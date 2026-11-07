@@ -27,6 +27,7 @@ footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 12px
 a { color: var(--accent); text-underline-offset: 3px; overflow-wrap: anywhere; }
 nav a { color: var(--ink); text-decoration: none; }
 nav a:hover { color: var(--accent); }
+.nav-links { display: flex; align-items: center; gap: 1rem; }
 .brand { font-weight: 700; font-size: 1.25rem; }
 h1, h2, p { margin: 0; }
 h1 { font-size: 24px; line-height: 1.3; font-weight: 600; }
@@ -56,6 +57,15 @@ summary span { margin-left: 6px; color: var(--muted); font-size: 12px; font-weig
 .notice { padding: 11px 14px; border-radius: 7px; background: var(--sunken); }
 .notice.error { background: var(--wrong-bg); color: var(--wrong); }
 .field-error { color: var(--wrong); font-size: 12.5px; }
+.moderation-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunken); color: var(--muted); font-size: 12.5px; }
+.moderation-bar form { display: flex; }
+.moderation-bar button { min-height: 32px; padding: 5px 11px; font-size: 12.5px; }
+.queue { display: grid; gap: 1rem; margin: 0 0 18px; padding: 0; list-style: none; }
+.queue-item { display: grid; gap: 10px; }
+.queue-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 1rem; color: var(--muted); font-size: 12px; }
+.queue-item h2, .queue-description, .queue-place { overflow-wrap: anywhere; }
+.queue-description { white-space: pre-wrap; }
+.queue-place { color: var(--muted); }
 dl { display: grid; grid-template-columns: minmax(6rem, 10rem) 1fr; gap: .5rem; overflow-wrap: anywhere; }
 dt { font-weight: 600; } dd { margin: 0; white-space: pre-wrap; }
 @media (max-width: 700px) {

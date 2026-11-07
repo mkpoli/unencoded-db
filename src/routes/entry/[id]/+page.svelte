@@ -1,6 +1,14 @@
 <script lang="ts">let { data } = $props(); let entry = $derived(data.entry)</script>
 <svelte:head><title>Evidence #{entry.id} · 珍字集覽</title></svelte:head>
 <p><a href="/">← All evidence</a></p>
+{#if data.isModerator}
+  <div class="moderation-bar">
+    <span>Moderator view</span>
+    <form method="POST" action="/moderate/{entry.id}/hide">
+      <button type="submit">Hide entry</button>
+    </form>
+  </div>
+{/if}
 <h1>{entry.ids || entry.script}</h1>
 <dl>
   <dt>Script</dt><dd>{entry.script}</dd>

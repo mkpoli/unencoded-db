@@ -1,22 +1,24 @@
 import { Database } from 'bun:sqlite'
 import { describe, expect, test } from 'bun:test'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { migrationFiles, migrationSql } from '$lib/server/test-db'
 import { load as list } from './+page.server'
 import { load as detail } from './entry/[id]/+page.server'
+import { load as queue } from './moderate/+page.server'
 
 type PlanRow = { detail: string }
 
 function database() {
   const db = new Database(':memory:')
-  db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
+  for (const name of migrationFiles) db.exec(migrationSql(name))
   return db
 }
 
 // Exercise the route's actual SQL while avoiding any storage or network access.
 function capture(db: Database) {
   const plans: string[][] = []
+  const sqls: string[] = []
   const binding = {
     prepare(sql: string) {
       return {
@@ -25,13 +27,14 @@ function capture(db: Database) {
           try {
             const plan = statement.all(...values) as PlanRow[]
             plans.push(plan.map(row => row.detail))
+            sqls.push(sql)
           } finally { statement.finalize() }
           return { all: async () => ({ results: [] }), first: async () => null }
         }
       }
     }
   }
-  return { binding, plans }
+  return { binding, plans, sqls }
 }
 
 function assertPlan(plan: string[], expected: RegExp) {
@@ -48,7 +51,15 @@ describe('public query plans', () => {
         return entry.isDirectory() ? routes(join(dir, entry.name), path) : /^\+(?:page\.server|layout\.server|server)\.[jt]s$/.test(entry.name) ? [path] : []
       })
     }
-    expect(routes(new URL('.', import.meta.url).pathname).sort()).toEqual(['+page.server.ts', 'entry/[id]/+page.server.ts', 'new/+page.server.ts'].sort())
+    expect(routes(new URL('.', import.meta.url).pathname).sort()).toEqual([
+      '+layout.server.ts',
+      '+page.server.ts',
+      'entry/[id]/+page.server.ts',
+      'moderate/+page.server.ts',
+      'moderate/[id]/hide/+server.ts',
+      'moderate/[id]/restore/+server.ts',
+      'new/+page.server.ts',
+    ].sort())
   })
   test('list uses the visible index for cursor and descending order', async () => {
     const db = database()
@@ -73,6 +84,33 @@ describe('public query plans', () => {
       await expect(detail({ platform: { env: { DB: binding } }, params: { id: '1' } } as any)).rejects.toMatchObject({ status: 404 })
       expect(plans).toHaveLength(1)
       assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
+    } finally { db.close() }
+  })
+
+  test('hidden queue uses the hidden index for cursor and descending order', async () => {
+    const db = database()
+    try {
+      const { binding, plans, sqls } = capture(db)
+      for (const path of ['/moderate', '/moderate?before=100']) {
+        await queue({
+          platform: { env: { DB: binding } },
+          locals: { moderator: 'mod@example.com' },
+          url: new URL(path, 'https://example.test'),
+        } as any)
+      }
+      expect(plans).toHaveLength(2)
+      expect(sqls.every(sql => /LIMIT 21\s*$/i.test(sql.trim()))).toBe(true)
+      expect(sqls.every(sql => /^SELECT id, script, description, place, created_at FROM entries\b/.test(sql))).toBe(true)
+      for (const plan of plans) assertPlan(plan, /SEARCH entries USING INDEX entries_hidden_id \(id<\?\)/i)
+
+      db.exec('DROP INDEX entries_hidden_id')
+      const withoutIndex = capture(db)
+      await queue({
+        platform: { env: { DB: withoutIndex.binding } },
+        locals: { moderator: 'mod@example.com' },
+        url: new URL('https://example.test/moderate?before=100'),
+      } as any)
+      expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_hidden_id \(id<\?\)/i)).toThrow()
     } finally { db.close() }
   })
 
