@@ -30,6 +30,13 @@ function event(db: Database, values: Record<string, string> = {}) {
 }
 
 describe('revisions', () => {
+  test('revision schema covers every content column', () => {
+    const db = dbSetup()
+    try {
+      const columns = db.query("SELECT name FROM pragma_table_info('entry_revisions')").all().map((row: any) => row.name)
+      expect(columns).toEqual(['entry_id', 'revision', 'script', 'ids', 'description', 'place', 'url', 'title', 'author', 'publisher', 'year', 'page', 'note', 'recorded_at', 'tombstone'])
+    } finally { db.close() }
+  })
   test('SSR renders a placeholder without tombstone content', async () => {
     const source = readFileSync(new URL('./entry/[id]/history/+page.svelte', import.meta.url), 'utf8')
       .replace('$lib/source-url', new URL('../lib/source-url.ts', import.meta.url).href)
@@ -91,6 +98,8 @@ describe('revisions', () => {
         `${scrub}, year='leak'`, `${scrub}, page='leak'`, `${scrub}, note='leak'`, `${scrub}, script='leak'`
       ]) expect(() => db.exec(`UPDATE entry_revisions SET ${alteration} WHERE entry_id=1 AND revision=1`)).toThrow()
       expect(() => db.exec("INSERT INTO entry_revisions (entry_id, revision, script, place, url, recorded_at, tombstone) VALUES (1, 99, '', '', '', 'time', 1)")).toThrow()
+      expect(() => db.exec("INSERT INTO entry_revisions (entry_id, revision, script, place, url, recorded_at) VALUES (1, 50, 'forged', 'p', 'https://f.org', 't')")).toThrow()
+      expect(() => db.exec(`UPDATE OR REPLACE entry_revisions SET ${scrub}, revision=3 WHERE entry_id=1 AND revision=1`)).toThrow()
       expect(() => db.exec("INSERT OR REPLACE INTO entry_revisions (entry_id, revision, script, place, url, recorded_at) VALUES (1, 1, 'x', 'x', 'x', 'time')")).toThrow()
       expect(() => db.exec('DELETE FROM entry_revisions WHERE revision=1')).toThrow()
       db.exec("CREATE TRIGGER fail_audit BEFORE INSERT ON revision_redaction_audit BEGIN SELECT RAISE(ABORT, 'audit failure'); END")
@@ -114,6 +123,17 @@ describe('revisions', () => {
       db.exec('UPDATE entries SET visible=1 WHERE id=1')
       expect((await history(event(db)) as any).revisions[1].tombstone).toBe(true)
     } finally { db.close() }
+  })
+  test('redaction fails closed for an orphan revision', async () => {
+    const orphan = new Database(':memory:')
+    try {
+      for (const name of ['0001_init.sql', '0002_entry_visibility.sql']) orphan.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
+      orphan.exec("INSERT INTO entries (script,place,url,created_at) VALUES ('old','book','https://example.org','2026')")
+      for (const name of ['0003_revisions.sql', '0004_edit_generation.sql', '0005_revision_redaction.sql']) orphan.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
+      orphan.exec("UPDATE entries SET script='new', revision=revision+1 WHERE id=1")
+      orphan.exec('DELETE FROM entries WHERE id=1')
+      await expect(redactRevision(binding(orphan) as any, 1, 1)).rejects.toThrow()
+    } finally { orphan.close() }
   })
   test('backfills, snapshots atomically, rejects stale edits and hides every revision', async () => {
     const db = dbSetup()

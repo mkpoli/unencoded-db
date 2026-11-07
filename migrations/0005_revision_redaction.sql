@@ -21,7 +21,9 @@ END;
 
 CREATE TRIGGER entry_revisions_no_tombstone_insert BEFORE INSERT ON entry_revisions
 WHEN NEW.tombstone IS NOT 0 BEGIN SELECT RAISE(ABORT, 'Cannot insert a tombstone'); END;
-DROP TRIGGER entry_revisions_no_update;
+CREATE TRIGGER entry_revisions_snapshot_provenance BEFORE INSERT ON entry_revisions
+WHEN NOT EXISTS (SELECT 1 FROM entries WHERE id = NEW.entry_id AND revision = NEW.revision)
+BEGIN SELECT RAISE(ABORT, 'Revisions must be current snapshots'); END;
 CREATE TRIGGER entry_revisions_redaction_guard BEFORE UPDATE ON entry_revisions
 WHEN OLD.tombstone IS NOT 0 OR NEW.tombstone IS NOT 1
   OR NEW.entry_id IS NOT OLD.entry_id OR NEW.revision IS NOT OLD.revision OR NEW.recorded_at IS NOT OLD.recorded_at
@@ -30,6 +32,7 @@ WHEN OLD.tombstone IS NOT 0 OR NEW.tombstone IS NOT 1
   OR NEW.publisher IS NOT NULL OR NEW.year IS NOT NULL OR NEW.page IS NOT NULL OR NEW.note IS NOT NULL
   OR NOT EXISTS (SELECT 1 FROM entries WHERE id = OLD.entry_id AND revision != OLD.revision)
 BEGIN SELECT RAISE(ABORT, 'Invalid revision redaction'); END;
+DROP TRIGGER entry_revisions_no_update;
 CREATE TRIGGER entry_revisions_redaction_audit AFTER UPDATE ON entry_revisions BEGIN
   INSERT INTO revision_redaction_audit (entry_id, revision, redacted_at)
   VALUES (NEW.entry_id, NEW.revision, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
