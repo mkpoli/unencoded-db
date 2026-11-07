@@ -26,6 +26,17 @@ The Cloudflare configuration contains a placeholder D1 ID. Provision a database 
 
 Apply the D1 migrations before serving code that reads visibility. Drain old application instances before hiding entries, since older readers do not filter them. Hiding an entry cannot retract responses already in flight or content already loaded or cached by a client.
 
+## JSON export
+
+`GET /export.json` returns visible records in ascending id order with `version: 1`. Read `next` and request `?after=<next>` until it is null. Pages default to 100 records; `limit` accepts 1 to 200. Hidden records are excluded and responses are not cached.
+
+```sh
+curl 'https://example.org/export.json?limit=200'
+curl 'https://example.org/export.json?limit=200&after=200'
+```
+
+Each record contains its id, script, IDS, description, place, source URL, title, author, publisher, year, page, note and creation time. Images and related-character comparisons are not included.
+
 ## Limitations
 
 This is a local prototype, not ready for public operation. It has no moderation, abuse prevention, rate limiting, editing, deletion or contributor accounts. Pagination lists 20 records at a time.

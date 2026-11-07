@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { load as list } from './+page.server'
 import { load as detail } from './entry/[id]/+page.server'
+import { GET as exportJson } from './export.json/+server'
 
 type PlanRow = { detail: string }
 
@@ -48,7 +49,7 @@ describe('public query plans', () => {
         return entry.isDirectory() ? routes(join(dir, entry.name), path) : /^\+(?:page\.server|layout\.server|server)\.[jt]s$/.test(entry.name) ? [path] : []
       })
     }
-    expect(routes(new URL('.', import.meta.url).pathname).sort()).toEqual(['+page.server.ts', 'entry/[id]/+page.server.ts', 'new/+page.server.ts'].sort())
+    expect(routes(new URL('.', import.meta.url).pathname).sort()).toEqual(['+page.server.ts', 'entry/[id]/+page.server.ts', 'export.json/+server.ts', 'new/+page.server.ts'].sort())
   })
   test('list uses the visible index for cursor and descending order', async () => {
     const db = database()
@@ -63,6 +64,20 @@ describe('public query plans', () => {
       const withoutIndex = capture(db)
       await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/?before=100') } as any)
       expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_visible_id \(id<\?\)/i)).toThrow()
+    } finally { db.close() }
+  })
+
+  test('export uses the visible index for ascending pages', async () => {
+    const db = database()
+    try {
+      const { binding, plans } = capture(db)
+      await exportJson({ platform: { env: { DB: binding } }, url: new URL('https://example.test/export.json?after=10&limit=50') } as any)
+      expect(plans).toHaveLength(1)
+      assertPlan(plans[0], /SEARCH entries USING INDEX entries_visible_id \(id>\?\)/i)
+      db.exec('DROP INDEX entries_visible_id')
+      const withoutIndex = capture(db)
+      await exportJson({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/export.json?after=10') } as any)
+      expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_visible_id \(id>\?\)/i)).toThrow()
     } finally { db.close() }
   })
 
