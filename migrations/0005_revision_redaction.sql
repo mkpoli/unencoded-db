@@ -34,6 +34,9 @@ CREATE TRIGGER entry_revisions_redaction_audit AFTER UPDATE ON entry_revisions B
   INSERT INTO revision_redaction_audit (entry_id, revision, redacted_at)
   VALUES (NEW.entry_id, NEW.revision, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
 END;
+CREATE TRIGGER revision_redaction_audit_provenance BEFORE INSERT ON revision_redaction_audit
+WHEN NOT EXISTS (SELECT 1 FROM entry_revisions WHERE entry_id = NEW.entry_id AND revision = NEW.revision AND tombstone = 1)
+BEGIN SELECT RAISE(ABORT, 'Audit records require a redacted revision'); END;
 CREATE TRIGGER revision_redaction_audit_no_replace BEFORE INSERT ON revision_redaction_audit
 WHEN EXISTS (SELECT 1 FROM revision_redaction_audit WHERE entry_id = NEW.entry_id AND revision = NEW.revision)
 BEGIN SELECT RAISE(ABORT, 'Audit records are immutable'); END;
