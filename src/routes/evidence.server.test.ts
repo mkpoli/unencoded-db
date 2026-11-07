@@ -25,6 +25,7 @@ describe('evidence routes', () => {
     const db = new Database(':memory:')
     try {
       db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
+      db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
       expect(() => db.exec("INSERT INTO entries (script, place, created_at) VALUES ('Han', 'Book', '2026')")).toThrow()
       const DB = binding(db)
       const values = { script: 'Han', url: 'https://example.org/book', ids: '⿰木木', title: 'Source', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'Notes' }
@@ -34,6 +35,69 @@ describe('evidence routes', () => {
       const result = await detail({ platform: { env: { DB } }, params: { id: '1' } } as any) as any
       expect(result.entry).toMatchObject(values)
       expect(result.entry.place).toBe(values.url)
+    } finally { db.close() }
+  })
+  test('migration preserves existing entries and visibility applies to every public read', async () => {
+    const db = new Database(':memory:')
+    try {
+      db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
+      db.exec("INSERT INTO entries (script, place, url, created_at) VALUES ('old', 'book', 'https://example.org', '2026')")
+      db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
+      expect(db.query('SELECT visible FROM entries WHERE id = 1').get()).toEqual({ visible: 1 })
+      expect(() => db.exec('UPDATE entries SET visible = 2 WHERE id = 1')).toThrow()
+      const DB = binding(db)
+      const oldEntry = await detail({ platform: { env: { DB } }, params: { id: '1' } } as any) as any
+      expect(oldEntry.entry.script).toBe('old')
+      await expect(actions.default!(event({ script: 'created', url: 'https://example.org' }, DB))).rejects.toMatchObject({ status: 303, location: '/entry/2' })
+      expect((await detail({ platform: { env: { DB } }, params: { id: '2' } } as any) as any).entry.script).toBe('created')
+      db.exec('UPDATE entries SET visible = 0 WHERE id = 2')
+      for (let i = 0; i < 45; i++) {
+        db.query('INSERT INTO entries (script, place, url, created_at, visible) VALUES (?, ?, ?, ?, ?)').run('new', 'book', 'https://example.org', '2026', i % 2)
+      }
+      db.exec('UPDATE entries SET visible = 0 WHERE id = 1')
+      const ids: number[] = []
+      let before: number | null = null
+      do {
+        const url = new URL('https://example.test/')
+        if (before) url.searchParams.set('before', String(before))
+        const page = await list({ platform: { env: { DB } }, url } as any) as any
+        ids.push(...page.entries.map((entry: { id: number }) => entry.id))
+        before = page.next
+      } while (before)
+      expect(ids).toEqual((db.query('SELECT id FROM entries WHERE visible = 1 ORDER BY id DESC').all() as { id: number }[]).map(row => row.id))
+      expect(ids.length).toBe(22)
+      for (const id of [1, 2]) {
+        await expect(detail({ platform: { env: { DB } }, params: { id: String(id) } } as any)).rejects.toMatchObject({ status: 404 })
+      }
+      expect((await detail({ platform: { env: { DB } }, params: { id: '4' } } as any) as any).entry.id).toBe(4)
+    } finally { db.close() }
+  })
+  test('pagination handles empty, all-hidden, 20 and 21 visible entries', async () => {
+    const db = new Database(':memory:')
+    try {
+      db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
+      db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
+      const DB = binding(db)
+      const page = async (before?: number) => {
+        const url = new URL('https://example.test/')
+        if (before !== undefined) url.searchParams.set('before', String(before))
+        return await list({ platform: { env: { DB } }, url } as any) as any
+      }
+      expect(await page()).toEqual({ entries: [], next: null })
+      const insert = db.query("INSERT INTO entries (script, place, url, created_at, visible) VALUES ('Han', 'book', 'https://example.org', '2026', ?)")
+      for (let i = 0; i < 21; i++) insert.run(0)
+      expect(await page()).toEqual({ entries: [], next: null })
+      db.exec('UPDATE entries SET visible = 1 WHERE id <= 20')
+      const twenty = await page()
+      expect(twenty.entries).toHaveLength(20)
+      expect(twenty.next).toBeNull()
+      db.exec('UPDATE entries SET visible = 1 WHERE id = 21')
+      const first = await page()
+      expect(first.entries).toHaveLength(20)
+      expect(first.next).toBe(2)
+      const last = await page(first.next)
+      expect(last.entries.map((entry: { id: number }) => entry.id)).toEqual([1])
+      expect(last.next).toBeNull()
     } finally { db.close() }
   })
   test('requires a source URL even when a place is provided', async () => {

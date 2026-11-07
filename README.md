@@ -22,6 +22,10 @@ bun run build
 
 The Cloudflare configuration contains a placeholder D1 ID. Provision a database and configure its binding before using a separate environment.
 
+## Visibility rollout
+
+Apply the D1 migrations before serving code that reads visibility. Drain old application instances before hiding entries, since older readers do not filter them. Hiding an entry cannot retract responses already in flight or content already loaded or cached by a client.
+
 ## Limitations
 
 This is a local prototype, not ready for public operation. It has no moderation, abuse prevention, rate limiting, editing, deletion or contributor accounts. Pagination lists 20 records at a time.
