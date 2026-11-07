@@ -59,10 +59,67 @@ function join(parts: Uint8Array[]): Uint8Array {
 
 const PNG_TEXT_CHUNKS = new Set(['eXIf', 'tEXt', 'zTXt', 'iTXt', 'tIME'])
 
-/** Drop EXIF, XMP, IPTC and comments from a JPEG. Returns null when the segment structure is invalid. */
+function readTiffOrientation(bytes: Uint8Array, start: number, end: number): number | null {
+  if (start + 8 > end) return null
+  const little = bytes[start] === 0x49 && bytes[start + 1] === 0x49
+  const big = bytes[start] === 0x4d && bytes[start + 1] === 0x4d
+  if (!little && !big) return null
+  const u16 = (offset: number) => little
+    ? bytes[offset]! | (bytes[offset + 1]! << 8)
+    : (bytes[offset]! << 8) | bytes[offset + 1]!
+  const u32 = (offset: number) => little
+    ? (bytes[offset]! | (bytes[offset + 1]! << 8) | (bytes[offset + 2]! << 16) | (bytes[offset + 3]! << 24)) >>> 0
+    : ((bytes[offset]! << 24) | (bytes[offset + 1]! << 16) | (bytes[offset + 2]! << 8) | bytes[offset + 3]!) >>> 0
+  if (u16(start + 2) !== 42) return null
+  const ifd = start + u32(start + 4)
+  if (ifd + 2 > end) return null
+  const count = u16(ifd)
+  for (let index = 0; index < count; index++) {
+    const entry = ifd + 2 + index * 12
+    if (entry + 12 > end) return null
+    if (u16(entry) === 0x0112 && u16(entry + 2) === 3 && u32(entry + 4) === 1) {
+      const value = u16(entry + 8)
+      return value >= 1 && value <= 8 ? value : null
+    }
+  }
+  return null
+}
+
+/** Read the EXIF orientation before stripping, so phone photos do not turn sideways. */
+export function readJpegOrientation(bytes: Uint8Array): number | null {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null
+  let offset = 2
+  while (offset + 4 <= bytes.length) {
+    if (bytes[offset] !== 0xff) return null
+    const marker = bytes[offset + 1]
+    if (marker === undefined || marker === 0xda || marker === 0xd9) return null
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      offset += 2
+      continue
+    }
+    const length = (bytes[offset + 2]! << 8) | bytes[offset + 3]!
+    if (length < 2 || offset + 2 + length > bytes.length) return null
+    if (marker === 0xe1 && startsWith(bytes, [0x45, 0x78, 0x69, 0x66, 0x00, 0x00], offset + 4)) {
+      return readTiffOrientation(bytes, offset + 10, offset + 2 + length)
+    }
+    offset += 2 + length
+  }
+  return null
+}
+
+function orientationSegment(orientation: number): Uint8Array {
+  const tiff = [0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x12, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, orientation, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+  const data = [0x45, 0x78, 0x69, 0x66, 0x00, 0x00, ...tiff]
+  const length = data.length + 2
+  return new Uint8Array([0xff, 0xe1, (length >> 8) & 0xff, length & 0xff, ...data])
+}
+
+/** Drop EXIF, XMP, IPTC and comments from a JPEG, keeping only EXIF orientation. */
 export function stripJpegMetadata(bytes: Uint8Array): Uint8Array | null {
   if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null
+  const orientation = readJpegOrientation(bytes)
   const parts: Uint8Array[] = [bytes.slice(0, 2)]
+  if (orientation !== null && orientation !== 1) parts.push(orientationSegment(orientation))
   let offset = 2
   while (offset < bytes.length) {
     if (bytes[offset] !== 0xff) return null

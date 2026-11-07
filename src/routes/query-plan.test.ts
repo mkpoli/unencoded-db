@@ -85,7 +85,8 @@ describe('public query plans', () => {
     const db = database()
     try {
       const { binding, plans } = capture(db)
-      await expect(image({ platform: { env: { DB: binding, IMAGES: fakeImages().bucket } }, params: { id: '1' } } as any)).rejects.toMatchObject({ status: 404 })
+      const response = await image({ platform: { env: { DB: binding, IMAGES: fakeImages().bucket } }, params: { id: '1' } } as any)
+      expect(response.status).toBe(404)
       expect(plans).toHaveLength(1)
       assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
     } finally { db.close() }

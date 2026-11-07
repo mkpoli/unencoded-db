@@ -8,6 +8,7 @@ import {
   UNSUPPORTED_IMAGE_MESSAGE,
   createImageKey,
   detectImageType,
+  readJpegOrientation,
   readSourceImage,
 } from './images'
 
@@ -107,6 +108,17 @@ describe('source image validation', () => {
     const webpResult = await readSourceImage(formWith(imageFile(webp)))
     expect(webpResult.image?.type).toBe('image/webp')
     expect(webpResult.image?.bytes).toEqual(WEBP_BYTES)
+  })
+
+  test('keeps EXIF orientation while removing other JPEG metadata', async () => {
+    const tiff = [0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x12, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+    const payload = [0x45, 0x78, 0x69, 0x66, 0x00, 0x00, ...tiff, ...new TextEncoder().encode('GPS-SECRET')]
+    const length = payload.length + 2
+    const withExif = new Uint8Array([0xff, 0xd8, 0xff, 0xe1, (length >> 8) & 0xff, length & 0xff, ...payload, ...JPEG_BYTES.slice(2)])
+    const result = await readSourceImage(formWith(imageFile(withExif)))
+    expect(result.image?.type).toBe('image/jpeg')
+    expect(readJpegOrientation(result.image!.bytes)).toBe(6)
+    expect(new TextDecoder().decode(result.image!.bytes)).not.toContain('GPS-SECRET')
   })
 
   test('rejects a payload that only starts with an image signature', async () => {

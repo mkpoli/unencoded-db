@@ -51,7 +51,9 @@ describe('entry image route', () => {
     try {
       const DB = insertRecord(db, { key: KEY, type: 'image/png', size: PNG_BYTES.byteLength, visible: 0 })
       await images.bucket.put(KEY, PNG_BYTES, { httpMetadata: { contentType: 'image/png' } })
-      await expect(GET(requestEvent(DB, images))).rejects.toMatchObject({ status: 404 })
+      const response = await GET(requestEvent(DB, images))
+      expect(response.status).toBe(404)
+      expect(response.headers.get('cache-control')).toBe('no-store')
       expect(images.gets).toHaveLength(0)
     } finally { db.close() }
   })
@@ -61,7 +63,9 @@ describe('entry image route', () => {
     const images = fakeImages()
     try {
       const DB = insertRecord(db, { key: null, type: null, size: null })
-      await expect(GET(requestEvent(DB, images))).rejects.toMatchObject({ status: 404 })
+      const response = await GET(requestEvent(DB, images))
+      expect(response.status).toBe(404)
+      expect(response.headers.get('cache-control')).toBe('no-store')
       expect(images.gets).toHaveLength(0)
     } finally { db.close() }
   })
@@ -71,7 +75,9 @@ describe('entry image route', () => {
     const images = fakeImages()
     try {
       const DB = insertRecord(db)
-      await expect(GET(requestEvent(DB, images))).rejects.toMatchObject({ status: 404 })
+      const response = await GET(requestEvent(DB, images))
+      expect(response.status).toBe(404)
+      expect(response.headers.get('cache-control')).toBe('no-store')
       expect(images.gets).toEqual([KEY])
     } finally { db.close() }
   })
@@ -81,8 +87,11 @@ describe('entry image route', () => {
     const images = fakeImages()
     try {
       const DB = d1Binding(db)
-      await expect(GET(requestEvent(DB, images, '99'))).rejects.toMatchObject({ status: 404 })
-      await expect(GET(requestEvent(DB, images, 'not-a-number'))).rejects.toMatchObject({ status: 404 })
+      for (const id of ['99', 'not-a-number']) {
+        const response = await GET(requestEvent(DB, images, id))
+        expect(response.status).toBe(404)
+        expect(response.headers.get('cache-control')).toBe('no-store')
+      }
     } finally { db.close() }
   })
 

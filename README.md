@@ -34,8 +34,8 @@ bun run build
 - Bytes live in R2; content type and size live in D1.
 - Images are not decoded or re-encoded. A corrupt file with a valid signature may fail to render in the browser.
 - `POST /new` accepts up to 8 MiB plus form framing. Other POST routes keep the 128 KiB limit.
-- Image responses use the stored content type, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, so hiding takes effect on the next request.
-- Images are stripped of common metadata on upload: JPEG APP1/APP13 segments and comments, PNG text and EXIF chunks, and WebP EXIF/XMP chunks. Other metadata and pixel content are stored as uploaded.
+- Image responses use the stored content type, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, so hiding takes effect on the next request. Missing and hidden images also return an uncached 404.
+- Images are stripped of common metadata on upload: JPEG EXIF, XMP, IPTC and comments before the image scan, PNG text and EXIF chunks, and WebP EXIF/XMP chunks. EXIF orientation is kept; ICC colour profiles and pixel content are stored as uploaded. Image metadata is not preserved for attribution, so record credit in the bibliographic fields.
 
 ## Visibility
 
@@ -55,7 +55,7 @@ Apply all migrations before deploying code that expects visibility and the image
 bunx wrangler d1 migrations apply DB --remote
 ```
 
-Migration `0001` creates the base table. Migration `0002` adds `visible` and the `entries_visible_id` index. Migration `0003` rebuilds `entries`, preserves `visible` and the id high-water mark, recreates `entries_visible_id`, removes the source URL column and adds `image_key`, `image_type` and `image_size`. Existing rows keep their ids and text fields; existing source URLs are dropped.
+Migration `0001` creates the base table. Migration `0002` adds `visible` and the `entries_visible_id` index. Migration `0003` rebuilds `entries`, preserves `visible` and the id high-water mark, recreates `entries_visible_id`, adds a unique partial `entries_image_key` index, removes the source URL column and adds `image_key`, `image_type` and `image_size`. Existing rows keep their ids and text fields; existing source URLs are dropped.
 
 The Cloudflare configuration contains a placeholder D1 database ID and an R2 bucket name. Configure real bindings for a separate environment.
 
@@ -65,7 +65,7 @@ There is no global storage quota, no per-user quota and no cleanup job. An R2 pu
 
 ## Rights
 
-Uploaders must have the rights to share the image. Uploaded images keep their original rights; the project license covers the code only.
+Uploaders must have the rights to share the image. Image metadata is stripped, so credit belongs in the record's title, author and publisher fields. Uploaded images keep their original rights; the project license covers the code only.
 
 A validation failure or an upload over the request limit returns an error page; the browser clears the file input, so the image must be selected again. Text fields are preserved on validation errors. The request limit is 8 MiB plus framing for `/new`.
 
