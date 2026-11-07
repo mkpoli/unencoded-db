@@ -1,4 +1,9 @@
-<script lang="ts">let { form } = $props()</script>
+<script lang="ts">
+  import { enhance } from '$app/forms'
+  import { handleContributionResult } from '$lib/contribution-result'
+  let { form } = $props()
+  let rateLimitFailure = $state<429 | 503 | null>(null)
+</script>
 <svelte:head><title>Add evidence · 珍字集覽</title></svelte:head>
 <div class="form-page">
   <div class="page-heading">
@@ -6,7 +11,11 @@
     <p>Provide a source URL for the evidence. Contributions are public and anonymous.</p>
   </div>
   {#if form?.errors}<p class="notice error" role="alert">Check the fields below.</p>{/if}
-  <form method="POST">
+  {#if rateLimitFailure}<p class="notice error" role="alert">{rateLimitFailure === 429 ? 'Too many requests. Try again in a minute.' : 'Contributions are temporarily unavailable. Try again later.'}</p>{/if}
+  <form method="POST" use:enhance={() => {
+    rateLimitFailure = null
+    return async ({ result, update }) => handleContributionResult(result, status => { rateLimitFailure = status }, update)
+  }}>
     <section class="panel" aria-labelledby="source-heading">
       <h2 id="source-heading">Source</h2>
       <div class="field">
