@@ -8,6 +8,12 @@ describe('evidence', () => {
     expect(result?.script).toBe('Han')
     expect(result?.place).toBe('https://example.org/source')
   })
+  test('accepts a long URL fallback while retaining the place limit', () => {
+    const url = `https://example.org/${'x'.repeat(600)}`
+    expect(readEvidence(form({ script: 'Han', url, place: url }))?.place).toBe(url)
+    expect(readEvidence(form({ script: 'Han', url, place: `${url}x` }))).toBeNull()
+    expect(readEvidence(form({ script: 'Han', url: `https://example.org/${'x'.repeat(1000)}` }))).toBeNull()
+  })
   test('requires script and source URL even when place is supplied', () => {
     expect(readEvidence(form({ url: 'https://example.org/source' }))).toBeNull()
     expect(readEvidence(form({ script: 'Han', place: 'book' }))).toBeNull()

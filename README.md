@@ -1,6 +1,6 @@
 # 珍字集覽
 
-A collection of evidence for unencoded characters and unifiable variants. Anyone can create a record with a source URL and view the collection.
+A collection of evidence for unencoded characters and unifiable variants. Anyone can create or revise a record with a source URL and view its revision history.
 
 ## Local development
 
@@ -26,9 +26,15 @@ The Cloudflare configuration contains a placeholder D1 ID. Provision a database 
 
 Apply the D1 migrations before serving code that reads visibility. Drain old application instances before hiding entries, since older readers do not filter them. Hiding an entry cannot retract responses already in flight or content already loaded or cached by a client.
 
+## Revision rollout
+
+The revision migration copies existing records in one statement; its time and storage costs grow with the database. Pause submissions and drain older writers before migrating, and rehearse the migration against a representative copy. Evidence updates that omit the revision step fail after migration.
+
 ## Limitations
 
-This is a local prototype, not ready for public operation. It has no moderation, abuse prevention, rate limiting, editing, deletion or contributor accounts. Pagination lists 20 records at a time.
+This is a local prototype, not ready for public operation. It has no moderation, abuse prevention, rate limiting, deletion or contributor accounts. Pagination lists 20 records at a time.
+
+**Public launch is blocked:** editing out sensitive text leaves it in public history. Hiding an entry conceals its history, but restoring the entry republishes every snapshot. Immutable triggers prevent selective deletion or alteration of snapshots; a separately reviewed redaction feature is required before launch.
 
 ## License
 

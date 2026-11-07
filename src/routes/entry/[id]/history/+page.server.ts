@@ -1,0 +1,17 @@
+import { error } from '@sveltejs/kit'
+import { publicEntryPredicate } from '$lib/server/visibility'
+import { fields } from '$lib/server/evidence'
+import type { PageServerLoad } from './$types'
+
+export const load: PageServerLoad = async ({ params, platform, url }) => {
+  if (!platform) error(500, 'Database unavailable')
+  if (!/^[1-9]\d*$/.test(params.id) || !Number.isSafeInteger(Number(params.id))) error(404)
+  const before = url.searchParams.get('before')
+  if (before !== null && (!/^[1-9]\d*$/.test(before) || !Number.isSafeInteger(Number(before)))) error(404)
+  const id = Number(params.id)
+  const entry = await platform.env.DB.prepare(`SELECT id FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first()
+  if (!entry) error(404)
+  const { results } = await platform.env.DB.prepare(`SELECT r.entry_id, r.revision, r.recorded_at, ${fields.map(field => `r.${field}`).join(', ')} FROM entry_revisions r JOIN entries e ON e.id = r.entry_id AND e.visible = 1 WHERE r.entry_id = ? AND r.revision < ? ORDER BY r.revision DESC LIMIT 21`).bind(id, before === null ? Number.MAX_SAFE_INTEGER : Number(before)).all<{ entry_id: number; revision: number; script: string; ids: string | null; description: string | null; place: string; url: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; recorded_at: string }>()
+  const revisions = results.slice(0, 20)
+  return { id, revisions, next: results.length > 20 ? revisions[revisions.length - 1].revision : null }
+}
