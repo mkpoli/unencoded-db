@@ -3,23 +3,18 @@
 <div class="form-page">
   <div class="page-heading">
     <h1>Add evidence</h1>
-    <p>Provide a place or source URL, and an image or source URL. Contributions are public and anonymous.</p>
+    <p>Provide a source URL for the evidence. Contributions are public and anonymous.</p>
   </div>
   {#if form?.errors}<p class="notice error" role="alert">Check the fields below.</p>{/if}
-  {#if form?.reselectImage}<p class="notice" role="status">Please select your image again before submitting.</p>{/if}
-  <form method="POST" enctype="multipart/form-data">
+  <form method="POST">
     <section class="panel" aria-labelledby="source-heading">
       <h2 id="source-heading">Source</h2>
-      <div class="field">
-        <label>Image (JPEG, PNG or WebP; up to 15 MiB; no EXIF, XMP or PNG text metadata) <input name="image" type="file" accept="image/jpeg,image/png,image/webp" aria-invalid={!!form?.errors?.image} aria-describedby={form?.errors?.image ? 'image-error' : undefined} /></label>
-        {#if form?.errors?.image}<p class="field-error" id="image-error">{form.errors.image}</p>{/if}
-      </div>
       <div class="field">
         <label>Place seen <input name="place" maxlength="500" value={form?.values?.place ?? ''} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} /></label>
         {#if form?.errors?.place}<p class="field-error" id="place-error">{form.errors.place}</p>{/if}
       </div>
       <div class="field">
-        <label>Source URL <input name="url" type="url" maxlength="1000" value={form?.values?.url ?? ''} aria-invalid={!!form?.errors?.url} aria-describedby={form?.errors?.url ? 'url-error' : undefined} /></label>
+        <label>Source URL <input name="url" type="url" required maxlength="1000" value={form?.values?.url ?? ''} aria-invalid={!!form?.errors?.url} aria-describedby={form?.errors?.url ? 'url-error' : undefined} /></label>
         {#if form?.errors?.url}<p class="field-error" id="url-error">{form.errors.url}</p>{/if}
       </div>
       <details open={!!(form?.errors?.title || form?.errors?.author || form?.errors?.publisher || form?.errors?.year || form?.errors?.page)}>

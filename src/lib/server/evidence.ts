@@ -11,13 +11,11 @@ export function readEvidence(form: FormData): Evidence | null {
     if (text.length > limits[name]) return null
     row[name] = text || null
   }
-  if (!row.script) return null
-  if (row.url) {
-    try {
-      const url = new URL(row.url)
-      if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return null
-    } catch { return null }
-  }
+  if (!row.script || !row.url) return null
+  try {
+    const url = new URL(row.url)
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return null
+  } catch { return null }
   row.place ||= row.url
   if (!row.place) return null
   return row

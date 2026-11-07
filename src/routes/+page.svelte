@@ -6,7 +6,6 @@
   <div class="grid">
     {#each data.entries as entry}
       <a class="card" href="/entry/{entry.id}">
-        {#if entry.image_key}<img src="/media/{entry.image_key}" alt="" loading="lazy" />{/if}
         <strong>{entry.ids || entry.script}</strong><br />{entry.place}
       </a>
     {/each}

@@ -3,7 +3,6 @@ import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { load as list } from './+page.server'
 import { load as detail } from './entry/[id]/+page.server'
-import { GET as media } from './media/[key]/+server'
 
 type PlanRow = { detail: string }
 
@@ -60,21 +59,4 @@ describe('foundation query plans', () => {
     } finally { db.close() }
   })
 
-  test('media visibility uses the image index and detects its removal', async () => {
-    const db = database()
-    try {
-      const key = `${'a'.repeat(64)}.png`
-      const run = async () => {
-        const { binding, plans } = capture(db)
-        await media({ platform: { env: { DB: binding } }, params: { key } } as any)
-        expect(plans).toHaveLength(1)
-        return plans[0]
-      }
-      const expected = /SEARCH entries USING (?:COVERING )?INDEX entries_by_image \(image_key=\?\)/i
-      assertPlan(await run(), expected)
-      db.exec('DROP INDEX entries_by_image')
-      const unprotected = await run()
-      expect(() => assertPlan(unprotected, expected)).toThrow()
-    } finally { db.close() }
-  })
 })

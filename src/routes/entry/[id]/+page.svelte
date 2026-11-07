@@ -2,7 +2,6 @@
 <svelte:head><title>Evidence #{entry.id} · 珍字集覽</title></svelte:head>
 <p><a href="/">← All evidence</a></p>
 <h1>{entry.ids || entry.script}</h1>
-{#if entry.image_key}<img class="evidence-image" src="/media/{entry.image_key}" alt="Evidence from {entry.place}" />{/if}
 <dl>
   <dt>Script</dt><dd>{entry.script}</dd>
   {#if entry.ids}<dt>IDS</dt><dd>{entry.ids}</dd>{/if}

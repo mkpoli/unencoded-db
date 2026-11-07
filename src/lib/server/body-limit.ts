@@ -1,7 +1,5 @@
-import { MAX_IMAGE, MAX_THUMB } from './image'
-
-// Allow both uploads at their individual limits plus room for fields and multipart framing.
-export const MAX_WRITE_BODY = MAX_IMAGE + MAX_THUMB + 1024 * 1024
+// Allow room for URL-encoded text fields and form framing.
+export const MAX_WRITE_BODY = 128 * 1024
 
 /** Read at most the limit before handing the request to a form parser. */
 export async function limitWriteBody(request: Request, limit = MAX_WRITE_BODY): Promise<Request | null> {

@@ -1,70 +1,58 @@
+import { Database } from 'bun:sqlite'
 import { describe, expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
 import { actions } from './new/+page.server'
-import { GET } from './media/[key]/+server'
+import { load as list } from './+page.server'
+import { load as detail } from './entry/[id]/+page.server'
 
-function event(values: Record<string, string | File>, db: unknown, media: unknown) {
+function event(values: Record<string, string>, db: unknown) {
   const form = new FormData()
   for (const [key, value] of Object.entries(values)) form.set(key, value)
-  return { request: new Request('https://example.test/new', { method: 'POST', body: form }), platform: { env: { DB: db, MEDIA: media } } } as any
+  return { request: new Request('https://example.test/new', { method: 'POST', body: form }), platform: { env: { DB: db } } } as any
+}
+
+function binding(db: Database) {
+  return { prepare(sql: string) { return { bind(...values: (string | number | null)[]) {
+    return {
+      first: async () => db.query(sql).get(...values),
+      all: async () => ({ results: db.query(sql).all(...values) }),
+    }
+  } } } }
 }
 
 describe('evidence routes', () => {
-  test('creates an anonymous record with a source and redirects', async () => {
-    let statement = '', bound: unknown[] = []
-    const db = { prepare(sql: string) { statement = sql; return { bind(...values: unknown[]) { bound = values; return { first: async () => ({ id: 7 }) } } } } }
-    const result = actions.default!(event({ script: 'Han', url: 'https://example.org/book', title: 'Source' }, db, {}))
-    await expect(result).rejects.toMatchObject({ status: 303, location: '/entry/7' })
-    expect(statement).toContain('INSERT INTO entries')
-    expect(bound).toContain('https://example.org/book')
-    expect(bound).toContain('Source')
+  test('creates and displays source-linked evidence with bibliographic details', async () => {
+    const db = new Database(':memory:')
+    try {
+      db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
+      expect(() => db.exec("INSERT INTO entries (script, place, created_at) VALUES ('Han', 'Book', '2026')")).toThrow()
+      const DB = binding(db)
+      const values = { script: 'Han', url: 'https://example.org/book', ids: '⿰木木', title: 'Source', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'Notes' }
+      await expect(actions.default!(event(values, DB))).rejects.toMatchObject({ status: 303, location: '/entry/1' })
+      const listing = await list({ platform: { env: { DB } }, url: new URL('https://example.test/') } as any) as any
+      expect(listing.entries[0]).toMatchObject({ id: 1, ids: values.ids, place: values.url })
+      const result = await detail({ platform: { env: { DB } }, params: { id: '1' } } as any) as any
+      expect(result.entry).toMatchObject(values)
+      expect(result.entry.place).toBe(values.url)
+    } finally { db.close() }
   })
-  test('rejects records without an image or URL', async () => {
-    const result = await actions.default!(event({ script: 'Han', place: 'book' }, {}, {})) as any
+  test('requires a source URL even when a place is provided', async () => {
+    const result = await actions.default!(event({ script: 'Han', place: 'book' }, {})) as any
     expect(result.status).toBe(400)
+    expect(result.data.errors.url).toContain('HTTP or HTTPS')
   })
-  test('reports missing source fields and preserves all text', async () => {
-    const result = await actions.default!(event({ script: 'Han', title: '  My title  ', note: 'notes' }, {}, {})) as any
+  test('preserves text on validation failure', async () => {
+    const result = await actions.default!(event({ script: 'Han', title: '  My title  ', note: 'notes' }, {})) as any
     expect(result.status).toBe(400)
-    expect(result.data.errors.place).toContain('place or source URL')
-    expect(result.data.errors.image).toContain('image or source URL')
+    expect(result.data.errors.url).toBeDefined()
     expect(result.data.values.title).toBe('  My title  ')
     expect(result.data.values.note).toBe('notes')
   })
   test('reports specific field errors together', async () => {
-    const result = await actions.default!(event({ script: '', url: 'ftp://example.org/', title: 'x'.repeat(301) }, {}, {})) as any
+    const result = await actions.default!(event({ script: '', url: 'ftp://example.org/', title: 'x'.repeat(301) }, {})) as any
     expect(result.data.errors.script).toContain('script')
     expect(result.data.errors.url).toContain('HTTP or HTTPS')
     expect(result.data.errors.title).toContain('length')
     expect(result.data.values.url).toBe('ftp://example.org/')
-  })
-  test('rejects EXIF images with guidance and asks for reselection', async () => {
-    const exif = new TextEncoder().encode('Exif\0\0GPSDATA')
-    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0, exif.length + 2, ...exif, 0xff, 0xc0, 0, 11, 8, 1, 0xe0, 2, 0x80, 1, 1, 0x11, 0, 0xff, 0xda, 0, 2, 9, 9, 9, 0xff, 0xd9])
-    const result = await actions.default!(event({ script: 'Han', place: 'Book', title: 'Source', image: new File([jpeg], 'photo.jpg', { type: 'image/jpeg' }) }, {}, {})) as any
-    expect(result.status).toBe(400)
-    expect(result.data.errors.image).toContain('without EXIF')
-    expect(result.data.reselectImage).toBe(true)
-    expect(result.data.values.title).toBe('Source')
-  })
-  test('asks for image reselection when another field fails', async () => {
-    const png = await Bun.file(new URL('../lib/server/fixtures/sample.png', import.meta.url)).arrayBuffer()
-    const result = await actions.default!(event({ script: '', place: 'Book', image: new File([png], 'photo.png') }, {}, {})) as any
-    expect(result.data.errors.script).toBeDefined()
-    expect(result.data.errors.image).toBeUndefined()
-    expect(result.data.reselectImage).toBe(true)
-  })
-  test('requires a place even with a valid image', async () => {
-    const png = await Bun.file(new URL('../lib/server/fixtures/sample.png', import.meta.url)).arrayBuffer()
-    const result = await actions.default!(event({ script: 'Han', image: new File([png], 'photo.png') }, {}, {})) as any
-    expect(result.data.errors.place).toContain('place or source URL')
-    expect(result.data.errors.image).toBeUndefined()
-    expect(result.data.reselectImage).toBe(true)
-  })
-  test('does not serve an unreferenced object', async () => {
-    let fetched = false
-    const platform = { env: { DB: { prepare: () => ({ bind: () => ({ first: async () => null }) }) }, MEDIA: { get: async () => { fetched = true } } } }
-    const response = await GET({ params: { key: `${'a'.repeat(64)}.png` }, platform } as any)
-    expect(response.status).toBe(404)
-    expect(fetched).toBe(false)
   })
 })

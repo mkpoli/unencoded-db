@@ -1,6 +1,6 @@
 declare global {
   namespace App {
-    interface Platform { env: { DB: D1Database; MEDIA: R2Bucket } }
+    interface Platform { env: { DB: D1Database } }
   }
 }
 export {}
