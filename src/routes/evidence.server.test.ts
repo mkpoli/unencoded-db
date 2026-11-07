@@ -192,7 +192,7 @@ describe('evidence routes', () => {
       const missing = await actions.default!(event(record, DB, images, null, 'ja')) as any
       expect(missing.data.errors.image).toBe('出典画像を選択してください。JPEG、PNG、WebPのいずれか、8 MiBまでです。')
       const unsupported = await actions.default!(event(record, DB, images, imageFile(new TextEncoder().encode('<svg/>'), 'x.svg', 'image/svg+xml'), 'zh-Hant')) as any
-      expect(unsupported.data.errors.image).toBe('圖片必須是JPEG、PNG或WebP檔案。')
+      expect(unsupported.data.errors.image).toBe('圖片必須是有效的JPEG、PNG或WebP檔案。')
       const empty = await actions.default!(event(record, DB, images, imageFile(new Uint8Array(), 'empty.png'), 'zh-Hans')) as any
       expect(empty.data.errors.image).toBe('图片文件为空。')
       const oversize = await actions.default!(event(record, DB, images, imageFile(new Uint8Array(MAX_IMAGE_BYTES + 1)), 'ko')) as any
