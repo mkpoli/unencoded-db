@@ -6,6 +6,6 @@
 </script>
 
 <svelte:head><title>{message} · {t(locale, 'app.name')}</title></svelte:head>
-<h1>{status}</h1>
-<p>{message}</p>
+<h1>{message}</h1>
+<p>{status}</p>
 <p><a href={localizedHref(locale)}>{t(locale, 'error.home')}</a></p>

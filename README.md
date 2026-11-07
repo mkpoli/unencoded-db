@@ -2,7 +2,7 @@
 
 A community evidence wiki for characters and glyphs. Anyone can add a record with a source image and view the collection.
 
-A record keeps one source image as its evidence: a photo, scan or screenshot of the character or glyph. The image is served only through its record at `/{locale}/entry/[id]/image`. Classifying the glyph is a later question.
+A new record keeps one source image as its evidence: a photo, scan or screenshot of the character or glyph. The image is served only through its record at `/{locale}/entry/[id]/image`. Classifying the glyph is a later question.
 
 ## Languages and URLs
 
@@ -21,7 +21,7 @@ For example, the collection is at `/ja` and a record at `/ja/entry/12`.
 
 A request to `/` returns a 303 redirect to the negotiated locale, with English as the default. Negotiation reads `Accept-Language` in quality order: `ja`, `ko` and `vi` map to themselves; `zh-TW`, `zh-HK`, `zh-MO` and `zh-Hant` map to `zh-Hant`; other Chinese tags map to `zh-Hans`; every other tag falls back to English. No locale cookie is used, so the address always names the language.
 
-Application links keep the active locale; the third-party notice is a static file at `/third-party/README.md`. The navigation language switcher links to the same path and query string in each locale. The locale layout validates the prefix and rejects unknown or malformed segments with 404. Other paths under a valid locale render the localized error page. Creating a record redirects to its localized entry page.
+Application links keep the active locale; the third-party notice is a static English file at `/third-party/README.md`. The navigation language switcher links to the same path and query string in each locale. The locale layout validates the prefix and rejects unknown or malformed segments with 404. Other paths under a valid locale render the localized error page. Creating a record redirects to its localized entry page.
 
 Translations live in `messages/{en,ja,zh-Hans,zh-Hant,ko,vi}.json`. Each catalogue contains only the keys the public pages use.
 
@@ -49,14 +49,14 @@ bun run build
 
 ## Images
 
-- One image per record. There is no editing or replacement flow.
+- One image per new record. Rows migrated from `0001` remain image-less. There is no editing or replacement flow.
 - JPEG, PNG and WebP are accepted, identified by magic bytes. SVG, HTML, empty and unrecognised files are rejected.
 - The maximum file size is 8 MiB.
 - Bytes live in R2; content type and size live in D1.
 - Images are not decoded or re-encoded. A corrupt file with a valid signature may fail to render in the browser.
 - `POST /{locale}/new` accepts up to 8 MiB plus form framing. Other POST routes keep the 128 KiB limit.
 - Image responses use the stored content type, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, so hiding takes effect on the next request. Missing, hidden and invalid-locale images also return an uncached 404.
-- Images are stripped of common metadata on upload: JPEG EXIF, XMP, IPTC and comments before the image scan, PNG text and EXIF chunks, and WebP EXIF/XMP chunks. EXIF orientation is kept; ICC colour profiles and pixel content are stored as uploaded. Image metadata is not preserved for attribution, so record credit in the bibliographic fields.
+- Images are stripped of common metadata on upload: JPEG EXIF, XMP, IPTC and comments before the image scan, PNG text, tIME and EXIF chunks, and WebP EXIF/XMP chunks. JPEG EXIF orientation is kept; ICC colour profiles and pixel content are stored as uploaded. Image metadata is not preserved for attribution, so record credit in the bibliographic fields.
 
 ## Visibility
 

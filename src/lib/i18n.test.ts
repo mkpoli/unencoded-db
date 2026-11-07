@@ -118,6 +118,7 @@ describe('dates', () => {
     for (const locale of LOCALES) {
       expect(formatDate(locale, '2026-11-01T00:00:00.000Z'), locale).toContain('2026')
     }
+    expect(formatDate('en', '2026-11-08T00:30:00.000Z')).toBe(formatDate('en', '2026-11-08T23:30:00.000Z'))
     expect(formatDate('ja', 'not a date')).toBe('not a date')
   })
 })

@@ -103,7 +103,7 @@ export function switchLocaleHref(locale: Locale, pathname: string, search = ''):
 export function formatDate(locale: Locale, value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date)
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(date)
 }
 
 /** The message for `key` in `locale`, with `{name}` placeholders filled from `values`. */

@@ -16,11 +16,11 @@
   {:else if form?.errors}
     <p class="notice error" role="alert">{t(data.locale, 'error.fields')}</p>
   {/if}
-  <form method="POST" enctype="multipart/form-data">
+  <form method="POST" enctype="multipart/form-data" novalidate>
     <section class="panel" aria-labelledby="source-heading">
       <h2 id="source-heading">{t(data.locale, 'field.source')}</h2>
       <div class="field">
-        <label>{t(data.locale, 'field.sourceImage')} <input name="image" type="file" accept="image/jpeg,image/png,image/webp" required aria-invalid={!!form?.errors?.image} aria-describedby={form?.errors?.image ? 'image-error' : 'image-help image-rights'} /></label>
+        <label>{t(data.locale, 'field.sourceImage')} <input name="image" type="file" accept="image/jpeg,image/png,image/webp" required aria-invalid={!!form?.errors?.image} aria-describedby={form?.errors?.image ? 'image-help image-rights image-error' : 'image-help image-rights'} /></label>
         <p class="field-help" id="image-help">{t(data.locale, 'field.sourceImageHint')}</p>
         <p class="field-help" id="image-rights">{t(data.locale, 'field.rightsHint')}</p>
         {#if form?.errors?.image}<p class="field-error" id="image-error">{form.errors.image}</p>{/if}

@@ -71,19 +71,21 @@ describe('localized pages', () => {
   test('new record form renders the localized source image fields and errors', async () => {
     const { head, body } = await page('src/routes/[locale]/new/+page.svelte', 'new', {
       data: { locale: 'zh-Hant' },
-      form: { errors: { image: '圖片必須是JPEG、PNG或WebP檔案。' }, values: { script: 'Han' } },
+      form: { errors: { image: '圖片必須是有效的JPEG、PNG或WebP檔案。' }, values: { script: 'Han' } },
     })
     expect(head).toContain('新增字 · 珍字集覽')
     expect(body).toContain('<h1>新增字</h1>')
     expect(body).toContain('出處圖片')
-    expect(body).toContain('支援JPEG、PNG或WebP，最大8 MiB。常見的定位與裝置中繼資料會被移除，圖片方向保留。')
+    expect(body).toContain('支援JPEG、PNG或WebP，最大8 MiB。常見的位置與裝置中繼資料會被移除，JPEG圖片方向保留。')
     expect(body).toContain('請只上傳你有權分享的圖片。')
+    expect(body).toContain('novalidate')
+    expect(body).toContain('aria-describedby="image-help image-rights image-error"')
     expect(body).toContain('發現地點或出處')
     expect(body).toContain('出處詳情')
     expect(body).toContain('書目資訊')
     expect(body).toContain('選填')
     expect(body).toContain('請檢查以下各項。')
-    expect(body).toContain('圖片必須是JPEG、PNG或WebP檔案。')
+    expect(body).toContain('圖片必須是有效的JPEG、PNG或WebP檔案。')
     expect(body).toContain('enctype="multipart/form-data"')
     expect(body).toContain('name="image"')
     expect(body).toContain('type="file"')
@@ -106,14 +108,15 @@ describe('localized pages', () => {
     expect(body).toContain('alt="출처 이미지"')
     expect(body).toContain('표의 문자 구성 설명(IDS)')
     expect(body).toContain('발견한 곳')
-    expect(body).toContain('추가 시각')
+    expect(body).toContain('추가일')
     expect(body).not.toContain('https://example.org/source')
   })
 
   test('error page renders the localized not-found message and home link', async () => {
     const notFound = await page('src/lib/components/ErrorPage.svelte', 'error', { locale: 'zh-Hans', status: 404 })
     expect(notFound.head).toContain('此页面不存在。 · 珍字集览')
-    expect(notFound.body).toContain('<h1>404</h1>')
+    expect(notFound.body).toContain('<h1>此页面不存在。</h1>')
+    expect(notFound.body).toContain('404')
     expect(notFound.body).toContain('此页面不存在。')
     expect(notFound.body).toContain('href="/zh-Hans"')
     expect(notFound.body).toContain('返回记录列表')
