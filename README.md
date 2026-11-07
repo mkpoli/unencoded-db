@@ -28,7 +28,7 @@ Apply the D1 migrations before serving code that reads visibility. Drain old app
 
 ## Revision rollout
 
-The revision migration copies existing records in one statement; its time and storage costs grow with the database. Pause submissions and drain older writers before migrating, and rehearse the migration against a representative copy. Evidence updates that omit the revision step fail after migration.
+The revision migration copies existing records in one statement; its time and storage costs grow with the database. Pause submissions and drain older writers before migrating, and rehearse the migration against a representative copy. Evidence updates that omit the revision step fail after migration. Drain editors that do not check the visibility generation before changing visibility; they can otherwise submit forms opened before a hide and restore.
 
 ## Limitations
 

@@ -21,7 +21,8 @@
   <p>Changes are public and anonymous. Earlier versions remain visible.</p>
   {#if form?.message}<p class="notice error" role="alert">{form.message}</p>{/if}
   <form method="POST">
-    <input type="hidden" name="revision" value={form?.revision ?? data.entry.revision} />
+    <input type="hidden" name="revision" value={form ? (form.revision ?? '') : data.entry.revision} />
+    <input type="hidden" name="edit_generation" value={form ? (form.generation ?? '') : data.entry.edit_generation} />
     <section class="panel">
       {#each fields as field}
         <div class="field">

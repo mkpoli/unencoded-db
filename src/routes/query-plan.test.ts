@@ -14,6 +14,7 @@ function database() {
   db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
   db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
   db.exec(readFileSync(new URL('../../migrations/0003_revisions.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../migrations/0004_edit_generation.sql', import.meta.url), 'utf8'))
   return db
 }
 
@@ -79,7 +80,7 @@ describe('public query plans', () => {
         await history({ ...base, url: new URL(path, 'https://example.test') } as any)
       }
       const form = new FormData()
-      form.set('script', 'Han'); form.set('url', 'https://example.org'); form.set('revision', '1')
+      form.set('script', 'Han'); form.set('url', 'https://example.org'); form.set('revision', '1'); form.set('edit_generation', '1')
       await expect(editActions.default!({ ...base, request: new Request('https://example.test', { method: 'POST', body: form }) } as any)).rejects.toMatchObject({ status: 303 })
       expect(plans).toHaveLength(7)
       for (const i of [0, 1, 3, 5, 6]) assertPlan(plans[i], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)

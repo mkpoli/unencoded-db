@@ -10,7 +10,7 @@ function idOf(id: string) {
 
 export const load: PageServerLoad = async ({ params, platform }) => {
   if (!platform) error(500, 'Database unavailable')
-  const entry = await platform.env.DB.prepare(`SELECT id, revision, ${fields.join(', ')} FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(idOf(params.id)).first()
+  const entry = await platform.env.DB.prepare(`SELECT id, revision, edit_generation, ${fields.join(', ')} FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(idOf(params.id)).first()
   if (!entry) error(404)
   return { entry }
 }
@@ -23,17 +23,19 @@ export const actions: Actions = {
     const values = Object.fromEntries(fields.map(name => [name, typeof form.get(name) === 'string' ? form.get(name) : '']))
     const version = form.get('revision')
     const revision = typeof version === 'string' && /^[1-9]\d*$/.test(version) ? Number(version) : NaN
+    const generationToken = form.get('edit_generation')
+    const generation = typeof generationToken === 'string' && /^[1-9]\d*$/.test(generationToken) ? Number(generationToken) : NaN
     const row = readEvidence(form)
     // Visibility is checked before returning even submitted data for a hidden entry.
     const current = await platform.env.DB.prepare(`SELECT revision FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first<{ revision: number }>()
     if (!current) error(404)
     const errors = evidenceErrors(form)
-    if (!Number.isSafeInteger(revision) || !row || Object.keys(errors).length) return fail(400, { values, revision: version, errors, message: 'Check the fields below.' })
-    const updated = await platform.env.DB.prepare(`UPDATE entries SET ${fields.map(name => `${name} = ?`).join(', ')}, revision = revision + 1 WHERE id = ? AND ${publicEntryPredicate} AND revision = ? RETURNING id`).bind(...fields.map(name => row[name]), id, revision).first()
+    if (!Number.isSafeInteger(revision) || !Number.isSafeInteger(generation) || !row || Object.keys(errors).length) return fail(400, { values, revision: version, generation: generationToken, errors, message: 'Check the fields below.' })
+    const updated = await platform.env.DB.prepare(`UPDATE entries SET ${fields.map(name => `${name} = ?`).join(', ')}, revision = revision + 1 WHERE id = ? AND ${publicEntryPredicate} AND revision = ? AND edit_generation = ? RETURNING id`).bind(...fields.map(name => row[name]), id, revision, generation).first()
     if (!updated) {
       const visible = await platform.env.DB.prepare(`SELECT revision FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first()
       if (!visible) error(404)
-      return fail(409, { values, revision: version, errors, message: 'This record changed while you were editing. Open the current version in another tab, then copy your changes there.' })
+      return fail(409, { values, revision: version, generation: generationToken, errors, message: 'This record changed while you were editing. Open the current version in another tab, then copy your changes there.' })
     }
     redirect(303, `/entry/${id}`)
   }

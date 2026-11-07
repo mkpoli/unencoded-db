@@ -9,6 +9,7 @@ function dbSetup() {
   for (const name of ['0001_init.sql', '0002_entry_visibility.sql']) db.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
   db.exec("INSERT INTO entries (script,place,url,title,created_at) VALUES ('old','book','https://example.org','title','2026')")
   db.exec(readFileSync(new URL('../../migrations/0003_revisions.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../migrations/0004_edit_generation.sql', import.meta.url), 'utf8'))
   return db
 }
 function binding(db: Database) {
@@ -27,7 +28,7 @@ describe('revisions', () => {
     const db = dbSetup()
     try {
       expect(db.query('SELECT revision, title FROM entry_revisions').get()).toEqual({ revision: 1, title: 'title' })
-      const values = { revision: '1', script: 'new', url: 'https://example.org/new', place: 'page', title: 'new title', author: 'A', publisher: 'P', year: '1900', page: '8', note: 'N', ids: 'X', description: 'D' }
+      const values = { revision: '1', edit_generation: '1', script: 'new', url: 'https://example.org/new', place: 'page', title: 'new title', author: 'A', publisher: 'P', year: '1900', page: '8', note: 'N', ids: 'X', description: 'D' }
       await expect(actions.default!(event(db, values))).rejects.toMatchObject({ status: 303 })
       expect(db.query('SELECT revision, title, author, publisher, year, page, note, ids, description FROM entry_revisions WHERE revision = 2').get()).toEqual({ revision: 2, title: 'new title', author: 'A', publisher: 'P', year: '1900', page: '8', note: 'N', ids: 'X', description: 'D' })
       const stale = await actions.default!(event(db, { ...values, title: 'unsaved' })) as any
@@ -49,11 +50,63 @@ describe('revisions', () => {
       expect(restored.revisions.find((r: any) => r.revision === 1).title).toBe('title')
     } finally { db.close() }
   })
+  test('visibility transitions invalidate old forms without creating revisions', async () => {
+    const db = dbSetup()
+    try {
+      const loaded = await editLoad(event(db)) as any
+      expect(loaded.entry.edit_generation).toBe(1)
+      const values = { revision: '1', edit_generation: '1', script: 'unsaved', url: 'https://example.org' }
+      db.exec('UPDATE entries SET visible = 1 WHERE id = 1')
+      expect(db.query('SELECT edit_generation FROM entries').get()).toEqual({ edit_generation: 1 })
+      db.exec('UPDATE entries SET visible = 0 WHERE id = 1')
+      await expect(actions.default!(event(db, values))).rejects.toMatchObject({ status: 404 })
+      db.exec('UPDATE entries SET visible = 1 WHERE id = 1')
+      expect(db.query('SELECT revision, edit_generation FROM entries').get()).toEqual({ revision: 1, edit_generation: 3 })
+      const stale = await actions.default!(event(db, values)) as any
+      expect(stale.status).toBe(409)
+      expect(stale.data.values.script).toBe('unsaved')
+      expect(stale.data.generation).toBe('1')
+      const invalid = await actions.default!(event(db, { ...values, url: 'bad' })) as any
+      expect(invalid.status).toBe(400)
+      expect(invalid.data.generation).toBe('1')
+      expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 1 })
+      expect(db.query('SELECT script FROM entries').get()).toEqual({ script: 'old' })
+      await expect(actions.default!(event(db, { ...values, edit_generation: '3' }))).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 2 })
+      const missing = await actions.default!(event(db, { revision: '2', script: 'missing', url: 'https://example.org' })) as any
+      expect(missing.status).toBe(400)
+      expect(missing.data.generation).toBeNull()
+    } finally { db.close() }
+  })
+  test('generation rejects resets, fractional values and invalid combined transitions', () => {
+    const db = dbSetup()
+    try {
+      db.exec('UPDATE entries SET edit_generation = edit_generation + 1 WHERE id = 1')
+      for (const value of ['1', '0', '2', '2.5', '4']) {
+        expect(() => db.exec(`UPDATE entries SET edit_generation = ${value} WHERE id = 1`)).toThrow()
+      }
+      expect(() => db.exec('UPDATE entries SET visible = 0, edit_generation = 1 WHERE id = 1')).toThrow()
+      expect(db.query('SELECT visible, edit_generation FROM entries').get()).toEqual({ visible: 1, edit_generation: 2 })
+      db.exec('UPDATE entries SET visible = 0, edit_generation = edit_generation + 1 WHERE id = 1')
+      expect(db.query('SELECT visible, edit_generation FROM entries').get()).toEqual({ visible: 0, edit_generation: 4 })
+      db.exec('UPDATE entries SET visible = 1 WHERE id = 1')
+      expect(db.query('SELECT visible, edit_generation FROM entries').get()).toEqual({ visible: 1, edit_generation: 5 })
+      expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 1 })
+    } finally { db.close() }
+  })
+  test('a failed generation increment rolls back visibility', () => {
+    const db = dbSetup()
+    try {
+      db.exec("CREATE TRIGGER reject_generation BEFORE UPDATE OF edit_generation ON entries BEGIN SELECT RAISE(ABORT, 'failure'); END")
+      expect(() => db.exec('UPDATE entries SET visible = 0 WHERE id = 1')).toThrow()
+      expect(db.query('SELECT visible, edit_generation FROM entries').get()).toEqual({ visible: 1, edit_generation: 1 })
+    } finally { db.close() }
+  })
   test('edits preserve a long URL fallback and report invalid fields', async () => {
     const db = dbSetup()
     try {
       const url = `https://example.org/${'x'.repeat(600)}`
-      const values = { revision: '1', script: 'Han', url, place: url }
+      const values = { revision: '1', edit_generation: '1', script: 'Han', url, place: url }
       await expect(actions.default!(event(db, values))).rejects.toMatchObject({ status: 303 })
       expect(db.query('SELECT place FROM entries WHERE id = 1').get()).toEqual({ place: url })
       const bad = await actions.default!(event(db, { ...values, revision: '2', url: 'javascript:bad', place: 'book' })) as any
