@@ -22,6 +22,10 @@ bun run build
 
 The Cloudflare configuration contains a placeholder D1 ID. Provision a database and configure its binding before using a separate environment.
 
+## Continuous integration
+
+GitHub Actions runs `bun install --frozen-lockfile`, `bun run test`, `bun run check` and `bun run build` for pull requests and pushes to `main`. Browser checks are not part of CI.
+
 ## Limitations
 
 This is a local prototype, not ready for public operation. It has no moderation, abuse prevention, rate limiting, editing, deletion or contributor accounts. Pagination lists 20 records at a time.
