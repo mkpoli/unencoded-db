@@ -1,12 +1,12 @@
 # 珍字集覽
 
-A collection of evidence for unencoded characters and unifiable variants. Anyone can create a record with a source URL and view the collection.
+A community evidence wiki for unencoded characters and unifiable variants. Anyone can create a record with a source URL and view the collection.
 
 ## Names
 
 | Language | Name | Tagline |
 | --- | --- | --- |
-| English | Rare Character Compendium | Unencoded characters and unifiable variants |
+| English | Rare Character Compendium | A community evidence wiki for unencoded characters and unifiable variants |
 | Japanese | 珍字集覧 | 未収録文字と包摂可能な異体字 |
 | Simplified Chinese | 珍字集览 | 未编码文字与可统一的异体字 |
 | Traditional Chinese | 珍字集覽 | 未編碼文字與可統合的異體字 |
