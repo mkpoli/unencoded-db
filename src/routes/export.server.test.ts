@@ -95,6 +95,7 @@ describe('JSON export', () => {
       for (const query of ['?limit=0', '?limit=201', '?limit=x', '?after=-1', '?after=x', '?after=1.5', '?after=9007199254740992']) {
         const { response, body } = await exportJson(db, query)
         expect(response.status).toBe(400)
+        expect(response.headers.get('cache-control')).toBe('no-store')
         expect(body.error).toBe('Invalid after or limit parameter')
       }
     } finally { db.close() }

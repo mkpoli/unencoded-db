@@ -74,10 +74,17 @@ describe('public query plans', () => {
       await exportJson({ platform: { env: { DB: binding } }, url: new URL('https://example.test/export.json?after=10&limit=50') } as any)
       expect(plans).toHaveLength(1)
       assertPlan(plans[0], /SEARCH entries USING INDEX entries_visible_id \(id>\?\)/i)
+
+      // The planner keeps the partial index with statistics and a long hidden tail.
+      for (let index = 0; index < 50; index++) db.exec(`INSERT INTO entries (script, place, url, created_at, visible) VALUES ('S${index}', 'book', 'https://example.org', '2026', ${index < 25 ? 1 : 0})`)
+      db.exec('ANALYZE')
+      const analyzed = capture(db)
+      await exportJson({ platform: { env: { DB: analyzed.binding } }, url: new URL('https://example.test/export.json?after=25&limit=10') } as any)
+      assertPlan(analyzed.plans[0], /SEARCH entries USING INDEX entries_visible_id \(id>\?\)/i)
+
       db.exec('DROP INDEX entries_visible_id')
       const withoutIndex = capture(db)
-      await exportJson({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/export.json?after=10') } as any)
-      expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_visible_id \(id>\?\)/i)).toThrow()
+      await expect(exportJson({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/export.json?after=10') } as any)).rejects.toThrow()
     } finally { db.close() }
   })
 

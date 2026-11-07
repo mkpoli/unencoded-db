@@ -39,7 +39,7 @@ Each record contains its id, script, IDS, description, place, source URL, title,
 
 ## Limitations
 
-This is a local prototype, not ready for public operation. It has no moderation, abuse prevention, rate limiting, editing, deletion or contributor accounts. Pagination lists 20 records at a time.
+This is a local prototype, not ready for public operation. It has no moderation, abuse prevention, rate limiting, editing, deletion or contributor accounts. The collection page lists 20 records at a time; export pages use the cursor described above.
 
 ## License
 

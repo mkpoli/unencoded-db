@@ -32,11 +32,11 @@ export const GET: RequestHandler = async ({ platform, url }) => {
   if (!platform) error(500, 'Database unavailable')
   const after = readInteger(url.searchParams.get('after'), 0, 0, Number.MAX_SAFE_INTEGER)
   const limit = readInteger(url.searchParams.get('limit'), DEFAULT_LIMIT, 1, MAX_LIMIT)
-  if (after === null || limit === null) return json({ error: 'Invalid after or limit parameter' }, { status: 400 })
+  if (after === null || limit === null) return json({ error: 'Invalid after or limit parameter' }, { status: 400, headers: { 'cache-control': 'no-store' } })
 
   const { results } = await platform.env.DB
     .prepare(`SELECT id, script, ids, description, place, url, title, author, publisher, year, page, note, created_at
-              FROM entries WHERE ${publicEntryPredicate} AND id > ? ORDER BY id ASC LIMIT ?`)
+              FROM entries INDEXED BY entries_visible_id WHERE ${publicEntryPredicate} AND id > ? ORDER BY id ASC LIMIT ?`)
     .bind(after, limit + 1)
     .all<ExportRecord>()
   const records = results.slice(0, limit)
