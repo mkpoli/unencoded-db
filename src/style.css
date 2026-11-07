@@ -66,6 +66,8 @@ summary span { margin-left: 6px; color: var(--muted); font-size: 12px; font-weig
 .moderation-bar button { min-height: 32px; padding: 5px 11px; font-size: 12.5px; }
 .queue { display: grid; gap: 1rem; margin: 0 0 18px; padding: 0; list-style: none; }
 .queue-item { display: grid; gap: 10px; }
+.queue-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.queue-actions form { display: flex; }
 .queue-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 1rem; color: var(--muted); font-size: 12px; }
 .queue-item h2, .queue-description, .queue-place { overflow-wrap: anywhere; }
 .queue-description { white-space: pre-wrap; }

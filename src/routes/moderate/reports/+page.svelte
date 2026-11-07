@@ -6,7 +6,7 @@
 <svelte:head><title>Reports · 珍字集覽</title></svelte:head>
 <div class="page-heading">
   <h1>Open reports</h1>
-  <p>Signed in as {data.moderator}. Reports are anonymous. Hiding an entry resolves its open reports.</p>
+  <p>Signed in as {data.moderator}. Reports are anonymous. Dismissing resolves one report and leaves the entry visible; hiding resolves all of its open reports.</p>
 </div>
 <p><a href="/moderate">← Hidden entries</a></p>
 {#if data.reports.length}
@@ -18,9 +18,14 @@
         <p><strong>{reasonLabel(report.reason)}</strong></p>
         {#if report.note}<p class="queue-description">{report.note}</p>{/if}
         <p class="queue-place"><a href="/entry/{report.entry_id}">#{report.entry_id}</a> · {report.place}</p>
-        <form method="POST" action="/moderate/{report.entry_id}/hide">
-          <button type="submit">Hide entry</button>
-        </form>
+        <div class="queue-actions">
+          <form method="POST" action="/moderate/reports/{report.report_id}/dismiss">
+            <button type="submit">Dismiss</button>
+          </form>
+          <form method="POST" action="/moderate/{report.entry_id}/hide">
+            <button type="submit">Hide entry</button>
+          </form>
+        </div>
       </li>
     {/each}
   </ul>

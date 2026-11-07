@@ -61,6 +61,7 @@ describe('public query plans', () => {
       'moderate/[id]/hide/+server.ts',
       'moderate/[id]/restore/+server.ts',
       'moderate/reports/+page.server.ts',
+      'moderate/reports/[id]/dismiss/+server.ts',
       'new/+page.server.ts',
     ].sort())
   })
@@ -114,6 +115,29 @@ describe('public query plans', () => {
         url: new URL('https://example.test/moderate?before=100'),
       } as any)
       expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_hidden_id \(id<\?\)/i)).toThrow()
+    } finally { db.close() }
+  })
+
+  test('dismissal lookup and resolution use the report primary key', () => {
+    const db = database()
+    try {
+      function plan(sql: string, ...values: (string | number)[]): string[] {
+        const statement = db.prepare(`EXPLAIN QUERY PLAN ${sql}`)
+        try {
+          return (statement.all(...values) as PlanRow[]).map(row => row.detail)
+        } finally { statement.finalize() }
+      }
+
+      const auditLookup = plan('SELECT 1 FROM report_dismissals WHERE report_id = ?', 1)
+      expect(auditLookup.some(line => /SEARCH report_dismissals USING INTEGER PRIMARY KEY \(rowid=\?\)/i.test(line))).toBe(true)
+      expect(auditLookup.some(line => /\bSCAN report_dismissals\b/i.test(line))).toBe(false)
+
+      const openLookup = plan('SELECT 1 FROM entry_reports WHERE id = ? AND resolved_at IS NOT NULL', 1)
+      expect(openLookup.some(line => /SEARCH entry_reports USING INTEGER PRIMARY KEY \(rowid=\?\)/i.test(line))).toBe(true)
+
+      const resolution = plan('UPDATE entry_reports SET resolved_at = ? WHERE id = ?', '2026-02-03T04:05:06.000Z', 1)
+      expect(resolution.some(line => /SEARCH entry_reports USING INTEGER PRIMARY KEY \(rowid=\?\)/i.test(line))).toBe(true)
+      expect(resolution.some(line => /USE TEMP B-TREE/i.test(line))).toBe(false)
     } finally { db.close() }
   })
 

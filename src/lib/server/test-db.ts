@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { readFileSync } from 'node:fs'
 
-export const migrationFiles = ['0001_init.sql', '0002_entry_visibility.sql', '0003_moderation.sql', '0004_reports.sql'] as const
+export const migrationFiles = ['0001_init.sql', '0002_entry_visibility.sql', '0003_moderation.sql', '0004_reports.sql', '0005_report_dismissals.sql'] as const
 
 export function migrationSql(name: typeof migrationFiles[number]): string {
   return readFileSync(new URL(`../../../migrations/${name}`, import.meta.url), 'utf8')
@@ -57,4 +57,12 @@ export function reportRows(db: Database): { id: number; entry_id: number; reason
 
 export function entryVisible(db: Database, id: number): number {
   return (db.query('SELECT visible FROM entries WHERE id = ?').get(id) as { visible: number }).visible
+}
+
+export function insertDismissal(db: Database, reportId: number, moderator = 'mod@example.com', dismissedAt = '2026-02-03T04:05:06.000Z'): void {
+  db.query('INSERT INTO report_dismissals (report_id, moderator, dismissed_at) VALUES (?, ?, ?)').run(reportId, moderator, dismissedAt)
+}
+
+export function dismissalRows(db: Database): { report_id: number; moderator: string; dismissed_at: string }[] {
+  return db.query('SELECT report_id, moderator, dismissed_at FROM report_dismissals ORDER BY report_id').all() as never
 }

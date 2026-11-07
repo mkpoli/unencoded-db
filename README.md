@@ -1,6 +1,6 @@
 # 珍字集覽
 
-A collection of evidence for unencoded characters and unifiable variants. Anyone can create a record with a source URL, view the collection, and report a public record. Moderators review reports and can hide records; hidden records can be restored from a private queue.
+A collection of evidence for unencoded characters and unifiable variants. Anyone can create a record with a source URL, view the collection, and report a public record. Moderators review reports, can dismiss individual reports, and can hide records; hidden records can be restored from a private queue.
 
 ## Local development
 
@@ -73,7 +73,9 @@ A public entry page has a "Report this record" form. A report carries a reason (
 
 Reports store no reporter identity. The database keeps the entry id, reason, note, creation time and resolution time. The rate limiter hashes the client network in memory and stores neither the address nor the digest, and the Worker does not log it. Notes are untrusted text, visible to moderators in the private queue, and escaped when rendered. A hidden or missing entry cannot receive reports.
 
-Hiding an entry resolves its open reports in the same database statement as the visibility change, with `resolved_at` copied from the audit time. Restoring the entry leaves them resolved. An entry can hold at most 100 open reports; further reports return 429 until the entry is hidden, which resolves them. The cap bounds storage per entry, but it does not stop a network from filling the newest queue page with spam, so moderation coverage remains an operational requirement. Notes are capped at 2000 characters, and nothing prunes resolved rows automatically.
+Moderators can dismiss one open report from the private queue without hiding its entry. A dismissal stores the report id, moderator email and UTC time, then resolves that report in the same database statement; the entry and its other open reports are unchanged. Dismissal rows are append-only and contain no report content.
+
+Hiding an entry resolves every remaining open report in the same database statement as the visibility change, with `resolved_at` copied from the audit time. Restoring the entry leaves dismissed and otherwise resolved reports resolved. An entry can hold at most 100 open reports; further reports return 429 until reports are resolved. The cap bounds storage per entry, but it does not stop a network from filling the newest queue page with spam, so moderation coverage remains an operational requirement. Notes are capped at 2000 characters. Resolved reports and dismissal rows are not pruned automatically.
 
 ## Report rate limit
 
@@ -95,11 +97,11 @@ Cloudflare rate limit counters are approximate and local to each Cloudflare loca
 
 Local simulation: put `LOCAL_RATE_LIMIT=true` in `.dev.vars` (gitignored). The Worker then keeps one in-process bucket of five requests per 60 seconds, and only when the request host is loopback and the client address is `127.0.0.1` or `::1`; every other request fails closed with 503. Requests through a deployed hostname do not match the loopback condition.
 
-This feature is not deployed. Apply migrations 0001–0004 before running it.
+This feature is not deployed. Apply migrations 0001–0005 before running it.
 
 ## Limitations
 
-This is a local prototype, not ready for public operation. It has no editing, deletion, contributor accounts or record-creation rate limit; report submissions are limited as described above. Pagination lists 20 records at a time. The audit records hide and restore actions; it does not keep entry revisions or redacted content. Reporting and moderation are not deployed.
+This is a local prototype, not ready for public operation. It has no editing, deletion, contributor accounts or record-creation rate limit; report submissions are limited as described above. Pagination lists 20 records at a time. The audit and dismissal tables record hide and restore actions and report dismissals; they do not keep entry revisions or redacted content. Reporting and moderation are not deployed.
 
 ## License
 
