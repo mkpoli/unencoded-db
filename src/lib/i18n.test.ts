@@ -67,6 +67,8 @@ describe('locale values', () => {
     expect(localeFromPathname('/en/')).toBe('en')
     expect(localeFromPathname('/fr/x')).toBeNull()
     expect(localeFromPathname('/')).toBeNull()
+    expect(localeFromPathname('/%6a%61/new')).toBe('ja')
+    expect(localeFromPathname('/%zz/new')).toBeNull()
   })
 })
 
@@ -86,6 +88,7 @@ describe('localized links', () => {
     expect(pathAfterLocale('/en/')).toBe('')
     expect(pathAfterLocale('/new')).toBe('/new')
     expect(pathAfterLocale('/fr/x')).toBe('/fr/x')
+    expect(pathAfterLocale('/%6a%61/new')).toBe('/new')
   })
 
   test('keeps the path and query string when switching language', () => {
@@ -93,6 +96,7 @@ describe('localized links', () => {
     expect(switchLocaleHref('vi', '/ja')).toBe('/vi')
     expect(switchLocaleHref('ko', '/ja/', '?q=1')).toBe('/ko?q=1')
     expect(switchLocaleHref('en', '/vi/new')).toBe('/en/new')
+    expect(switchLocaleHref('en', '/%6a%61/entry/7', '?before=5')).toBe('/en/entry/7?before=5')
   })
 })
 

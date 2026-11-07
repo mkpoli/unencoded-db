@@ -24,9 +24,18 @@ export function isLocale(value: unknown): value is Locale {
   return typeof value === 'string' && (LOCALES as readonly string[]).includes(value)
 }
 
+function decodeSegment(segment: string | undefined): string | undefined {
+  if (!segment) return segment
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
+}
+
 /** The locale a path starts with, or null when it has no valid locale prefix. */
 export function localeFromPathname(pathname: string): Locale | null {
-  const first = pathname.split('/')[1]
+  const first = decodeSegment(pathname.split('/')[1])
   return isLocale(first) ? first : null
 }
 
@@ -79,9 +88,9 @@ export function localizedHref(locale: Locale, path = '/'): string {
 
 /** The path after a valid locale prefix, or the path unchanged when it has none. */
 export function pathAfterLocale(pathname: string): string {
-  const first = pathname.split('/')[1]
-  if (!isLocale(first)) return pathname
-  const rest = pathname.split('/').slice(2).join('/')
+  const parts = pathname.split('/')
+  if (!isLocale(decodeSegment(parts[1]))) return pathname
+  const rest = parts.slice(2).join('/')
   return rest ? `/${rest}` : ''
 }
 

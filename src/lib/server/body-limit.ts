@@ -9,8 +9,13 @@ export const MAX_NEW_BODY = MAX_IMAGE_BYTES + 64 * 1024
 
 function isNewPath(pathname: string): boolean {
   const path = pathname.replace(/\/+$/, '') || '/'
-  if (path === '/new') return true
-  const [, locale, page] = path.split('/')
+  const [, rawLocale, page] = path.split('/')
+  let locale: string | undefined
+  try {
+    locale = decodeURIComponent(rawLocale ?? '')
+  } catch {
+    locale = rawLocale
+  }
   return isLocale(locale) && page === 'new'
 }
 

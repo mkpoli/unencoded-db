@@ -34,10 +34,10 @@ describe('write body limit', () => {
 describe('route body limits', () => {
   test('allows an 8 MiB image on the localized new page only', () => {
     expect(MAX_NEW_BODY).toBe(MAX_IMAGE_BYTES + 64 * 1024)
-    for (const path of ['/new', '/en/new', '/ja/new', '/zh-Hans/new', '/zh-Hant/new', '/ko/new', '/vi/new', '/ja/new/']) {
+    for (const path of ['/en/new', '/ja/new', '/zh-Hans/new', '/zh-Hant/new', '/ko/new', '/vi/new', '/ja/new/', '/%6a%61/new']) {
       expect(writeBodyLimit(path), path).toBe(MAX_NEW_BODY)
     }
-    for (const path of ['/', '/en', '/ja/entry/1', '/en/entry/1/image', '/ja/not-new', '/newer']) {
+    for (const path of ['/', '/new', '/en', '/ja/entry/1', '/en/entry/1/image', '/ja/not-new', '/newer']) {
       expect(writeBodyLimit(path), path).toBe(MAX_WRITE_BODY)
     }
   })
