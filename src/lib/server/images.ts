@@ -128,7 +128,14 @@ export function stripWebpMetadata(bytes: Uint8Array): Uint8Array | null {
     const padded = size + (size % 2)
     if (offset + 8 + padded > end) return null
     if (type === 'VP8 ' || type === 'VP8L' || type === 'VP8X') imageChunks++
-    if (type !== 'EXIF' && type !== 'XMP ') parts.push(bytes.slice(offset, offset + 8 + padded))
+    if (type === 'VP8X') {
+      const chunk = bytes.slice(offset, offset + 8 + padded)
+      // Clear the EXIF and XMP flags that no longer have matching chunks.
+      chunk[8] = chunk[8]! & ~0x0c
+      parts.push(chunk)
+    } else if (type !== 'EXIF' && type !== 'XMP ') {
+      parts.push(bytes.slice(offset, offset + 8 + padded))
+    }
     offset += 8 + padded
   }
   if (offset !== end || imageChunks === 0) return null
