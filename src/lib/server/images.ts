@@ -8,14 +8,11 @@ export type SourceImage = {
   size: number
 }
 
+export type ImageError = 'missing' | 'empty' | 'oversize' | 'unsupported'
+
 export type SourceImageResult =
   | { image: SourceImage; error?: never }
-  | { image?: never; error: string }
-
-export const MISSING_IMAGE_MESSAGE = 'Choose a source image: a JPEG, PNG or WebP file up to 8 MiB.'
-export const EMPTY_IMAGE_MESSAGE = 'The image file is empty.'
-export const OVERSIZE_IMAGE_MESSAGE = 'The image is larger than 8 MiB.'
-export const UNSUPPORTED_IMAGE_MESSAGE = 'The image must be a JPEG, PNG or WebP file.'
+  | { image?: never; error: ImageError }
 
 function startsWith(bytes: Uint8Array, signature: number[], offset = 0): boolean {
   if (bytes.length < offset + signature.length) return false
@@ -216,22 +213,22 @@ function isFile(value: FormDataEntryValue | null): value is File {
 /** Validate the required image field and read its bytes. */
 export async function readSourceImage(form: FormData, name = 'image'): Promise<SourceImageResult> {
   const file = form.get(name)
-  if (file === null) return { error: MISSING_IMAGE_MESSAGE }
-  if (!isFile(file)) return { error: UNSUPPORTED_IMAGE_MESSAGE }
-  if (file.size === 0) return { error: EMPTY_IMAGE_MESSAGE }
-  if (file.size > MAX_IMAGE_BYTES) return { error: OVERSIZE_IMAGE_MESSAGE }
+  if (file === null) return { error: 'missing' }
+  if (!isFile(file)) return { error: 'unsupported' }
+  if (file.size === 0) return { error: 'empty' }
+  if (file.size > MAX_IMAGE_BYTES) return { error: 'oversize' }
   let bytes: Uint8Array
   try {
     bytes = new Uint8Array(await file.arrayBuffer())
   } catch {
-    return { error: UNSUPPORTED_IMAGE_MESSAGE }
+    return { error: 'unsupported' }
   }
-  if (bytes.byteLength > MAX_IMAGE_BYTES) return { error: OVERSIZE_IMAGE_MESSAGE }
-  if (bytes.byteLength === 0) return { error: EMPTY_IMAGE_MESSAGE }
+  if (bytes.byteLength > MAX_IMAGE_BYTES) return { error: 'oversize' }
+  if (bytes.byteLength === 0) return { error: 'empty' }
   const type = detectImageType(bytes)
-  if (!type) return { error: UNSUPPORTED_IMAGE_MESSAGE }
+  if (!type) return { error: 'unsupported' }
   const stripped = stripImageMetadata(bytes, type)
-  if (!stripped) return { error: UNSUPPORTED_IMAGE_MESSAGE }
+  if (!stripped) return { error: 'unsupported' }
   return { image: { bytes: stripped, type, size: stripped.byteLength } }
 }
 

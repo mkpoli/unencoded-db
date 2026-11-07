@@ -3,9 +3,9 @@ import { describe, expect, test } from 'bun:test'
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { createTestDatabase, fakeImages } from '../test-support'
-import { load as list } from './+page.server'
-import { load as detail } from './entry/[id]/+page.server'
-import { GET as image } from './entry/[id]/image/+server'
+import { load as list } from './[locale]/+page.server'
+import { load as detail } from './[locale]/entry/[id]/+page.server'
+import { GET as image } from './[locale]/entry/[id]/image/+server'
 
 type PlanRow = { detail: string }
 
@@ -49,9 +49,12 @@ describe('public query plans', () => {
     }
     expect(routes(new URL('.', import.meta.url).pathname).sort()).toEqual([
       '+page.server.ts',
-      'entry/[id]/+page.server.ts',
-      'entry/[id]/image/+server.ts',
-      'new/+page.server.ts',
+      '[locale]/+layout.server.ts',
+      '[locale]/+page.server.ts',
+      '[locale]/[...rest]/+page.server.ts',
+      '[locale]/entry/[id]/+page.server.ts',
+      '[locale]/entry/[id]/image/+server.ts',
+      '[locale]/new/+page.server.ts',
     ].sort())
   })
 
@@ -59,14 +62,14 @@ describe('public query plans', () => {
     const db = database()
     try {
       const { binding, plans } = capture(db)
-      for (const path of ['/', '/?before=100']) {
+      for (const path of ['/en', '/en?before=100', '/ja?before=100']) {
         await list({ platform: { env: { DB: binding } }, url: new URL(path, 'https://example.test') } as any)
       }
-      expect(plans).toHaveLength(2)
+      expect(plans).toHaveLength(3)
       for (const plan of plans) assertPlan(plan, /SEARCH entries USING INDEX entries_visible_id \(id<\?\)/i)
       db.exec('DROP INDEX entries_visible_id')
       const withoutIndex = capture(db)
-      await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/?before=100') } as any)
+      await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/en?before=100') } as any)
       expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_visible_id \(id<\?\)/i)).toThrow()
     } finally { db.close() }
   })
@@ -75,7 +78,7 @@ describe('public query plans', () => {
     const db = database()
     try {
       const { binding, plans } = capture(db)
-      await expect(detail({ platform: { env: { DB: binding } }, params: { id: '1' } } as any)).rejects.toMatchObject({ status: 404 })
+      await expect(detail({ platform: { env: { DB: binding } }, params: { locale: 'en', id: '1' } } as any)).rejects.toMatchObject({ status: 404 })
       expect(plans).toHaveLength(1)
       assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
     } finally { db.close() }
@@ -85,8 +88,9 @@ describe('public query plans', () => {
     const db = database()
     try {
       const { binding, plans } = capture(db)
-      const response = await image({ platform: { env: { DB: binding, IMAGES: fakeImages().bucket } }, params: { id: '1' } } as any)
+      const response = await image({ platform: { env: { DB: binding, IMAGES: fakeImages().bucket } }, params: { locale: 'en', id: '1' } } as any)
       expect(response.status).toBe(404)
+      expect(response.headers.get('cache-control')).toBe('no-store')
       expect(plans).toHaveLength(1)
       assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
     } finally { db.close() }
