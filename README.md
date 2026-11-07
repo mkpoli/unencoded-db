@@ -9,16 +9,37 @@ Install [Bun](https://bun.sh/), then run:
 ```sh
 bun install
 bun run db:local
-bun run preview
 ```
 
-The local D1 database is stored in Wrangler's local state. To run the checks:
+New records are paused by default. To enable local submissions, create `.dev.vars` in the project root containing:
+
+```dotenv
+NEW_RECORDS_PAUSED=0
+LOCAL_RATE_LIMIT=true
+```
+
+Then start Wrangler on loopback:
+
+```sh
+bun run build
+bunx wrangler dev --local --infer-origin-from-routes=false --ip 127.0.0.1
+```
+
+Open the loopback URL printed by Wrangler. The local D1 database is stored in Wrangler's local state. To run the checks:
 
 ```sh
 bun run test
 bun run check
 bun run build
 ```
+
+## New record pause
+
+`POST /new` accepts submissions only when `NEW_RECORDS_PAUSED` is exactly `0`. The checked-in Worker configuration defaults to `1`; missing and all other values pause submissions. Configure the variable explicitly for each Worker environment. Paused same-origin requests return 503 before the limiter or request body is read; framework checks may reject cross-origin requests earlier. GET requests and other POST routes are unaffected by this pause.
+
+Worker configuration changes roll out across locations over time. A pause cannot retract writes already in flight; allow for propagation and in-flight requests when responding to an incident. Coordinate configuration with deployments and rollbacks: [Wrangler deployments](https://developers.cloudflare.com/workers/wrangler/configuration/) can overwrite dashboard variables unless configured to retain them, and deploying the checked-in default pauses new records. Older Worker versions without this gate cannot enforce the pause. With JavaScript, the 503 leaves the draft in the form; without JavaScript the response cannot restore submitted fields, and browser Back behavior varies.
+
+## Cloudflare configuration
 
 The Cloudflare configuration contains a placeholder D1 ID. Provision a database and configure its binding before using a separate environment. The `CONTRIBUTION_RATE_LIMIT` binding targets 5 POST requests per IPv4 address or IPv6 /64 prefix per 60 seconds at each Cloudflare location; counters can overshoot. Configure that binding separately for every named environment; choose a namespace ID unique to the limiter within the account. Missing or unavailable bindings and missing client addresses return 503; exhausted limits return 429. Both checks happen before reading the request body. With JavaScript, a 429 or limiter-unavailable 503 keeps the form in place; without JavaScript the response cannot restore submitted fields, and browser Back behavior varies. An oversized request returns 413 and does not preserve the form in place.
 

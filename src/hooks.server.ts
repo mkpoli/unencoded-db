@@ -25,9 +25,9 @@ function rateLimitKey(event: RequestEvent): string | null {
   return null
 }
 
-function unavailable(request: Request): Response {
+function unavailable(request: Request, message = 'Rate limit unavailable'): Response {
   const enhanced = request.headers.get('x-sveltekit-action') === 'true'
-  return new Response(enhanced ? JSON.stringify({ type: 'failure', status: 503 }) : 'Rate limit unavailable', {
+  return new Response(enhanced ? JSON.stringify({ type: 'failure', status: 503 }) : message, {
     status: 503,
     headers: { 'content-type': enhanced ? 'application/json' : 'text/plain; charset=utf-8', 'cache-control': 'no-store' }
   })
@@ -37,6 +37,7 @@ const limitedPage = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 
 export const handle: Handle = async ({ event, resolve }) => {
   if (event.request.method === 'POST' && event.route.id === '/new') {
+    if (event.platform?.env?.NEW_RECORDS_PAUSED !== '0') return unavailable(event.request, 'Contributions are temporarily unavailable')
     try {
       const key = rateLimitKey(event)
       const limiter = event.platform?.env.CONTRIBUTION_RATE_LIMIT
