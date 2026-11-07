@@ -7,6 +7,7 @@ import {
   negotiateLocale,
   pathAfterLocale,
   switchLocaleHref,
+  formatDate,
   t,
   type Locale,
 } from './i18n'
@@ -105,5 +106,14 @@ describe('translation lookup', () => {
 
   test('falls back to English for an unknown key', () => {
     expect(t('ja', 'not.a.key')).toBe('not.a.key')
+  })
+})
+
+describe('dates', () => {
+  test('formats a timestamp in each locale and leaves invalid text alone', () => {
+    for (const locale of LOCALES) {
+      expect(formatDate(locale, '2026-11-01T00:00:00.000Z'), locale).toContain('2026')
+    }
+    expect(formatDate('ja', 'not a date')).toBe('not a date')
   })
 })

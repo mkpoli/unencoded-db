@@ -90,6 +90,13 @@ export function switchLocaleHref(locale: Locale, pathname: string, search = ''):
   return `${localizedHref(locale, pathAfterLocale(pathname) || '/')}${search}`
 }
 
+/** A timestamp as a date in the locale, or the original text when it is not a date. */
+export function formatDate(locale: Locale, value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date)
+}
+
 /** The message for `key` in `locale`, with `{name}` placeholders filled from `values`. */
 export function t(locale: Locale, key: MessageKey | string, values: Record<string, string | number> = {}): string {
   const messages = catalogues[locale] ?? en

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { localizedHref, t, type Locale } from '$lib/i18n'
+  import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
 
   type Entry = { id: number; script: string; ids: string | null; description: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
   let { data }: { data: { locale: Locale; entry: Entry } } = $props()
@@ -25,5 +25,5 @@
   {#if entry.year}<dt>{t(data.locale, 'field.year')}</dt><dd>{entry.year}</dd>{/if}
   {#if entry.page}<dt>{t(data.locale, 'field.page')}</dt><dd>{entry.page}</dd>{/if}
   {#if entry.note}<dt>{t(data.locale, 'field.note')}</dt><dd>{entry.note}</dd>{/if}
-  <dt>{t(data.locale, 'entry.added')}</dt><dd>{entry.created_at}</dd>
+  <dt>{t(data.locale, 'entry.added')}</dt><dd>{formatDate(data.locale, entry.created_at)}</dd>
 </dl>
