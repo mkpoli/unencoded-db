@@ -24,7 +24,7 @@ The Cloudflare configuration contains a placeholder D1 ID. Provision a database 
 
 ## Continuous integration
 
-GitHub Actions runs `bun install --frozen-lockfile`, `bun run test`, `bun run check` and `bun run build` for pull requests and pushes to `main`. Browser checks are not part of CI.
+GitHub Actions runs `bun install --frozen-lockfile`, `bun run test`, `bun run check` and `bun run build` for pull requests and pushes to `main`.
 
 ## Limitations
 
