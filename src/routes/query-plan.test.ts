@@ -1,17 +1,16 @@
 import { Database } from 'bun:sqlite'
 import { describe, expect, test } from 'bun:test'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { createTestDatabase, fakeImages } from '../test-support'
 import { load as list } from './+page.server'
 import { load as detail } from './entry/[id]/+page.server'
+import { GET as image } from './entry/[id]/image/+server'
 
 type PlanRow = { detail: string }
 
 function database() {
-  const db = new Database(':memory:')
-  db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
-  return db
+  return createTestDatabase()
 }
 
 // Exercise the route's actual SQL while avoiding any storage or network access.
@@ -48,8 +47,14 @@ describe('public query plans', () => {
         return entry.isDirectory() ? routes(join(dir, entry.name), path) : /^\+(?:page\.server|layout\.server|server)\.[jt]s$/.test(entry.name) ? [path] : []
       })
     }
-    expect(routes(new URL('.', import.meta.url).pathname).sort()).toEqual(['+page.server.ts', 'entry/[id]/+page.server.ts', 'new/+page.server.ts'].sort())
+    expect(routes(new URL('.', import.meta.url).pathname).sort()).toEqual([
+      '+page.server.ts',
+      'entry/[id]/+page.server.ts',
+      'entry/[id]/image/+server.ts',
+      'new/+page.server.ts',
+    ].sort())
   })
+
   test('list uses the visible index for cursor and descending order', async () => {
     const db = database()
     try {
@@ -76,4 +81,13 @@ describe('public query plans', () => {
     } finally { db.close() }
   })
 
+  test('image lookup uses the primary key', async () => {
+    const db = database()
+    try {
+      const { binding, plans } = capture(db)
+      await expect(image({ platform: { env: { DB: binding, IMAGES: fakeImages().bucket } }, params: { id: '1' } } as any)).rejects.toMatchObject({ status: 404 })
+      expect(plans).toHaveLength(1)
+      assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
+    } finally { db.close() }
+  })
 })

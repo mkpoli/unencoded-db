@@ -2,12 +2,16 @@
 <svelte:head><title>Evidence #{entry.id} · 珍字集覽</title></svelte:head>
 <p><a href="/">← All evidence</a></p>
 <h1>{entry.ids || entry.script}</h1>
+{#if entry.has_image}
+  <figure class="source-image">
+    <img src="/entry/{entry.id}/image" alt={entry.description || 'Source image'} />
+  </figure>
+{/if}
 <dl>
   <dt>Script</dt><dd>{entry.script}</dd>
   {#if entry.ids}<dt>IDS</dt><dd>{entry.ids}</dd>{/if}
   {#if entry.description}<dt>Description</dt><dd>{entry.description}</dd>{/if}
   <dt>Place seen</dt><dd>{entry.place}</dd>
-  {#if entry.url}<dt>Source URL</dt><dd><a href={entry.url} rel="nofollow noreferrer">{entry.url}</a></dd>{/if}
   {#if entry.title}<dt>Title</dt><dd>{entry.title}</dd>{/if}
   {#if entry.author}<dt>Author</dt><dd>{entry.author}</dd>{/if}
   {#if entry.publisher}<dt>Publisher</dt><dd>{entry.publisher}</dd>{/if}

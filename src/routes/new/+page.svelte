@@ -3,19 +3,25 @@
 <div class="form-page">
   <div class="page-heading">
     <h1>Add evidence</h1>
-    <p>Provide a source URL for the evidence. Contributions are public and anonymous.</p>
+    <p>Upload a photo, scan or screenshot of the character or glyph. Contributions are public and anonymous.</p>
   </div>
-  {#if form?.errors}<p class="notice error" role="alert">Check the fields below.</p>{/if}
-  <form method="POST">
+  {#if form?.errors?.form}
+    <p class="notice error" role="alert">{form.errors.form}</p>
+  {:else if form?.errors}
+    <p class="notice error" role="alert">Check the fields below.</p>
+  {/if}
+  <form method="POST" enctype="multipart/form-data">
     <section class="panel" aria-labelledby="source-heading">
       <h2 id="source-heading">Source</h2>
       <div class="field">
-        <label>Place seen <input name="place" maxlength="500" value={form?.values?.place ?? ''} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} /></label>
-        {#if form?.errors?.place}<p class="field-error" id="place-error">{form.errors.place}</p>{/if}
+        <label>Source image <input name="image" type="file" accept="image/jpeg,image/png,image/webp" required aria-invalid={!!form?.errors?.image} aria-describedby={form?.errors?.image ? 'image-error' : 'image-help'} /></label>
+        <p class="field-help" id="image-help">JPEG, PNG or WebP, up to 8 MiB. Remove location and other personal metadata before uploading.</p>
+        <p class="field-help">Upload only an image you have the right to share.</p>
+        {#if form?.errors?.image}<p class="field-error" id="image-error">{form.errors.image}</p>{/if}
       </div>
       <div class="field">
-        <label>Source URL <input name="url" type="url" required maxlength="1000" value={form?.values?.url ?? ''} aria-invalid={!!form?.errors?.url} aria-describedby={form?.errors?.url ? 'url-error' : undefined} /></label>
-        {#if form?.errors?.url}<p class="field-error" id="url-error">{form.errors.url}</p>{/if}
+        <label>Place seen <input name="place" required maxlength="500" value={form?.values?.place ?? ''} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} /></label>
+        {#if form?.errors?.place}<p class="field-error" id="place-error">{form.errors.place}</p>{/if}
       </div>
       <details open={!!(form?.errors?.title || form?.errors?.author || form?.errors?.publisher || form?.errors?.year || form?.errors?.page)}>
         <summary>Bibliographic details <span>Optional</span></summary>

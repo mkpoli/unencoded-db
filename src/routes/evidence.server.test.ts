@@ -1,60 +1,84 @@
-import { Database } from 'bun:sqlite'
 import { describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+import { PNG_BYTES, createTestDatabase, d1Binding, fakeImages, imageFile } from '../test-support'
 import { actions } from './new/+page.server'
 import { load as list } from './+page.server'
 import { load as detail } from './entry/[id]/+page.server'
 
-function event(values: Record<string, string>, db: unknown) {
+function event(values: Record<string, string>, DB: unknown, images: ReturnType<typeof fakeImages>, image: File | null = imageFile(PNG_BYTES)) {
   const form = new FormData()
   for (const [key, value] of Object.entries(values)) form.set(key, value)
-  return { request: new Request('https://example.test/new', { method: 'POST', body: form }), platform: { env: { DB: db } } } as any
+  if (image !== null) form.set('image', image)
+  return {
+    request: new Request('https://example.test/new', { method: 'POST', body: form }),
+    platform: { env: { DB, IMAGES: images.bucket } },
+  } as any
 }
 
-function binding(db: Database) {
-  return { prepare(sql: string) { return { bind(...values: (string | number | null)[]) {
-    return {
-      first: async () => db.query(sql).get(...values),
-      all: async () => ({ results: db.query(sql).all(...values) }),
-    }
-  } } } }
+const record = {
+  script: 'Han',
+  ids: '⿰木木',
+  place: 'Book',
+  title: 'Source',
+  author: 'Author',
+  publisher: 'Publisher',
+  year: '1900',
+  page: '12',
+  note: 'Notes',
 }
 
 describe('evidence routes', () => {
-  test('creates and displays source-linked evidence with bibliographic details', async () => {
-    const db = new Database(':memory:')
+  test('creates an image-backed record with bibliographic details', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
     try {
-      db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
-      db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
-      expect(() => db.exec("INSERT INTO entries (script, place, created_at) VALUES ('Han', 'Book', '2026')")).toThrow()
-      const DB = binding(db)
-      const values = { script: 'Han', url: 'https://example.org/book', ids: '⿰木木', title: 'Source', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'Notes' }
-      await expect(actions.default!(event(values, DB))).rejects.toMatchObject({ status: 303, location: '/entry/1' })
+      const DB = d1Binding(db)
+      await expect(actions.default!(event(record, DB, images))).rejects.toMatchObject({ status: 303, location: '/entry/1' })
+
+      expect(images.puts).toHaveLength(1)
+      const put = images.puts[0]
+      expect(put.key).toMatch(/^entries\/[0-9a-f-]{36}$/)
+      expect(put.bytes).toEqual(PNG_BYTES)
+      expect(put.contentType).toBe('image/png')
+
+      const row = db.query('SELECT * FROM entries WHERE id = 1').get() as any
+      expect(row).toMatchObject({ ...record, visible: 1, image_key: put.key, image_type: 'image/png', image_size: PNG_BYTES.byteLength })
+      expect('url' in row).toBe(false)
+
       const listing = await list({ platform: { env: { DB } }, url: new URL('https://example.test/') } as any) as any
-      expect(listing.entries[0]).toMatchObject({ id: 1, ids: values.ids, place: values.url })
+      expect(listing.entries[0]).toMatchObject({ id: 1, ids: record.ids, place: record.place })
+
       const result = await detail({ platform: { env: { DB } }, params: { id: '1' } } as any) as any
-      expect(result.entry).toMatchObject(values)
-      expect(result.entry.place).toBe(values.url)
+      expect(result.entry).toMatchObject({ ...record, id: 1, has_image: 1 })
+      expect(result.entry.image_key).toBeUndefined()
+      expect(result.entry.url).toBeUndefined()
+      expect(JSON.stringify(result)).not.toContain(put.key)
     } finally { db.close() }
   })
-  test('migration preserves existing entries and visibility applies to every public read', async () => {
-    const db = new Database(':memory:')
+
+  test('lists and renders a historical record without an image', async () => {
+    const db = createTestDatabase()
     try {
-      db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
-      db.exec("INSERT INTO entries (script, place, url, created_at) VALUES ('old', 'book', 'https://example.org', '2026')")
-      db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
-      expect(db.query('SELECT visible FROM entries WHERE id = 1').get()).toEqual({ visible: 1 })
-      expect(() => db.exec('UPDATE entries SET visible = 2 WHERE id = 1')).toThrow()
-      const DB = binding(db)
-      const oldEntry = await detail({ platform: { env: { DB } }, params: { id: '1' } } as any) as any
-      expect(oldEntry.entry.script).toBe('old')
-      await expect(actions.default!(event({ script: 'created', url: 'https://example.org' }, DB))).rejects.toMatchObject({ status: 303, location: '/entry/2' })
-      expect((await detail({ platform: { env: { DB } }, params: { id: '2' } } as any) as any).entry.script).toBe('created')
+      db.exec("INSERT INTO entries (script, ids, place, title, created_at) VALUES ('Han', '⿰木木', 'Book', 'Old source', '2026-01-01T00:00:00.000Z')")
+      const DB = d1Binding(db)
+      const listing = await list({ platform: { env: { DB } }, url: new URL('https://example.test/') } as any) as any
+      expect(listing.entries).toHaveLength(1)
+      expect(listing.entries[0]).toMatchObject({ id: 1, place: 'Book' })
+      const result = await detail({ platform: { env: { DB } }, params: { id: '1' } } as any) as any
+      expect(result.entry).toMatchObject({ id: 1, title: 'Old source', has_image: 0 })
+      expect(result.entry.url).toBeUndefined()
+    } finally { db.close() }
+  })
+
+  test('hides entries from listing, pagination and detail', async () => {
+    const db = createTestDatabase()
+    try {
+      db.exec("INSERT INTO entries (script, place, created_at) VALUES ('old', 'book', '2026')")
+      db.exec("INSERT INTO entries (script, place, created_at) VALUES ('hidden', 'book', '2026')")
       db.exec('UPDATE entries SET visible = 0 WHERE id = 2')
-      for (let i = 0; i < 45; i++) {
-        db.query('INSERT INTO entries (script, place, url, created_at, visible) VALUES (?, ?, ?, ?, ?)').run('new', 'book', 'https://example.org', '2026', i % 2)
-      }
+      const insert = db.query("INSERT INTO entries (script, place, created_at, visible) VALUES ('new', 'book', '2026', ?)")
+      for (let i = 0; i < 45; i++) insert.run(i % 2)
       db.exec('UPDATE entries SET visible = 0 WHERE id = 1')
+      const DB = d1Binding(db)
       const ids: number[] = []
       let before: number | null = null
       do {
@@ -72,19 +96,18 @@ describe('evidence routes', () => {
       expect((await detail({ platform: { env: { DB } }, params: { id: '4' } } as any) as any).entry.id).toBe(4)
     } finally { db.close() }
   })
+
   test('pagination handles empty, all-hidden, 20 and 21 visible entries', async () => {
-    const db = new Database(':memory:')
+    const db = createTestDatabase()
     try {
-      db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
-      db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
-      const DB = binding(db)
+      const DB = d1Binding(db)
       const page = async (before?: number) => {
         const url = new URL('https://example.test/')
         if (before !== undefined) url.searchParams.set('before', String(before))
         return await list({ platform: { env: { DB } }, url } as any) as any
       }
       expect(await page()).toEqual({ entries: [], next: null })
-      const insert = db.query("INSERT INTO entries (script, place, url, created_at, visible) VALUES ('Han', 'book', 'https://example.org', '2026', ?)")
+      const insert = db.query("INSERT INTO entries (script, place, created_at, visible) VALUES ('Han', 'book', '2026', ?)")
       for (let i = 0; i < 21; i++) insert.run(0)
       expect(await page()).toEqual({ entries: [], next: null })
       db.exec('UPDATE entries SET visible = 1 WHERE id <= 20')
@@ -100,23 +123,118 @@ describe('evidence routes', () => {
       expect(last.next).toBeNull()
     } finally { db.close() }
   })
-  test('requires a source URL even when a place is provided', async () => {
-    const result = await actions.default!(event({ script: 'Han', place: 'book' }, {})) as any
-    expect(result.status).toBe(400)
-    expect(result.data.errors.url).toContain('HTTP or HTTPS')
+
+  test('requires an image for a new record', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const result = await actions.default!(event(record, d1Binding(db), images, null)) as any
+      expect(result.status).toBe(400)
+      expect(result.data.errors.image).toContain('source image')
+      expect(images.puts).toHaveLength(0)
+      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
+    } finally { db.close() }
   })
-  test('preserves text on validation failure', async () => {
-    const result = await actions.default!(event({ script: 'Han', title: '  My title  ', note: 'notes' }, {})) as any
-    expect(result.status).toBe(400)
-    expect(result.data.errors.url).toBeDefined()
-    expect(result.data.values.title).toBe('  My title  ')
-    expect(result.data.values.note).toBe('notes')
+
+  test('rejects SVG and HTML masquerading as images', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      for (const file of [
+        imageFile(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"></svg>'), 'source.svg', 'image/svg+xml'),
+        imageFile(new TextEncoder().encode('<!doctype html><html></html>'), 'source.png', 'image/png'),
+      ]) {
+        const result = await actions.default!(event(record, DB, images, file)) as any
+        expect(result.status).toBe(400)
+        expect(result.data.errors.image).toContain('JPEG, PNG or WebP')
+      }
+      expect(images.puts).toHaveLength(0)
+    } finally { db.close() }
   })
-  test('reports specific field errors together', async () => {
-    const result = await actions.default!(event({ script: '', url: 'ftp://example.org/', title: 'x'.repeat(301) }, {})) as any
-    expect(result.data.errors.script).toContain('script')
-    expect(result.data.errors.url).toContain('HTTP or HTTPS')
-    expect(result.data.errors.title).toContain('length')
-    expect(result.data.values.url).toBe('ftp://example.org/')
+
+  test('keeps place required', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const withoutPlace: Record<string, string> = { ...record }
+      delete withoutPlace.place
+      for (const values of [{ ...record, place: '' }, withoutPlace]) {
+        const result = await actions.default!(event(values, d1Binding(db), images)) as any
+        expect(result.status).toBe(400)
+        expect(result.data.errors.place).toContain('where the character was seen')
+      }
+      expect(images.puts).toHaveLength(0)
+    } finally { db.close() }
+  })
+
+  test('reports field errors and preserves text', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const result = await actions.default!(event({ script: '', place: '', title: 'x'.repeat(301), note: 'notes' }, d1Binding(db), images, null)) as any
+      expect(result.status).toBe(400)
+      expect(result.data.errors.script).toContain('script')
+      expect(result.data.errors.place).toContain('where')
+      expect(result.data.errors.title).toContain('length')
+      expect(result.data.errors.image).toBeDefined()
+      expect(result.data.values.note).toBe('notes')
+    } finally { db.close() }
+  })
+
+  test('keeps the object when a D1 failure is ambiguous', async () => {
+    const images = fakeImages()
+    const failing = { prepare: () => ({ bind: () => ({ first: async () => { throw new Error('D1 down') } }) }) }
+    const result = await actions.default!(event(record, failing, images)) as any
+    expect(result.status).toBe(500)
+    expect(result.data.errors.form).toBe('Could not save the record. Try again.')
+    expect(images.puts).toHaveLength(1)
+    expect(images.deletes).toHaveLength(0)
+    expect(images.objects.size).toBe(1)
+    expect(JSON.stringify(result)).not.toContain('D1 down')
+  })
+
+  test('deletes the object when the insert definitely failed', async () => {
+    const images = fakeImages()
+    const failing = { prepare: () => ({ bind: () => ({ first: async () => null }) }) }
+    const result = await actions.default!(event(record, failing, images)) as any
+    expect(result.status).toBe(500)
+    expect(images.puts).toHaveLength(1)
+    expect(images.deletes).toEqual([images.puts[0].key])
+    expect(images.objects.size).toBe(0)
+  })
+
+  test('recovers the row when the insert committed before the error', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const base = d1Binding(db)
+      const failing = {
+        prepare(sql: string) {
+          if (sql.includes('INSERT INTO entries')) {
+            return { bind: (...values: (string | number | null)[]) => ({ first: async () => { db.query(sql).run(...values); throw new Error('D1 network error after commit') } }) }
+          }
+          return base.prepare(sql)
+        },
+      }
+      await expect(actions.default!(event(record, failing, images))).rejects.toMatchObject({ status: 303, location: '/entry/1' })
+      expect(images.deletes).toHaveLength(0)
+      expect(images.objects.size).toBe(1)
+      const row = db.query('SELECT image_key FROM entries WHERE id = 1').get() as { image_key: string }
+      expect(images.objects.has(row.image_key)).toBe(true)
+    } finally { db.close() }
+  })
+
+  test('ignores a submitted source URL', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      await expect(actions.default!(event({ ...record, url: 'https://example.org/source' }, DB, images))).rejects.toMatchObject({ status: 303 })
+      const row = db.query('SELECT * FROM entries WHERE id = 1').get() as any
+      expect('url' in row).toBe(false)
+      const result = await detail({ platform: { env: { DB } }, params: { id: '1' } } as any) as any
+      expect(JSON.stringify(result)).not.toContain('example.org')
+    } finally { db.close() }
   })
 })

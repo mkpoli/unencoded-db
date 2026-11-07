@@ -1,5 +1,14 @@
-// Allow room for URL-encoded text fields and form framing.
+import { MAX_IMAGE_BYTES } from './images'
+
+// Allow room for text fields and form framing.
 export const MAX_WRITE_BODY = 128 * 1024
+
+// An 8 MiB image plus the bounded text fields and multipart framing.
+export const MAX_NEW_BODY = MAX_IMAGE_BYTES + 64 * 1024
+
+export function writeBodyLimit(pathname: string): number {
+  return pathname === '/new' ? MAX_NEW_BODY : MAX_WRITE_BODY
+}
 
 /** Read at most the limit before handing the request to a form parser. */
 export async function limitWriteBody(request: Request, limit = MAX_WRITE_BODY): Promise<Request | null> {
