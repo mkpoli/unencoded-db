@@ -2,7 +2,7 @@
 
 A community evidence wiki for characters and glyphs. Anyone can create a record with a source image and view the collection.
 
-A record keeps a character or glyph as a person encountered it, with a source image and optional IDS. Whether it is encoded, a variant or a new character is a later question; the collection keeps the evidence for that analysis and for IRG suggestions.
+A record keeps a character or glyph as a person encountered it, with a source image and optional IDS. The collection gathers them in one place for discovering and sharing new characters, and keeps the evidence for analysis and IRG suggestions.
 
 ## Names
 
