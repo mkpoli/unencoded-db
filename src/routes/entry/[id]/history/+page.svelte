@@ -7,6 +7,9 @@
   <section class="panel">
     <h2>Revision {revision.revision}</h2>
     <p>{revision.recorded_at}</p>
+    {#if revision.tombstone}
+      <p>Revision redacted.</p>
+    {:else}
     <dl>
       <dt>Script</dt><dd>{revision.script}</dd>
       {#if revision.ids}<dt>IDS</dt><dd>{revision.ids}</dd>{/if}
@@ -20,6 +23,7 @@
       {#if revision.page}<dt>Page</dt><dd>{revision.page}</dd>{/if}
       {#if revision.note}<dt>Notes</dt><dd>{revision.note}</dd>{/if}
     </dl>
+    {/if}
   </section>
 {/each}
 </div>

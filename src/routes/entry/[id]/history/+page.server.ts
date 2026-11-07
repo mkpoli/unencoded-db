@@ -11,7 +11,9 @@ export const load: PageServerLoad = async ({ params, platform, url }) => {
   const id = Number(params.id)
   const entry = await platform.env.DB.prepare(`SELECT id FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first()
   if (!entry) error(404)
-  const { results } = await platform.env.DB.prepare(`SELECT r.entry_id, r.revision, r.recorded_at, ${fields.map(field => `r.${field}`).join(', ')} FROM entry_revisions r JOIN entries e ON e.id = r.entry_id AND e.visible = 1 WHERE r.entry_id = ? AND r.revision < ? ORDER BY r.revision DESC LIMIT 21`).bind(id, before === null ? Number.MAX_SAFE_INTEGER : Number(before)).all<{ entry_id: number; revision: number; script: string; ids: string | null; description: string | null; place: string; url: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; recorded_at: string }>()
-  const revisions = results.slice(0, 20)
+  const { results } = await platform.env.DB.prepare(`SELECT r.entry_id, r.revision, r.recorded_at, r.tombstone, ${fields.map(field => `r.${field}`).join(', ')} FROM entry_revisions r JOIN entries e ON e.id = r.entry_id AND e.visible = 1 WHERE r.entry_id = ? AND r.revision < ? ORDER BY r.revision DESC LIMIT 21`).bind(id, before === null ? Number.MAX_SAFE_INTEGER : Number(before)).all<{ entry_id: number; revision: number; tombstone: number; script: string; ids: string | null; description: string | null; place: string; url: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; recorded_at: string }>()
+  const revisions = results.slice(0, 20).map(row => row.tombstone
+    ? { entry_id: row.entry_id, revision: row.revision, recorded_at: row.recorded_at, tombstone: true as const }
+    : { ...row, tombstone: false as const })
   return { id, revisions, next: results.length > 20 ? revisions[revisions.length - 1].revision : null }
 }

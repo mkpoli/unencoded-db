@@ -1,8 +1,12 @@
 import { Database } from 'bun:sqlite'
 import { describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { compile } from 'svelte/compiler'
+import { render } from 'svelte/server'
 import { actions, load as editLoad } from './entry/[id]/edit/+page.server'
 import { load as history } from './entry/[id]/history/+page.server'
+import { redactRevision } from '../lib/server/revision-redaction'
 
 function dbSetup() {
   const db = new Database(':memory:')
@@ -10,11 +14,12 @@ function dbSetup() {
   db.exec("INSERT INTO entries (script,place,url,title,created_at) VALUES ('old','book','https://example.org','title','2026')")
   db.exec(readFileSync(new URL('../../migrations/0003_revisions.sql', import.meta.url), 'utf8'))
   db.exec(readFileSync(new URL('../../migrations/0004_edit_generation.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../migrations/0005_revision_redaction.sql', import.meta.url), 'utf8'))
   return db
 }
 function binding(db: Database) {
   return { prepare(sql: string) { return { bind(...values: (string | number | null)[]) { return {
-    first: async () => db.query(sql).get(...values), all: async () => ({ results: db.query(sql).all(...values) })
+    first: async () => db.query(sql).get(...values), all: async () => ({ results: db.query(sql).all(...values) }), run: async () => ({ meta: { changes: db.query(sql).run(...values).changes } })
   } } } } }
 }
 function event(db: Database, values: Record<string, string> = {}) {
@@ -24,6 +29,86 @@ function event(db: Database, values: Record<string, string> = {}) {
 }
 
 describe('revisions', () => {
+  test('SSR renders a placeholder without tombstone content', async () => {
+    const source = readFileSync(new URL('./entry/[id]/history/+page.svelte', import.meta.url), 'utf8')
+      .replace('$lib/source-url', new URL('../lib/source-url.ts', import.meta.url).href)
+    const code = compile(source, { generate: 'server' }).js.code
+    const dir = new URL('../../node_modules/.cache/revision-ssr/', import.meta.url)
+    mkdirSync(dir, { recursive: true })
+    const path = new URL(`ssr-test-${crypto.randomUUID()}.mjs`, dir)
+    writeFileSync(path, code)
+    try {
+      const component = (await import(path.href)).default
+      const html = render(component, { props: { data: { id: 1, next: null, revisions: [
+        { entry_id: 1, revision: 1, recorded_at: '2026', tombstone: true, script: 'SECRET-SHOULD-NOT-RENDER' },
+        { entry_id: 1, revision: 2, recorded_at: '2026', tombstone: false, script: 'visible', place: 'book', url: 'https://example.org' }
+      ] } } }).body
+      expect(html).toContain('Revision redacted.')
+      expect(html).not.toContain('SECRET-SHOULD-NOT-RENDER')
+      expect(html).toContain('visible')
+    } finally { unlinkSync(path) }
+  })
+  test('edit and redaction serialize across database connections', async () => {
+    const initial = dbSetup()
+    const path = `${tmpdir()}/concurrency-test-${crypto.randomUUID()}.sqlite`
+    writeFileSync(path, initial.serialize())
+    initial.close()
+    const editor = new Database(path)
+    const redactor = new Database(path)
+    try {
+      const api = binding(redactor) as any
+      // Redaction first cannot remove the current revision.
+      await expect(redactRevision(api, 1, 1)).rejects.toThrow()
+      editor.exec('BEGIN IMMEDIATE')
+      editor.exec("UPDATE entries SET script='edited', revision=revision+1 WHERE id=1")
+      // An uncommitted edit cannot make a snapshot eligible on another writer.
+      await expect(redactRevision(api, 1, 1)).rejects.toThrow()
+      editor.exec('COMMIT')
+      expect(await redactRevision(api, 1, 1)).toBe(true)
+      await expect(redactRevision(api, 1, 2)).rejects.toThrow()
+      expect(redactor.query('SELECT revision, tombstone FROM entry_revisions ORDER BY revision').all()).toEqual([
+        { revision: 1, tombstone: 1 }, { revision: 2, tombstone: 0 }
+      ])
+    } finally { editor.close(); redactor.close(); unlinkSync(path) }
+  })
+  test('redaction guard, audit rollback, and projection', async () => {
+    const db = dbSetup()
+    try {
+      const api = binding(db) as any
+      const scrub = "script='', ids=NULL, description=NULL, place='', url='', title=NULL, author=NULL, publisher=NULL, year=NULL, page=NULL, note=NULL, tombstone=1"
+      // A current snapshot remains protected; an edit makes the old snapshot eligible.
+      await expect(redactRevision(api, 1, 1)).rejects.toThrow()
+      db.exec("UPDATE entries SET script='current', revision=revision+1 WHERE id=1")
+      for (const alteration of [
+        "script='tampered'", 'tombstone=1', `${scrub}, title='leak'`, `${scrub}, recorded_at='changed'`,
+        `${scrub}, revision=3`, `${scrub}, entry_id=2`, `${scrub}, ids='leak'`, `${scrub}, description='leak'`,
+        `${scrub}, place='leak'`, `${scrub}, url='leak'`, `${scrub}, author='leak'`, `${scrub}, publisher='leak'`,
+        `${scrub}, year='leak'`, `${scrub}, page='leak'`, `${scrub}, note='leak'`, `${scrub}, script='leak'`
+      ]) expect(() => db.exec(`UPDATE entry_revisions SET ${alteration} WHERE entry_id=1 AND revision=1`)).toThrow()
+      expect(() => db.exec("INSERT INTO entry_revisions (entry_id, revision, script, place, url, recorded_at, tombstone) VALUES (1, 99, '', '', '', 'time', 1)")).toThrow()
+      expect(() => db.exec("INSERT OR REPLACE INTO entry_revisions (entry_id, revision, script, place, url, recorded_at) VALUES (1, 1, 'x', 'x', 'x', 'time')")).toThrow()
+      expect(() => db.exec('DELETE FROM entry_revisions WHERE revision=1')).toThrow()
+      db.exec("CREATE TRIGGER fail_audit BEFORE INSERT ON revision_redaction_audit BEGIN SELECT RAISE(ABORT, 'audit failure'); END")
+      await expect(redactRevision(api, 1, 1)).rejects.toThrow()
+      expect(db.query('SELECT script, tombstone FROM entry_revisions WHERE revision=1').get()).toEqual({ script: 'old', tombstone: 0 })
+      db.exec('DROP TRIGGER fail_audit')
+      expect(await redactRevision(api, 1, 1)).toBe(true)
+      expect(await redactRevision(api, 1, 99)).toBe(false)
+      await expect(redactRevision(api, 1, 1)).rejects.toThrow()
+      expect(db.query('SELECT entry_id, revision FROM revision_redaction_audit').all()).toEqual([{ entry_id: 1, revision: 1 }])
+      expect(() => db.exec('DELETE FROM revision_redaction_audit')).toThrow()
+      expect(() => db.exec("UPDATE revision_redaction_audit SET redacted_at='x'")).toThrow()
+      expect(() => db.exec("INSERT OR REPLACE INTO revision_redaction_audit VALUES (1, 1, 'x')")).toThrow()
+      const result = await history(event(db)) as any
+      expect(result.revisions[0].script).toBe('current')
+      expect(result.revisions[1]).toEqual({ entry_id: 1, revision: 1, recorded_at: '2026', tombstone: true })
+      expect(JSON.stringify(result.revisions[1])).not.toContain('script')
+      db.exec('UPDATE entries SET visible=0 WHERE id=1')
+      await expect(history(event(db))).rejects.toMatchObject({ status: 404 })
+      db.exec('UPDATE entries SET visible=1 WHERE id=1')
+      expect((await history(event(db)) as any).revisions[1].tombstone).toBe(true)
+    } finally { db.close() }
+  })
   test('backfills, snapshots atomically, rejects stale edits and hides every revision', async () => {
     const db = dbSetup()
     try {

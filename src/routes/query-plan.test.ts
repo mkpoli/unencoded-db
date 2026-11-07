@@ -15,6 +15,7 @@ function database() {
   db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
   db.exec(readFileSync(new URL('../../migrations/0003_revisions.sql', import.meta.url), 'utf8'))
   db.exec(readFileSync(new URL('../../migrations/0004_edit_generation.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../migrations/0005_revision_redaction.sql', import.meta.url), 'utf8'))
   return db
 }
 
