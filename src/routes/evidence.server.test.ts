@@ -27,6 +27,7 @@ describe('evidence routes', () => {
     try {
       db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
       db.exec(readFileSync(new URL('../../migrations/0002_attribution.sql', import.meta.url), 'utf8'))
+      db.exec(readFileSync(new URL('../../migrations/0003_oidc.sql', import.meta.url), 'utf8'))
       expect(() => db.exec("INSERT INTO entries (script, place, created_at) VALUES ('Han', 'Book', '2026')")).toThrow()
       const DB = binding(db)
       const values = { script: 'Han', url: 'https://example.org/book', ids: '⿰木木', title: 'Source', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'Notes' }
@@ -50,6 +51,7 @@ describe('evidence routes', () => {
     try {
       db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
       db.exec(readFileSync(new URL('../../migrations/0002_attribution.sql', import.meta.url), 'utf8'))
+      db.exec(readFileSync(new URL('../../migrations/0003_oidc.sql', import.meta.url), 'utf8'))
       const e = event({ script: 'Han', url: 'https://example.org/' }, binding(db))
       const set: any[] = []
       e.cookies.set = (...args: any[]) => set.push(args)
@@ -69,6 +71,7 @@ describe('evidence routes', () => {
     try {
       db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
       db.exec(readFileSync(new URL('../../migrations/0002_attribution.sql', import.meta.url), 'utf8'))
+      db.exec(readFileSync(new URL('../../migrations/0003_oidc.sql', import.meta.url), 'utf8'))
       const issued: string[] = []
       const makeEvent = () => {
         const e = event({ script: 'Han', url: 'https://example.org/' }, binding(db))

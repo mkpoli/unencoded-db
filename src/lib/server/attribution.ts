@@ -30,7 +30,8 @@ export async function saveEvidence(db: D1Database, row: Evidence, token: string 
     const result = await db.prepare(`INSERT INTO entries (${columns}, created_at, creator_id)
       SELECT ${placeholders}, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), person_id
       FROM contributor_sessions WHERE token_hash = ? AND revoked_at IS NULL
-      AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now') RETURNING id`)
+      AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      AND NOT EXISTS (SELECT 1 FROM revoked_session_families r WHERE r.family_hash = COALESCE(contributor_sessions.family_hash, contributor_sessions.token_hash)) RETURNING id`)
       .bind(...values, await hashToken(token)).first<{ id: number }>()
     if (result) return { id: result.id }
   }
