@@ -48,6 +48,8 @@ describe('source image migration', () => {
 
       const index = db.query("SELECT name, sql FROM sqlite_master WHERE type = 'index' AND name = 'entries_visible_id'").get() as { name: string; sql: string } | null
       expect(index?.sql).toContain('ON entries(id DESC) WHERE visible = 1')
+      const imageIndex = db.query("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'entries_image_key'").get() as { sql: string } | null
+      expect(imageIndex?.sql).toContain('UNIQUE INDEX entries_image_key')
       expect(() => db.exec('UPDATE entries SET visible = 2 WHERE id = 42')).toThrow()
 
       db.exec("INSERT INTO entries (script, place, created_at) VALUES ('New', 'Book', '2026')")

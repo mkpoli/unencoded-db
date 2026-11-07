@@ -225,6 +225,29 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
+  test('keeps the object when a thrown insert commits later', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const base = d1Binding(db)
+      let key = ''
+      const failing = {
+        prepare(sql: string) {
+          if (sql.includes('INSERT INTO entries')) {
+            return { bind: (...values: (string | number | null)[]) => ({ first: async () => { key = String(values[10]); throw new Error('network') } }) }
+          }
+          return base.prepare(sql)
+        },
+      }
+      const result = await actions.default!(event(record, failing, images)) as any
+      expect(result.status).toBe(500)
+      expect(images.deletes).toHaveLength(0)
+      expect(images.objects.size).toBe(1)
+      db.query("INSERT INTO entries (script, place, image_key, image_type, image_size, created_at) VALUES ('Han', 'Book', ?, 'image/png', 1, '2026')").run(key)
+      expect(images.objects.has(key)).toBe(true)
+    } finally { db.close() }
+  })
+
   test('ignores a submitted source URL', async () => {
     const db = createTestDatabase()
     const images = fakeImages()

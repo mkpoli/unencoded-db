@@ -1,6 +1,6 @@
 -- Records now carry a source image as their evidence. The source URL column is
 -- dropped; place remains required so a record still says where it came from.
--- Image lookups go through the primary key, so no extra image index is needed.
+-- Image lookups by key are rare, but the recovery path needs an index.
 -- Visibility is preserved and its public-read index is recreated.
 CREATE TABLE _entries_sequence AS SELECT seq FROM sqlite_sequence WHERE name = 'entries';
 
@@ -37,6 +37,7 @@ DROP TABLE entries;
 ALTER TABLE entries_new RENAME TO entries;
 
 CREATE INDEX entries_visible_id ON entries(id DESC) WHERE visible = 1;
+CREATE UNIQUE INDEX entries_image_key ON entries(image_key) WHERE image_key IS NOT NULL;
 
 -- Dropping the old table also drops its AUTOINCREMENT high-water mark. Restore
 -- it so an id deleted before the migration cannot be reused.

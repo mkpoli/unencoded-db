@@ -15,7 +15,7 @@
       <h2 id="source-heading">Source</h2>
       <div class="field">
         <label>Source image <input name="image" type="file" accept="image/jpeg,image/png,image/webp" required aria-invalid={!!form?.errors?.image} aria-describedby={form?.errors?.image ? 'image-error' : 'image-help'} /></label>
-        <p class="field-help" id="image-help">JPEG, PNG or WebP, up to 8 MiB. Remove location and other personal metadata before uploading.</p>
+        <p class="field-help" id="image-help">JPEG, PNG or WebP, up to 8 MiB. Location and other personal metadata are removed on upload.</p>
         <p class="field-help">Upload only an image you have the right to share.</p>
         {#if form?.errors?.image}<p class="field-error" id="image-error">{form.errors.image}</p>{/if}
       </div>

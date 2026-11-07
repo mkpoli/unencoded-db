@@ -63,11 +63,11 @@ export const actions: Actions = {
         `INSERT INTO entries (${fields.join(', ')}, image_key, image_type, image_size, created_at) VALUES (${fields.map(() => '?').join(', ')}, ?, ?, ?, ?) RETURNING id`
       ).bind(...fields.map(name => row[name]), key, image.type, image.size, new Date().toISOString()).first<{ id: number }>()
     } catch {
-      // A transport error can arrive after the insert committed. Look for the
-      // row before deleting its image; leave an orphan if the lookup fails.
+      // A transport error can arrive before or after the insert commits.
+      // Recover the row when it is visible and otherwise keep the object: a
+      // later commit would leave a record with a deleted image.
       const existing = await findEntryByImageKey(platform.env.DB, key)
       if (existing) redirect(303, `/entry/${existing.id}`)
-      if (existing === null) await deleteSourceImage(platform.env.IMAGES, key)
       return failForm(500, { form: SAVE_FAILED })
     }
     if (!result) {

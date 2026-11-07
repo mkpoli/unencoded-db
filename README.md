@@ -35,7 +35,7 @@ bun run build
 - Images are not decoded or re-encoded. A corrupt file with a valid signature may fail to render in the browser.
 - `POST /new` accepts up to 8 MiB plus form framing. Other POST routes keep the 128 KiB limit.
 - Image responses use the stored content type, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, so hiding takes effect on the next request.
-- Images are stored as uploaded. EXIF, XMP and PNG text chunks are not stripped, so a photo can carry location or device details. Uploaders should remove personal metadata first.
+- Images are stripped of common metadata on upload: JPEG APP1/APP13 segments and comments, PNG text and EXIF chunks, and WebP EXIF/XMP chunks. Other metadata and pixel content are stored as uploaded.
 
 ## Visibility
 
@@ -61,7 +61,7 @@ The Cloudflare configuration contains a placeholder D1 database ID and an R2 buc
 
 ## Storage gaps
 
-There is no global storage quota, no per-user quota and no cleanup job. An R2 put that times out after the request finishes can leave an orphan object. If the D1 insert certainly failed, the object is deleted on a best-effort basis; when the insert outcome is ambiguous the Worker looks for the row first and keeps an orphan if it cannot tell. Recovering other orphans requires an operator.
+There is no global storage quota, no per-user quota and no cleanup job. An R2 put that times out after the request finishes can leave an orphan object. If the insert returns no row without an error, the object is deleted on a best-effort basis. A thrown insert error is treated as ambiguous: the Worker looks for the row and otherwise keeps the object, which can leave an orphan. Recovering other orphans requires an operator.
 
 ## Rights
 
