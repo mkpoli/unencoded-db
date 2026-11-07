@@ -88,7 +88,7 @@ describe('moderation hook', () => {
   })
 
   test('hides guarded paths without a token', async () => {
-    for (const path of ['/moderate', '/moderate/1/restore', '/moderate/x', '/%6Doderate']) {
+    for (const path of ['/moderate', '/moderate/1/restore', '/moderate/x', '/moderate/reports', '/%6Doderate']) {
       const { event, locals } = makeEvent(path, { method: path.endsWith('restore') ? 'POST' : 'GET' })
       const response = await run(event)
       expect(response.status).toBe(404)
@@ -127,7 +127,7 @@ describe('moderation hook', () => {
 
   test('resolves guarded paths and records a verified moderator', async () => {
     const token = await signToken()
-    for (const path of ['/moderate', '/moderate/1/hide']) {
+    for (const path of ['/moderate', '/moderate/1/hide', '/moderate/reports']) {
       const { event, locals } = makeEvent(path, { method: path.endsWith('hide') ? 'POST' : 'GET', token })
       const response = await run(event)
       expect(response.status).toBe(200)

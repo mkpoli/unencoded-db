@@ -4,6 +4,7 @@
   <h1>Hidden entries</h1>
   <p>Signed in as {data.moderator}. Hidden entries stay out of the public collection.</p>
 </div>
+<p><a href="/moderate/reports">Open reports</a></p>
 {#if data.entries.length}
   <ul class="queue">
     {#each data.entries as entry}

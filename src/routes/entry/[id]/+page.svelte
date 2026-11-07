@@ -1,6 +1,9 @@
 <script lang="ts">let { data } = $props(); let entry = $derived(data.entry)</script>
 <svelte:head><title>Evidence #{entry.id} · 珍字集覽</title></svelte:head>
 <p><a href="/">← All evidence</a></p>
+{#if data.reported}
+  <p class="notice" role="status">Report received. A moderator will review this record.</p>
+{/if}
 {#if data.isModerator}
   <div class="moderation-bar">
     <span>Moderator view</span>
@@ -24,3 +27,25 @@
   {#if entry.note}<dt>Notes</dt><dd>{entry.note}</dd>{/if}
   <dt>Added</dt><dd>{entry.created_at}</dd>
 </dl>
+<details class="report">
+  <summary>Report this record</summary>
+  <form method="POST" action="/entry/{entry.id}/report" class="report-form">
+    <div class="field">
+      <label>Reason
+        <select name="reason" required>
+          <option value="spam">Spam</option>
+          <option value="privacy">Privacy</option>
+          <option value="rights">Copyright</option>
+          <option value="other">Other</option>
+        </select>
+      </label>
+    </div>
+    <div class="field">
+      <label>Note <span class="optional">Optional</span>
+        <textarea name="note" maxlength="2000" rows="4"></textarea>
+      </label>
+    </div>
+    <p class="form-hint">Reports are anonymous. Notes are visible to moderators.</p>
+    <button type="submit">Send report</button>
+  </form>
+</details>

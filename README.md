@@ -1,6 +1,6 @@
 # 珍字集覽
 
-A collection of evidence for unencoded characters and unifiable variants. Anyone can create a record with a source URL and view the collection. Moderators can hide records and restore them from a private queue.
+A collection of evidence for unencoded characters and unifiable variants. Anyone can create a record with a source URL, view the collection, and report a public record. Moderators review reports and can hide records; hidden records can be restored from a private queue.
 
 ## Local development
 
@@ -67,9 +67,39 @@ bunx wrangler d1 migrations apply DB --remote
 
 Drain old application instances before hiding entries, since older readers do not filter them.
 
+## Reporting
+
+A public entry page has a "Report this record" form. A report carries a reason (Spam, Privacy, Copyright, Other) and an optional note of up to 2000 characters; the note is trimmed. The form posts without JavaScript. A report does not prove a rights claim: moderators review it and decide whether to hide the entry.
+
+Reports store no reporter identity. The database keeps the entry id, reason, note, creation time and resolution time. The rate limiter hashes the client network in memory and stores neither the address nor the digest, and the Worker does not log it. Notes are untrusted text, visible to moderators in the private queue, and escaped when rendered. A hidden or missing entry cannot receive reports.
+
+Hiding an entry resolves its open reports in the same database statement as the visibility change, with `resolved_at` copied from the audit time. Restoring the entry leaves them resolved. Report rows accumulate; notes are capped at 2000 characters, and nothing prunes the table automatically.
+
+## Report rate limit
+
+`POST /entry/[id]/report` allows five requests per 60 seconds per client network through the `REPORT_RATE_LIMIT` binding. The check runs in `hooks.server.ts` before the request body is read or parsed. A rejected request receives 429 with `retry-after: 60`; an unavailable limiter returns 503. GET requests and other POST paths are unaffected.
+
+The key is SHA-256 of the client address, or of the IPv6 /64 prefix. IPv4-mapped IPv6 and malformed addresses fail closed. The address is not stored or logged, and only the hash reaches the binding.
+
+Configuration in `wrangler.jsonc`:
+
+```jsonc
+"ratelimits": [
+  { "name": "REPORT_RATE_LIMIT", "namespace_id": "1002", "simple": { "limit": 5, "period": 60 } }
+]
+```
+
+`namespace_id` must not match any other rate limiter in the account.
+
+Cloudflare rate limit counters are approximate and local to each Cloudflare location, so the effective global limit is higher than five per minute. IPv6 clients share one bucket across the whole /64, which affects networks that assign many addresses from one prefix. `getClientAddress()` reads the edge-provided client address; another Worker in the same zone can pass a forged address, so the key is reliable only for traffic that reaches this Worker through Cloudflare's edge. Cover alternate paths with Access or WAF.
+
+Local simulation: put `LOCAL_RATE_LIMIT=true` in `.dev.vars` (gitignored). The Worker then keeps one in-process bucket of five requests per 60 seconds, and only when the request host is loopback and the client address is `127.0.0.1` or `::1`; every other request fails closed with 503. Requests through a deployed hostname do not match the loopback condition.
+
+This feature is not deployed. Apply migrations 0001–0004 before running it.
+
 ## Limitations
 
-This is a local prototype, not ready for public operation. It has no editing, deletion, rate limiting, abuse prevention or contributor accounts. Pagination lists 20 records at a time. The audit records hide and restore actions; it does not keep entry revisions or redacted content.
+This is a local prototype, not ready for public operation. It has no editing, deletion, contributor accounts or record-creation rate limit; report submissions are limited as described above. Pagination lists 20 records at a time. The audit records hide and restore actions; it does not keep entry revisions or redacted content. Reporting and moderation are not deployed.
 
 ## License
 
