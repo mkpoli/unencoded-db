@@ -13,7 +13,6 @@ A community evidence wiki for unencoded characters and unifiable variants. Anyon
 | Korean | 진자집람 | 미등재 문자와 통합 가능한 이체자 |
 | Vietnamese | Tuyển tập chữ quý | Chữ chưa mã hóa và dị thể có thể hợp nhất |
 
-The interface is in English and uses 珍字集覽 for the site name.
 
 ## Local development
 
