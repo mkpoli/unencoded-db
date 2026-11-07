@@ -64,6 +64,18 @@ function hideEvent(db: Database, id: number) {
 }
 
 describe('report route', () => {
+  test('returns 429 when an entry has too many open reports', async () => {
+    const db = testDatabase()
+    try {
+      const entry = insertEntry(db)
+      for (let index = 0; index < 100; index++) insertReport(db, entry, 'spam', '')
+      const response = await reportPost(reportEvent({ db: d1Binding(db), id: entry }))
+      expect(response.status).toBe(429)
+      expect(await response.text()).toContain('many open reports')
+      expect(reportRows(db)).toHaveLength(100)
+    } finally { db.close() }
+  })
+
   test('stores an anonymous report, trims the note and redirects', async () => {
     const db = testDatabase()
     try {

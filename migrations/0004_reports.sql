@@ -18,6 +18,8 @@ BEFORE INSERT ON entry_reports
 BEGIN
   SELECT RAISE(ABORT, 'reports: entry is not visible')
   WHERE NOT EXISTS (SELECT 1 FROM entries WHERE id = NEW.entry_id AND visible = 1);
+  SELECT RAISE(ABORT, 'reports: too many open reports')
+  WHERE (SELECT count(*) FROM entry_reports WHERE entry_id = NEW.entry_id AND resolved_at IS NULL) >= 100;
 END;
 
 -- Hiding resolves every open report for the entry in the same statement that

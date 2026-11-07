@@ -41,7 +41,12 @@ export const POST: RequestHandler = async ({ params, request, platform, url }) =
       .run()
   } catch (cause) {
     // A concurrent hide can make the visibility guard reject the insert.
-    if (isReportRejection(cause)) error(404)
+    if (isReportRejection(cause)) {
+      if (cause instanceof Error && cause.message.includes('too many open reports')) {
+        return new Response('This record already has many open reports.', { status: 429, headers: { 'cache-control': 'no-store' } })
+      }
+      error(404)
+    }
     throw cause
   }
 

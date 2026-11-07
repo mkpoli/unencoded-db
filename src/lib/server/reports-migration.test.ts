@@ -59,6 +59,23 @@ describe('reports migration', () => {
     } finally { db.close() }
   })
 
+  test('caps open reports per entry', () => {
+    const db = testDatabase()
+    try {
+      const entry = insertEntry(db)
+      for (let index = 0; index < 100; index++) insertReport(db, entry, 'spam', `note ${index}`)
+      expect(() => insertReport(db, entry, 'spam', 'overflow')).toThrow(/too many open reports/)
+      expect(reportRows(db)).toHaveLength(100)
+
+      audit(db, entry, 'hide')
+      const open = db.query('SELECT count(*) AS n FROM entry_reports WHERE resolved_at IS NULL').get() as { n: number }
+      expect(open.n).toBe(0)
+
+      audit(db, entry, 'restore')
+      expect(insertReport(db, entry, 'other', 'after restore')).toBe(101)
+    } finally { db.close() }
+  })
+
   test('hiding resolves every open report in the same statement', () => {
     const db = testDatabase()
     try {

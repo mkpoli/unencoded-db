@@ -73,7 +73,7 @@ A public entry page has a "Report this record" form. A report carries a reason (
 
 Reports store no reporter identity. The database keeps the entry id, reason, note, creation time and resolution time. The rate limiter hashes the client network in memory and stores neither the address nor the digest, and the Worker does not log it. Notes are untrusted text, visible to moderators in the private queue, and escaped when rendered. A hidden or missing entry cannot receive reports.
 
-Hiding an entry resolves its open reports in the same database statement as the visibility change, with `resolved_at` copied from the audit time. Restoring the entry leaves them resolved. Report rows accumulate; notes are capped at 2000 characters, and nothing prunes the table automatically.
+Hiding an entry resolves its open reports in the same database statement as the visibility change, with `resolved_at` copied from the audit time. Restoring the entry leaves them resolved. An entry can hold at most 100 open reports; further reports return 429 until the entry is hidden, which resolves them. The cap bounds storage per entry, but it does not stop a network from filling the newest queue page with spam, so moderation coverage remains an operational requirement. Notes are capped at 2000 characters, and nothing prunes resolved rows automatically.
 
 ## Report rate limit
 
