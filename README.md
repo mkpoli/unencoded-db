@@ -1,6 +1,20 @@
 # 珍字集覽
 
-A collection of evidence for unencoded characters and unifiable variants. Anyone can create a record with a source URL and view the collection.
+A community evidence wiki for characters and glyphs. Anyone can create a record with a source image and view the collection.
+
+A record keeps a character or glyph as a person encountered it, with a source image and optional IDS. The collection gathers them in one place for discovering and sharing new characters, and keeps the evidence for analysis and IRG suggestions.
+
+## Names
+
+| Language | Name | Tagline |
+| --- | --- | --- |
+| English | Rare Character Compendium | A community evidence wiki for characters and glyphs |
+| Japanese | 珍字集覧 | 文字と字形の証拠を集めるコミュニティウィキ |
+| Simplified Chinese | 珍字集览 | 收集文字与字形证据的社区维基 |
+| Traditional Chinese | 珍字集覽 | 收集文字與字形證據的社群維基 |
+| Korean | 진자집람 | 문자와 글리프의 증거를 모으는 커뮤니티 위키 |
+| Vietnamese | Tuyển tập chữ quý | Wiki cộng đồng thu thập bằng chứng về chữ và glyph |
+
 
 ## Local development
 
