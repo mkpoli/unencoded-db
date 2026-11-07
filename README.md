@@ -34,7 +34,7 @@ The revision migration copies existing records in one statement; its time and st
 
 This is a local prototype, not ready for public operation. It has no moderation, abuse prevention, rate limiting, deletion or contributor accounts. Pagination lists 20 records at a time.
 
-**Public launch is blocked:** moderator authorization and handling sensitive current content are required. An internal primitive can irreversibly redact noncurrent snapshots, with an audit record; it has no public interface. Current records and other revisions may still contain the same text. Redaction cannot retract copies in caches, logs or backups. Hiding an entry conceals its history, and restoring it republishes its unredacted snapshots. Apply the redaction migration before deploying readers or writers that use it.
+**Public launch is blocked:** moderator authorization and handling sensitive current content are required. An internal primitive can irreversibly redact noncurrent snapshots, with an audit record; it has no public interface. Current records and other revisions may still contain the same text. Redaction cannot retract copies in caches, logs, database backups or point-in-time recovery. Hiding an entry conceals its history, and restoring it republishes its unredacted snapshots. Apply the redaction migration before deploying readers or writers that use it.
 
 ## License
 
