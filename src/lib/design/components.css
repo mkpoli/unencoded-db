@@ -191,6 +191,8 @@
 .related-card h3 { margin-bottom: var(--space-1); font-size: var(--text-xl); font-weight: 550; letter-spacing: -0.2px; }
 .related-card .entry-meta { padding: 0; border: 0; background: none; }
 .related-card .entry-row { border-top: 1px solid var(--line); }
+.revision-card { display: grid; gap: var(--space-2); }
+.revision-date { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 
 /* Form pages. */
 .form-page { max-width: var(--form-max); margin: 0 auto; }
@@ -230,6 +232,8 @@
   background: var(--wrong-light);
   color: var(--wrong);
 }
+/* A validation notice sits above the form with a gap, not flush against it. */
+.notice + .form-panel { margin-top: var(--space-4); }
 
 .details {
   border: 1px solid var(--line-control);
