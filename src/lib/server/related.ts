@@ -8,7 +8,7 @@ export function readComparisons(form: FormData) {
   const columns = comparisonFields.map(name => form.getAll(`comparison_${name}`))
   const count = Math.max(...columns.map(column => column.length))
   const rows: Comparison[] = []
-  const errors: string[] = []
+  const errors: boolean[] = []
   for (let i = 0; i < count; i++) {
     const row = {} as Comparison
     let invalid = false
@@ -21,7 +21,7 @@ export function readComparisons(form: FormData) {
     }
     if (!row.character.trim() || !relationships.includes(row.relationship)) invalid = true
     rows.push(row)
-    errors.push(invalid ? 'Enter a character and a valid relationship; check field lengths.' : '')
+    errors.push(invalid)
   }
   return { rows, errors, tooMany: count > MAX_COMPARISONS }
 }

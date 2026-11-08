@@ -1,16 +1,116 @@
 import { describe, expect, test } from 'bun:test'
 import type { RequestEvent } from '@sveltejs/kit'
 import { handle } from './hooks.server'
-import { MAX_WRITE_BODY } from './lib/server/body-limit'
+import { MAX_NEW_BODY, MAX_WRITE_BODY } from './lib/server/body-limit'
+import { MAX_IMAGE_BYTES } from './lib/server/images'
+import { PNG_BYTES, imageFile } from './test-support'
+
+function event(pathname: string, body: string) {
+  const request = new Request(`https://example.test${pathname}`, { method: 'POST', body })
+  return { request, url: new URL(request.url), route: { id: pathname } } as any
+}
+
+describe('POST body limit routing', () => {
+  test('keeps the small limit on other localized POST routes', async () => {
+    let resolved = false
+    const response = await handle({
+      event: event('/ja/entry/1', 'x'.repeat(MAX_WRITE_BODY + 1)),
+      resolve: async () => { resolved = true; return new Response('ok') },
+    } as any)
+    expect(response.status).toBe(413)
+    expect(await response.text()).toBe('アップロードが大きすぎます。')
+    expect(resolved).toBe(false)
+  })
+
+  test('uses the larger limit on the localized new page', async () => {
+    let resolved = false
+    const e = event('/ja/new', 'x'.repeat(MAX_WRITE_BODY + 1))
+    const response = await handle({
+      event: e,
+      resolve: async () => { resolved = true; return new Response('ok') },
+    } as any)
+    expect(response.status).toBe(200)
+    expect(resolved).toBe(true)
+    expect(e.request.headers.get('content-length')).toBe(String(MAX_WRITE_BODY + 1))
+  })
+
+  test('rejects an oversized localized new body before parsing or resolving', async () => {
+    let resolved = false
+    const e = event('/zh-Hant/new', 'x'.repeat(MAX_NEW_BODY + 1))
+    e.request.formData = () => { throw new Error('form parsed') }
+    const response = await handle({
+      event: e,
+      resolve: async () => { resolved = true; return new Response('ok') },
+    } as any)
+    expect(response.status).toBe(413)
+    expect(await response.text()).toBe('上傳內容過大。')
+    expect(resolved).toBe(false)
+  })
+})
+
+describe('multipart POST on the localized new page', () => {
+  test('reconstructs an 8 MiB multipart body for the form parser', async () => {
+    const bytes = new Uint8Array(MAX_IMAGE_BYTES)
+    bytes.set(PNG_BYTES)
+    const form = new FormData()
+    form.set('script', 'Han')
+    form.set('place', 'Book')
+    form.set('image', imageFile(bytes))
+    const request = new Request('https://example.test/vi/new', { method: 'POST', body: form })
+
+    let kept: Request | undefined
+    const response = await handle({
+      event: { request, url: new URL(request.url) } as any,
+      resolve: async (resolvedEvent: any) => { kept = resolvedEvent.request; return new Response('ok') },
+    } as any)
+    expect(response.status).toBe(200)
+    expect(kept!.headers.get('content-type')).toContain('multipart/form-data')
+    expect(Number(kept!.headers.get('content-length'))).toBeLessThan(MAX_NEW_BODY)
+
+    const parsed = await kept!.formData()
+    expect(parsed.get('script')).toBe('Han')
+    expect(parsed.get('place')).toBe('Book')
+    const file = parsed.get('image') as File
+    expect(file.size).toBe(MAX_IMAGE_BYTES)
+    expect(new Uint8Array(await file.arrayBuffer()).slice(0, PNG_BYTES.byteLength)).toEqual(PNG_BYTES)
+  })
+})
+
+describe('html lang', () => {
+  const template = '<!doctype html><html lang="%lang%"><head></head><body>%lang%</body></html>'
+
+  async function render(path: string) {
+    const event = { request: new Request(`https://example.test${path}`), url: new URL(`https://example.test${path}`) } as any
+    const response = await handle({
+      event,
+      resolve: async (_event: unknown, options: { transformPageChunk: (input: { html: string; done: boolean }) => string }) => new Response(options.transformPageChunk({ html: template, done: true })),
+    } as any)
+    return response.text()
+  }
+
+  test('sets the language of the address during server rendering', async () => {
+    expect(await render('/ja/new')).toContain('<html lang="ja">')
+    expect(await render('/zh-Hans')).toContain('<html lang="zh-Hans">')
+    expect(await render('/zh-Hant/entry/1')).toContain('<html lang="zh-Hant">')
+    expect(await render('/ko')).toContain('<html lang="ko">')
+    expect(await render('/vi')).toContain('<html lang="vi">')
+  })
+
+  test('uses English for an invalid locale and leaves page text alone', async () => {
+    const html = await render('/fr')
+    expect(html).toContain('<html lang="en">')
+    expect(html).toContain('<body>%lang%</body>')
+  })
+})
 
 type Limiter = { limit: (input: { key: string }) => Promise<{ success: boolean }> }
 
-function setup(options: { path?: string, method?: string, body?: string, address?: string, cf?: boolean, local?: string, limiter?: Limiter, enhanced?: boolean } = {}) {
-  const path = options.path ?? '/new'
+function rateEvent(options: { path?: string, locale?: string, method?: string, body?: string, address?: string, cf?: boolean, local?: string, limiter?: Limiter, enhanced?: boolean, route?: string | null } = {}) {
+  const path = options.path ?? `/${options.locale ?? 'ja'}/new`
   const method = options.method ?? 'POST'
   const request = new Request(`http://localhost${path}`, { method, headers: options.enhanced ? { 'x-sveltekit-action': 'true' } : {}, ...(method === 'POST' ? { body: options.body ?? 'hello' } : {}) })
   const event = {
-    request, url: new URL(request.url), route: { id: path === '/new' ? '/new' : null },
+    request, url: new URL(request.url), route: { id: options.route === undefined ? '/[locale]/new' : options.route },
     getClientAddress: () => options.address ?? '192.0.2.1',
     platform: { env: { CONTRIBUTION_RATE_LIMIT: options.limiter, LOCAL_RATE_LIMIT: options.local }, ...(options.cf === false ? {} : { cf: {} }) }
   } as unknown as RequestEvent
@@ -26,7 +126,7 @@ const digest = async (value: string) => Array.from(new Uint8Array(await crypto.s
 describe('contribution rate limit hook', () => {
   test('allows requests and reads their bodies after checking the key', async () => {
     let key = ''
-    const ctx = setup({ limiter: { limit: async input => { key = input.key; expect(ctx.request.bodyUsed).toBe(false); return { success: true } } } })
+    const ctx = rateEvent({ limiter: { limit: async input => { key = input.key; expect(ctx.request.bodyUsed).toBe(false); return { success: true } } } })
     expect((await ctx.run()).status).toBe(200)
     expect(key).toBe(await digest('192.0.2.1'))
     expect(ctx.request.bodyUsed).toBe(true)
@@ -36,25 +136,36 @@ describe('contribution rate limit hook', () => {
   test('passes limiter decisions at the five-request window boundary', async () => {
     let count = 0
     const limiter: Limiter = { limit: async () => ({ success: ++count <= 5 }) }
-    for (let n = 0; n < 5; n++) expect((await setup({ limiter }).run()).status).toBe(200)
-    const blocked = setup({ limiter })
+    for (let n = 0; n < 5; n++) expect((await rateEvent({ limiter }).run()).status).toBe(200)
+    const blocked = rateEvent({ limiter })
     expect((await blocked.run()).status).toBe(429)
     expect(blocked.request.bodyUsed).toBe(false)
     count = 0 // Simulate a provider window reset.
-    expect((await setup({ limiter }).run()).status).toBe(200)
+    expect((await rateEvent({ limiter }).run()).status).toBe(200)
   })
   test('blocks before body consumption and resolution', async () => {
-    const ctx = setup({ limiter: deny, body: 'x'.repeat(MAX_WRITE_BODY + 1) })
+    const ctx = rateEvent({ limiter: deny, body: 'x'.repeat(MAX_WRITE_BODY + 1) })
     const response = await ctx.run()
     expect(response.status).toBe(429)
     expect(response.headers.get('retry-after')).toBe('60')
     expect(response.headers.get('cache-control')).toBe('no-store')
-    expect(await response.text()).toContain('Try again in a minute.')
+    expect(await response.text()).toContain('リクエストが多すぎます')
     expect(ctx.request.bodyUsed).toBe(false)
     expect(ctx.resolved()).toBe(false)
   })
+  test('renders the limited page in the request locale', async () => {
+    for (const [locale, text] of [['en', 'Too many requests'], ['zh-Hant', '要求過多'], ['vi', 'Quá nhiều yêu cầu'], ['ko', '요청이 너무 많습니다']] as const) {
+      const ctx = rateEvent({ locale, limiter: deny })
+      const response = await ctx.run()
+      expect(response.status).toBe(429)
+      expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8')
+      const html = await response.text()
+      expect(html).toContain(`<html lang="${locale}">`)
+      expect(html).toContain(text)
+    }
+  })
   test('returns an enhanced action failure without consuming the body', async () => {
-    const ctx = setup({ limiter: deny, enhanced: true })
+    const ctx = rateEvent({ limiter: deny, enhanced: true })
     const response = await ctx.run()
     expect(response.status).toBe(429)
     expect(response.headers.get('content-type')).toBe('application/json')
@@ -66,7 +177,7 @@ describe('contribution rate limit hook', () => {
   })
   test('fails closed before reading when provider is missing or fails', async () => {
     for (const limiter of [undefined, { limit: async () => { throw new Error('offline') } }, { limit: async () => ({} as { success: boolean }) }]) {
-      const ctx = setup({ limiter })
+      const ctx = rateEvent({ limiter })
       expect((await ctx.run()).status).toBe(503)
       expect(ctx.request.bodyUsed).toBe(false)
       expect(ctx.resolved()).toBe(false)
@@ -79,7 +190,7 @@ describe('contribution rate limit hook', () => {
       { limiter: { limit: async () => { throw new Error('offline') } } },
       { limiter: { limit: async () => ({} as { success: boolean }) } }
     ]) {
-      const ctx = setup({ ...options, enhanced: true })
+      const ctx = rateEvent({ ...options, enhanced: true })
       const response = await ctx.run()
       expect(response.status).toBe(503)
       expect(response.headers.get('cache-control')).toBe('no-store')
@@ -88,22 +199,22 @@ describe('contribution rate limit hook', () => {
       expect(ctx.request.bodyUsed).toBe(false)
       expect(ctx.resolved()).toBe(false)
     }
-    const plain = setup()
+    const plain = rateEvent({ locale: 'en' })
     const response = await plain.run()
     expect(response.status).toBe(503)
     expect(response.headers.get('cache-control')).toBe('no-store')
-    expect(await response.text()).toBe('Rate limit unavailable')
+    expect(await response.text()).toBe('Contributions are temporarily unavailable. Try again later.')
   })
   test('rejects missing or malformed production addresses', async () => {
     for (const address of ['', 'garbage', '192.0.2.1, 192.0.2.2']) {
-      const ctx = setup({ address, limiter: allow })
+      const ctx = rateEvent({ address, limiter: allow })
       expect((await ctx.run()).status).toBe(503)
       expect(ctx.request.bodyUsed).toBe(false)
     }
   })
   test('fails closed on IPv4-mapped IPv6 addresses', async () => {
     for (const address of ['::ffff:192.0.2.1', '::ffff:c000:201', '0:0:0:0:0:ffff:c633:6401']) {
-      const ctx = setup({ address, limiter: allow })
+      const ctx = rateEvent({ address, limiter: allow })
       expect((await ctx.run()).status).toBe(503)
       expect(ctx.request.bodyUsed).toBe(false)
       expect(ctx.resolved()).toBe(false)
@@ -113,7 +224,7 @@ describe('contribution rate limit hook', () => {
     const keys: string[] = []
     const limiter: Limiter = { limit: async input => { keys.push(input.key); return { success: true } } }
     for (const address of ['2001:0db8:0:1:0:0:0:1', '2001:db8:0:1::ffff', '2001:db8:0:2::1', '::1']) {
-      expect((await setup({ address, limiter }).run()).status).toBe(200)
+      expect((await rateEvent({ address, limiter }).run()).status).toBe(200)
     }
     expect(keys[0]).toBe(await digest('ipv6-64:2001:0db8:0000:0001'))
     expect(keys[1]).toBe(keys[0])
@@ -122,28 +233,30 @@ describe('contribution rate limit hook', () => {
   })
   test('local mode requires explicit flag and loopback URL and address', async () => {
     for (const opts of [{ cf: false, address: '127.0.0.1' }, { cf: false, local: 'true', address: '192.0.2.1' }]) {
-      const ctx = setup({ ...opts, limiter: allow })
+      const ctx = rateEvent({ ...opts, limiter: allow })
       expect((await ctx.run()).status).toBe(503)
     }
     let key = ''
-    const ctx = setup({ local: 'true', address: '127.0.0.1', limiter: { limit: async input => { key = input.key; return { success: true } } } })
+    const ctx = rateEvent({ local: 'true', address: '127.0.0.1', limiter: { limit: async input => { key = input.key; return { success: true } } } })
     expect((await ctx.run()).status).toBe(200)
     expect(key).toBe(await digest('local-loopback'))
-    const remote = setup({ cf: false, local: 'true', address: '127.0.0.1', limiter: allow })
-    remote.event.url = new URL('http://example.test/new')
+    const remote = rateEvent({ cf: false, local: 'true', address: '127.0.0.1', limiter: allow })
+    remote.event.url = new URL('http://example.test/ja/new')
     expect((await remote.run()).status).toBe(503)
   })
-  test('unknown POSTs and GETs do not use the provider', async () => {
-    for (const options of [{ path: '/unknown' }, { method: 'GET' }]) {
-      const ctx = setup(options)
+  test('other POST routes, other locales and GETs do not use the provider', async () => {
+    for (const options of [{ route: '/[locale]/entry/[id]' }, { route: null }, { method: 'GET' }]) {
+      const ctx = rateEvent(options)
       expect((await ctx.run()).status).toBe(200)
       expect(ctx.resolved()).toBe(true)
     }
   })
-  test('size limit remains enforced at boundary', async () => {
-    const exact = setup({ body: 'x'.repeat(MAX_WRITE_BODY), limiter: allow })
+  test('still rejects an oversized body on the localized new page after the limiter allows it', async () => {
+    const exact = rateEvent({ body: 'x'.repeat(MAX_NEW_BODY), limiter: allow })
     expect((await exact.run()).status).toBe(200)
-    const over = setup({ body: 'x'.repeat(MAX_WRITE_BODY + 1), limiter: allow })
+    const over = rateEvent({ body: 'x'.repeat(MAX_NEW_BODY + 1), limiter: allow })
     expect((await over.run()).status).toBe(413)
+    const small = rateEvent({ body: 'x'.repeat(MAX_WRITE_BODY + 1), limiter: allow })
+    expect((await small.run()).status).toBe(200)
   })
 })
