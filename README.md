@@ -34,11 +34,20 @@ bun run check
 bun run build
 ```
 
-The Cloudflare configuration contains a placeholder D1 ID. Provision a database and configure its binding before using a separate environment. The `CONTRIBUTION_RATE_LIMIT` binding targets 5 POST requests per IPv4 address or IPv6 /64 prefix per 60 seconds at each Cloudflare location; counters can overshoot. Configure that binding separately for every named environment; choose a namespace ID unique to the limiter within the account. Missing or unavailable bindings and missing client addresses return 503; exhausted limits return 429. Both checks happen before reading the request body. With JavaScript, a 429 or limiter-unavailable 503 keeps the form in place; without JavaScript the response cannot restore submitted fields, and browser Back behavior varies. An oversized request returns 413 and does not preserve the form in place.
+The checked-in configuration targets the production D1 database. Provision a database and configure its binding before using a separate environment. The `CONTRIBUTION_RATE_LIMIT` binding targets 5 POST requests per IPv4 address or IPv6 /64 prefix per 60 seconds at each Cloudflare location; counters can overshoot. Configure that binding separately for every named environment; choose a namespace ID unique to the limiter within the account. Missing or unavailable bindings and missing client addresses return 503; exhausted limits return 429. Both checks happen before reading the request body. With JavaScript, a 429 or limiter-unavailable 503 keeps the form in place; without JavaScript the response cannot restore submitted fields, and browser Back behavior varies. An oversized request returns 413 and does not preserve the form in place.
 
 Production requires requests to reach the Worker through Cloudflare, which supplies `CF-Connecting-IP` and request `cf` metadata. For same-zone Worker subrequests, `CF-Connecting-IP` reflects `x-real-ip`, which the calling Worker can modify ([Cloudflare request headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/#cf-connecting-ip)). Do not expose an alternate origin that accepts client-supplied forwarding headers or allow untrusted Workers to invoke this Worker as if they were end users. For local Wrangler development only, set `LOCAL_RATE_LIMIT=true` in a local `.dev.vars` file and bind Wrangler to loopback. Local requests must use a loopback URL and address, and share one limiter key. Never set this variable in a deployed environment or expose the local server to a network. Wrangler's local limiter is a development simulation.
 
 The application uses IPv4 addresses and IPv6 /64 prefixes as limiter keys; IPv4-mapped IPv6 addresses return 503. It sends a SHA-256 digest of the key and does not store or log the IP. The digest is pseudonymous, not anonymous: IP addresses can be guessed. [Cloudflare's rate-limit binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) maintains local, eventually consistent counters at each Cloudflare location. They are not a global quota or comprehensive abuse prevention; users sharing an IPv4 address or IPv6 /64 prefix share a limit.
+
+
+## Glyph Atlas sign-in
+
+Sign-in is optional. Configure `ATLAS_ISSUER`, `ATLAS_CLIENT_ID`, `ATLAS_CLIENT_SECRET` and `ATLAS_PUBLIC_ORIGIN` as worker secrets or bindings, and register the exact callback URL `<ATLAS_PUBLIC_ORIGIN>/auth/callback` with the provider. The public origin must match the request origin exactly and use HTTPS, except for loopback HTTP in local development. Apply all D1 migrations before enabling the feature. The issuer and discovery endpoints must use HTTPS; discovered endpoints must share the issuer's origin. The provider must support authorization code flow, PKCE S256, client secret basic authentication and RS256 ID tokens. A token's issued-at time must be within ten minutes. No credentials are included in this repository.
+
+Sign-in requires an anonymous contributor session. Adding evidence creates one; otherwise, select “Sign in with Glyph Atlas” and then “Continue to Glyph Atlas”. Sign-in links the contributor to the verified issuer and subject. If that identity already exists, the anonymous person is mapped to the existing person; historical entry creator IDs stay unchanged. Signing out revokes the current session. Changing to another Glyph Atlas account requires signing out first.
+
+The protocol follows [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html), [OpenID Connect Discovery 1.0](https://openid.net/specs/openid-connect-discovery-1_0.html), and [RFC 7636: PKCE](https://www.rfc-editor.org/rfc/rfc7636).
 
 ## Visibility
 
@@ -50,7 +59,9 @@ GitHub Actions runs `bun install --frozen-lockfile` and `bun run build` for pull
 
 ## Limitations
 
-This is a local prototype, not ready for public operation. It has no moderation, editing, deletion or contributor accounts. Pagination lists 20 records at a time.
+This is a local prototype without moderation, editing or deletion. Pagination lists 20 records at a time. Provider availability and the permitted endpoint layout have not been verified against a live Glyph Atlas deployment. Discovery and keys are fetched on each sign-in; each provider request has a five-second deadline and a 128 KiB response limit. The provider controls the identity assertions it issues.
+
+Sessions expire after 365 days. Clearing an anonymous cookie loses its link to future contributions. Simultaneous first submissions or sign-in preparations can create separate anonymous identities, with only one cookie retained by the browser. If concurrent preparations establish different session families, signing out of one family cannot revoke an in-flight callback bound to the other; avoid concurrent preparation tabs. Expired flows and revoked sessions are not cleaned up automatically. Attribution merges are stored as person mappings; a future contributor-facing view must resolve them. Rate limiting and storage retention need operational policy before public use.
 
 ## License
 
