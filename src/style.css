@@ -41,13 +41,18 @@ form, .panel, .details-fields { display: grid; gap: 18px; min-width: 0; }
 .panel { padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .field, label { display: grid; gap: 6px; min-width: 0; }
 label { font-weight: 500; }
-input, textarea, button { font: inherit; color: inherit; }
-input, textarea { display: block; width: 100%; min-width: 0; min-height: 42px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); }
+input, textarea, select, button { font: inherit; color: inherit; }
+input, textarea, select { display: block; width: 100%; min-width: 0; min-height: 42px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); }
 textarea { min-height: 96px; resize: vertical; line-height: 1.55; }
 input[aria-invalid=true], textarea[aria-invalid=true] { border-color: var(--wrong); }
 :focus-visible { outline: 3px solid #b1a7ff; outline-offset: 2px; }
 button { justify-self: start; min-height: 40px; padding: 8px 14px; border: 1px solid var(--action); border-radius: 7px; background: var(--action); color: var(--on-action); font-weight: 500; cursor: pointer; }
-button:hover { opacity: .85; }
+button:hover:not(:disabled) { opacity: .85; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.secondary { background: var(--surface); border-color: var(--line-strong); color: var(--ink); }
+.comparison { min-width: 0; margin: 0; padding: 12px 16px 16px; border: 1px solid var(--line); border-radius: 7px; }
+.comparison legend { padding: 0 4px; font-weight: 600; }
+.comparison-fields { display: grid; gap: 18px; min-width: 0; }
 details { border: 1px solid var(--line); border-radius: 7px; }
 summary { padding: 12px; font-weight: 500; cursor: pointer; }
 summary span { margin-left: 6px; color: var(--muted); font-size: 12px; font-weight: 400; }
