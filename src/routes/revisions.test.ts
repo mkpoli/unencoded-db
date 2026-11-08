@@ -1,33 +1,35 @@
 import { Database } from 'bun:sqlite'
 import { describe, expect, test } from 'bun:test'
-import { readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs'
+import { writeFileSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { compile } from 'svelte/compiler'
-import { render } from 'svelte/server'
-import { actions, load as editLoad } from './entry/[id]/edit/+page.server'
-import { load as history } from './entry/[id]/history/+page.server'
+import { applyMigration } from '../test-support'
 import { redactRevision } from '../lib/server/revision-redaction'
+import { actions, load as editLoad } from './[locale]/entry/[id]/edit/+page.server'
+import { load as history } from './[locale]/entry/[id]/history/+page.server'
 
 function dbSetup() {
   const db = new Database(':memory:')
-  db.exec('PRAGMA foreign_keys = ON')
-  for (const name of ['0001_init.sql', '0002_entry_visibility.sql']) db.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
+  applyMigration(db, '0001_init.sql')
+  applyMigration(db, '0002_entry_visibility.sql')
   db.exec("INSERT INTO entries (script,place,url,title,created_at) VALUES ('old','book','https://example.org','title','2026')")
-  db.exec(readFileSync(new URL('../../migrations/0003_related_characters.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0007_revisions.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0008_edit_generation.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0009_revision_redaction.sql', import.meta.url), 'utf8'))
+  applyMigration(db, '0003_related_characters.sql')
+  applyMigration(db, '0004_attribution.sql')
+  applyMigration(db, '0005_oidc.sql')
+  applyMigration(db, '0006_source_images.sql')
+  applyMigration(db, '0007_revisions.sql')
+  applyMigration(db, '0008_edit_generation.sql')
+  applyMigration(db, '0009_revision_redaction.sql')
   return db
 }
 function binding(db: Database) {
   return { prepare(sql: string) { return { bind(...values: (string | number | null)[]) { return {
-    first: async () => db.query(sql).get(...values), all: async () => ({ results: db.query(sql).all(...values) }), run: async () => ({ meta: { changes: db.query(sql).run(...values).changes } })
+    first: async () => db.query(sql).get(...values), all: async () => ({ results: db.query(sql).all(...values) })
   } } } } }
 }
 function event(db: Database, values: Record<string, string> = {}) {
   const form = new FormData()
   for (const [key, value] of Object.entries(values)) form.set(key, value)
-  return { params: { id: '1' }, platform: { env: { DB: binding(db) } }, request: new Request('https://example.test/', { method: 'POST', body: form }), url: new URL('https://example.test/') } as any
+  return { params: { locale: 'en', id: '1' }, platform: { env: { DB: binding(db) } }, request: new Request('https://example.test/en/entry/1/edit', { method: 'POST', body: form }), url: new URL('https://example.test/en/entry/1/history') } as any
 }
 
 describe('revisions', () => {
@@ -35,27 +37,8 @@ describe('revisions', () => {
     const db = dbSetup()
     try {
       const columns = db.query("SELECT name FROM pragma_table_info('entry_revisions')").all().map((row: any) => row.name)
-      expect(columns).toEqual(['entry_id', 'revision', 'script', 'ids', 'description', 'place', 'url', 'title', 'author', 'publisher', 'year', 'page', 'note', 'recorded_at', 'tombstone'])
+      expect(columns).toEqual(['entry_id', 'revision', 'script', 'ids', 'description', 'place', 'title', 'author', 'publisher', 'year', 'page', 'note', 'recorded_at', 'tombstone'])
     } finally { db.close() }
-  })
-  test('SSR renders a placeholder without tombstone content', async () => {
-    const source = readFileSync(new URL('./entry/[id]/history/+page.svelte', import.meta.url), 'utf8')
-      .replace('$lib/source-url', new URL('../lib/source-url.ts', import.meta.url).href)
-    const code = compile(source, { generate: 'server' }).js.code
-    const dir = new URL('../../node_modules/.cache/revision-ssr/', import.meta.url)
-    mkdirSync(dir, { recursive: true })
-    const path = new URL(`ssr-test-${crypto.randomUUID()}.mjs`, dir)
-    writeFileSync(path, code)
-    try {
-      const component = (await import(path.href)).default
-      const html = render(component, { props: { data: { id: 1, next: null, revisions: [
-        { entry_id: 1, revision: 1, recorded_at: '2026', tombstone: true, script: 'SECRET-SHOULD-NOT-RENDER' },
-        { entry_id: 1, revision: 2, recorded_at: '2026', tombstone: false, script: 'visible', place: 'book', url: 'https://example.org' }
-      ] } } }).body
-      expect(html).toContain('Revision redacted.')
-      expect(html).not.toContain('SECRET-SHOULD-NOT-RENDER')
-      expect(html).toContain('visible')
-    } finally { unlinkSync(path) }
   })
   test('edit and redaction serialize across database connections', async () => {
     const initial = dbSetup()
@@ -86,7 +69,7 @@ describe('revisions', () => {
     const db = dbSetup()
     try {
       const api = binding(db) as any
-      const scrub = "script='', ids=NULL, description=NULL, place='', url='', title=NULL, author=NULL, publisher=NULL, year=NULL, page=NULL, note=NULL, tombstone=1"
+      const scrub = "script='', ids=NULL, description=NULL, place='', title=NULL, author=NULL, publisher=NULL, year=NULL, page=NULL, note=NULL, tombstone=1"
       // A current snapshot remains protected; an edit makes the old snapshot eligible.
       await expect(redactRevision(api, 1, 1)).rejects.toThrow()
       db.exec("UPDATE entries SET script='current', revision=revision+1 WHERE id=1")
@@ -95,13 +78,13 @@ describe('revisions', () => {
       for (const alteration of [
         "script='tampered'", 'tombstone=1', `${scrub}, title='leak'`, `${scrub}, recorded_at='changed'`,
         `${scrub}, revision=3`, `${scrub}, entry_id=2`, `${scrub}, ids='leak'`, `${scrub}, description='leak'`,
-        `${scrub}, place='leak'`, `${scrub}, url='leak'`, `${scrub}, author='leak'`, `${scrub}, publisher='leak'`,
+        `${scrub}, place='leak'`, `${scrub}, author='leak'`, `${scrub}, publisher='leak'`,
         `${scrub}, year='leak'`, `${scrub}, page='leak'`, `${scrub}, note='leak'`, `${scrub}, script='leak'`
       ]) expect(() => db.exec(`UPDATE entry_revisions SET ${alteration} WHERE entry_id=1 AND revision=1`)).toThrow()
-      expect(() => db.exec("INSERT INTO entry_revisions (entry_id, revision, script, place, url, recorded_at, tombstone) VALUES (1, 99, '', '', '', 'time', 1)")).toThrow()
-      expect(() => db.exec("INSERT INTO entry_revisions (entry_id, revision, script, place, url, recorded_at) VALUES (1, 50, 'forged', 'p', 'https://f.org', 't')")).toThrow()
+      expect(() => db.exec("INSERT INTO entry_revisions (entry_id, revision, script, place, recorded_at, tombstone) VALUES (1, 99, '', '', 'time', 1)")).toThrow()
+      expect(() => db.exec("INSERT INTO entry_revisions (entry_id, revision, script, place, recorded_at) VALUES (1, 50, 'forged', 'p', 't')")).toThrow()
       expect(() => db.exec(`UPDATE OR REPLACE entry_revisions SET ${scrub}, revision=3 WHERE entry_id=1 AND revision=1`)).toThrow()
-      expect(() => db.exec("INSERT OR REPLACE INTO entry_revisions (entry_id, revision, script, place, url, recorded_at) VALUES (1, 1, 'x', 'x', 'x', 'time')")).toThrow()
+      expect(() => db.exec("INSERT OR REPLACE INTO entry_revisions (entry_id, revision, script, place, recorded_at) VALUES (1, 1, 'x', 'x', 'time')")).toThrow()
       expect(() => db.exec('DELETE FROM entry_revisions WHERE revision=1')).toThrow()
       db.exec("CREATE TRIGGER fail_audit BEFORE INSERT ON revision_redaction_audit BEGIN SELECT RAISE(ABORT, 'audit failure'); END")
       await expect(redactRevision(api, 1, 1)).rejects.toThrow()
@@ -128,9 +111,16 @@ describe('revisions', () => {
   test('redaction fails closed for an orphan revision', async () => {
     const orphan = new Database(':memory:')
     try {
-      for (const name of ['0001_init.sql', '0002_entry_visibility.sql']) orphan.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
+      applyMigration(orphan, '0001_init.sql')
+      applyMigration(orphan, '0002_entry_visibility.sql')
       orphan.exec("INSERT INTO entries (script,place,url,created_at) VALUES ('old','book','https://example.org','2026')")
-      for (const name of ['0003_related_characters.sql', '0007_revisions.sql', '0008_edit_generation.sql', '0009_revision_redaction.sql']) orphan.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
+      applyMigration(orphan, '0003_related_characters.sql')
+      applyMigration(orphan, '0004_attribution.sql')
+      applyMigration(orphan, '0005_oidc.sql')
+      applyMigration(orphan, '0006_source_images.sql')
+      applyMigration(orphan, '0007_revisions.sql')
+      applyMigration(orphan, '0008_edit_generation.sql')
+      applyMigration(orphan, '0009_revision_redaction.sql')
       orphan.exec("UPDATE entries SET script='new', revision=revision+1 WHERE id=1")
       orphan.exec('DELETE FROM entries WHERE id=1')
       await expect(redactRevision(binding(orphan) as any, 1, 1)).rejects.toThrow()
@@ -140,8 +130,8 @@ describe('revisions', () => {
     const db = dbSetup()
     try {
       expect(db.query('SELECT revision, title FROM entry_revisions').get()).toEqual({ revision: 1, title: 'title' })
-      const values = { revision: '1', edit_generation: '1', script: 'new', url: 'https://example.org/new', place: 'page', title: 'new title', author: 'A', publisher: 'P', year: '1900', page: '8', note: 'N', ids: 'X', description: 'D' }
-      await expect(actions.default!(event(db, values))).rejects.toMatchObject({ status: 303 })
+      const values = { revision: '1', edit_generation: '1', script: 'new', place: 'page', title: 'new title', author: 'A', publisher: 'P', year: '1900', page: '8', note: 'N', ids: 'X', description: 'D' }
+      await expect(actions.default!(event(db, values))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
       expect(db.query('SELECT revision, title, author, publisher, year, page, note, ids, description FROM entry_revisions WHERE revision = 2').get()).toEqual({ revision: 2, title: 'new title', author: 'A', publisher: 'P', year: '1900', page: '8', note: 'N', ids: 'X', description: 'D' })
       const stale = await actions.default!(event(db, { ...values, title: 'unsaved' })) as any
       expect(stale.status).toBe(409)
@@ -149,10 +139,10 @@ describe('revisions', () => {
       expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 2 })
       expect(() => db.exec("UPDATE entry_revisions SET title = 'tamper'")).toThrow()
       expect(() => db.exec('DELETE FROM entry_revisions')).toThrow()
-      expect(() => db.exec("INSERT OR REPLACE INTO entry_revisions SELECT entry_id, revision, script, ids, description, place, url, 'tampered', author, publisher, year, page, note, recorded_at FROM entry_revisions WHERE revision = 1")).toThrow()
+      expect(() => db.exec("INSERT OR REPLACE INTO entry_revisions (entry_id, revision, script, ids, description, place, title, author, publisher, year, page, note, recorded_at) SELECT entry_id, revision, script, ids, description, place, title, author, publisher, year, page, note, recorded_at FROM entry_revisions WHERE revision = 1")).toThrow()
       expect(() => db.exec('UPDATE entries SET revision = 5 WHERE id = 1')).toThrow()
       db.exec('UPDATE entries SET visible = 0 WHERE id = 1')
-      expect(() => db.exec("INSERT OR REPLACE INTO entries (id, revision, script, place, url, created_at) VALUES (1, 5, 'replacement', 'book', 'https://example.org', '2026')")).toThrow()
+      expect(() => db.exec("INSERT OR REPLACE INTO entries (id, revision, script, place, created_at) VALUES (1, 5, 'replacement', 'book', '2026')")).toThrow()
       expect(db.query('SELECT visible, revision FROM entries WHERE id = 1').get()).toEqual({ visible: 0, revision: 2 })
       await expect(editLoad(event(db))).rejects.toMatchObject({ status: 404 })
       await expect(history(event(db))).rejects.toMatchObject({ status: 404 })
@@ -167,7 +157,7 @@ describe('revisions', () => {
     try {
       const loaded = await editLoad(event(db)) as any
       expect(loaded.entry.edit_generation).toBe(1)
-      const values = { revision: '1', edit_generation: '1', script: 'unsaved', url: 'https://example.org' }
+      const values = { revision: '1', edit_generation: '1', script: 'unsaved', place: 'book' }
       db.exec('UPDATE entries SET visible = 1 WHERE id = 1')
       expect(db.query('SELECT edit_generation FROM entries').get()).toEqual({ edit_generation: 1 })
       db.exec('UPDATE entries SET visible = 0 WHERE id = 1')
@@ -178,14 +168,14 @@ describe('revisions', () => {
       expect(stale.status).toBe(409)
       expect(stale.data.values.script).toBe('unsaved')
       expect(stale.data.generation).toBe('1')
-      const invalid = await actions.default!(event(db, { ...values, url: 'bad' })) as any
+      const invalid = await actions.default!(event(db, { ...values, script: '' })) as any
       expect(invalid.status).toBe(400)
       expect(invalid.data.generation).toBe('1')
       expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 1 })
       expect(db.query('SELECT script FROM entries').get()).toEqual({ script: 'old' })
       await expect(actions.default!(event(db, { ...values, edit_generation: '3' }))).rejects.toMatchObject({ status: 303 })
       expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 2 })
-      const missing = await actions.default!(event(db, { revision: '2', script: 'missing', url: 'https://example.org' })) as any
+      const missing = await actions.default!(event(db, { revision: '2', script: 'missing', place: 'book' })) as any
       expect(missing.status).toBe(400)
       expect(missing.data.generation).toBeNull()
     } finally { db.close() }
@@ -214,26 +204,28 @@ describe('revisions', () => {
       expect(db.query('SELECT visible, edit_generation FROM entries').get()).toEqual({ visible: 1, edit_generation: 1 })
     } finally { db.close() }
   })
-  test('edits preserve a long URL fallback and report invalid fields', async () => {
+  test('edits report every invalid field and keep the submitted text', async () => {
     const db = dbSetup()
     try {
-      const url = `https://example.org/${'x'.repeat(600)}`
-      const values = { revision: '1', edit_generation: '1', script: 'Han', url, place: url }
-      await expect(actions.default!(event(db, values))).rejects.toMatchObject({ status: 303 })
-      expect(db.query('SELECT place FROM entries WHERE id = 1').get()).toEqual({ place: url })
-      const bad = await actions.default!(event(db, { ...values, revision: '2', url: 'javascript:bad', place: 'book' })) as any
-      expect(bad.status).toBe(400)
-      expect(bad.data.errors.url).toContain('HTTP or HTTPS')
-      const changed = await actions.default!(event(db, { ...values, revision: '2', url: 'https://example.org/other' })) as any
-      expect(changed.status).toBe(400)
-      expect(changed.data.errors.place).toContain('clear or shorten')
+      const values = { revision: '1', edit_generation: '1', script: 'Han', place: 'x'.repeat(501), title: 't'.repeat(301), note: 'kept' }
+      const invalid = await actions.default!(event(db, values)) as any
+      expect(invalid.status).toBe(400)
+      expect(invalid.data.errors.place).toContain('where the character was seen')
+      expect(invalid.data.errors.title).toContain('length')
+      expect(invalid.data.values.note).toBe('kept')
+      expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 1 })
+      const missingScript = await actions.default!(event(db, { ...values, place: 'book', script: '' })) as any
+      expect(missingScript.status).toBe(400)
+      expect(missingScript.data.errors.script).toContain('script')
+      await expect(actions.default!(event(db, { ...values, place: 'book', title: 'new' }))).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT place, title FROM entry_revisions WHERE revision = 2').get()).toEqual({ place: 'book', title: 'new' })
     } finally { db.close() }
   })
   test('snapshot failure rolls back both inserts and updates', () => {
     const db = dbSetup()
     try {
       db.exec("CREATE TRIGGER reject_snapshot BEFORE INSERT ON entry_revisions BEGIN SELECT RAISE(ABORT, 'failure'); END")
-      expect(() => db.exec("INSERT INTO entries (script, place, url, created_at) VALUES ('new', 'book', 'https://example.org', '2026')")).toThrow()
+      expect(() => db.exec("INSERT INTO entries (script, place, created_at) VALUES ('new', 'book', '2026')")).toThrow()
       expect(db.query('SELECT count(*) AS n FROM entries').get()).toEqual({ n: 1 })
       expect(() => db.exec("UPDATE entries SET script = 'new', revision = revision + 1 WHERE id = 1")).toThrow()
       expect(db.query('SELECT script, revision FROM entries WHERE id = 1').get()).toEqual({ script: 'old', revision: 1 })

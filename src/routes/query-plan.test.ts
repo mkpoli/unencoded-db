@@ -1,23 +1,18 @@
 import { Database } from 'bun:sqlite'
 import { describe, expect, test } from 'bun:test'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { load as list } from './+page.server'
-import { load as detail } from './entry/[id]/+page.server'
-import { load as edit, actions as editActions } from './entry/[id]/edit/+page.server'
-import { load as history } from './entry/[id]/history/+page.server'
+import { createTestDatabase, fakeImages } from '../test-support'
+import { load as list } from './[locale]/+page.server'
+import { load as detail } from './[locale]/entry/[id]/+page.server'
+import { load as edit, actions as editActions } from './[locale]/entry/[id]/edit/+page.server'
+import { load as history } from './[locale]/entry/[id]/history/+page.server'
+import { GET as image } from './[locale]/entry/[id]/image/+server'
 
 type PlanRow = { detail: string }
 
 function database() {
-  const db = new Database(':memory:')
-  db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0003_related_characters.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0007_revisions.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0008_edit_generation.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0009_revision_redaction.sql', import.meta.url), 'utf8'))
-  return db
+  return createTestDatabase()
 }
 
 // Exercise the route's actual SQL while avoiding any storage or network access.
@@ -54,20 +49,35 @@ describe('public query plans', () => {
         return entry.isDirectory() ? routes(join(dir, entry.name), path) : /^\+(?:page\.server|layout\.server|server)\.[jt]s$/.test(entry.name) ? [path] : []
       })
     }
-    expect(routes(new URL('.', import.meta.url).pathname).sort()).toEqual(['+layout.server.ts', '+page.server.ts', 'auth/callback/+server.ts', 'auth/prepare/+server.ts', 'auth/sign-in/+server.ts', 'auth/sign-out/+server.ts', 'entry/[id]/+page.server.ts', 'entry/[id]/edit/+page.server.ts', 'entry/[id]/history/+page.server.ts', 'new/+page.server.ts'].sort())
+    expect(routes(new URL('.', import.meta.url).pathname).sort()).toEqual([
+      '+page.server.ts',
+      '[locale]/+layout.server.ts',
+      '[locale]/+page.server.ts',
+      '[locale]/[...rest]/+page.server.ts',
+      '[locale]/entry/[id]/+page.server.ts',
+      '[locale]/entry/[id]/edit/+page.server.ts',
+      '[locale]/entry/[id]/history/+page.server.ts',
+      '[locale]/entry/[id]/image/+server.ts',
+      '[locale]/new/+page.server.ts',
+      'auth/callback/+server.ts',
+      'auth/prepare/+server.ts',
+      'auth/sign-in/+server.ts',
+      'auth/sign-out/+server.ts',
+    ].sort())
   })
+
   test('list uses the visible index for cursor and descending order', async () => {
     const db = database()
     try {
       const { binding, plans } = capture(db)
-      for (const path of ['/', '/?before=100']) {
+      for (const path of ['/en', '/en?before=100', '/ja?before=100']) {
         await list({ platform: { env: { DB: binding } }, url: new URL(path, 'https://example.test') } as any)
       }
-      expect(plans).toHaveLength(2)
+      expect(plans).toHaveLength(3)
       for (const plan of plans) assertPlan(plan, /SEARCH entries USING INDEX entries_visible_id \(id<\?\)/i)
       db.exec('DROP INDEX entries_visible_id')
       const withoutIndex = capture(db)
-      await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/?before=100') } as any)
+      await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/en?before=100') } as any)
       expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_visible_id \(id<\?\)/i)).toThrow()
     } finally { db.close() }
   })
@@ -76,14 +86,14 @@ describe('public query plans', () => {
     const db = database()
     try {
       const { binding, plans } = capture(db, true)
-      const base = { platform: { env: { DB: binding } }, params: { id: '1' } }
+      const base = { platform: { env: { DB: binding } }, params: { locale: 'en', id: '1' } }
       await edit(base as any)
-      for (const path of ['/entry/1/history', '/entry/1/history?before=5']) {
+      for (const path of ['/en/entry/1/history', '/en/entry/1/history?before=5']) {
         await history({ ...base, url: new URL(path, 'https://example.test') } as any)
       }
       const form = new FormData()
-      form.set('script', 'Han'); form.set('url', 'https://example.org'); form.set('revision', '1'); form.set('edit_generation', '1')
-      await expect(editActions.default!({ ...base, request: new Request('https://example.test', { method: 'POST', body: form }) } as any)).rejects.toMatchObject({ status: 303 })
+      form.set('script', 'Han'); form.set('place', 'Book'); form.set('revision', '1'); form.set('edit_generation', '1')
+      await expect(editActions.default!({ ...base, request: new Request('https://example.test/en/entry/1/edit', { method: 'POST', body: form }) } as any)).rejects.toMatchObject({ status: 303 })
       expect(plans).toHaveLength(7)
       for (const i of [0, 1, 3, 5, 6]) assertPlan(plans[i], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
       for (const i of [2, 4]) {
@@ -97,7 +107,7 @@ describe('public query plans', () => {
     const db = database()
     try {
       const { binding, plans } = capture(db, true)
-      await detail({ platform: { env: { DB: binding } }, params: { id: '1' } } as any)
+      await detail({ platform: { env: { DB: binding } }, params: { locale: 'en', id: '1' } } as any)
       expect(plans).toHaveLength(1)
       assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
     } finally { db.close() }
@@ -107,10 +117,21 @@ describe('public query plans', () => {
     const db = database()
     try {
       const { binding, plans } = capture(db)
-      await expect(detail({ platform: { env: { DB: binding } }, params: { id: '1' } } as any)).rejects.toMatchObject({ status: 404 })
+      await expect(detail({ platform: { env: { DB: binding } }, params: { locale: 'en', id: '1' } } as any)).rejects.toMatchObject({ status: 404 })
       expect(plans).toHaveLength(1)
       assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
     } finally { db.close() }
   })
 
+  test('image lookup uses the primary key', async () => {
+    const db = database()
+    try {
+      const { binding, plans } = capture(db)
+      const response = await image({ platform: { env: { DB: binding, IMAGES: fakeImages().bucket } }, params: { locale: 'en', id: '1' } } as any)
+      expect(response.status).toBe(404)
+      expect(response.headers.get('cache-control')).toBe('no-store')
+      expect(plans).toHaveLength(1)
+      assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
+    } finally { db.close() }
+  })
 })

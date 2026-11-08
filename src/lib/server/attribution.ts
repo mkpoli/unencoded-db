@@ -22,14 +22,21 @@ export async function hashToken(token: string) {
   return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))))
 }
 
-export async function saveEvidence(db: D1Database, row: Evidence, token: string | undefined, comparisons: Comparison[] = []) {
-  const values = fields.map(name => row[name])
+export type SourceImageMeta = { key: string; type: string; size: number }
+
+/** A save that failed without committing anything, so the stored image is safe to delete. */
+export class DefinitiveSaveFailure extends Error {}
+
+export async function saveEvidence(db: D1Database, row: Evidence, token: string | undefined, comparisons: Comparison[] = [], image?: SourceImageMeta) {
+  const columns = [...fields, ...(image ? ['image_key', 'image_type', 'image_size'] : [])]
+  const values: (string | number | null)[] = fields.map(name => row[name])
+  if (image) values.push(image.key, image.type, image.size)
   const comparisonJson = JSON.stringify(comparisons)
-  const columns = fields.join(', ')
-  const placeholders = fields.map(() => '?').join(', ')
+  const columnList = columns.join(', ')
+  const placeholders = columns.map(() => '?').join(', ')
   // Check revocation and expiry in the write itself so a stale read cannot authorize it.
   if (token && /^[0-9a-f]{64}$/.test(token)) {
-    const result = await db.prepare(`INSERT INTO entries (${columns}, comparisons, created_at, creator_id)
+    const result = await db.prepare(`INSERT INTO entries (${columnList}, comparisons, created_at, creator_id)
       SELECT ${placeholders}, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), person_id
       FROM contributor_sessions WHERE token_hash = ? AND revoked_at IS NULL
       AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -47,10 +54,10 @@ export async function saveEvidence(db: D1Database, row: Evidence, token: string 
   const results = await db.batch([
     db.prepare('INSERT INTO persons (id, created_at) VALUES (?, ?)').bind(person, now.toISOString()),
     db.prepare('INSERT INTO contributor_sessions (token_hash, person_id, created_at, expires_at) VALUES (?, ?, ?, ?)').bind(tokenHash, person, now.toISOString(), expires),
-    db.prepare(`INSERT INTO entries (${columns}, comparisons, created_at, creator_id) VALUES (${placeholders}, ?, ?, ?) RETURNING id`).bind(...values, comparisonJson, now.toISOString(), person),
+    db.prepare(`INSERT INTO entries (${columnList}, comparisons, created_at, creator_id) VALUES (${placeholders}, ?, ?, ?) RETURNING id`).bind(...values, comparisonJson, now.toISOString(), person),
   ])
   const id = (results[2].results[0] as { id: number } | undefined)?.id
-  if (!id) throw new Error('Could not save evidence')
+  if (!id) throw new DefinitiveSaveFailure('Could not save evidence')
   return { id, token: newToken }
 }
 

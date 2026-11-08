@@ -4,7 +4,7 @@ export async function redactRevision(db: D1Database, entryId: number, revision: 
     throw new RangeError('Invalid revision identity')
   }
   const result = await db.prepare(`UPDATE entry_revisions SET
-    script = '', ids = NULL, description = NULL, place = '', url = '', title = NULL,
+    script = '', ids = NULL, description = NULL, place = '', title = NULL,
     author = NULL, publisher = NULL, year = NULL, page = NULL, note = NULL, tombstone = 1
     WHERE entry_id = ? AND revision = ? RETURNING revision`).bind(entryId, revision).first()
   return result !== null
