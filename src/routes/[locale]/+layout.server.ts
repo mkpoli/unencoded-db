@@ -1,8 +1,11 @@
+import { error } from '@sveltejs/kit'
 import { cookieOptions, hashToken } from '$lib/server/attribution'
 import { configured } from '$lib/server/auth'
+import { isLocale } from '$lib/i18n'
 import type { LayoutServerLoad } from './$types'
 
-export const load: LayoutServerLoad = async ({ platform, url, cookies }) => {
+export const load: LayoutServerLoad = async ({ params, platform, url, cookies }) => {
+  if (!isLocale(params.locale)) error(404)
   const env = platform?.env
   const enabled = configured(env, url)
   const cookie = cookieOptions(url)
@@ -17,5 +20,5 @@ export const load: LayoutServerLoad = async ({ platform, url, cookies }) => {
     hasSession = Boolean(row)
     signedIn = Boolean(row?.linked)
   }
-  return { signInEnabled: enabled, signedIn, hasSession }
+  return { locale: params.locale, signInEnabled: enabled, signedIn, hasSession }
 }

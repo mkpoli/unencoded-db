@@ -13,6 +13,7 @@ These notices cover the client and Cloudflare server output built with the versi
 | [set-cookie-parser](https://github.com/nfriedly/set-cookie-parser) | 3.2.2 | [MIT](set-cookie-parser.txt) | Server |
 | [clsx](https://github.com/lukeed/clsx) | 2.1.1 | [MIT](clsx.txt) | Server |
 | [jose](https://github.com/panva/jose) | 6.2.15 | [MIT](jose.txt) | Server |
+| [Inter](https://github.com/rsms/inter) | 4.66 | [SIL OFL 1.1](../fonts/Inter-OFL.txt) | Client font |
 
 SvelteKit's server SHA-256 implementation is attributed to the [Stanford Javascript Crypto Library](https://github.com/bitwiseshiftleft/sjcl) and states that it is modified and redistributed under the BSD license. The [BSD-2-Clause notice](sjcl-bsd.txt) is from SJCL's [license file](https://github.com/bitwiseshiftleft/sjcl/blob/master/LICENSE.txt).
 
