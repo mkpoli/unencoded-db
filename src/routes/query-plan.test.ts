@@ -14,8 +14,8 @@ function database() {
   db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
   db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
   db.exec(readFileSync(new URL('../../migrations/0003_related_characters.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0004_revisions.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0005_edit_generation.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../migrations/0007_revisions.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../migrations/0008_edit_generation.sql', import.meta.url), 'utf8'))
   return db
 }
 
