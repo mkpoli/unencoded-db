@@ -8,6 +8,10 @@ declare global {
         MODERATOR_EMAILS?: string
         REPORT_RATE_LIMIT?: RateLimit
         LOCAL_RATE_LIMIT?: string
+        ATLAS_ISSUER?: string
+        ATLAS_CLIENT_ID?: string
+        ATLAS_CLIENT_SECRET?: string
+        ATLAS_PUBLIC_ORIGIN?: string
       }
       cf?: IncomingRequestCfProperties
       ctx?: ExecutionContext
