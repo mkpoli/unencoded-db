@@ -325,7 +325,7 @@ describe('moderation report queue', () => {
     try {
       const firstEntry = insertEntry(db, 1, 'First')
       const secondEntry = insertEntry(db, 1, 'Second')
-      db.query("UPDATE entries SET description = 'A description', place = 'A place' WHERE id = ?").run(secondEntry)
+      db.query("UPDATE entries SET description = 'A description', place = 'A place', revision = revision + 1 WHERE id = ?").run(secondEntry)
       const first = insertReport(db, firstEntry, 'spam', 'first note', '2026-01-01T00:00:00.000Z')
       const second = insertReport(db, secondEntry, 'rights', 'second note', '2026-01-02T00:00:00.000Z')
       const resolved = insertReport(db, firstEntry, 'other', 'resolved note', '2026-01-03T00:00:00.000Z')

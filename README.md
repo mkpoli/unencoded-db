@@ -1,6 +1,6 @@
 # Rare Character Compendium
 
-A community evidence wiki for characters and glyphs. Anyone can add a record with a source image and view the collection, and report a public record. Moderators review reports, can dismiss individual reports, and can hide records; hidden records can be restored from a private queue.
+A community evidence wiki for characters and glyphs. Anyone can add or revise a record with a source image, view its revision history and report a public record. Moderators review reports, can dismiss individual reports, and can hide records; hidden records can be restored from a private queue.
 
 A new record keeps one source image as its evidence: a photo, scan or screenshot of the character or glyph. The image is served only through its record at `/{locale}/entry/[id]/image`. Classifying the glyph is a later question.
 
@@ -64,7 +64,7 @@ bun run build
 
 ## Images
 
-- One image per new record. Rows migrated from `0001` remain image-less. There is no editing or replacement flow.
+- One image per new record. Rows migrated from `0001` remain image-less. There is no image editing or replacement flow.
 - JPEG, PNG and WebP are accepted, identified by magic bytes. SVG, HTML, empty and unrecognised files are rejected.
 - The maximum file size is 8 MiB.
 - Bytes live in R2; content type and size live in D1.
@@ -120,9 +120,9 @@ Adding these variables and deploying the Worker does not create or update an Acc
 
 ## Visibility and moderation
 
-Hidden entries are absent from the listing, the entry page and the image route. Hiding is not deletion or redaction: the record remains in the database, can be restored, and responses already in flight, cached by a client or held by a proxy can still contain it. Hidden entries are listed only in the private queue, newest first, 20 at a time.
+Hidden entries are absent from the listing, the entry page and the image route. Hiding is not deletion or redaction: the record remains in the database, can be restored, and responses already in flight, cached by a client or held by a proxy can still contain it. Hidden entries are listed only in the private queue, newest first, 20 at a time. Hidden records return 404 on the edit and history pages.
 
-Every hide and restore writes one `moderation_audit` row with the entry id, action, moderator email and UTC time. That insert performs the visibility change inside a trigger, so the audit row and the transition roll back together on failure. Audit rows are append-only and contain no entry content. Moderated pages are sent with frame protection and a private, no-store cache policy. The Worker changes visibility only through the audit insert; a database writer with schema access can still change visibility directly, so restrict database access.
+Every hide and restore writes one `moderation_audit` row with the entry id, action, moderator email and UTC time. That insert performs the visibility change inside a trigger, so the audit row and the transition roll back together on failure. Audit rows are append-only and contain no entry content. A visibility change also advances the edit generation, so a form opened before it returns 409. Moderated pages are sent with frame protection and a private, no-store cache policy. The Worker changes visibility only through the audit insert; a database writer with schema access can still change visibility directly, so restrict database access.
 
 Apply the D1 migrations before deploying the Worker. Locally:
 
@@ -136,7 +136,13 @@ Against a remote database:
 bunx wrangler d1 migrations apply DB --remote
 ```
 
-Drain old application instances before hiding entries, since older readers do not filter them.
+Drain old application instances before hiding entries, since older readers do not filter them, and before applying `0006`, since it removes the old URL column that older writers still use. Drain writers that do not advance revisions before applying `0007`, since their updates fail once the revision triggers exist.
+
+## Revisions
+
+Revising a record submits the whole evidence text and advances its revision by one. `entry_revisions` stores every version; the history page lists 20 at a time, newest first. A redacted snapshot shows only its revision number, recording date and a redaction marker. Images and related characters are not versioned: edits change text fields only, so the current image and comparisons belong to every revision.
+
+Each edit form carries the revision and visibility generation it was opened at. A write succeeds only when both still match, so a form opened before another edit or a visibility change returns 409 rather than overwriting. Migration `0007_revisions.sql` backfills the current text of every record and installs triggers that require the next revision and reject changes to stored revisions. Migration `0008_edit_generation.sql` adds the generation that invalidates forms opened before a visibility change. Pause submissions, drain older writers and rehearse both migrations against a representative database before applying them; production-scale time and storage have not been measured.
 
 ## Reporting
 
@@ -178,13 +184,13 @@ Provision the remote bucket before deploying:
 bunx wrangler r2 bucket create unencoded-db-images
 ```
 
-Apply all migrations before deploying code that expects visibility and the image schema:
+Apply all migrations before deploying code that expects visibility, revisions and the image schema:
 
 ```sh
 bunx wrangler d1 migrations apply DB --remote
 ```
 
-Migration `0001` creates the base table. Migration `0002` adds `visible` and the `entries_visible_id` index. Migration `0003` adds related comparisons. Migration `0004` adds anonymous attribution. Migration `0005` adds OIDC identities and session rotation. Migration `0006` rebuilds `entries`, preserves `visible`, comparisons, attribution and the id high-water mark, recreates `entries_visible_id`, adds a unique partial `entries_image_key` index, removes the source URL column and adds `image_key`, `image_type` and `image_size`. Migration `0010` adds the moderation audit table and its triggers, and the `entries_hidden_id` index behind the queue. Migration `0011` adds anonymous entry reports, the open and entry indexes, and the triggers that refuse reports for hidden entries, cap open reports at 100 and resolve them on hide. Existing rows keep their ids and text fields; existing source URLs are dropped.
+Migration `0001` creates the base table. Migration `0002` adds `visible` and the `entries_visible_id` index. Migration `0003` adds related comparisons. Migration `0004` adds anonymous attribution. Migration `0005` adds OIDC identities and session rotation. Migration `0006` rebuilds `entries`, preserves `visible`, comparisons, attribution and the id high-water mark, recreates `entries_visible_id`, adds a unique partial `entries_image_key` index, removes the source URL column and adds `image_key`, `image_type` and `image_size`. Migration `0007` adds the `revision` column and `entry_revisions` with the backfill, snapshot and immutability triggers. Migration `0008` adds `edit_generation` and advances it on every visibility change. Migration `0009` adds the tombstone flag and redaction audit table, restates the snapshot triggers for the new column, and rejects any update that is not one complete scrub of a noncurrent snapshot. Migration `0010` adds the moderation audit table and its triggers, and the `entries_hidden_id` index behind the queue. Migration `0011` adds anonymous entry reports, the open and entry indexes, and the triggers that refuse reports for hidden entries, cap open reports at 100 and resolve them on hide. Existing rows keep their ids and text fields; existing source URLs are dropped.
 
 The Cloudflare configuration names the production D1 database and an R2 bucket. Configure real bindings for a separate environment, including `CONTRIBUTION_RATE_LIMIT` and `REPORT_RATE_LIMIT` for each deployed environment.
 
@@ -204,9 +210,13 @@ GitHub Actions runs `bun install --frozen-lockfile` and `bun run build` for pull
 
 ## Limitations
 
-This is a local prototype, not ready for public operation. It has no editing or deletion. Record creation and report submissions are rate limited as described above. Pagination lists 20 records at a time. The audit and dismissal tables record hide and restore actions and report dismissals; they do not keep entry revisions or redacted content. Reporting and moderation are not deployed.
+This is a local prototype, not ready for public operation. It has no deletion. Hiding and restoring records and report dismissals are audited, but the audit keeps no entry content. Editing is anonymous and has no rate limit; creating a record and report submissions are limited per client network as described above. Pagination lists 20 records at a time. Reporting and moderation are not deployed.
 
-Provider availability and the permitted endpoint layout have not been verified against a live Glyph Atlas deployment. Discovery and keys are fetched on each sign-in; each provider request has a five-second deadline and a 128 KiB response limit. The provider controls the identity assertions it issues. Sessions expire after 365 days. Clearing an anonymous cookie loses its link to future contributions. Simultaneous first submissions or sign-in preparations can create separate anonymous identities, with only one cookie retained by the browser. If concurrent preparations establish different session families, signing out of one family cannot revoke an in-flight callback bound to the other; avoid concurrent preparation tabs. Expired flows and revoked sessions are not cleaned up automatically. Attribution merges are stored as person mappings; a future contributor-facing view must resolve them. Storage retention needs operational policy before public use.
+Provider availability and the permitted endpoint layout have not been verified against a live Glyph Atlas deployment. Discovery and keys are fetched on each sign-in; each provider request has a five-second deadline and a 128 KiB response limit. The provider controls the identity assertions it issues.
+
+Sessions expire after 365 days. Clearing an anonymous cookie loses its link to future contributions. Simultaneous first submissions or sign-in preparations can create separate anonymous identities, with only one cookie retained by the browser. If concurrent preparations establish different session families, signing out of one family cannot revoke an in-flight callback bound to the other; avoid concurrent preparation tabs. Expired flows and revoked sessions are not cleaned up automatically. Attribution merges are stored as person mappings; a future contributor-facing view must resolve them. Storage retention and abuse response need operational policy before public use.
+
+**Public launch is blocked:** handling sensitive current content has no operational policy yet. An internal primitive can irreversibly redact noncurrent snapshots, with an audit record; it has no public interface. Current records and other revisions may still contain the same text. Redaction cannot retract copies in caches, logs, database backups or point-in-time recovery. Hiding an entry conceals its history, and restoring it republishes its unredacted snapshots. Apply the redaction migration before deploying readers or writers that use it.
 
 ## License
 
