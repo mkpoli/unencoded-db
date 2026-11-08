@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import { fields, readEvidence } from '$lib/server/evidence'
 import { cookieOptions, saveEvidence, sessionCookieSettings } from '$lib/server/attribution'
+import { readComparisons } from '$lib/server/related'
 import type { Actions } from './$types'
 
 export const actions: Actions = {
@@ -25,10 +26,13 @@ export const actions: Actions = {
       }
     }
     const row = readEvidence(form)
-    if (!row || Object.keys(errors).length) return fail(400, { errors, values })
+    const comparisons = readComparisons(form)
+    if (!row || Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) {
+      return fail(400, { errors, values, comparisons })
+    }
     const cookie = cookieOptions(url)
     if (!cookie) error(403, 'Secure connection required')
-    const result = await saveEvidence(platform.env.DB, row, cookies.get(cookie.name))
+    const result = await saveEvidence(platform.env.DB, row, cookies.get(cookie.name), comparisons.rows)
     if (result.token) cookies.set(cookie.name, result.token, { ...sessionCookieSettings, secure: cookie.secure })
     redirect(303, `/entry/${result.id}`)
   },

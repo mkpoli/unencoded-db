@@ -1,4 +1,19 @@
-<script lang="ts">let { form } = $props()</script>
+<script lang="ts">
+  import { untrack } from 'svelte'
+  import { newComparison, removeComparison } from '$lib/comparison-rows'
+  let { form } = $props()
+  let comparisons = $state<{ character: string; relationship: string; differences: string; evidence: string }[]>(untrack(() => form?.comparisons?.rows ?? []))
+  let comparisonErrors = $state<string[]>(untrack(() => form?.comparisons?.errors ?? []))
+  function addComparison() {
+    comparisons.push(newComparison())
+    comparisonErrors.push('')
+  }
+  function removeRow(index: number) {
+    const next = removeComparison(comparisons, comparisonErrors, index)
+    comparisons = next.rows
+    comparisonErrors = next.errors
+  }
+</script>
 <svelte:head><title>Add evidence · 珍字集覽</title></svelte:head>
 <div class="form-page">
   <div class="page-heading">
@@ -38,6 +53,27 @@
       <div class="field"><label>Character description <textarea name="description" maxlength="5000" aria-invalid={!!form?.errors?.description} aria-describedby={form?.errors?.description ? 'description-error' : undefined}>{form?.values?.description ?? ''}</textarea></label>{#if form?.errors?.description}<p class="field-error" id="description-error">{form.errors.description}</p>{/if}</div>
     </section>
     <p>A browser cookie links your contributions for 365 days. The stored attribution remains after the cookie expires or is deleted.</p>
+    <section class="panel" aria-labelledby="related-heading">
+      <h2 id="related-heading">Related characters</h2>
+      <p>Compare up to 10 characters.</p>
+      {#if comparisons.length > 10}<p class="field-error" role="alert">Remove comparisons until there are at most 10.</p>{/if}
+      {#each comparisons as comparison, i}
+        <fieldset class="comparison">
+          <legend>Comparison {i + 1}</legend>
+          <div class="comparison-fields">
+          {#if comparisonErrors[i]}<p class="field-error" role="alert">{comparisonErrors[i]}</p>{/if}
+          <div class="field"><label>Character <input name="comparison_character" required maxlength="200" bind:value={comparison.character} /></label></div>
+          <div class="field"><label>Relationship <select name="comparison_relationship" bind:value={comparison.relationship}>
+            <option value="variant">Variant</option><option value="not_variant">Not a variant</option><option value="similar">Similar</option><option value="uncertain">Uncertain</option>
+          </select></label></div>
+          <div class="field"><label>Differences <textarea name="comparison_differences" maxlength="2000" bind:value={comparison.differences}></textarea></label></div>
+          <div class="field"><label>Evidence <textarea name="comparison_evidence" maxlength="2000" bind:value={comparison.evidence}></textarea></label></div>
+          <button class="secondary" type="button" onclick={() => removeRow(i)}>Remove comparison</button>
+          </div>
+        </fieldset>
+      {/each}
+      <button class="secondary" type="button" disabled={comparisons.length >= 10} onclick={addComparison}>Add comparison</button>
+    </section>
     <button type="submit">Save evidence</button>
   </form>
 </div>
