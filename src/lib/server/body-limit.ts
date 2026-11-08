@@ -1,3 +1,4 @@
+import { isLocale } from '$lib/i18n'
 import { MAX_IMAGE_BYTES } from './images'
 
 // Allow room for text fields and form framing.
@@ -6,8 +7,20 @@ export const MAX_WRITE_BODY = 128 * 1024
 // An 8 MiB image plus the bounded text fields and multipart framing.
 export const MAX_NEW_BODY = MAX_IMAGE_BYTES + 64 * 1024
 
+function isNewPath(pathname: string): boolean {
+  const path = pathname.replace(/\/+$/, '') || '/'
+  const [, rawLocale, page] = path.split('/')
+  let locale: string | undefined
+  try {
+    locale = decodeURIComponent(rawLocale ?? '')
+  } catch {
+    locale = rawLocale
+  }
+  return isLocale(locale) && page === 'new'
+}
+
 export function writeBodyLimit(pathname: string): number {
-  return pathname === '/new' ? MAX_NEW_BODY : MAX_WRITE_BODY
+  return isNewPath(pathname) ? MAX_NEW_BODY : MAX_WRITE_BODY
 }
 
 /** Read at most the limit before handing the request to a form parser. */

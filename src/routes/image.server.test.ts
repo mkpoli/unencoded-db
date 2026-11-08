@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { PNG_BYTES, createTestDatabase, d1Binding, fakeImages } from '../test-support'
-import { load as detail } from './entry/[id]/+page.server'
-import { GET } from './entry/[id]/image/+server'
-import { load as list } from './+page.server'
+import { load as detail } from './[locale]/entry/[id]/+page.server'
+import { GET } from './[locale]/entry/[id]/image/+server'
+import { load as list } from './[locale]/+page.server'
 
 const KEY = 'entries/11111111-1111-4111-8111-111111111111'
 
@@ -12,8 +12,8 @@ function insertRecord(db: ReturnType<typeof createTestDatabase>, image: { key: s
   return d1Binding(db)
 }
 
-function requestEvent(DB: unknown, images: ReturnType<typeof fakeImages>, id = '1') {
-  return { params: { id }, platform: { env: { DB, IMAGES: images.bucket } } } as any
+function requestEvent(DB: unknown, images: ReturnType<typeof fakeImages>, id = '1', locale = 'en') {
+  return { params: { locale, id }, platform: { env: { DB, IMAGES: images.bucket } } } as any
 }
 
 describe('entry image route', () => {
@@ -40,7 +40,7 @@ describe('entry image route', () => {
     try {
       const DB = insertRecord(db, { key: KEY, type: 'image/webp', size: PNG_BYTES.byteLength })
       await images.bucket.put(KEY, PNG_BYTES, { httpMetadata: { contentType: 'application/octet-stream' } })
-      const response = await GET(requestEvent(DB, images))
+      const response = await GET(requestEvent(DB, images, '1', 'ja'))
       expect(response.headers.get('content-type')).toBe('image/webp')
     } finally { db.close() }
   })
@@ -95,6 +95,18 @@ describe('entry image route', () => {
     } finally { db.close() }
   })
 
+  test('returns 404 for an invalid locale before touching storage', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = insertRecord(db)
+      const response = await GET(requestEvent(DB, images, '1', 'fr'))
+      expect(response.status).toBe(404)
+      expect(response.headers.get('cache-control')).toBe('no-store')
+      expect(images.gets).toHaveLength(0)
+    } finally { db.close() }
+  })
+
   test('never exposes the object key in page data', async () => {
     const db = createTestDatabase()
     const images = fakeImages()
@@ -102,7 +114,7 @@ describe('entry image route', () => {
       const DB = insertRecord(db)
       await images.bucket.put(KEY, PNG_BYTES, { httpMetadata: { contentType: 'image/png' } })
       const entry = await detail(requestEvent(DB, images)) as any
-      const entries = await list({ platform: { env: { DB } }, url: new URL('https://example.test/') } as any) as any
+      const entries = await list({ platform: { env: { DB } }, url: new URL('https://example.test/en') } as any) as any
       expect(JSON.stringify(entry)).not.toContain(KEY)
       expect(JSON.stringify(entries)).not.toContain(KEY)
       expect(entry.entry.image_key).toBeUndefined()

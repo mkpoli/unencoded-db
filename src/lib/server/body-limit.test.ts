@@ -32,21 +32,24 @@ describe('write body limit', () => {
 })
 
 describe('route body limits', () => {
-  test('allows an 8 MiB image only on POST /new', () => {
+  test('allows an 8 MiB image on the localized new page only', () => {
     expect(MAX_NEW_BODY).toBe(MAX_IMAGE_BYTES + 64 * 1024)
-    expect(writeBodyLimit('/new')).toBe(MAX_NEW_BODY)
-    expect(writeBodyLimit('/entry/1')).toBe(MAX_WRITE_BODY)
-    expect(writeBodyLimit('/')).toBe(MAX_WRITE_BODY)
+    for (const path of ['/en/new', '/ja/new', '/zh-Hans/new', '/zh-Hant/new', '/ko/new', '/vi/new', '/ja/new/', '/%6a%61/new']) {
+      expect(writeBodyLimit(path), path).toBe(MAX_NEW_BODY)
+    }
+    for (const path of ['/', '/new', '/en', '/ja/entry/1', '/en/entry/1/image', '/ja/not-new', '/newer']) {
+      expect(writeBodyLimit(path), path).toBe(MAX_WRITE_BODY)
+    }
   })
   test('accepts a body between the small and image limits with the larger limit', async () => {
     const body = 'x'.repeat(MAX_WRITE_BODY + 1)
-    const req = new Request('https://example.test/new', { method: 'POST', body })
+    const req = new Request('https://example.test/ja/new', { method: 'POST', body })
     const result = await limitWriteBody(req, MAX_NEW_BODY)
     expect(result).not.toBeNull()
     expect((await result!.arrayBuffer()).byteLength).toBe(MAX_WRITE_BODY + 1)
   })
   test('rejects a body over the image limit', async () => {
-    const req = new Request('https://example.test/new', { method: 'POST', body: 'x'.repeat(MAX_NEW_BODY + 1) })
+    const req = new Request('https://example.test/ja/new', { method: 'POST', body: 'x'.repeat(MAX_NEW_BODY + 1) })
     expect(await limitWriteBody(req, MAX_NEW_BODY)).toBeNull()
   })
 })

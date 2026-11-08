@@ -1,16 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { JPEG_BYTES, PNG_BYTES, WEBP_BYTES, imageFile } from '../../test-support'
-import {
-  EMPTY_IMAGE_MESSAGE,
-  MAX_IMAGE_BYTES,
-  MISSING_IMAGE_MESSAGE,
-  OVERSIZE_IMAGE_MESSAGE,
-  UNSUPPORTED_IMAGE_MESSAGE,
-  createImageKey,
-  detectImageType,
-  readJpegOrientation,
-  readSourceImage,
-} from './images'
+import { MAX_IMAGE_BYTES, createImageKey, detectImageType, readJpegOrientation, readSourceImage } from './images'
 
 function formWith(file?: File): FormData {
   const form = new FormData()
@@ -47,19 +37,19 @@ describe('source image validation', () => {
 
   test('requires an image', async () => {
     const result = await readSourceImage(formWith())
-    expect(result.error).toBe(MISSING_IMAGE_MESSAGE)
+    expect(result.error).toBe('missing')
   })
 
   test('rejects an empty file', async () => {
     const result = await readSourceImage(formWith(imageFile(new Uint8Array(), 'empty.png')))
-    expect(result.error).toBe(EMPTY_IMAGE_MESSAGE)
+    expect(result.error).toBe('empty')
   })
 
   test('rejects SVG and HTML even with an image filename or type', async () => {
     const svg = await readSourceImage(formWith(imageFile(new TextEncoder().encode('<svg></svg>'), 'source.png', 'image/png')))
-    expect(svg.error).toBe(UNSUPPORTED_IMAGE_MESSAGE)
+    expect(svg.error).toBe('unsupported')
     const html = await readSourceImage(formWith(imageFile(new TextEncoder().encode('<html></html>'), 'source.jpg', 'image/jpeg')))
-    expect(html.error).toBe(UNSUPPORTED_IMAGE_MESSAGE)
+    expect(html.error).toBe('unsupported')
   })
 
   test('accepts exactly 8 MiB, strips padding and rejects one byte more', async () => {
@@ -72,7 +62,7 @@ describe('source image validation', () => {
     const oversize = new Uint8Array(MAX_IMAGE_BYTES + 1)
     oversize.set(PNG_BYTES)
     const rejected = await readSourceImage(formWith(imageFile(oversize)))
-    expect(rejected.error).toBe(OVERSIZE_IMAGE_MESSAGE)
+    expect(rejected.error).toBe('oversize')
   })
 
   test('removes EXIF, XMP and text metadata', async () => {
@@ -128,7 +118,7 @@ describe('source image validation', () => {
       file.set(prefix)
       file.set(html, prefix.length)
       const result = await readSourceImage(formWith(imageFile(file, name)))
-      expect(result.error).toBe(UNSUPPORTED_IMAGE_MESSAGE)
+      expect(result.error).toBe('unsupported')
     }
   })
 })

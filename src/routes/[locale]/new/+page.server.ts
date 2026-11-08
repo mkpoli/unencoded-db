@@ -1,9 +1,17 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import { fields, readEvidence } from '$lib/server/evidence'
-import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage } from '$lib/server/images'
+import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, type ImageError } from '$lib/server/images'
+import { isLocale, localizedHref, t, type Locale } from '$lib/i18n'
 import type { Actions } from './$types'
 
-const SAVE_FAILED = 'Could not save the record. Try again.'
+function imageError(locale: Locale, error: ImageError): string {
+  switch (error) {
+    case 'missing': return t(locale, 'error.imageMissing')
+    case 'empty': return t(locale, 'error.imageEmpty')
+    case 'oversize': return t(locale, 'error.imageOversize')
+    default: return t(locale, 'error.imageUnsupported')
+  }
+}
 
 async function findEntryByImageKey(db: D1Database, key: string): Promise<{ id: number } | null | undefined> {
   try {
@@ -23,8 +31,10 @@ function fieldValues(form: FormData): Record<FieldName, string> {
 }
 
 export const actions: Actions = {
-  default: async ({ request, platform }) => {
+  default: async ({ request, platform, params }) => {
+    if (!isLocale(params.locale)) error(404)
     if (!platform) error(500, 'Storage unavailable')
+    const locale = params.locale
     const form = await request.formData()
     const values = fieldValues(form)
     const errors: FormErrors = {}
@@ -37,24 +47,24 @@ export const actions: Actions = {
       if (value !== null) probe.set(name, value)
       else probe.delete(name)
       if (!readEvidence(probe)) {
-        errors[name] = name === 'script' ? 'Enter a script (up to 80 characters).'
-          : name === 'place' ? 'Enter where the character was seen (up to 500 characters).'
-          : 'Check the length of this field.'
+        errors[name] = name === 'script' ? t(locale, 'error.script')
+          : name === 'place' ? t(locale, 'error.placeSeen')
+          : t(locale, 'error.length')
       }
     }
     const source = await readSourceImage(form)
-    if (source.error) errors.image = source.error
+    if (source.error) errors.image = imageError(locale, source.error)
     const row = readEvidence(form)
     const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values })
     if (!row || source.error || Object.keys(errors).length) return failForm(400, errors)
-    if (!source.image) return failForm(400, { image: 'Choose a source image.' })
+    if (!source.image) return failForm(400, { image: t(locale, 'error.imageMissing') })
     const image = source.image
 
     const key = createImageKey()
     try {
       await putSourceImage(platform.env.IMAGES, key, image)
     } catch {
-      return failForm(500, { form: SAVE_FAILED })
+      return failForm(500, { form: t(locale, 'error.save') })
     }
 
     let result: { id: number } | null = null
@@ -67,15 +77,15 @@ export const actions: Actions = {
       // Recover the row when it is visible and otherwise keep the object: a
       // later commit would leave a record with a deleted image.
       const existing = await findEntryByImageKey(platform.env.DB, key)
-      if (existing) redirect(303, `/entry/${existing.id}`)
-      return failForm(500, { form: SAVE_FAILED })
+      if (existing) redirect(303, localizedHref(locale, `/entry/${existing.id}`))
+      return failForm(500, { form: t(locale, 'error.save') })
     }
     if (!result) {
       const existing = await findEntryByImageKey(platform.env.DB, key)
-      if (existing) redirect(303, `/entry/${existing.id}`)
+      if (existing) redirect(303, localizedHref(locale, `/entry/${existing.id}`))
       if (existing === null) await deleteSourceImage(platform.env.IMAGES, key)
-      return failForm(500, { form: SAVE_FAILED })
+      return failForm(500, { form: t(locale, 'error.save') })
     }
-    redirect(303, `/entry/${result.id}`)
+    redirect(303, localizedHref(locale, `/entry/${result.id}`))
   },
 }
