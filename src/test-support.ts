@@ -13,6 +13,7 @@ export type Migration =
   | '0007_revisions.sql'
   | '0008_edit_generation.sql'
   | '0009_revision_redaction.sql'
+  | '0010_moderation.sql'
 
 export function applyMigration(db: Database, name: Migration): void {
   db.exec(readFileSync(new URL(name, migrations), 'utf8'))
@@ -29,10 +30,11 @@ export function createTestDatabase(): Database {
   applyMigration(db, '0007_revisions.sql')
   applyMigration(db, '0008_edit_generation.sql')
   applyMigration(db, '0009_revision_redaction.sql')
+  applyMigration(db, '0010_moderation.sql')
   return db
 }
 
-export function d1Binding(db: Database) {
+export function d1Binding(db: Database): D1Database {
   return {
     prepare(sql: string) {
       return {
@@ -47,7 +49,7 @@ export function d1Binding(db: Database) {
       }
     },
     batch: async (statements: { execute: () => unknown[] }[]) => db.transaction(() => statements.map(statement => ({ results: statement.execute() })))(),
-  }
+  } as unknown as D1Database
 }
 
 export type StoredObject = { bytes: Uint8Array; contentType: string | null }
@@ -93,4 +95,19 @@ export const WEBP_BYTES = decode('UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAUAmJa
 
 export function imageFile(bytes: Uint8Array, name = 'source.png', type = 'image/png'): File {
   return new File([bytes as unknown as BlobPart], name, { type })
+}
+
+export function insertEntry(db: Database, visible: 0 | 1 = 1, script = 'Han'): number {
+  const result = db
+    .query("INSERT INTO entries (script, place, created_at, visible) VALUES (?, 'book', '2026-01-01T00:00:00.000Z', ?)")
+    .run(script, visible)
+  return Number(result.lastInsertRowid)
+}
+
+export function entryVisible(db: Database, id: number): number {
+  return (db.query('SELECT visible FROM entries WHERE id = ?').get(id) as { visible: number }).visible
+}
+
+export function moderationAuditRows(db: Database): { id: number; entry_id: number; action: string; moderator: string; created_at: string }[] {
+  return db.query('SELECT id, entry_id, action, moderator, created_at FROM moderation_audit ORDER BY id').all() as never
 }

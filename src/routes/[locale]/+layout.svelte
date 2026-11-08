@@ -9,6 +9,7 @@
     signInEnabled: boolean
     signedIn: boolean
     hasSession: boolean
+    isModerator: boolean
   }
   let { data, children }: { data: Data; children: Snippet } = $props()
   const locale = $derived((isLocale(data.locale) ? data.locale : 'en') as Locale)
@@ -16,6 +17,7 @@
   const path = $derived(page.url.pathname)
   const home = $derived(localizedHref(locale))
   const add = $derived(localizedHref(locale, '/new'))
+  const moderate = $derived(localizedHref(locale, '/moderate'))
 
   // The server sets lang in app.html; this keeps it right after client-side navigation.
   $effect(() => { document.documentElement.lang = locale })
@@ -27,6 +29,9 @@
     <nav class="site-nav" aria-label={t(locale, 'app.name')}>
       <a class="nav-link" href={home} aria-current={path === home || path === `${home}/` ? 'page' : undefined}>{t(locale, 'nav.browse')}</a>
       <a class="nav-link" href={add} aria-current={path === add ? 'page' : undefined}>{t(locale, 'nav.add')}</a>
+      {#if data.isModerator}
+        <a class="nav-link" href={moderate} aria-current={path === moderate || path.startsWith(`${moderate}/`) ? 'page' : undefined}>{t(locale, 'nav.moderation')}</a>
+      {/if}
     </nav>
     <div class="header-actions">
       {#if data.signedIn}

@@ -8,6 +8,7 @@ import { load as detail } from './[locale]/entry/[id]/+page.server'
 import { load as edit, actions as editActions } from './[locale]/entry/[id]/edit/+page.server'
 import { load as history } from './[locale]/entry/[id]/history/+page.server'
 import { GET as image } from './[locale]/entry/[id]/image/+server'
+import { load as queue } from './[locale]/moderate/+page.server'
 
 type PlanRow = { detail: string }
 
@@ -18,6 +19,7 @@ function database() {
 // Exercise the route's actual SQL while avoiding any storage or network access.
 function capture(db: Database, found = false) {
   const plans: string[][] = []
+  const sqls: string[] = []
   const binding = {
     prepare(sql: string) {
       return {
@@ -26,13 +28,14 @@ function capture(db: Database, found = false) {
           try {
             const plan = statement.all(...values) as PlanRow[]
             plans.push(plan.map(row => row.detail))
+            sqls.push(sql)
           } finally { statement.finalize() }
           return { all: async () => ({ results: [] }), first: async () => found ? { id: 1, revision: 1, edit_generation: 1, comparisons: '[]' } : null }
         }
       }
     }
   }
-  return { binding, plans }
+  return { binding, plans, sqls }
 }
 
 function assertPlan(plan: string[], expected: RegExp) {
@@ -58,6 +61,9 @@ describe('public query plans', () => {
       '[locale]/entry/[id]/edit/+page.server.ts',
       '[locale]/entry/[id]/history/+page.server.ts',
       '[locale]/entry/[id]/image/+server.ts',
+      '[locale]/moderate/+page.server.ts',
+      '[locale]/moderate/[id]/hide/+server.ts',
+      '[locale]/moderate/[id]/restore/+server.ts',
       '[locale]/new/+page.server.ts',
       'auth/callback/+server.ts',
       'auth/prepare/+server.ts',
@@ -120,6 +126,35 @@ describe('public query plans', () => {
       await expect(detail({ platform: { env: { DB: binding } }, params: { locale: 'en', id: '1' } } as any)).rejects.toMatchObject({ status: 404 })
       expect(plans).toHaveLength(1)
       assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
+    } finally { db.close() }
+  })
+
+  test('hidden queue uses the hidden index for cursor and descending order', async () => {
+    const db = database()
+    try {
+      const { binding, plans, sqls } = capture(db)
+      for (const path of ['/en/moderate', '/en/moderate?before=100']) {
+        await queue({
+          params: { locale: 'en' },
+          platform: { env: { DB: binding } },
+          locals: { moderator: 'mod@example.com' },
+          url: new URL(path, 'https://example.test'),
+        } as any)
+      }
+      expect(plans).toHaveLength(2)
+      expect(sqls.every(sql => /LIMIT 21\s*$/i.test(sql.trim()))).toBe(true)
+      expect(sqls.every(sql => /^SELECT id, script, description, place, created_at FROM entries\b/.test(sql))).toBe(true)
+      for (const plan of plans) assertPlan(plan, /SEARCH entries USING INDEX entries_hidden_id \(id<\?\)/i)
+
+      db.exec('DROP INDEX entries_hidden_id')
+      const withoutIndex = capture(db)
+      await queue({
+        params: { locale: 'en' },
+        platform: { env: { DB: withoutIndex.binding } },
+        locals: { moderator: 'mod@example.com' },
+        url: new URL('https://example.test/en/moderate?before=100'),
+      } as any)
+      expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_hidden_id \(id<\?\)/i)).toThrow()
     } finally { db.close() }
   })
 

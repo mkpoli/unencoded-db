@@ -107,6 +107,10 @@
   font-family: var(--font-mono);
   font-size: 10px;
 }
+/* A queue card shows a record rather than linking to one, so it keeps the resting surface. */
+.entry-card.queue-card:hover { border-color: var(--line); background: var(--surface); }
+.queue-card .description { color: var(--muted); font-size: var(--text-sm); text-wrap: pretty; }
+.entry-actions { display: flex; justify-content: flex-end; margin-top: auto; padding-top: var(--space-2); }
 .more-row { display: flex; justify-content: center; margin-top: 22px; }
 .empty-state {
   display: grid;
@@ -147,6 +151,23 @@
   border-radius: var(--radius-lg);
   background: var(--surface);
 }
+/* The moderator bar sits on a record page, above the record itself. */
+.moderation-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.moderation-bar form { display: flex; }
+.moderation-bar button { min-height: 36px; }
 .entry-row {
   display: grid;
   grid-template-columns: minmax(120px, 160px) minmax(0, 1fr);

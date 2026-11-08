@@ -4,6 +4,9 @@ declare global {
       env: {
         DB: D1Database
         IMAGES: R2Bucket
+        ACCESS_TEAM_DOMAIN?: string
+        ACCESS_AUD?: string
+        MODERATOR_EMAILS?: string
         ATLAS_ISSUER?: string
         ATLAS_CLIENT_ID?: string
         ATLAS_CLIENT_SECRET?: string
@@ -12,6 +15,9 @@ declare global {
         LOCAL_RATE_LIMIT?: string
       }
       cf?: IncomingRequestCfProperties
+    }
+    interface Locals {
+      moderator: string | null
     }
   }
 }

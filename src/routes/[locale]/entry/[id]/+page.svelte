@@ -4,7 +4,7 @@
 
   type Comparison = { character: string; relationship: string; differences: string; evidence: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
-  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[] } } = $props()
+  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; isModerator: boolean } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons)
 </script>
@@ -17,6 +17,14 @@
     <h1>{entry.ids || entry.script}</h1>
     <p><a href={localizedHref(data.locale, `/entry/${entry.id}/edit`)}>{t(data.locale, 'entry.revise')}</a> · <a href={localizedHref(data.locale, `/entry/${entry.id}/history`)}>{t(data.locale, 'entry.history')}</a></p>
   </header>
+  {#if data.isModerator}
+    <div class="moderation-bar">
+      <span>{t(data.locale, 'moderate.view')}</span>
+      <form method="POST" action={localizedHref(data.locale, `/moderate/${entry.id}/hide`)}>
+        <button class="secondary" type="submit">{t(data.locale, 'moderate.hide')}</button>
+      </form>
+    </div>
+  {/if}
   {#if entry.has_image}
     <figure class="entry-figure">
       <img src={localizedHref(data.locale, `/entry/${entry.id}/image`)} alt={entry.description || t(data.locale, 'field.sourceImage')} />

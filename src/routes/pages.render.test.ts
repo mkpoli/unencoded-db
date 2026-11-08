@@ -147,6 +147,47 @@ describe('localized pages', () => {
     expect(body).not.toContain('https://example.org/source')
   })
 
+  test('entry page shows moderator controls only when a moderator is present', async () => {
+    const data = {
+      locale: 'ko',
+      entry: { id: 9, script: 'Han', ids: null, description: null, place: '서울', title: null, author: null, publisher: null, year: null, page: null, note: null, created_at: '2026-11-08T05:00:00.000Z', has_image: 0 },
+      comparisons: [],
+    }
+    const anonymous = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-public', { data })
+    expect(anonymous.body).not.toContain('moderation-bar')
+    const moderator = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-moderator', { data: { ...data, isModerator: true } })
+    expect(moderator.body).toContain('moderation-bar')
+    expect(moderator.body).toContain('관리자 보기')
+    expect(moderator.body).toContain('action="/ko/moderate/9/hide"')
+  })
+
+  test('queue page renders hidden records with the design-system cards', async () => {
+    const { head, body } = await page('src/routes/[locale]/moderate/+page.svelte', 'queue', {
+      data: {
+        locale: 'ja',
+        moderator: 'mod@example.com',
+        next: 3,
+        entries: [{ id: 7, script: 'Han', description: '説明', place: '本書', created_at: '2026-11-08T05:00:00.000Z' }],
+      },
+    })
+    expect(head).toContain('非表示の記録')
+    expect(body).toContain('class="card-grid"')
+    expect(body).toContain('class="entry-card queue-card"')
+    expect(body).toContain('class="entry-actions"')
+    expect(body).toContain('action="/ja/moderate/7/restore"')
+    expect(body).toContain('再表示')
+    expect(body).toContain('href="/ja/moderate?before=3"')
+    expect(body).toContain('mod@example.com')
+  })
+
+  test('empty queue renders the localized empty state', async () => {
+    const { body } = await page('src/routes/[locale]/moderate/+page.svelte', 'queue-empty', {
+      data: { locale: 'vi', moderator: 'mod@example.com', next: null, entries: [] },
+    })
+    expect(body).toContain('empty-state')
+    expect(body).toContain('Không có mục từ nào bị ẩn.')
+  })
+
   test('edit page renders localized evidence fields, tokens and a stale-form notice', async () => {
     const { head, body } = await page('src/routes/[locale]/entry/[id]/edit/+page.svelte', 'edit', {
       data: { locale: 'ja', entry: { id: 9, revision: 2, edit_generation: 5, script: 'Han', ids: '⿰木木', description: '説明', place: '本書', title: '題名', author: '著者', publisher: '出版者', year: '1900', page: '8', note: 'メモ' } },
@@ -222,6 +263,13 @@ describe('localized pages', () => {
 
     const failed = await page('src/lib/components/ErrorPage.svelte', 'error', { locale: 'zh-Hans', status: 500 })
     expect(failed.body).toContain('出了点问题')
+  })
+
+  test('conflict page returns to the localized moderation queue', async () => {
+    const { body } = await page('src/lib/components/ErrorPage.svelte', 'error-conflict', { locale: 'ja', status: 409 })
+    expect(body).toContain('この操作の前に記録が変更されました。')
+    expect(body).toContain('href="/ja/moderate"')
+    expect(body).toContain('非表示の記録に戻る')
   })
 
   test('language switcher links to the same path and query in all six locales', async () => {
