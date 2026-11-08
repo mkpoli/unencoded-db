@@ -73,6 +73,18 @@ bun run build
 - Image responses use the stored content type, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, so hiding takes effect on the next request. Missing, hidden and invalid-locale images also return an uncached 404.
 - Images are stripped of common metadata on upload: JPEG EXIF, XMP, IPTC and comments before the image scan, PNG text, tIME and EXIF chunks, and WebP EXIF/XMP chunks. JPEG EXIF orientation is kept; ICC colour profiles and pixel content are stored as uploaded. Image metadata is not preserved for attribution, so record credit in the bibliographic fields.
 
+## Contribution rate limit
+
+Creating a record is limited to five POST requests per IPv4 address or IPv6 /64 prefix per 60 seconds at each Cloudflare location. The `CONTRIBUTION_RATE_LIMIT` binding holds this limit; configure it separately for every named environment and choose a namespace ID unique to the limiter within the account. Counters are local to each location, eventually consistent and approximate: shared networks share a limit, and distributed clients can exceed it. This is not a global quota or a substitute for moderation.
+
+The limiter runs before the request body is read on `POST /{locale}/new`. An exhausted limit returns 429 with `Retry-After: 60`. A missing or unavailable binding, or a missing or malformed client address, returns 503. With JavaScript the form keeps its contents and shows a localized notice; without JavaScript the browser shows a localized error page and the submitted fields are not restored. Oversized requests return 413 after the limiter allows them and also do not preserve the form.
+
+Production requests must reach the Worker through Cloudflare, which supplies `CF-Connecting-IP` and request `cf` metadata. For same-zone Worker subrequests, `CF-Connecting-IP` reflects `x-real-ip`, which the calling Worker can modify ([Cloudflare request headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/#cf-connecting-ip)). Do not expose an alternate origin that accepts client-supplied forwarding headers or allow untrusted Workers to invoke this Worker as end users.
+
+The limiter key is the IPv4 address or the IPv6 /64 prefix; IPv4-mapped IPv6 addresses return 503. The Worker sends a SHA-256 digest and does not store or log the address. The digest is pseudonymous, not anonymous: addresses can be guessed. [Cloudflare's rate-limit binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) keeps local, eventually consistent counters at each location.
+
+For local Wrangler development only, set `LOCAL_RATE_LIMIT=true` in `.dev.vars` and bind Wrangler to loopback. Local requests must use a loopback URL and address and share one limiter key. Never set this variable in a deployed environment or expose the local server to a network. Wrangler's local limiter is a development simulation.
+
 ## Glyph Atlas sign-in
 
 Sign-in is optional. Configure `ATLAS_ISSUER`, `ATLAS_CLIENT_ID`, `ATLAS_CLIENT_SECRET` and `ATLAS_PUBLIC_ORIGIN` as worker secrets or bindings, and register the exact callback URL `<ATLAS_PUBLIC_ORIGIN>/auth/callback` with the provider. The public origin must match the request origin exactly and use HTTPS, except for loopback HTTP in local development. Apply all D1 migrations before enabling the feature. The issuer and discovery endpoints must use HTTPS; discovered endpoints must share the issuer's origin. The provider must support authorization code flow, PKCE S256, client secret basic authentication and RS256 ID tokens. A token's issued-at time must be within ten minutes. No credentials are included in this repository.
@@ -140,9 +152,9 @@ Apply all migrations before deploying code that expects visibility and the image
 bunx wrangler d1 migrations apply DB --remote
 ```
 
-Migration `0001` creates the base table. Migration `0002` adds `visible` and the `entries_visible_id` index. Migration `0003` adds related comparisons. Migration `0004` adds anonymous attribution. Migration `0005` adds OIDC identities and session rotation. Migration `0006` rebuilds `entries`, preserves `visible`, comparisons, attribution and the id high-water mark, recreates `entries_visible_id`, adds a unique partial `entries_image_key` index, removes the source URL column and adds `image_key`, `image_type` and `image_size`. Migration `0010` adds the moderation audit table and its triggers, and the `entries_hidden_id` index behind the queue. Existing rows keep their ids and text fields; existing source URLs are dropped.
+Migration `0001` creates the base table. Migration `0002` adds `visible` and the `entries_visible_id` index. Migration `0003` adds related comparisons. Migration `0004` adds anonymous attribution. Migration `0005` adds OIDC identities and session rotation. Migration `0006` rebuilds `entries`, preserves `visible`, comparisons, attribution and the id high-water mark, recreates `entries_visible_id`, adds a unique partial `entries_image_key` index, removes the source URL column and adds `image_key`, `image_type` and `image_size`; existing rows keep their ids and text fields and their source URLs are dropped. Migration `0010` adds the moderation audit table and its triggers, and the `entries_hidden_id` index behind the queue.
 
-The Cloudflare configuration names the production D1 database and an R2 bucket. Configure real bindings for a separate environment.
+The Cloudflare configuration names the production D1 database and an R2 bucket. Configure real bindings for a separate environment, including `CONTRIBUTION_RATE_LIMIT` for each deployed environment.
 
 ## Storage gaps
 
@@ -160,9 +172,11 @@ GitHub Actions runs `bun install --frozen-lockfile` and `bun run build` for pull
 
 ## Limitations
 
-This is a local prototype, not ready for public operation. It has no editing, deletion, rate limiting or abuse prevention. Pagination lists 20 records at a time. The audit records hide and restore actions; it does not keep entry revisions or redacted content.
+This is a local prototype, not ready for public operation. It has no editing or deletion. Hiding and restoring records is audited, but the audit keeps no entry revisions or redacted content. Pagination lists 20 records at a time.
 
-Provider availability and the permitted endpoint layout have not been verified against a live Glyph Atlas deployment. Discovery and keys are fetched on each sign-in; each provider request has a five-second deadline and a 128 KiB response limit. The provider controls the identity assertions it issues. Sessions expire after 365 days. Clearing an anonymous cookie loses its link to future contributions. Simultaneous first submissions or sign-in preparations can create separate anonymous identities, with only one cookie retained by the browser. If concurrent preparations establish different session families, signing out of one family cannot revoke an in-flight callback bound to the other; avoid concurrent preparation tabs. Expired flows and revoked sessions are not cleaned up automatically. Attribution merges are stored as person mappings; a future contributor-facing view must resolve them. Rate limiting and storage retention need operational policy before public use.
+Provider availability and the permitted endpoint layout have not been verified against a live Glyph Atlas deployment. Discovery and keys are fetched on each sign-in; each provider request has a five-second deadline and a 128 KiB response limit. The provider controls the identity assertions it issues.
+
+Sessions expire after 365 days. Clearing an anonymous cookie loses its link to future contributions. Simultaneous first submissions or sign-in preparations can create separate anonymous identities, with only one cookie retained by the browser. If concurrent preparations establish different session families, signing out of one family cannot revoke an in-flight callback bound to the other; avoid concurrent preparation tabs. Expired flows and revoked sessions are not cleaned up automatically. Attribution merges are stored as person mappings; a future contributor-facing view must resolve them. Storage retention and abuse response need operational policy before public use.
 
 ## License
 
