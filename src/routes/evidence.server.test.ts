@@ -28,7 +28,81 @@ const record = {
   note: 'Notes',
 }
 
+function comparisonEvent(rows: Record<string, string>[], DB: unknown, images: ReturnType<typeof fakeImages>, locale = 'en') {
+  const form = new FormData()
+  for (const [key, value] of Object.entries(record)) form.set(key, value)
+  form.set('image', imageFile(PNG_BYTES))
+  for (const row of rows) for (const [key, value] of Object.entries(row)) form.append(`comparison_${key}`, value)
+  return {
+    request: new Request(`https://example.test/${locale}/new`, { method: 'POST', body: form }),
+    platform: { env: { DB, IMAGES: images.bucket } },
+    params: { locale },
+  } as any
+}
+
+const comparison = { character: '漢', relationship: 'not_variant', differences: 'Different component', evidence: 'Source page 4' }
+
 describe('evidence routes', () => {
+  test('persists multiple comparisons and displays their explanations', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      const rows = [comparison, { ...comparison, character: '字', relationship: 'uncertain' }]
+      await expect(actions.default!(comparisonEvent(rows, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(result.comparisons).toEqual(rows)
+      await expect(actions.default!(comparisonEvent(rows, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/2' })
+      const second = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '2' } } as any) as any
+      expect(second.comparisons).toEqual(rows)
+    } finally { db.close() }
+  })
+
+  test('rejects excess and invalid comparisons without saving', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const rows = Array.from({ length: 11 }, () => ({ ...comparison }))
+      rows[10].relationship = 'wrong'
+      const result = await actions.default!(comparisonEvent(rows, d1Binding(db), images)) as any
+      expect(result.status).toBe(400)
+      expect(result.data.comparisons.tooMany).toBe(true)
+      expect(result.data.comparisons.errors[10]).toBe(true)
+      expect(result.data.comparisons.rows).toEqual(rows)
+      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
+      expect(images.puts).toHaveLength(0)
+    } finally { db.close() }
+  })
+
+  test('rejects incomplete, overlong and misaligned rows', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      for (const row of [
+        { ...comparison, character: ' ' },
+        { ...comparison, evidence: 'x'.repeat(2001) },
+        { character: '漢', relationship: 'variant', differences: '' },
+      ]) {
+        const result = await actions.default!(comparisonEvent([row], d1Binding(db), images)) as any
+        expect(result.status).toBe(400)
+        expect(result.data.comparisons.errors[0]).toBe(true)
+      }
+      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
+      expect(images.puts).toHaveLength(0)
+    } finally { db.close() }
+  })
+
+  test('keeps no entry when the insert rejects comparisons', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      db.exec("CREATE TRIGGER reject_comparisons BEFORE INSERT ON entries WHEN json_array_length(NEW.comparisons) > 0 BEGIN SELECT RAISE(ABORT, 'rejected'); END")
+      const result = await actions.default!(comparisonEvent([comparison], d1Binding(db), images)) as any
+      expect(result.status).toBe(500)
+      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
+    } finally { db.close() }
+  })
+
   test('creates an image-backed record with bibliographic details', async () => {
     const db = createTestDatabase()
     const images = fakeImages()

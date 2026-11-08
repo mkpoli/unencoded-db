@@ -1,9 +1,12 @@
 <script lang="ts">
+  import { relationshipLabel } from '$lib/comparison-rows'
   import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
 
+  type Comparison = { character: string; relationship: string; differences: string; evidence: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
-  let { data }: { data: { locale: Locale; entry: Entry } } = $props()
+  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[] } } = $props()
   let entry = $derived(data.entry)
+  let comparisons = $derived(data.comparisons)
 </script>
 
 <svelte:head><title>{t(data.locale, 'entry.record', { id: entry.id })} · {t(data.locale, 'app.name')}</title></svelte:head>
@@ -31,4 +34,21 @@
     {#if entry.note}<div class="entry-row"><dt>{t(data.locale, 'field.note')}</dt><dd>{entry.note}</dd></div>{/if}
     <div class="entry-row"><dt>{t(data.locale, 'entry.added')}</dt><dd>{formatDate(data.locale, entry.created_at)}</dd></div>
   </dl>
+  {#if comparisons.length}
+    <section class="related-section" aria-labelledby="related-heading">
+      <h2 class="section-label" id="related-heading">{t(data.locale, 'form.related')}</h2>
+      <div class="related-list">
+        {#each comparisons as comparison}
+          <article class="related-card">
+            <h3>{comparison.character}</h3>
+            <dl class="entry-meta">
+              <div class="entry-row"><dt>{t(data.locale, 'field.relationship')}</dt><dd>{relationshipLabel(data.locale, comparison.relationship)}</dd></div>
+              {#if comparison.differences}<div class="entry-row"><dt>{t(data.locale, 'field.differences')}</dt><dd>{comparison.differences}</dd></div>{/if}
+              {#if comparison.evidence}<div class="entry-row"><dt>{t(data.locale, 'field.comparisonEvidence')}</dt><dd>{comparison.evidence}</dd></div>{/if}
+            </dl>
+          </article>
+        {/each}
+      </div>
+    </section>
+  {/if}
 </div>
