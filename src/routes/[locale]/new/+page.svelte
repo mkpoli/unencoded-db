@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { enhance } from '$app/forms'
   import { untrack } from 'svelte'
   import FileField from '$lib/components/FileField.svelte'
   import { newComparison, relationshipLabel, removeComparison } from '$lib/comparison-rows'
+  import { handleContributionResult } from '$lib/contribution-result'
   import { t, type Locale } from '$lib/i18n'
 
   type Values = Record<string, string>
@@ -12,6 +14,7 @@
     comparisons?: { rows: Comparison[]; errors: boolean[]; tooMany: boolean }
   }
   let { form, data }: { form?: Form; data: { locale: Locale } } = $props()
+  let rateLimitFailure = $state<429 | 503 | null>(null)
   const imageError = $derived(form?.errors?.image ?? '')
   let comparisons = $state<Comparison[]>(untrack(() => form?.comparisons?.rows ?? []))
   let comparisonErrors = $state<boolean[]>(untrack(() => form?.comparisons?.errors ?? []))
@@ -55,7 +58,13 @@
   {:else if form?.errors}
     <p class="notice error" id="form-error" tabindex="-1" role="alert">{t(data.locale, 'error.fields')}</p>
   {/if}
-  <form class="form-panel" method="POST" enctype="multipart/form-data" novalidate>
+  {#if rateLimitFailure}
+    <p class="notice error" role="alert">{rateLimitFailure === 429 ? t(data.locale, 'error.rateLimit') : t(data.locale, 'error.rateUnavailable')}</p>
+  {/if}
+  <form class="form-panel" method="POST" enctype="multipart/form-data" novalidate use:enhance={() => {
+    rateLimitFailure = null
+    return async ({ result, update }) => handleContributionResult(result, status => { rateLimitFailure = status }, update)
+  }}>
     <section class="form-section" aria-labelledby="source-heading">
       <h2 class="section-label" id="source-heading">{t(data.locale, 'field.source')}</h2>
       <div class="field">
