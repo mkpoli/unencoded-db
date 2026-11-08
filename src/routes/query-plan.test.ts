@@ -13,9 +13,10 @@ function database() {
   const db = new Database(':memory:')
   db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
   db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0003_revisions.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0004_edit_generation.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0005_revision_redaction.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../migrations/0003_related_characters.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../migrations/0004_revisions.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../migrations/0005_edit_generation.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../migrations/0006_revision_redaction.sql', import.meta.url), 'utf8'))
   return db
 }
 
@@ -31,7 +32,7 @@ function capture(db: Database, found = false) {
             const plan = statement.all(...values) as PlanRow[]
             plans.push(plan.map(row => row.detail))
           } finally { statement.finalize() }
-          return { all: async () => ({ results: [] }), first: async () => found ? { id: 1, revision: 1 } : null }
+          return { all: async () => ({ results: [] }), first: async () => found ? { id: 1, revision: 1, edit_generation: 1, comparisons: '[]' } : null }
         }
       }
     }
@@ -89,6 +90,16 @@ describe('public query plans', () => {
         expect(plans[i].some(line => /SEARCH r USING PRIMARY KEY \(entry_id=\? AND revision<\?\)/i.test(line))).toBe(true)
         expect(plans[i].some(line => /SCAN|TEMP B-TREE/i.test(line))).toBe(false)
       }
+    } finally { db.close() }
+  })
+
+  test('detail loads bounded comparisons with the entry primary key', async () => {
+    const db = database()
+    try {
+      const { binding, plans } = capture(db, true)
+      await detail({ platform: { env: { DB: binding } }, params: { id: '1' } } as any)
+      expect(plans).toHaveLength(1)
+      assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
     } finally { db.close() }
   })
 
