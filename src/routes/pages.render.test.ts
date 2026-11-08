@@ -101,7 +101,7 @@ describe('localized pages', () => {
     expect(body).toContain('id="file-formats"')
     expect(body).toContain('發現地點或出處')
     expect(body).toContain('出處詳情')
-    expect(body).toContain('書目資訊')
+    expect(body).toContain('更多資訊')
     expect(body).toContain('選填')
     expect(body).toContain('請檢查以下各項。')
     expect(body).toContain('圖片必須是有效的JPEG、PNG或WebP檔案。')
@@ -114,6 +114,17 @@ describe('localized pages', () => {
     expect(body).toContain('>儲存 <span aria-hidden="true">→</span></button>')
     expect(body).toContain('class="file-field invalid"')
     expect(body).toContain('選擇圖片')
+  })
+
+  test('IDS input offers related records', async () => {
+    const { body } = await page('src/routes/[locale]/new/+page.svelte', 'new-suggestions', {
+      data: { locale: 'ja', suggestions: [{ ids: '⿰木木', script: 'Han' }] },
+      form: { values: { ids: '⿰木木', script: 'Han' } },
+    })
+    expect(body).toContain('関連する記録')
+    expect(body).toContain('記録を選ぶと文字体系とIDSが入ります。')
+    expect(body).toContain('⿰木木')
+    expect(body).toContain('suggestion-list')
   })
 
   test('entry page renders the Korean image, labels and alt fallback', async () => {
