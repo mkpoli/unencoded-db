@@ -9,6 +9,7 @@ const oldRow = {
   description: 'description',
   place: 'place',
   visible: 1,
+  comparisons: '[]',
   image_key: null,
   image_type: null,
   image_size: null,
@@ -18,11 +19,12 @@ const oldRow = {
   year: '1900',
   page: '12',
   note: 'note',
+  creator_id: 'person-1',
   created_at: '2026-01-01T00:00:00.000Z',
 }
 
 describe('source image migration', () => {
-  test('preserves rows, ids and visibility while dropping the source URL', () => {
+  test('preserves rows, ids, visibility, comparisons and attribution while dropping the source URL', () => {
     const db = new Database(':memory:')
     try {
       applyMigration(db, '0001_init.sql')
@@ -31,20 +33,29 @@ describe('source image migration', () => {
       db.exec(`INSERT INTO entries (id, script, place, url, created_at)
                VALUES (43, 'Hidden', 'Book', 'https://example.org/hidden', '2026-01-02T00:00:00.000Z')`)
       applyMigration(db, '0002_entry_visibility.sql')
+      applyMigration(db, '0003_related_characters.sql')
+      applyMigration(db, '0004_attribution.sql')
+      applyMigration(db, '0005_oidc.sql')
+      db.exec("INSERT INTO persons (id, created_at) VALUES ('person-1', '2026-01-01T00:00:00.000Z')")
+      db.exec("UPDATE entries SET creator_id = 'person-1' WHERE id = 42")
       db.exec('UPDATE entries SET visible = 0 WHERE id = 43')
-      applyMigration(db, '0003_source_images.sql')
+      db.exec(`UPDATE entries SET comparisons = '[{"character":"漢","relationship":"similar","differences":"","evidence":""}]' WHERE id = 43`)
+      applyMigration(db, '0006_source_images.sql')
 
       const row = db.query('SELECT * FROM entries WHERE id = 42').get() as Record<string, unknown>
       expect(row).toEqual(oldRow)
       expect('url' in row).toBe(false)
       expect(db.query('SELECT visible FROM entries WHERE id = 43').get()).toEqual({ visible: 0 })
+      expect(db.query('SELECT comparisons FROM entries WHERE id = 43').get()).toEqual({ comparisons: '[{"character":"漢","relationship":"similar","differences":"","evidence":""}]' })
 
       const columns = db.query('PRAGMA table_info(entries)').all() as { name: string; type: string; notnull: number; dflt_value: string | null }[]
       expect(columns.map(column => column.name)).not.toContain('url')
       expect(columns.find(column => column.name === 'image_key')).toMatchObject({ type: 'TEXT' })
       expect(columns.find(column => column.name === 'image_type')).toMatchObject({ type: 'TEXT' })
       expect(columns.find(column => column.name === 'image_size')).toMatchObject({ type: 'INTEGER' })
+      expect(columns.find(column => column.name === 'creator_id')).toMatchObject({ type: 'TEXT' })
       expect(columns.find(column => column.name === 'visible')).toMatchObject({ type: 'INTEGER', notnull: 1, dflt_value: '1' })
+      expect(columns.find(column => column.name === 'comparisons')).toMatchObject({ type: 'TEXT', notnull: 1, dflt_value: "'[]'" })
 
       const index = db.query("SELECT name, sql FROM sqlite_master WHERE type = 'index' AND name = 'entries_visible_id'").get() as { name: string; sql: string } | null
       expect(index?.sql).toContain('ON entries(id DESC) WHERE visible = 1')
@@ -64,9 +75,12 @@ describe('source image migration', () => {
       applyMigration(db, '0001_init.sql')
       for (const id of [1, 2, 3]) db.exec(`INSERT INTO entries (id, script, place, url, created_at) VALUES (${id}, 'Han', 'Book', 'https://example.org', '2026')`)
       applyMigration(db, '0002_entry_visibility.sql')
+      applyMigration(db, '0003_related_characters.sql')
+      applyMigration(db, '0004_attribution.sql')
+      applyMigration(db, '0005_oidc.sql')
       db.exec('DELETE FROM entries WHERE id = 3')
       expect(db.query('SELECT seq FROM sqlite_sequence WHERE name = ?').get('entries')).toEqual({ seq: 3 })
-      applyMigration(db, '0003_source_images.sql')
+      applyMigration(db, '0006_source_images.sql')
       db.exec("INSERT INTO entries (script, place, created_at) VALUES ('New', 'Book', '2026')")
       expect(db.query('SELECT max(id) AS id FROM entries').get()).toEqual({ id: 4 })
     } finally { db.close() }

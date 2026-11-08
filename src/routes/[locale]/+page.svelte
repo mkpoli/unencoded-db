@@ -8,6 +8,7 @@
 <div class="page-heading">
   <h1>{t(data.locale, 'app.name')}</h1>
   <p>{t(data.locale, 'app.tagline')}</p>
+  <p><a class="quiet-link" href="/export.json">{t(data.locale, 'browse.export')}</a></p>
 </div>
 {#if data.entries.length}
   <div class="card-grid">

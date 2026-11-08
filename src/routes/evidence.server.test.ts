@@ -1,16 +1,25 @@
 import { describe, expect, test } from 'bun:test'
 import { PNG_BYTES, createTestDatabase, d1Binding, fakeImages, imageFile } from '../test-support'
 import { MAX_IMAGE_BYTES } from '../lib/server/images'
-import { actions, load as newForm } from './[locale]/new/+page.server'
+import { actions } from './[locale]/new/+page.server'
 import { load as list } from './[locale]/+page.server'
 import { load as detail } from './[locale]/entry/[id]/+page.server'
 
-function event(values: Record<string, string>, DB: unknown, images: ReturnType<typeof fakeImages>, image: File | null = imageFile(PNG_BYTES), locale = 'en') {
+function testCookies() {
+  const jar = new Map<string, string>()
+  return { jar, cookies: { get: (name: string) => jar.get(name), set: (name: string, value: string) => { jar.set(name, value) } } }
+}
+
+function event(values: Record<string, string>, DB: unknown, images: ReturnType<typeof fakeImages>, image: File | null = imageFile(PNG_BYTES), locale = 'en', requestUrl = `https://example.test/${locale}/new`) {
   const form = new FormData()
   for (const [key, value] of Object.entries(values)) form.set(key, value)
   if (image !== null) form.set('image', image)
+  const { jar, cookies } = testCookies()
   return {
-    request: new Request(`https://example.test/${locale}/new`, { method: 'POST', body: form }),
+    request: new Request(requestUrl, { method: 'POST', body: form }),
+    url: new URL(requestUrl),
+    cookies,
+    jar,
     platform: { env: { DB, IMAGES: images.bucket } },
     params: { locale },
   } as any
@@ -28,7 +37,85 @@ const record = {
   note: 'Notes',
 }
 
+function comparisonEvent(rows: Record<string, string>[], DB: unknown, images: ReturnType<typeof fakeImages>, locale = 'en', requestUrl = `https://example.test/${locale}/new`) {
+  const form = new FormData()
+  for (const [key, value] of Object.entries(record)) form.set(key, value)
+  form.set('image', imageFile(PNG_BYTES))
+  for (const row of rows) for (const [key, value] of Object.entries(row)) form.append(`comparison_${key}`, value)
+  const { jar, cookies } = testCookies()
+  return {
+    request: new Request(requestUrl, { method: 'POST', body: form }),
+    url: new URL(requestUrl),
+    cookies,
+    jar,
+    platform: { env: { DB, IMAGES: images.bucket } },
+    params: { locale },
+  } as any
+}
+
+const comparison = { character: '漢', relationship: 'not_variant', differences: 'Different component', evidence: 'Source page 4' }
+
 describe('evidence routes', () => {
+  test('persists multiple comparisons and displays their explanations', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      const rows = [comparison, { ...comparison, character: '字', relationship: 'uncertain' }]
+      await expect(actions.default!(comparisonEvent(rows, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(result.comparisons).toEqual(rows)
+      await expect(actions.default!(comparisonEvent(rows, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/2' })
+      const second = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '2' } } as any) as any
+      expect(second.comparisons).toEqual(rows)
+    } finally { db.close() }
+  })
+
+  test('rejects excess and invalid comparisons without saving', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const rows = Array.from({ length: 11 }, () => ({ ...comparison }))
+      rows[10].relationship = 'wrong'
+      const result = await actions.default!(comparisonEvent(rows, d1Binding(db), images)) as any
+      expect(result.status).toBe(400)
+      expect(result.data.comparisons.tooMany).toBe(true)
+      expect(result.data.comparisons.errors[10]).toBe(true)
+      expect(result.data.comparisons.rows).toEqual(rows)
+      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
+      expect(images.puts).toHaveLength(0)
+    } finally { db.close() }
+  })
+
+  test('rejects incomplete, overlong and misaligned rows', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      for (const row of [
+        { ...comparison, character: ' ' },
+        { ...comparison, evidence: 'x'.repeat(2001) },
+        { character: '漢', relationship: 'variant', differences: '' },
+      ]) {
+        const result = await actions.default!(comparisonEvent([row], d1Binding(db), images)) as any
+        expect(result.status).toBe(400)
+        expect(result.data.comparisons.errors[0]).toBe(true)
+      }
+      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
+      expect(images.puts).toHaveLength(0)
+    } finally { db.close() }
+  })
+
+  test('keeps no entry when the insert rejects comparisons', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      db.exec("CREATE TRIGGER reject_comparisons BEFORE INSERT ON entries WHEN json_array_length(NEW.comparisons) > 0 BEGIN SELECT RAISE(ABORT, 'rejected'); END")
+      const result = await actions.default!(comparisonEvent([comparison], d1Binding(db), images)) as any
+      expect(result.status).toBe(500)
+      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
+    } finally { db.close() }
+  })
+
   test('creates an image-backed record with bibliographic details', async () => {
     const db = createTestDatabase()
     const images = fakeImages()
@@ -44,6 +131,7 @@ describe('evidence routes', () => {
 
       const row = db.query('SELECT * FROM entries WHERE id = 1').get() as any
       expect(row).toMatchObject({ ...record, visible: 1, image_key: put.key, image_type: 'image/png', image_size: PNG_BYTES.byteLength })
+      expect(row.creator_id).toMatch(/^[0-9a-f-]{36}$/)
       expect('url' in row).toBe(false)
 
       const listing = await list({ platform: { env: { DB } }, url: new URL('https://example.test/en') } as any) as any
@@ -54,16 +142,6 @@ describe('evidence routes', () => {
       expect(result.entry.image_key).toBeUndefined()
       expect(result.entry.url).toBeUndefined()
       expect(JSON.stringify(result)).not.toContain(put.key)
-    } finally { db.close() }
-  })
-
-  test('suggests visible records that share an IDS', async () => {
-    const db = createTestDatabase()
-    try {
-      db.exec("INSERT INTO entries (script, ids, place, created_at) VALUES ('Han', '⿰木木', 'Book', '2026')")
-      db.exec("INSERT INTO entries (script, ids, place, created_at, visible) VALUES ('Han', '⿱日木', 'Hidden', '2026', 0)")
-      const data = await newForm({ platform: { env: { DB: d1Binding(db) } } } as any) as any
-      expect(data.suggestions).toEqual([{ ids: '⿰木木', script: 'Han' }])
     } finally { db.close() }
   })
 
@@ -216,7 +294,10 @@ describe('evidence routes', () => {
 
   test('localizes the save error', async () => {
     const images = fakeImages()
-    const failing = { prepare: () => ({ bind: () => ({ first: async () => { throw new Error('D1 down') } }) }) }
+    const failing = {
+      prepare: () => ({ bind: () => ({ first: async () => { throw new Error('D1 down') } }) }),
+      batch: async () => { throw new Error('D1 down') },
+    }
     const result = await actions.default!(event(record, failing, images, imageFile(PNG_BYTES), 'ja')) as any
     expect(result.status).toBe(500)
     expect(result.data.errors.form).toBe('記録を保存できませんでした。もう一度お試しください。')
@@ -225,7 +306,10 @@ describe('evidence routes', () => {
 
   test('keeps the object when a D1 failure is ambiguous', async () => {
     const images = fakeImages()
-    const failing = { prepare: () => ({ bind: () => ({ first: async () => { throw new Error('D1 down') } }) }) }
+    const failing = {
+      prepare: () => ({ bind: () => ({ first: async () => { throw new Error('D1 down') } }) }),
+      batch: async () => { throw new Error('D1 down') },
+    }
     const result = await actions.default!(event(record, failing, images)) as any
     expect(result.status).toBe(500)
     expect(result.data.errors.form).toBe('Could not save the record. Try again.')
@@ -237,7 +321,10 @@ describe('evidence routes', () => {
 
   test('deletes the object when the insert definitely failed', async () => {
     const images = fakeImages()
-    const failing = { prepare: () => ({ bind: () => ({ first: async () => null }) }) }
+    const failing = {
+      prepare: () => ({ bind: () => ({ first: async () => null }) }),
+      batch: async () => [{ results: [] }, { results: [] }, { results: [] }],
+    }
     const result = await actions.default!(event(record, failing, images)) as any
     expect(result.status).toBe(500)
     expect(images.puts).toHaveLength(1)
@@ -251,12 +338,14 @@ describe('evidence routes', () => {
     try {
       const base = d1Binding(db)
       const failing = {
+        ...base,
         prepare(sql: string) {
           if (sql.includes('INSERT INTO entries')) {
-            return { bind: (...values: (string | number | null)[]) => ({ first: async () => { db.query(sql).run(...values); throw new Error('D1 network error after commit') } }) }
+            return { bind: (...values: (string | number | null)[]) => ({ execute: () => { db.query(sql).run(...values); throw new Error('D1 network error after commit') } }) }
           }
           return base.prepare(sql)
         },
+        batch: async (statements: { execute: () => unknown[] }[]) => statements.map(statement => ({ results: statement.execute() })),
       }
       await expect(actions.default!(event(record, failing, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
       expect(images.deletes).toHaveLength(0)
@@ -273,12 +362,14 @@ describe('evidence routes', () => {
       const base = d1Binding(db)
       let key = ''
       const failing = {
+        ...base,
         prepare(sql: string) {
           if (sql.includes('INSERT INTO entries')) {
-            return { bind: (...values: (string | number | null)[]) => ({ first: async () => { key = String(values[10]); throw new Error('network') } }) }
+            return { bind: (...values: (string | number | null)[]) => ({ execute: () => { key = String(values[10]); throw new Error('network') } }) }
           }
           return base.prepare(sql)
         },
+        batch: async (statements: { execute: () => unknown[] }[]) => statements.map(statement => ({ results: statement.execute() })),
       }
       const result = await actions.default!(event(record, failing, images)) as any
       expect(result.status).toBe(500)
@@ -287,6 +378,56 @@ describe('evidence routes', () => {
       db.query("INSERT INTO entries (script, place, image_key, image_type, image_size, created_at) VALUES ('Han', 'Book', ?, 'image/png', 1, '2026')").run(key)
       expect(images.objects.has(key)).toBe(true)
     } finally { db.close() }
+  })
+
+  test('sets the bearer only after a successful atomic creation', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const e = event(record, d1Binding(db), images)
+      const set: any[] = []
+      e.cookies.set = (...args: any[]) => set.push(args)
+      await expect(actions.default!(e)).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      expect(set).toHaveLength(1)
+      expect(set[0][0]).toBe('__Host-contributor')
+      expect(set[0][2]).toEqual({ path: '/', httpOnly: true, sameSite: 'lax', secure: true, maxAge: 31536000 })
+      expect(db.query('SELECT count(*) AS n FROM persons').get()).toEqual({ n: 1 })
+      expect(db.query('SELECT count(*) AS n FROM contributor_sessions').get()).toEqual({ n: 1 })
+      expect((db.query('SELECT creator_id FROM entries WHERE id = 1').get() as any).creator_id).toBeTruthy()
+
+      db.exec("CREATE TRIGGER fail_entry BEFORE INSERT ON entries BEGIN SELECT RAISE(ABORT, 'failure'); END")
+      set.length = 0
+      const failed = await actions.default!(event(record, d1Binding(db), images)) as any
+      expect(failed.status).toBe(500)
+      expect(set).toHaveLength(0)
+      expect(db.query('SELECT count(*) AS n FROM persons').get()).toEqual({ n: 1 })
+    } finally { db.close() }
+  })
+
+  test('concurrent first submissions each receive their own bearer', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const issued: string[] = []
+      const submit = () => {
+        const e = event(record, d1Binding(db), images)
+        e.cookies.set = (_name: string, value: string) => issued.push(value)
+        return actions.default!(e)
+      }
+      const results = await Promise.allSettled([submit(), submit()])
+      expect(results.every(result => result.status === 'rejected' && (result.reason as { status?: number }).status === 303)).toBe(true)
+      expect(issued).toHaveLength(2)
+      expect(new Set(issued).size).toBe(2)
+      expect((db.query('SELECT count(DISTINCT creator_id) AS n FROM entries').get() as any).n).toBe(2)
+    } finally { db.close() }
+  })
+
+  test('rejects non-loopback HTTP without writing an image or setting a cookie', async () => {
+    const images = fakeImages()
+    const e = event(record, {}, images, imageFile(PNG_BYTES), 'en', 'http://example.test/en/new')
+    await expect(actions.default!(e)).rejects.toMatchObject({ status: 403 })
+    expect(images.puts).toHaveLength(0)
+    expect(e.jar.size).toBe(0)
   })
 
   test('ignores a submitted source URL', async () => {
