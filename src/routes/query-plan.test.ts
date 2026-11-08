@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { createTestDatabase, fakeImages } from '../test-support'
 import { load as list } from './[locale]/+page.server'
 import { load as detail } from './[locale]/entry/[id]/+page.server'
+import { load as edit, actions as editActions } from './[locale]/entry/[id]/edit/+page.server'
+import { load as history } from './[locale]/entry/[id]/history/+page.server'
 import { GET as image } from './[locale]/entry/[id]/image/+server'
 import { load as queue } from './[locale]/moderate/+page.server'
 import { load as reportsQueue } from './[locale]/moderate/reports/+page.server'
@@ -22,14 +24,14 @@ function capture(db: Database, found = false) {
   const binding = {
     prepare(sql: string) {
       return {
-        bind(...values: (string | number)[]) {
+        bind(...values: (string | number | null)[]) {
           const statement = db.prepare(`EXPLAIN QUERY PLAN ${sql}`)
           try {
             const plan = statement.all(...values) as PlanRow[]
             plans.push(plan.map(row => row.detail))
             sqls.push(sql)
           } finally { statement.finalize() }
-          return { all: async () => ({ results: [] }), first: async () => found ? { id: 1, comparisons: '[]' } : null }
+          return { all: async () => ({ results: [] }), first: async () => found ? { id: 1, revision: 1, edit_generation: 1, comparisons: '[]' } : null }
         }
       }
     }
@@ -57,6 +59,8 @@ describe('public query plans', () => {
       '[locale]/+page.server.ts',
       '[locale]/[...rest]/+page.server.ts',
       '[locale]/entry/[id]/+page.server.ts',
+      '[locale]/entry/[id]/edit/+page.server.ts',
+      '[locale]/entry/[id]/history/+page.server.ts',
       '[locale]/entry/[id]/image/+server.ts',
       '[locale]/entry/[id]/report/+server.ts',
       '[locale]/moderate/+page.server.ts',
@@ -84,6 +88,27 @@ describe('public query plans', () => {
       const withoutIndex = capture(db)
       await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/en?before=100') } as any)
       expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_visible_id \(id<\?\)/i)).toThrow()
+    } finally { db.close() }
+  })
+
+  test('edit and history use indexed lookups on every route shape', async () => {
+    const db = database()
+    try {
+      const { binding, plans } = capture(db, true)
+      const base = { platform: { env: { DB: binding } }, params: { locale: 'en', id: '1' } }
+      await edit(base as any)
+      for (const path of ['/en/entry/1/history', '/en/entry/1/history?before=5']) {
+        await history({ ...base, url: new URL(path, 'https://example.test') } as any)
+      }
+      const form = new FormData()
+      form.set('script', 'Han'); form.set('place', 'Book'); form.set('revision', '1'); form.set('edit_generation', '1')
+      await expect(editActions.default!({ ...base, request: new Request('https://example.test/en/entry/1/edit', { method: 'POST', body: form }) } as any)).rejects.toMatchObject({ status: 303 })
+      expect(plans).toHaveLength(7)
+      for (const i of [0, 1, 3, 5, 6]) assertPlan(plans[i], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
+      for (const i of [2, 4]) {
+        expect(plans[i].some(line => /SEARCH r USING PRIMARY KEY \(entry_id=\? AND revision<\?\)/i.test(line))).toBe(true)
+        expect(plans[i].some(line => /SCAN|TEMP B-TREE/i.test(line))).toBe(false)
+      }
     } finally { db.close() }
   })
 

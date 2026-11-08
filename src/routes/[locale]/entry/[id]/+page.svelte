@@ -15,6 +15,7 @@
   <header class="entry-header">
     <p class="eyebrow">{t(data.locale, 'entry.record', { id: entry.id })}</p>
     <h1>{entry.ids || entry.script}</h1>
+    <p><a href={localizedHref(data.locale, `/entry/${entry.id}/edit`)}>{t(data.locale, 'entry.revise')}</a> · <a href={localizedHref(data.locale, `/entry/${entry.id}/history`)}>{t(data.locale, 'entry.history')}</a></p>
   </header>
   {#if data.reported}<p class="notice" role="status">{t(data.locale, 'report.received')}</p>{/if}
   {#if data.isModerator}

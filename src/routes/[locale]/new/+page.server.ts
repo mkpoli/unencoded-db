@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit'
-import { fields, readEvidence } from '$lib/server/evidence'
+import { fields, invalidFields, readEvidence } from '$lib/server/evidence'
 import { DefinitiveSaveFailure, cookieOptions, saveEvidence, sessionCookieSettings } from '$lib/server/attribution'
 import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, type ImageError } from '$lib/server/images'
 import { isLocale, localizedHref, t, type Locale } from '$lib/i18n'
@@ -40,19 +40,10 @@ export const actions: Actions = {
     const form = await request.formData()
     const values = fieldValues(form)
     const errors: FormErrors = {}
-    // Validate fields independently so a single submission can report every field error.
-    for (const name of fields) {
-      const probe = new FormData()
-      probe.set('script', 'Han')
-      probe.set('place', 'Source')
-      const value = form.get(name)
-      if (value !== null) probe.set(name, value)
-      else probe.delete(name)
-      if (!readEvidence(probe)) {
-        errors[name] = name === 'script' ? t(locale, 'error.script')
-          : name === 'place' ? t(locale, 'error.placeSeen')
-          : t(locale, 'error.length')
-      }
+    for (const name of invalidFields(form)) {
+      errors[name] = name === 'script' ? t(locale, 'error.script')
+        : name === 'place' ? t(locale, 'error.placeSeen')
+        : t(locale, 'error.length')
     }
     const source = await readSourceImage(form)
     if (source.error) errors.image = imageError(locale, source.error)
