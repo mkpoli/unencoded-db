@@ -9,6 +9,8 @@ const tmp = resolve('.svelte-kit/render-tmp')
 mkdirSync(tmp, { recursive: true })
 const i18n = resolve('src/lib/i18n.ts')
 const fileField = resolve('src/lib/components/FileField.svelte')
+const appForms = resolve(tmp, 'app-forms.js')
+writeFileSync(appForms, 'export function enhance() { return {} }\n')
 const components = new Map<string, Promise<any>>()
 let fileFieldModule: Promise<string> | null = null
 
@@ -33,7 +35,7 @@ async function load(path: string, name: string) {
       const preprocessed = await preprocess(readFileSync(file, 'utf8'), vitePreprocess({ script: true }), { filename: file })
       let { js } = compile(preprocessed.code, { filename: file, generate: 'server' })
       const dep = await loadFileField()
-      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`)
+      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
