@@ -4,6 +4,17 @@ A community evidence wiki for characters and glyphs. Anyone can add a record wit
 
 A new record keeps one source image as its evidence: a photo, scan or screenshot of the character or glyph. The image is served only through its record at `/{locale}/entry/[id]/image`. Classifying the glyph is a later question.
 
+## Names
+
+| Language | Name | Tagline |
+| --- | --- | --- |
+| English | Rare Character Compendium | A community evidence wiki for characters and glyphs |
+| Japanese | 珍字集覧 | 文字と字形の証拠を集めるコミュニティウィキ |
+| Simplified Chinese | 珍字集览 | 收集文字与字形证据的社区维基 |
+| Traditional Chinese | 珍字集覽 | 收集文字與字形證據的社群維基 |
+| Korean | 진자집람 | 문자와 글리프의 증거를 모으는 커뮤니티 위키 |
+| Vietnamese | Tuyển tập chữ quý | Wiki cộng đồng thu thập bằng chứng về chữ và glyph |
+
 ## Languages and URLs
 
 The public interface is available in the same six languages as Glyph Atlas: English, Japanese, Simplified Chinese, Traditional Chinese, Korean and Vietnamese. Every page is prefixed with its locale:
@@ -89,6 +100,10 @@ There is no global storage quota, no per-user quota and no cleanup job. An R2 pu
 Uploaders must have the rights to share the image. Image metadata is stripped, so credit belongs in the record's title, author and publisher fields. Uploaded images keep their original rights; the project license covers the code only.
 
 A validation failure returns the form with its errors; an upload over the request limit returns 413. The browser clears the file input, so the image must be selected again. Text fields are preserved on validation errors. The request limit is 8 MiB plus framing for `/{locale}/new`.
+
+## Continuous integration
+
+GitHub Actions runs `bun install --frozen-lockfile` and `bun run build` for pull requests and pushes to `main`.
 
 ## Limitations
 
