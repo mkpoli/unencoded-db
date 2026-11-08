@@ -22,7 +22,7 @@ describe('OIDC discovery and ID tokens', () => {
     await expect(fetchJson(`${issuer}/test`, {}, 8, 20)).rejects.toThrow('timed out')
   })
   test('allows only pinned HTTPS or loopback HTTP public origins', () => {
-    const env = { DB: {} as D1Database, ATLAS_ISSUER: issuer, ATLAS_CLIENT_ID: 'client', ATLAS_CLIENT_SECRET: 'secret', ATLAS_PUBLIC_ORIGIN: 'http://localhost:5173' }
+    const env = { DB: {} as D1Database, IMAGES: {} as R2Bucket, ATLAS_ISSUER: issuer, ATLAS_CLIENT_ID: 'client', ATLAS_CLIENT_SECRET: 'secret', ATLAS_PUBLIC_ORIGIN: 'http://localhost:5173' }
     expect(configured(env, new URL('http://localhost:5173/a'))).toBe(true)
     expect(configured({ ...env, ATLAS_PUBLIC_ORIGIN: 'http://localhost.example:5173' }, new URL('http://localhost.example:5173'))).toBe(false)
     expect(configured({ ...env, ATLAS_PUBLIC_ORIGIN: 'http://localhost:5173/path' }, new URL('http://localhost:5173'))).toBe(false)
