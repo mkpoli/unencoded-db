@@ -36,7 +36,8 @@ the reader. `data-theme="light"` or `data-theme="dark"` can pin a scheme.
 | Layout | `--space-1` to `--space-12`, `--radius-xs` to `--radius-lg`, `--content-max`, `--form-max`, `--gutter` |
 
 Text uses Inter with system CJK fallbacks. Monospace is reserved for record ids, the language
-eyebrow and section labels.
+eyebrow and section labels. The light `--muted` is a shade darker than Glyph Atlas so 14 px muted
+text keeps a 4.5:1 contrast on the paper.
 
 ## Rules
 

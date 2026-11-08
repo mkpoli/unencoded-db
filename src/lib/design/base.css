@@ -160,7 +160,7 @@ textarea {
 }
 
 input::placeholder,
-textarea::placeholder { color: var(--faint); }
+textarea::placeholder { color: var(--muted); opacity: 1; }
 
 input:hover,
 textarea:hover { border-color: var(--line-strong); }
