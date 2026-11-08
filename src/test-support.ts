@@ -10,6 +10,9 @@ export type Migration =
   | '0004_attribution.sql'
   | '0005_oidc.sql'
   | '0006_source_images.sql'
+  | '0007_revisions.sql'
+  | '0008_edit_generation.sql'
+  | '0009_revision_redaction.sql'
 
 export function applyMigration(db: Database, name: Migration): void {
   db.exec(readFileSync(new URL(name, migrations), 'utf8'))
@@ -23,6 +26,9 @@ export function createTestDatabase(): Database {
   applyMigration(db, '0004_attribution.sql')
   applyMigration(db, '0005_oidc.sql')
   applyMigration(db, '0006_source_images.sql')
+  applyMigration(db, '0007_revisions.sql')
+  applyMigration(db, '0008_edit_generation.sql')
+  applyMigration(db, '0009_revision_redaction.sql')
   return db
 }
 
