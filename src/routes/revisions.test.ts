@@ -14,9 +14,9 @@ function dbSetup() {
   for (const name of ['0001_init.sql', '0002_entry_visibility.sql']) db.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
   db.exec("INSERT INTO entries (script,place,url,title,created_at) VALUES ('old','book','https://example.org','title','2026')")
   db.exec(readFileSync(new URL('../../migrations/0003_related_characters.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0004_revisions.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0005_edit_generation.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0006_revision_redaction.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../migrations/0007_revisions.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../migrations/0008_edit_generation.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../migrations/0009_revision_redaction.sql', import.meta.url), 'utf8'))
   return db
 }
 function binding(db: Database) {
@@ -130,7 +130,7 @@ describe('revisions', () => {
     try {
       for (const name of ['0001_init.sql', '0002_entry_visibility.sql']) orphan.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
       orphan.exec("INSERT INTO entries (script,place,url,created_at) VALUES ('old','book','https://example.org','2026')")
-      for (const name of ['0003_related_characters.sql', '0004_revisions.sql', '0005_edit_generation.sql', '0006_revision_redaction.sql']) orphan.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
+      for (const name of ['0003_related_characters.sql', '0007_revisions.sql', '0008_edit_generation.sql', '0009_revision_redaction.sql']) orphan.exec(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'))
       orphan.exec("UPDATE entries SET script='new', revision=revision+1 WHERE id=1")
       orphan.exec('DELETE FROM entries WHERE id=1')
       await expect(redactRevision(binding(orphan) as any, 1, 1)).rejects.toThrow()
