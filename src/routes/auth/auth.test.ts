@@ -16,7 +16,7 @@ afterEach(() => { globalThis.fetch = oldFetch })
 async function setup() {
   const sqlite = new Database(':memory:')
   sqlite.exec('PRAGMA foreign_keys = ON')
-  for (const file of ['0001_init.sql', '0002_entry_visibility.sql', '0003_related_characters.sql', '0004_attribution.sql', '0005_oidc.sql']) sqlite.exec(readFileSync(new URL(`../../../migrations/${file}`, import.meta.url), 'utf8'))
+  for (const file of ['0001_init.sql', '0002_entry_visibility.sql', '0003_related_characters.sql', '0004_attribution.sql', '0005_oidc.sql', '0006_source_images.sql']) sqlite.exec(readFileSync(new URL(`../../../migrations/${file}`, import.meta.url), 'utf8'))
   const db = {
     prepare(sql: string) { return { bind(...args: any[]) {
       const execute = () => sqlite.prepare(sql).all(...args)
@@ -170,7 +170,7 @@ describe('OIDC routes', () => {
       const atlasPerson = (s.sqlite.query('SELECT person_id FROM atlas_identities').get() as any).person_id
       await expect(signOut(s.event('/auth/sign-out', 'POST'))).rejects.toMatchObject({ status: 303 })
       const token = 'b'.repeat(64)
-      s.sqlite.exec("INSERT INTO persons VALUES ('anonymous', '2020'); INSERT INTO entries (script, place, url, created_at, creator_id) VALUES ('Han', 'place', 'https://example.org', '2020', 'anonymous')")
+      s.sqlite.exec("INSERT INTO persons VALUES ('anonymous', '2020'); INSERT INTO entries (script, place, created_at, creator_id) VALUES ('Han', 'place', '2020', 'anonymous')")
       s.sqlite.query('INSERT INTO contributor_sessions (token_hash, person_id, created_at, expires_at) VALUES (?, ?, ?, ?)').run(await hashToken(token), 'anonymous', '2020', '2099')
       s.jar.set('__Host-contributor', token)
       await expect(callback(s.event(await s.start()))).rejects.toMatchObject({ status: 303 })

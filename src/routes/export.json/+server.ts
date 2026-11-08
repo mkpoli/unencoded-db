@@ -11,7 +11,6 @@ type ExportRecord = {
   ids: string | null
   description: string | null
   place: string
-  url: string
   title: string | null
   author: string | null
   publisher: string | null
@@ -35,7 +34,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
   if (after === null || limit === null) return json({ error: 'Invalid after or limit parameter' }, { status: 400, headers: { 'cache-control': 'no-store' } })
 
   const { results } = await platform.env.DB
-    .prepare(`SELECT id, script, ids, description, place, url, title, author, publisher, year, page, note, created_at
+    .prepare(`SELECT id, script, ids, description, place, title, author, publisher, year, page, note, created_at
               FROM entries INDEXED BY entries_visible_id WHERE ${publicEntryPredicate} AND id > ? ORDER BY id ASC LIMIT ?`)
     .bind(after, limit + 1)
     .all<ExportRecord>()

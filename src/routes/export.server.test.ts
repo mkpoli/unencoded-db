@@ -1,29 +1,19 @@
-import { Database } from 'bun:sqlite'
+import type { Database } from 'bun:sqlite'
 import { describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+import { createTestDatabase, d1Binding } from '../test-support'
 import { GET } from './export.json/+server'
 
-function binding(db: Database) {
-  return { prepare(sql: string) { return { bind(...values: (string | number | null)[]) { return {
-    first: async () => db.query(sql).get(...values),
-    all: async () => ({ results: db.query(sql).all(...values) }),
-  } } } } }
-}
-
 function database() {
-  const db = new Database(':memory:')
-  db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
-  db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
-  return db
+  return createTestDatabase()
 }
 
 function insert(db: Database, script: string, visible = 1, note: string | null = null) {
-  return db.query('INSERT INTO entries (script, ids, description, place, url, title, author, publisher, year, page, note, created_at, visible) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(script, null, `Description ${script}`, 'Example collection', 'https://example.org/source', 'Title', 'Author', 'Publisher', '1900', '12', note, '2026-01-01T00:00:00.000Z', visible).lastInsertRowid as number
+  return db.query('INSERT INTO entries (script, ids, description, place, title, author, publisher, year, page, note, created_at, visible) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(script, null, `Description ${script}`, 'Example collection', 'Title', 'Author', 'Publisher', '1900', '12', note, '2026-01-01T00:00:00.000Z', visible).lastInsertRowid as number
 }
 
 async function exportJson(db: Database, query = '') {
-  const response = await GET({ platform: { env: { DB: binding(db) } }, url: new URL(`https://example.test/export.json${query}`) } as any)
+  const response = await GET({ platform: { env: { DB: d1Binding(db) } }, url: new URL(`https://example.test/export.json${query}`) } as any)
   return { response, body: await response.json() as { version?: number; records: Record<string, unknown>[]; next: number | null; error?: string } }
 }
 
@@ -47,7 +37,6 @@ describe('JSON export', () => {
         ids: null,
         description: 'Description Han',
         place: 'Example collection',
-        url: 'https://example.org/source',
         title: 'Title',
         author: 'Author',
         publisher: 'Publisher',
