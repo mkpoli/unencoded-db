@@ -9,6 +9,7 @@ import { load as edit, actions as editActions } from './[locale]/entry/[id]/edit
 import { load as history } from './[locale]/entry/[id]/history/+page.server'
 import { GET as image } from './[locale]/entry/[id]/image/+server'
 import { load as queue } from './[locale]/moderate/+page.server'
+import { load as reportsQueue } from './[locale]/moderate/reports/+page.server'
 
 type PlanRow = { detail: string }
 
@@ -61,9 +62,11 @@ describe('public query plans', () => {
       '[locale]/entry/[id]/edit/+page.server.ts',
       '[locale]/entry/[id]/history/+page.server.ts',
       '[locale]/entry/[id]/image/+server.ts',
+      '[locale]/entry/[id]/report/+server.ts',
       '[locale]/moderate/+page.server.ts',
       '[locale]/moderate/[id]/hide/+server.ts',
       '[locale]/moderate/[id]/restore/+server.ts',
+      '[locale]/moderate/reports/+page.server.ts',
       '[locale]/new/+page.server.ts',
       'auth/callback/+server.ts',
       'auth/prepare/+server.ts',
@@ -155,6 +158,38 @@ describe('public query plans', () => {
         url: new URL('https://example.test/en/moderate?before=100'),
       } as any)
       expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_hidden_id \(id<\?\)/i)).toThrow()
+    } finally { db.close() }
+  })
+
+  test('open reports use the partial index, join entries by key and stay bounded', async () => {
+    const db = database()
+    try {
+      const { binding, plans, sqls } = capture(db)
+      for (const path of ['/en/moderate/reports', '/en/moderate/reports?before=100']) {
+        await reportsQueue({
+          params: { locale: 'en' },
+          platform: { env: { DB: binding } },
+          locals: { moderator: 'mod@example.com' },
+          url: new URL(path, 'https://example.test'),
+        } as any)
+      }
+      expect(plans).toHaveLength(2)
+      expect(sqls.every(sql => /LIMIT 21\s*$/i.test(sql.trim()))).toBe(true)
+      expect(sqls.every(sql => /^SELECT r\.id AS report_id[\s\S]*FROM entry_reports r\s+JOIN entries e ON e\.id = r\.entry_id/i.test(sql))).toBe(true)
+      for (const plan of plans) {
+        assertPlan(plan, /SEARCH r USING INDEX entry_reports_open \(id<\?\)/i)
+        assertPlan(plan, /SEARCH e USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
+      }
+
+      db.exec('DROP INDEX entry_reports_open')
+      const withoutIndex = capture(db)
+      await reportsQueue({
+        params: { locale: 'en' },
+        platform: { env: { DB: withoutIndex.binding } },
+        locals: { moderator: 'mod@example.com' },
+        url: new URL('https://example.test/en/moderate/reports'),
+      } as any)
+      expect(() => assertPlan(withoutIndex.plans[0]!, /SEARCH r USING INDEX entry_reports_open \(id<\?\)/i)).toThrow()
     } finally { db.close() }
   })
 

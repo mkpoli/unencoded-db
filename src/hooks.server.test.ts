@@ -181,7 +181,7 @@ async function run(event: any): Promise<Response> {
 describe('moderation hook', () => {
   test('hides guarded paths without configuration', async () => {
     // SvelteKit normalizes a trailing slash before this hook runs in production.
-    for (const path of ['/en/moderate', '/ja/moderate/', '/zh-Hant/moderate/x', '/en/moderate/1/hide']) {
+    for (const path of ['/en/moderate', '/ja/moderate/', '/zh-Hant/moderate/x', '/en/moderate/1/hide', '/en/moderate/reports']) {
       const { event, locals } = makeEvent(path, { env: { DB: {} } })
       const response = await run(event)
       expect(response.status).toBe(404)
@@ -192,7 +192,7 @@ describe('moderation hook', () => {
   })
 
   test('hides guarded paths without a token', async () => {
-    for (const path of ['/en/moderate', '/ko/moderate/1/restore', '/vi/moderate/x', '/%65n/moderate']) {
+    for (const path of ['/en/moderate', '/ko/moderate/1/restore', '/vi/moderate/x', '/%65n/moderate', '/ja/moderate/reports']) {
       const { event, locals } = makeEvent(path, { method: path.endsWith('restore') ? 'POST' : 'GET' })
       const response = await run(event)
       expect(response.status).toBe(404)
@@ -231,7 +231,7 @@ describe('moderation hook', () => {
 
   test('resolves guarded paths and records a verified moderator', async () => {
     const token = await signToken()
-    for (const path of ['/en/moderate', '/en/moderate/1/hide']) {
+    for (const path of ['/en/moderate', '/en/moderate/1/hide', '/en/moderate/reports']) {
       const { event, locals } = makeEvent(path, { method: path.endsWith('hide') ? 'POST' : 'GET', token })
       const response = await run(event)
       expect(response.status).toBe(200)

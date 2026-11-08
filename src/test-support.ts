@@ -14,6 +14,7 @@ export type Migration =
   | '0008_edit_generation.sql'
   | '0009_revision_redaction.sql'
   | '0010_moderation.sql'
+  | '0011_reports.sql'
 
 export function applyMigration(db: Database, name: Migration): void {
   db.exec(readFileSync(new URL(name, migrations), 'utf8'))
@@ -31,6 +32,7 @@ export function createTestDatabase(): Database {
   applyMigration(db, '0008_edit_generation.sql')
   applyMigration(db, '0009_revision_redaction.sql')
   applyMigration(db, '0010_moderation.sql')
+  applyMigration(db, '0011_reports.sql')
   return db
 }
 
@@ -110,4 +112,15 @@ export function entryVisible(db: Database, id: number): number {
 
 export function moderationAuditRows(db: Database): { id: number; entry_id: number; action: string; moderator: string; created_at: string }[] {
   return db.query('SELECT id, entry_id, action, moderator, created_at FROM moderation_audit ORDER BY id').all() as never
+}
+
+export function insertReport(db: Database, entryId: number, reason = 'spam', note = '', createdAt = '2026-01-05T00:00:00.000Z'): number {
+  const result = db
+    .query('INSERT INTO entry_reports (entry_id, reason, note, created_at) VALUES (?, ?, ?, ?)')
+    .run(entryId, reason, note, createdAt)
+  return Number(result.lastInsertRowid)
+}
+
+export function reportRows(db: Database): { id: number; entry_id: number; reason: string; note: string; created_at: string; resolved_at: string | null }[] {
+  return db.query('SELECT id, entry_id, reason, note, created_at, resolved_at FROM entry_reports ORDER BY id').all() as never
 }

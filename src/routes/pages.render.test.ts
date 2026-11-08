@@ -272,6 +272,66 @@ describe('localized pages', () => {
     expect(body).toContain('非表示の記録に戻る')
   })
 
+  test('entry page offers the localized anonymous report form', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-report-form', {
+      data: {
+        locale: 'zh-Hant',
+        reported: false,
+        isModerator: false,
+        entry: { id: 9, script: 'Han', ids: null, description: null, place: '臺北', title: null, author: null, publisher: null, year: null, page: null, note: null, created_at: '2026-11-08T05:00:00.000Z', has_image: 0 },
+        comparisons: [],
+      },
+    })
+    expect(body).toContain('action="/zh-Hant/entry/9/report"')
+    expect(body).toContain('檢舉此記錄')
+    expect(body).toContain('垃圾訊息')
+    expect(body).toContain('送出檢舉')
+    expect(body).toContain('name="reason"')
+    expect(body).toContain('name="note"')
+  })
+
+  test('entry page confirms a received report', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-reported', {
+      data: {
+        locale: 'ja',
+        reported: true,
+        isModerator: false,
+        entry: { id: 9, script: 'Han', ids: null, description: null, place: '東京', title: null, author: null, publisher: null, year: null, page: null, note: null, created_at: '2026-11-08T05:00:00.000Z', has_image: 0 },
+        comparisons: [],
+      },
+    })
+    expect(body).toContain('通報を受け付けました。モデレーターが確認します。')
+    expect(body).toContain('class="notice" role="status"')
+  })
+
+  test('reports queue renders open reports with the design-system cards', async () => {
+    const { head, body } = await page('src/routes/[locale]/moderate/reports/+page.svelte', 'reports', {
+      data: {
+        locale: 'ja',
+        moderator: 'mod@example.com',
+        next: 3,
+        reports: [{ report_id: 12, reason: 'privacy', note: '個人情報です', created_at: '2026-11-08T05:00:00.000Z', entry_id: 7, script: 'Han', description: '説明', place: '本書' }],
+      },
+    })
+    expect(head).toContain('未対応の通報 · 珍字集覧')
+    expect(body).toContain('class="card-grid"')
+    expect(body).toContain('class="entry-card queue-card"')
+    expect(body).toContain('class="entry-actions"')
+    expect(body).toContain('action="/ja/moderate/7/hide"')
+    expect(body).toContain('href="/ja/entry/7"')
+    expect(body).toContain('プライバシー')
+    expect(body).toContain('個人情報です')
+    expect(body).toContain('href="/ja/moderate/reports?before=3"')
+  })
+
+  test('empty reports queue renders the localized empty state', async () => {
+    const { body } = await page('src/routes/[locale]/moderate/reports/+page.svelte', 'reports-empty', {
+      data: { locale: 'vi', moderator: 'mod@example.com', next: null, reports: [] },
+    })
+    expect(body).toContain('empty-state')
+    expect(body).toContain('Không có báo cáo chưa xử lý.')
+  })
+
   test('language switcher links to the same path and query in all six locales', async () => {
     const { body } = await page('src/lib/components/LanguageSwitcher.svelte', 'switcher', { locale: 'ja', pathname: '/ja/entry/7', search: '?before=2' })
     for (const [tag, href] of [['en', '/en/entry/7?before=2'], ['ja', '/ja/entry/7?before=2'], ['zh-Hans', '/zh-Hans/entry/7?before=2'], ['zh-Hant', '/zh-Hant/entry/7?before=2'], ['ko', '/ko/entry/7?before=2'], ['vi', '/vi/entry/7?before=2']]) {

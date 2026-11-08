@@ -10,6 +10,7 @@
   <p class="eyebrow">{t(data.locale, 'moderate.eyebrow')}</p>
   <h1>{t(data.locale, 'moderate.title')}</h1>
   <p>{t(data.locale, 'moderate.intro', { email: data.moderator })}</p>
+  <p><a href={localizedHref(data.locale, '/moderate/reports')}>{t(data.locale, 'moderate.reports')}</a></p>
 </div>
 {#if data.entries.length}
   <div class="card-grid">

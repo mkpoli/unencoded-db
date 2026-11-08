@@ -1,6 +1,7 @@
 import { isIP } from 'node:net'
 import { limitWriteBody, writeBodyLimit } from '$lib/server/body-limit'
 import { authenticateModerator } from '$lib/server/cf-access'
+import { enforceReportRateLimit, isReportRequest } from '$lib/server/ip-rate-limit'
 import { localeFromPathname, localizedHref, pathAfterLocale, t, type Locale } from '$lib/i18n'
 import type { Handle, RequestEvent } from '@sveltejs/kit'
 
@@ -97,6 +98,12 @@ export const handle: Handle = async ({ event, resolve }) => {
   } else if (method === 'GET' && event.request.headers.has('cf-access-jwt-assertion')) {
     const email = await authenticateModerator(event.request, event.platform?.env)
     if (email) event.locals.moderator = email
+  }
+
+  // Report submissions are limited before the body is read or parsed.
+  if (isReportRequest(event)) {
+    const rejection = await enforceReportRateLimit(event)
+    if (rejection) return rejection
   }
 
   if (method === 'POST' && event.route?.id === NEW_ROUTE) {

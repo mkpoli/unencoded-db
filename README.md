@@ -1,6 +1,6 @@
 # Rare Character Compendium
 
-A community evidence wiki for characters and glyphs. Anyone can add or revise a record with a source image and view its revision history.
+A community evidence wiki for characters and glyphs. Anyone can add or revise a record with a source image, view its revision history and report a public record. Moderators review reports and can hide records; hidden records can be restored from a private queue.
 
 A new record keeps one source image as its evidence: a photo, scan or screenshot of the character or glyph. The image is served only through its record at `/{locale}/entry/[id]/image`. Classifying the glyph is a later question.
 
@@ -32,7 +32,7 @@ For example, the collection is at `/ja` and a record at `/ja/entry/12`.
 
 A request to `/` returns a 303 redirect to the negotiated locale, with English as the default. Negotiation reads `Accept-Language` in quality order: `ja`, `ko` and `vi` map to themselves; `zh-TW`, `zh-HK`, `zh-MO` and `zh-Hant` map to `zh-Hant`; other Chinese tags map to `zh-Hans`; every other tag falls back to English. No locale cookie is used, so the address always names the language.
 
-Application links keep the active locale; the third-party notice is a static English file at `/third-party/README.md`. The navigation language switcher links to the same path and query string in each locale. The locale layout validates the prefix and rejects unknown or malformed segments with 404. Other paths under a valid locale render the localized error page. Creating a record redirects to its localized entry page, and hiding or restoring one redirects to the queue in the same locale.
+Application links keep the active locale; the third-party notice is a static English file at `/third-party/README.md`. The navigation language switcher links to the same path and query string in each locale. The locale layout validates the prefix and rejects unknown or malformed segments with 404. Other paths under a valid locale render the localized error page. Creating a record redirects to its localized entry page, a report returns to it, and hiding or restoring one redirects to the queue in the same locale.
 
 Translations live in `messages/{en,ja,zh-Hans,zh-Hant,ko,vi}.json`. Each catalogue contains only the keys the public pages use.
 
@@ -95,8 +95,6 @@ The protocol follows [OpenID Connect Core 1.0](https://openid.net/specs/openid-c
 
 ## Moderation setup
 
-## Moderation setup
-
 Moderation development needs synthetic bindings for `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` and `MODERATOR_EMAILS`, plus an Access assertion from that team. The Worker verifies the assertion in every environment. Do not weaken HTTPS or add a development admin bypass.
 
 Moderation is a private area at `/{locale}/moderate` in every interface locale. Cloudflare Access controls who can reach it, and the Worker verifies the Access assertion independently. A request is accepted only when all of these hold:
@@ -146,6 +144,36 @@ Revising a record submits the whole evidence text and advances its revision by o
 
 Each edit form carries the revision and visibility generation it was opened at. A write succeeds only when both still match, so a form opened before another edit or a visibility change returns 409 rather than overwriting. Migration `0007_revisions.sql` backfills the current text of every record and installs triggers that require the next revision and reject changes to stored revisions. Migration `0008_edit_generation.sql` adds the generation that invalidates forms opened before a visibility change. Pause submissions, drain older writers and rehearse both migrations against a representative database before applying them; production-scale time and storage have not been measured.
 
+## Reporting
+
+A public entry page has a “Report this record” form. A report carries a reason (Spam, Privacy, Copyright, Other) and an optional note of up to 2000 characters; the note is trimmed. The form posts without JavaScript to `POST /{locale}/entry/[id]/report` and returns to the record with a confirmation. A report does not prove a rights claim: moderators review it and decide whether to hide the entry.
+
+Reports store no reporter identity. The database keeps the entry id, reason, note, creation time and resolution time. The rate limiter hashes the client network in memory and stores neither the address nor the digest, and the Worker does not log it. Notes are untrusted text, visible to moderators in the private queue at `/{locale}/moderate/reports`, and escaped when rendered. A hidden or missing entry cannot receive reports.
+
+Hiding an entry resolves its open reports in the same database statement as the visibility change, with `resolved_at` copied from the audit time. Restoring the entry leaves them resolved. An entry can hold at most 100 open reports; further reports return 429 until the entry is hidden, which resolves them. The cap bounds storage per entry, but it does not stop a network from filling the newest queue page with spam, so moderation coverage remains an operational requirement. Notes are capped at 2000 characters, and nothing prunes resolved rows automatically.
+
+## Report rate limit
+
+`POST /{locale}/entry/[id]/report` allows five requests per 60 seconds per client network through the `REPORT_RATE_LIMIT` binding. The check runs in `hooks.server.ts` before the request body is read or parsed. A rejected request receives 429 with `retry-after: 60`; an unavailable limiter returns 503. GET requests and other POST paths are unaffected.
+
+The key is SHA-256 of the client address, or of the IPv6 /64 prefix. IPv4-mapped IPv6 and malformed addresses fail closed. The address is not stored or logged, and only the hash reaches the binding.
+
+Configuration in `wrangler.jsonc`:
+
+```jsonc
+"ratelimits": [
+  { "name": "REPORT_RATE_LIMIT", "namespace_id": "1002", "simple": { "limit": 5, "period": 60 } }
+]
+```
+
+`namespace_id` must not match any other rate limiter in the account.
+
+Cloudflare rate limit counters are approximate and local to each Cloudflare location, so the effective global limit is higher than five per minute. IPv6 clients share one bucket across the whole /64, which affects networks that assign many addresses from one prefix. `getClientAddress()` reads the edge-provided client address; another Worker in the same zone can pass a forged address, so the key is reliable only for traffic that reaches this Worker through Cloudflare's edge. Cover alternate paths with Access or WAF.
+
+Local simulation: put `LOCAL_RATE_LIMIT=true` in `.dev.vars` (gitignored). The Worker then keeps one in-process bucket of five requests per 60 seconds, and only when the request host is loopback and the client address is `127.0.0.1` or `::1`; every other request fails closed with 503. Requests through a deployed hostname do not match the loopback condition.
+
+Not deployed yet. Apply all migrations before running it.
+
 ## Deployment
 
 Provision the remote bucket before deploying:
@@ -160,9 +188,9 @@ Apply all migrations before deploying code that expects visibility, revisions an
 bunx wrangler d1 migrations apply DB --remote
 ```
 
-Migration `0001` creates the base table. Migration `0002` adds `visible` and the `entries_visible_id` index. Migration `0003` adds related comparisons. Migration `0004` adds anonymous attribution. Migration `0005` adds OIDC identities and session rotation. Migration `0006` rebuilds `entries`, preserves `visible`, comparisons, attribution and the id high-water mark, recreates `entries_visible_id`, adds a unique partial `entries_image_key` index, removes the source URL column and adds `image_key`, `image_type` and `image_size`. Existing rows keep their ids and text fields; existing source URLs are dropped. Migration `0007` adds the `revision` column and `entry_revisions` with the backfill, snapshot and immutability triggers. Migration `0008` adds `edit_generation` and advances it on every visibility change. Migration `0009` adds the tombstone flag and redaction audit table, restates the snapshot triggers for the new column, and rejects any update that is not one complete scrub of a noncurrent snapshot. Migration `0010` adds the moderation audit table and its triggers, and the `entries_hidden_id` index behind the queue.
+Migration `0001` creates the base table. Migration `0002` adds `visible` and the `entries_visible_id` index. Migration `0003` adds related comparisons. Migration `0004` adds anonymous attribution. Migration `0005` adds OIDC identities and session rotation. Migration `0006` rebuilds `entries`, preserves `visible`, comparisons, attribution and the id high-water mark, recreates `entries_visible_id`, adds a unique partial `entries_image_key` index, removes the source URL column and adds `image_key`, `image_type` and `image_size`. Migration `0007` adds the `revision` column and `entry_revisions` with the backfill, snapshot and immutability triggers. Migration `0008` adds `edit_generation` and advances it on every visibility change. Migration `0009` adds the tombstone flag and redaction audit table, restates the snapshot triggers for the new column, and rejects any update that is not one complete scrub of a noncurrent snapshot. Migration `0010` adds the moderation audit table and its triggers, and the `entries_hidden_id` index behind the queue. Migration `0011` adds anonymous entry reports, the open and entry indexes, and the triggers that refuse reports for hidden entries, cap open reports at 100 and resolve them on hide. Existing rows keep their ids and text fields; existing source URLs are dropped.
 
-The Cloudflare configuration names the production D1 database and an R2 bucket. Configure real bindings for a separate environment, including `CONTRIBUTION_RATE_LIMIT` for each deployed environment.
+The Cloudflare configuration names the production D1 database and an R2 bucket. Configure real bindings for a separate environment, including `CONTRIBUTION_RATE_LIMIT` and `REPORT_RATE_LIMIT` for each deployed environment.
 
 ## Storage gaps
 
@@ -180,7 +208,9 @@ GitHub Actions runs `bun install --frozen-lockfile` and `bun run build` for pull
 
 ## Limitations
 
-This is a local prototype, not ready for public operation. It has no deletion. Hiding and restoring records is audited, but the audit keeps no entry content. Editing is anonymous and has no rate limit; creating a record is limited per client address as described above. Pagination lists 20 records at a time. Provider availability and the permitted endpoint layout have not been verified against a live Glyph Atlas deployment. Discovery and keys are fetched on each sign-in; each provider request has a five-second deadline and a 128 KiB response limit. The provider controls the identity assertions it issues.
+This is a local prototype, not ready for public operation. It has no deletion. Hiding and restoring records is audited, but the audit keeps no entry content. Editing is anonymous and has no rate limit; creating a record and report submissions are limited per client network as described above. Pagination lists 20 records at a time. Reporting and moderation are not deployed.
+
+Provider availability and the permitted endpoint layout have not been verified against a live Glyph Atlas deployment. Discovery and keys are fetched on each sign-in; each provider request has a five-second deadline and a 128 KiB response limit. The provider controls the identity assertions it issues.
 
 Sessions expire after 365 days. Clearing an anonymous cookie loses its link to future contributions. Simultaneous first submissions or sign-in preparations can create separate anonymous identities, with only one cookie retained by the browser. If concurrent preparations establish different session families, signing out of one family cannot revoke an in-flight callback bound to the other; avoid concurrent preparation tabs. Expired flows and revoked sessions are not cleaned up automatically. Attribution merges are stored as person mappings; a future contributor-facing view must resolve them. Storage retention and abuse response need operational policy before public use.
 
