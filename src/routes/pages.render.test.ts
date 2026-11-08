@@ -140,7 +140,57 @@ describe('localized pages', () => {
     expect(body).toContain('이체자')
     expect(body).toContain('획 하나 차이')
     expect(body).toContain('4쪽')
+    expect(body).toContain('href="/ko/entry/9/edit"')
+    expect(body).toContain('href="/ko/entry/9/history"')
+    expect(body).toContain('기록 수정')
+    expect(body).toContain('수정 이력')
     expect(body).not.toContain('https://example.org/source')
+  })
+
+  test('edit page renders localized evidence fields, tokens and a stale-form notice', async () => {
+    const { head, body } = await page('src/routes/[locale]/entry/[id]/edit/+page.svelte', 'edit', {
+      data: { locale: 'ja', entry: { id: 9, revision: 2, edit_generation: 5, script: 'Han', ids: '⿰木木', description: '説明', place: '本書', title: '題名', author: '著者', publisher: '出版者', year: '1900', page: '8', note: 'メモ' } },
+      form: {
+        message: '編集中にこの記録が更新されました。現在の版を別のタブで開き、そちらに変更を反映してください。',
+        revision: '2',
+        generation: '5',
+        values: { place: '未保存の場所', script: 'Han' },
+        errors: { place: '文字を見つけた場所を入力してください（500文字以内）。' },
+      },
+    })
+    expect(head).toContain('記録を修正 · 珍字集覧')
+    expect(body).toContain('<h1>記録を修正</h1>')
+    expect(body).toContain('name="revision"')
+    expect(body).toContain('name="edit_generation"')
+    expect(body).toContain('value="未保存の場所"')
+    expect(body).toContain('編集中にこの記録が更新されました。')
+    expect(body).toContain('id="place-error"')
+    expect(body).toContain('aria-invalid="true"')
+    expect(body).toContain('修正を保存')
+    expect(body).toContain('href="/ja/entry/9"')
+    expect(body).toContain('name="script"')
+    expect(body).toContain('name="description"')
+  })
+
+  test('history page renders revisions, dates and the older link', async () => {
+    const { head, body } = await page('src/routes/[locale]/entry/[id]/history/+page.svelte', 'history', {
+      data: {
+        locale: 'zh-Hans',
+        id: 9,
+        next: 2,
+        revisions: [
+          { revision: 3, script: 'Han', ids: null, description: null, place: '书', title: '题名', author: null, publisher: null, year: null, page: null, note: null, recorded_at: '2026-11-08T05:00:00.000Z' },
+        ],
+      },
+    })
+    expect(head).toContain('修订历史 · 珍字集览')
+    expect(body).toContain('<h1>修订历史</h1>')
+    expect(body).toContain('第3版')
+    expect(body).toContain('记录时间')
+    expect(body).toContain('href="/zh-Hans/entry/9"')
+    expect(body).toContain('2026')
+    expect(body).toContain('href="?before=2"')
+    expect(body).toContain('更早的版本')
   })
 
   test('error page renders the localized not-found message and home link', async () => {
