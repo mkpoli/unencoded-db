@@ -12,6 +12,7 @@ function setup() {
   db.exec(readFileSync(new URL('../../../migrations/0003_related_characters.sql', import.meta.url), 'utf8'))
   db.exec("INSERT INTO entries (script, place, url, created_at) VALUES ('old', 'old', 'https://example.org', '2020')")
   db.exec(readFileSync(new URL('../../../migrations/0004_attribution.sql', import.meta.url), 'utf8'))
+  db.exec(readFileSync(new URL('../../../migrations/0005_oidc.sql', import.meta.url), 'utf8'))
   const plans: string[][] = []
   const binding = {
     prepare(sql: string) {

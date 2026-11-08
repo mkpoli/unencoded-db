@@ -35,7 +35,7 @@ describe('evidence routes', () => {
   test('persists multiple comparisons and displays their explanations', async () => {
     const db = new Database(':memory:')
     try {
-      for (const migration of ['0001_init.sql', '0002_entry_visibility.sql', '0003_related_characters.sql', '0004_attribution.sql']) db.exec(readFileSync(new URL(`../../migrations/${migration}`, import.meta.url), 'utf8'))
+      for (const migration of ['0001_init.sql', '0002_entry_visibility.sql', '0003_related_characters.sql', '0004_attribution.sql', '0005_oidc.sql']) db.exec(readFileSync(new URL(`../../migrations/${migration}`, import.meta.url), 'utf8'))
       const DB = binding(db)
       const rows = [comparison, { ...comparison, character: '字', relationship: 'uncertain' }]
       await expect(actions.default!(comparisonEvent(rows, DB))).rejects.toMatchObject({ status: 303, location: '/entry/1' })
@@ -69,7 +69,7 @@ describe('evidence routes', () => {
   test('rolls back the entry if comparisons fail', async () => {
     const db = new Database(':memory:')
     try {
-      for (const migration of ['0001_init.sql', '0002_entry_visibility.sql', '0003_related_characters.sql', '0004_attribution.sql']) db.exec(readFileSync(new URL(`../../migrations/${migration}`, import.meta.url), 'utf8'))
+      for (const migration of ['0001_init.sql', '0002_entry_visibility.sql', '0003_related_characters.sql', '0004_attribution.sql', '0005_oidc.sql']) db.exec(readFileSync(new URL(`../../migrations/${migration}`, import.meta.url), 'utf8'))
       db.exec("CREATE TRIGGER reject_comparisons BEFORE INSERT ON entries WHEN json_array_length(NEW.comparisons) > 0 BEGIN SELECT RAISE(ABORT, 'rejected'); END")
       await expect(actions.default!(comparisonEvent([comparison], binding(db)))).rejects.toThrow()
       expect(db.query('SELECT count(*) AS count FROM entries').get()).toEqual({ count: 0 })
@@ -80,8 +80,9 @@ describe('evidence routes', () => {
     try {
       db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
       db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
-db.exec(readFileSync(new URL('../../migrations/0003_related_characters.sql', import.meta.url), 'utf8'))
-db.exec(readFileSync(new URL('../../migrations/0004_attribution.sql', import.meta.url), 'utf8'))
+      db.exec(readFileSync(new URL('../../migrations/0003_related_characters.sql', import.meta.url), 'utf8'))
+      db.exec(readFileSync(new URL('../../migrations/0004_attribution.sql', import.meta.url), 'utf8'))
+      db.exec(readFileSync(new URL('../../migrations/0005_oidc.sql', import.meta.url), 'utf8'))
       expect(() => db.exec("INSERT INTO entries (script, place, created_at) VALUES ('Han', 'Book', '2026')")).toThrow()
       const DB = binding(db)
       const values = { script: 'Han', url: 'https://example.org/book', ids: '⿰木木', title: 'Source', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'Notes' }
@@ -108,6 +109,7 @@ db.exec(readFileSync(new URL('../../migrations/0004_attribution.sql', import.met
       db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
       db.exec(readFileSync(new URL('../../migrations/0003_related_characters.sql', import.meta.url), 'utf8'))
       db.exec(readFileSync(new URL('../../migrations/0004_attribution.sql', import.meta.url), 'utf8'))
+      db.exec(readFileSync(new URL('../../migrations/0005_oidc.sql', import.meta.url), 'utf8'))
       const e = event({ script: 'Han', url: 'https://example.org/' }, binding(db))
       const set: any[] = []
       e.cookies.set = (...args: any[]) => set.push(args)
@@ -129,6 +131,7 @@ db.exec(readFileSync(new URL('../../migrations/0004_attribution.sql', import.met
       db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
       db.exec(readFileSync(new URL('../../migrations/0003_related_characters.sql', import.meta.url), 'utf8'))
       db.exec(readFileSync(new URL('../../migrations/0004_attribution.sql', import.meta.url), 'utf8'))
+      db.exec(readFileSync(new URL('../../migrations/0005_oidc.sql', import.meta.url), 'utf8'))
       const issued: string[] = []
       const makeEvent = () => {
         const e = event({ script: 'Han', url: 'https://example.org/' }, binding(db))
@@ -153,8 +156,9 @@ db.exec(readFileSync(new URL('../../migrations/0004_attribution.sql', import.met
       db.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
       db.exec("INSERT INTO entries (script, place, url, created_at) VALUES ('old', 'book', 'https://example.org', '2026')")
       db.exec(readFileSync(new URL('../../migrations/0002_entry_visibility.sql', import.meta.url), 'utf8'))
-db.exec(readFileSync(new URL('../../migrations/0003_related_characters.sql', import.meta.url), 'utf8'))
-db.exec(readFileSync(new URL('../../migrations/0004_attribution.sql', import.meta.url), 'utf8'))
+      db.exec(readFileSync(new URL('../../migrations/0003_related_characters.sql', import.meta.url), 'utf8'))
+      db.exec(readFileSync(new URL('../../migrations/0004_attribution.sql', import.meta.url), 'utf8'))
+      db.exec(readFileSync(new URL('../../migrations/0005_oidc.sql', import.meta.url), 'utf8'))
       expect(db.query('SELECT visible FROM entries WHERE id = 1').get()).toEqual({ visible: 1 })
       expect(() => db.exec('UPDATE entries SET visible = 2 WHERE id = 1')).toThrow()
       const DB = binding(db)
