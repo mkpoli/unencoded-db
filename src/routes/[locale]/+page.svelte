@@ -5,21 +5,29 @@
 </script>
 
 <svelte:head><title>{t(data.locale, 'app.name')}</title></svelte:head>
-<h1>{t(data.locale, 'app.name')}</h1>
-<p>{t(data.locale, 'app.tagline')}</p>
+<div class="page-heading">
+  <h1>{t(data.locale, 'app.name')}</h1>
+  <p>{t(data.locale, 'app.tagline')}</p>
+</div>
 {#if data.entries.length}
-  <div class="grid">
+  <div class="card-grid">
     {#each data.entries as entry}
-      <a class="card" href={localizedHref(data.locale, `/entry/${entry.id}`)}>
-        <strong>{entry.ids || entry.script}</strong><br />{entry.place}
+      <a class="entry-card" href={localizedHref(data.locale, `/entry/${entry.id}`)}>
+        <span class="glyph">{entry.ids || entry.script}</span>
+        <span class="place">{entry.place}</span>
+        <span class="record">#{entry.id}</span>
       </a>
     {/each}
   </div>
-  {#if data.next}<p><a href={`${localizedHref(data.locale)}?before=${data.next}`}>{t(data.locale, 'browse.more')} →</a></p>{/if}
+  {#if data.next}
+    <div class="more-row">
+      <a class="secondary" href={`${localizedHref(data.locale)}?before=${data.next}`}>{t(data.locale, 'browse.more')} →</a>
+    </div>
+  {/if}
 {:else}
-  <p class="empty">{t(data.locale, 'browse.emptyAll')}<a href={localizedHref(data.locale, '/new')}>{t(data.locale, 'browse.addOne')}</a></p>
+  <div class="empty-state">
+    <span class="empty-mark" aria-hidden="true">字</span>
+    <p>{t(data.locale, 'browse.emptyAll')}</p>
+    <a class="primary" href={localizedHref(data.locale, '/new')}>{t(data.locale, 'browse.addOne')} <span aria-hidden="true">→</span></a>
+  </div>
 {/if}
-
-<style>
-  .empty a { margin-left: .4em; }
-</style>

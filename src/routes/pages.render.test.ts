@@ -8,7 +8,22 @@ import { resolve } from 'node:path'
 const tmp = resolve('.svelte-kit/render-tmp')
 mkdirSync(tmp, { recursive: true })
 const i18n = resolve('src/lib/i18n.ts')
+const fileField = resolve('src/lib/components/FileField.svelte')
 const components = new Map<string, Promise<any>>()
+let fileFieldModule: Promise<string> | null = null
+
+function loadFileField(): Promise<string> {
+  if (!fileFieldModule) {
+    fileFieldModule = (async () => {
+      const preprocessed = await preprocess(readFileSync(fileField, 'utf8'), vitePreprocess({ script: true }), { filename: fileField })
+      const { js } = compile(preprocessed.code, { filename: fileField, generate: 'server' })
+      const target = resolve(tmp, 'filefield.js')
+      writeFileSync(target, js.code)
+      return target
+    })()
+  }
+  return fileFieldModule
+}
 
 async function load(path: string, name: string) {
   let pending = components.get(name)
@@ -17,7 +32,8 @@ async function load(path: string, name: string) {
       const file = resolve(path)
       const preprocessed = await preprocess(readFileSync(file, 'utf8'), vitePreprocess({ script: true }), { filename: file })
       let { js } = compile(preprocessed.code, { filename: file, generate: 'server' })
-      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`)
+      const dep = await loadFileField()
+      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
@@ -76,7 +92,9 @@ describe('localized pages', () => {
     expect(head).toContain('新增字 · 珍字集覽')
     expect(body).toContain('<h1>新增字</h1>')
     expect(body).toContain('出處圖片')
-    expect(body).toContain('支援JPEG、PNG或WebP，最大8 MiB。常見的位置與裝置中繼資料會被移除，JPEG圖片方向保留。')
+    expect(body).toContain('常見的位置與裝置中繼資料會被移除，JPEG圖片方向保留。')
+    expect(body).toContain('JPEG、PNG 或 WebP · 8 MiB')
+    expect(body).toContain('瀏覽')
     expect(body).toContain('請只上傳你有權分享的圖片。')
     expect(body).toContain('novalidate')
     expect(body).toContain('aria-describedby="image-help image-rights image-error"')
@@ -92,7 +110,9 @@ describe('localized pages', () => {
     expect(body).toContain('accept="image/jpeg,image/png,image/webp"')
     expect(body).not.toContain('name="url"')
     expect(body).not.toContain('HTTP或HTTPS網址')
-    expect(body).toContain('>儲存</button>')
+    expect(body).toContain('>儲存 <span aria-hidden="true">→</span></button>')
+    expect(body).toContain('class="file-field invalid"')
+    expect(body).toContain('選擇圖片')
   })
 
   test('entry page renders the Korean image, labels and alt fallback', async () => {

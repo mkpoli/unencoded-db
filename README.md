@@ -25,6 +25,10 @@ Application links keep the active locale; the third-party notice is a static Eng
 
 Translations live in `messages/{en,ja,zh-Hans,zh-Hant,ko,vi}.json`. Each catalogue contains only the keys the public pages use.
 
+## Design
+
+The interface uses the small design system in `src/lib/design/`, with tokens and control shapes aligned to Glyph Atlas. [DESIGN.md](DESIGN.md) lists the tokens, components and usage rules; pages add classes from the system rather than new colours.
+
 ## Local development
 
 Install [Bun](https://bun.sh/), then run:
