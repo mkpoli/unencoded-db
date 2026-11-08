@@ -32,7 +32,7 @@
   --accent-light: light-dark(#eeebff, rgb(156 146 255 / 12%));
   --accent-hover: light-dark(#f6f4ff, rgb(156 146 255 / 8%));
   --accent-tile: light-dark(#eae7fa, #302c43);
-  --focus-ring: #b1a7ff;
+  --focus-ring: light-dark(#6356e5, #9c92ff);
 
   --wrong: light-dark(#be3d49, #ff929f);
   --wrong-light: light-dark(#fff2f3, rgb(255 146 159 / 10%));
