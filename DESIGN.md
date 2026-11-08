@@ -13,7 +13,7 @@ part in `src/lib/design/` so a future package can be extracted without changing 
 | --- | --- |
 | `src/lib/design/tokens.css` | Colour pairs, type scale, spacing and radii, plus the bundled Inter face. |
 | `src/lib/design/base.css` | Resets, headings, links, focus rings, inputs and button variants. |
-| `src/lib/design/components.css` | Header, footer, collection cards, record layout, related comparisons, revision history, form panels, file field and language menu. |
+| `src/lib/design/components.css` | Header, footer, collection cards, record layout, moderation bar and queue cards, related comparisons, revision history, form panels, file field and language menu. |
 | `src/lib/components/FileField.svelte` | Accessible image picker with preview, replace and remove. |
 
 `src/style.css` imports the three files in that order. A page adds classes from the system; it does
@@ -60,6 +60,10 @@ file field; `--line` remains the quieter rule between regions.
   submission.
 - Every interactive target is at least 40 px high on desktop and 44 px on the primary action.
 - Status is never conveyed by colour alone; error copy and labels carry it.
+
+## Moderation
+
+The moderation queue reuses `.card-grid` and `.entry-card`; `.queue-card` keeps the resting surface because the card is not a link, and `.entry-actions` holds its action forms. `.moderation-bar` sits on a record page for a verified moderator.
 
 ## Adding a page
 

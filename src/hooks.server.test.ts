@@ -1,13 +1,15 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { SignJWT, exportJWK, generateKeyPair } from 'jose'
 import type { RequestEvent } from '@sveltejs/kit'
 import { handle } from './hooks.server'
 import { MAX_NEW_BODY, MAX_WRITE_BODY } from './lib/server/body-limit'
 import { MAX_IMAGE_BYTES } from './lib/server/images'
+import { clearJwksCache } from '$lib/server/cf-access'
 import { PNG_BYTES, imageFile } from './test-support'
 
 function event(pathname: string, body: string) {
   const request = new Request(`https://example.test${pathname}`, { method: 'POST', body })
-  return { request, url: new URL(request.url), route: { id: pathname } } as any
+  return { request, url: new URL(request.url), route: { id: pathname }, locals: { moderator: null } } as any
 }
 
 describe('POST body limit routing', () => {
@@ -60,7 +62,7 @@ describe('multipart POST on the localized new page', () => {
 
     let kept: Request | undefined
     const response = await handle({
-      event: { request, url: new URL(request.url) } as any,
+      event: { request, url: new URL(request.url), locals: { moderator: null } } as any,
       resolve: async (resolvedEvent: any) => { kept = resolvedEvent.request; return new Response('ok') },
     } as any)
     expect(response.status).toBe(200)
@@ -80,7 +82,7 @@ describe('html lang', () => {
   const template = '<!doctype html><html lang="%lang%"><head></head><body>%lang%</body></html>'
 
   async function render(path: string) {
-    const event = { request: new Request(`https://example.test${path}`), url: new URL(`https://example.test${path}`) } as any
+    const event = { request: new Request(`https://example.test${path}`), url: new URL(`https://example.test${path}`), locals: { moderator: null } } as any
     const response = await handle({
       event,
       resolve: async (_event: unknown, options: { transformPageChunk: (input: { html: string; done: boolean }) => string }) => new Response(options.transformPageChunk({ html: template, done: true })),
@@ -103,6 +105,204 @@ describe('html lang', () => {
   })
 })
 
+const TEAM = 'hook.example.cloudflareaccess.com'
+const ISSUER = `https://${TEAM}`
+const AUD = 'hook-aud'
+const EMAIL = 'mod@example.com'
+const NOW_SECONDS = Math.floor(Date.now() / 1000)
+
+const { publicKey, privateKey } = await generateKeyPair('RS256')
+const otherKeys = await generateKeyPair('RS256')
+const publicJwk = { ...(await exportJWK(publicKey)), kid: 'hook-key', alg: 'RS256', use: 'sig' }
+
+async function signToken(overrides: { email?: string; secret?: CryptoKey } = {}): Promise<string> {
+  return new SignJWT({ sub: 'user-1', email: overrides.email ?? EMAIL })
+    .setProtectedHeader({ alg: 'RS256', kid: 'hook-key' })
+    .setIssuer(ISSUER)
+    .setAudience(AUD)
+    .setIssuedAt(NOW_SECONDS)
+    .setExpirationTime(NOW_SECONDS + 300)
+    .sign(overrides.secret ?? privateKey)
+}
+
+const originalFetch = globalThis.fetch
+let fetchCalls = 0
+
+beforeEach(() => {
+  clearJwksCache()
+  fetchCalls = 0
+  globalThis.fetch = (async () => {
+    fetchCalls++
+    return new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as unknown as typeof fetch
+})
+
+afterEach(() => {
+  globalThis.fetch = originalFetch
+  clearJwksCache()
+})
+
+function env(overrides: Record<string, string | undefined> = {}) {
+  return {
+    DB: {},
+    ACCESS_TEAM_DOMAIN: TEAM,
+    ACCESS_AUD: AUD,
+    MODERATOR_EMAILS: EMAIL,
+    ...overrides,
+  }
+}
+
+type EventOptions = {
+  method?: string
+  token?: string
+  env?: Record<string, unknown>
+  platform?: boolean
+  routeId?: string
+}
+
+function makeEvent(path: string, options: EventOptions = {}) {
+  const headers = new Headers()
+  if (options.token) headers.set('cf-access-jwt-assertion', options.token)
+  const url = new URL(`https://example.test${path}`)
+  const request = new Request(url, { method: options.method ?? 'GET', headers })
+  const locals: App.Locals = { moderator: null }
+  const platform = options.platform === false ? undefined : { env: options.env ?? env() }
+  const route = options.routeId ? { id: options.routeId } : undefined
+  return { event: { request, url, locals, platform, route } as any, locals }
+}
+
+async function run(event: any): Promise<Response> {
+  return await handle({
+    event,
+    resolve: async () => new Response('resolved', { status: 200 }),
+  } as any) as Response
+}
+
+describe('moderation hook', () => {
+  test('hides guarded paths without configuration', async () => {
+    // SvelteKit normalizes a trailing slash before this hook runs in production.
+    for (const path of ['/en/moderate', '/ja/moderate/', '/zh-Hant/moderate/x', '/en/moderate/1/hide', '/en/moderate/reports']) {
+      const { event, locals } = makeEvent(path, { env: { DB: {} } })
+      const response = await run(event)
+      expect(response.status).toBe(404)
+      expect(await response.text()).toBe('')
+      expect(locals.moderator).toBeNull()
+    }
+    expect(fetchCalls).toBe(0)
+  })
+
+  test('hides guarded paths without a token', async () => {
+    for (const path of ['/en/moderate', '/ko/moderate/1/restore', '/vi/moderate/x', '/%65n/moderate', '/ja/moderate/reports']) {
+      const { event, locals } = makeEvent(path, { method: path.endsWith('restore') ? 'POST' : 'GET' })
+      const response = await run(event)
+      expect(response.status).toBe(404)
+      expect(locals.moderator).toBeNull()
+    }
+    expect(fetchCalls).toBe(0)
+  })
+
+  test('hides guarded paths with an invalid token', async () => {
+    const invalid = await signToken({ secret: otherKeys.privateKey })
+    for (const path of ['/en/moderate', '/zh-Hans/moderate/x', '/en/moderate/1/hide']) {
+      const { event, locals } = makeEvent(path, { method: path.endsWith('hide') ? 'POST' : 'GET', token: invalid })
+      const response = await run(event)
+      expect(response.status).toBe(404)
+      expect(locals.moderator).toBeNull()
+    }
+  })
+
+  test('hides guarded paths for an unlisted email', async () => {
+    const unlisted = await signToken({ email: 'stranger@example.com' })
+    for (const path of ['/en/moderate', '/ja/moderate/x']) {
+      const { event, locals } = makeEvent(path, { token: unlisted })
+      const response = await run(event)
+      expect(response.status).toBe(404)
+      expect(locals.moderator).toBeNull()
+    }
+  })
+
+  test('hides guarded paths when the key set cannot be fetched', async () => {
+    globalThis.fetch = (async () => { throw new TypeError('network down') }) as unknown as typeof fetch
+    const token = await signToken()
+    const { event, locals } = makeEvent('/en/moderate', { token })
+    expect((await run(event)).status).toBe(404)
+    expect(locals.moderator).toBeNull()
+  })
+
+  test('resolves guarded paths and records a verified moderator', async () => {
+    const token = await signToken()
+    for (const path of ['/en/moderate', '/en/moderate/1/hide', '/en/moderate/reports']) {
+      const { event, locals } = makeEvent(path, { method: path.endsWith('hide') ? 'POST' : 'GET', token })
+      const response = await run(event)
+      expect(response.status).toBe(200)
+      expect(await response.text()).toBe('resolved')
+      expect(response.headers.get('cache-control')).toBe('private, no-store')
+      expect(locals.moderator).toBe(EMAIL)
+    }
+  })
+
+  test('guards the resolved route id even when the path cannot be decoded', async () => {
+    const token = await signToken()
+    const { event, locals } = makeEvent('/x', { token, routeId: '/[locale]/moderate' })
+    expect((await run(event)).status).toBe(200)
+    expect(locals.moderator).toBe(EMAIL)
+    const denied = makeEvent('/x', { routeId: '/[locale]/moderate' })
+    expect((await run(denied.event)).status).toBe(404)
+  })
+
+  test('guards other methods on moderation paths', async () => {
+    const token = await signToken()
+    for (const method of ['OPTIONS', 'PUT', 'DELETE']) {
+      const denied = await run(makeEvent('/en/moderate', { method }).event)
+      expect(denied.status).toBe(404)
+      const allowed = await run(makeEvent('/en/moderate', { method, token }).event)
+      expect(allowed.status).toBe(200)
+    }
+  })
+
+  test('adds frame protection to HTML and keeps moderated pages private', async () => {
+    const token = await signToken()
+    const resolve = async () => new Response('<p>page</p>', { headers: { 'content-type': 'text/html' } })
+    const moderated = await handle({ event: makeEvent('/en/moderate', { token }).event, resolve } as any) as Response
+    expect(moderated.headers.get('x-frame-options')).toBe('DENY')
+    expect(moderated.headers.get('content-security-policy')).toBe("frame-ancestors 'none'")
+    expect(moderated.headers.get('cache-control')).toBe('private, no-store')
+    const publicPage = await handle({ event: makeEvent('/en/entry/1').event, resolve } as any) as Response
+    expect(publicPage.headers.get('x-frame-options')).toBe('DENY')
+    expect(publicPage.headers.get('cache-control')).toBeNull()
+  })
+
+  test('leaves public and lookalike paths reachable without a token', async () => {
+    for (const path of ['/en/entry/1', '/en/moderatex', '/ja/moderatex/foo']) {
+      const { event, locals } = makeEvent(path)
+      const response = await run(event)
+      expect(response.status).toBe(200)
+      expect(locals.moderator).toBeNull()
+    }
+  })
+
+  test('sets a verified moderator on an entry page without hiding it', async () => {
+    const token = await signToken()
+    const { event, locals } = makeEvent('/en/entry/1', { token })
+    const response = await run(event)
+    expect(response.status).toBe(200)
+    expect(locals.moderator).toBe(EMAIL)
+  })
+
+  test('does not hide public paths when the token is invalid', async () => {
+    const invalid = await signToken({ secret: otherKeys.privateKey })
+    const { event, locals } = makeEvent('/en/entry/1', { token: invalid })
+    const response = await run(event)
+    expect(response.status).toBe(200)
+    expect(locals.moderator).toBeNull()
+  })
+
+  test('fails closed when the platform is unavailable', async () => {
+    const { event } = makeEvent('/en/moderate', { platform: false })
+    expect((await run(event)).status).toBe(404)
+  })
+})
+
 type Limiter = { limit: (input: { key: string }) => Promise<{ success: boolean }> }
 
 function rateEvent(options: { path?: string, locale?: string, method?: string, body?: string, address?: string, cf?: boolean, local?: string, limiter?: Limiter, enhanced?: boolean, route?: string | null } = {}) {
@@ -111,6 +311,7 @@ function rateEvent(options: { path?: string, locale?: string, method?: string, b
   const request = new Request(`http://localhost${path}`, { method, headers: options.enhanced ? { 'x-sveltekit-action': 'true' } : {}, ...(method === 'POST' ? { body: options.body ?? 'hello' } : {}) })
   const event = {
     request, url: new URL(request.url), route: { id: options.route === undefined ? '/[locale]/new' : options.route },
+    locals: { moderator: null },
     getClientAddress: () => options.address ?? '192.0.2.1',
     platform: { env: { CONTRIBUTION_RATE_LIMIT: options.limiter, LOCAL_RATE_LIMIT: options.local }, ...(options.cf === false ? {} : { cf: {} }) }
   } as unknown as RequestEvent

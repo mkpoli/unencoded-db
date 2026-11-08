@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { LOCALES, catalogues } from './i18n'
 
 const source = new URL('../', import.meta.url)
-const KEY_CALL = /\bt\(\s*(?:[A-Za-z_$][\w$.]*|'[^']*')\s*,\s*'([a-zA-Z][a-zA-Z0-9]*\.[a-zA-Z][a-zA-Z0-9]*)'/g
+const KEY_CALL = /\bt\(\s*(?:[A-Za-z_$][\w$.]*|'[^']*')\s*,\s*'((?:[a-zA-Z][a-zA-Z0-9]*\.)+[a-zA-Z][a-zA-Z0-9]*)'/g
 
 function files(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {

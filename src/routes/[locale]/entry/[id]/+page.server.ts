@@ -20,7 +20,7 @@ type Entry = {
   comparisons: string
 }
 
-export const load: PageServerLoad = async ({ params, platform }) => {
+export const load: PageServerLoad = async ({ params, platform, locals, url }) => {
   if (!platform) error(500, 'Database unavailable')
   if (!/^[1-9]\d*$/.test(params.id) || !Number.isSafeInteger(Number(params.id))) error(404)
   const row = await platform.env.DB.prepare(
@@ -32,5 +32,5 @@ export const load: PageServerLoad = async ({ params, platform }) => {
   const { comparisons: stored, ...entry } = row
   const comparisons = JSON.parse(stored) as Comparison[]
   if (!Array.isArray(comparisons) || comparisons.length > MAX_COMPARISONS) error(500, 'Invalid related characters')
-  return { entry, comparisons }
+  return { entry, comparisons, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
 }

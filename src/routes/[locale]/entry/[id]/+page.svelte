@@ -4,7 +4,7 @@
 
   type Comparison = { character: string; relationship: string; differences: string; evidence: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
-  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[] } } = $props()
+  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons)
 </script>
@@ -17,6 +17,15 @@
     <h1>{entry.ids || entry.script}</h1>
     <p><a href={localizedHref(data.locale, `/entry/${entry.id}/edit`)}>{t(data.locale, 'entry.revise')}</a> · <a href={localizedHref(data.locale, `/entry/${entry.id}/history`)}>{t(data.locale, 'entry.history')}</a></p>
   </header>
+  {#if data.reported}<p class="notice" role="status">{t(data.locale, 'report.received')}</p>{/if}
+  {#if data.isModerator}
+    <div class="moderation-bar">
+      <span>{t(data.locale, 'moderate.view')}</span>
+      <form method="POST" action={localizedHref(data.locale, `/moderate/${entry.id}/hide`)}>
+        <button class="secondary" type="submit">{t(data.locale, 'moderate.hide')}</button>
+      </form>
+    </div>
+  {/if}
   {#if entry.has_image}
     <figure class="entry-figure">
       <img src={localizedHref(data.locale, `/entry/${entry.id}/image`)} alt={entry.description || t(data.locale, 'field.sourceImage')} />
@@ -52,4 +61,26 @@
       </div>
     </section>
   {/if}
+  <details class="details">
+    <summary>{t(data.locale, 'report.summary')}</summary>
+    <form class="details-body" method="POST" action={localizedHref(data.locale, `/entry/${entry.id}/report`)}>
+      <div class="field">
+        <label class="field-label" for="report-reason">{t(data.locale, 'report.reason')}</label>
+        <select id="report-reason" name="reason" required>
+          <option value="spam">{t(data.locale, 'report.reason.spam')}</option>
+          <option value="privacy">{t(data.locale, 'report.reason.privacy')}</option>
+          <option value="rights">{t(data.locale, 'report.reason.rights')}</option>
+          <option value="other">{t(data.locale, 'report.reason.other')}</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label" for="report-note">{t(data.locale, 'report.note')} <span class="field-help">{t(data.locale, 'form.optional')}</span></label>
+        <textarea id="report-note" name="note" maxlength="2000" rows="4"></textarea>
+      </div>
+      <p class="field-help">{t(data.locale, 'report.hint')}</p>
+      <div class="form-actions">
+        <button class="primary" type="submit">{t(data.locale, 'report.send')}</button>
+      </div>
+    </form>
+  </details>
 </div>

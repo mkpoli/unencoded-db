@@ -36,9 +36,10 @@ describe('locale routing', () => {
     expect(thrown(() => redirectToLocale(event as any))).toMatchObject({ status: 303, location: '/en' })
   })
 
-  async function layoutEvent(locale: string, options: { token?: string; linked?: string | null } = {}) {
+  async function layoutEvent(locale: string, options: { token?: string; linked?: string | null; moderator?: string | null } = {}) {
     return {
       params: { locale },
+      locals: { moderator: options.moderator ?? null },
       url: new URL(`https://example.test/${locale}`),
       platform: {
         env: {
@@ -57,15 +58,20 @@ describe('locale routing', () => {
     for (const locale of LOCALES) {
       const event = await layoutEvent(locale)
       event.platform = undefined as any
-      expect(await localeLayout(event as any)).toEqual({ locale, signInEnabled: false, signedIn: false, hasSession: false })
+      expect(await localeLayout(event as any)).toEqual({ locale, signInEnabled: false, signedIn: false, hasSession: false, isModerator: false })
     }
   })
 
   test('reads the session and linked account from the layout cookie', async () => {
     const anonymous = await localeLayout(await layoutEvent('ja', { token: 'a'.repeat(64), linked: null }) as any)
-    expect(anonymous).toEqual({ locale: 'ja', signInEnabled: true, signedIn: false, hasSession: true })
+    expect(anonymous).toEqual({ locale: 'ja', signInEnabled: true, signedIn: false, hasSession: true, isModerator: false })
     const linked = await localeLayout(await layoutEvent('ja', { token: 'a'.repeat(64), linked: 'person-1' }) as any)
-    expect(linked).toEqual({ locale: 'ja', signInEnabled: true, signedIn: true, hasSession: true })
+    expect(linked).toEqual({ locale: 'ja', signInEnabled: true, signedIn: true, hasSession: true, isModerator: false })
+  })
+
+  test('marks the layout for a verified moderator', async () => {
+    const event = await layoutEvent('ja', { moderator: 'mod@example.com' })
+    expect((await localeLayout(event as any) as { isModerator: boolean }).isModerator).toBe(true)
   })
 
   test('rejects unknown and malformed locale segments with 404', async () => {
