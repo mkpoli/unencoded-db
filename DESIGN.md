@@ -63,7 +63,7 @@ file field; `--line` remains the quieter rule between regions.
 
 ## Moderation
 
-The moderation queue reuses `.card-grid` and `.entry-card`; `.queue-card` keeps the resting surface because the card is not a link, and `.entry-actions` holds its restore form. `.moderation-bar` sits on a record page for a verified moderator.
+The moderation queue reuses `.card-grid` and `.entry-card`; `.queue-card` keeps the resting surface because the card is not a link, and `.entry-actions` holds its action forms. `.moderation-bar` sits on a record page for a verified moderator.
 
 ## Adding a page
 

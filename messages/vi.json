@@ -103,9 +103,10 @@
   "report.send": "Gửi báo cáo",
   "report.summary": "Báo cáo mục từ này",
   "reports.back": "Mục từ đã ẩn",
+  "reports.dismiss": "Bỏ qua",
   "reports.empty": "Không có báo cáo chưa xử lý.",
   "reports.eyebrow": "Kiểm duyệt",
-  "reports.intro": "Đã đăng nhập với {email}. Báo cáo ẩn danh; ẩn mục từ sẽ giải quyết các báo cáo chưa xử lý.",
+  "reports.intro": "Đã đăng nhập với {email}. Báo cáo ẩn danh. Bỏ qua một báo cáo vẫn giữ mục từ công khai; ẩn mục từ sẽ giải quyết mọi báo cáo chưa xử lý.",
   "reports.older": "Báo cáo cũ hơn",
   "reports.record": "Báo cáo {id}",
   "reports.title": "Báo cáo chưa xử lý"

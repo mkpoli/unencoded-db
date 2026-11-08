@@ -103,9 +103,10 @@
   "report.send": "送出檢舉",
   "report.summary": "檢舉此記錄",
   "reports.back": "隱藏的記錄",
+  "reports.dismiss": "駁回",
   "reports.empty": "沒有待處理的檢舉。",
   "reports.eyebrow": "審核",
-  "reports.intro": "目前登入：{email}。檢舉匿名；隱藏記錄後，該記錄的待處理檢舉會一併解決。",
+  "reports.intro": "目前登入：{email}。檢舉匿名。駁回一則檢舉後記錄仍會公開展示；隱藏記錄會解決該記錄的所有待處理檢舉。",
   "reports.older": "較早的檢舉",
   "reports.record": "檢舉{id}",
   "reports.title": "待處理檢舉"

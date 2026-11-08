@@ -103,9 +103,10 @@
   "report.send": "通報を送信",
   "report.summary": "この記録を通報",
   "reports.back": "非表示の記録",
+  "reports.dismiss": "却下",
   "reports.empty": "未対応の通報はありません。",
   "reports.eyebrow": "モデレーション",
-  "reports.intro": "{email}でサインイン中です。通報は匿名で、記録を非表示にすると未対応の通報も解決します。",
+  "reports.intro": "{email}でサインイン中です。通報は匿名です。通報を1件却下しても記録は公開のまま残り、記録を非表示にすると未対応の通報がすべて解決します。",
   "reports.older": "以前の通報",
   "reports.record": "通報{id}",
   "reports.title": "未対応の通報"

@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import type { Database } from 'bun:sqlite'
-import { createTestDatabase as testDatabase, d1Binding, insertEntry, insertReport, moderationAuditRows as auditRows, reportRows } from '../../test-support'
+import { createTestDatabase as testDatabase, dismissalRows, d1Binding, entryVisible, insertEntry, insertReport, moderationAuditRows as auditRows, reportRows } from '../../test-support'
 import { GET as reportGet, POST as reportPost } from './entry/[id]/report/+server'
 import { load as reportsQueue } from './moderate/reports/+page.server'
 import { POST as hide } from './moderate/[id]/hide/+server'
+import { GET as dismissGet, POST as dismiss } from './moderate/reports/[id]/dismiss/+server'
 
 const EMAIL = 'mod@example.com'
 
@@ -61,6 +62,20 @@ function hideEvent(db: Database, id: number) {
     url,
     platform: { env: { DB: d1Binding(db) } },
     locals: { moderator: EMAIL },
+  } as any
+}
+
+function dismissEvent(db: D1Database, id: number | string, options: { origin?: string | null; moderator?: string | null } = {}) {
+  const url = new URL(`https://example.test/en/moderate/reports/${id}/dismiss`)
+  const headers = new Headers()
+  if (options.origin !== null) headers.set('origin', options.origin ?? url.origin)
+  const request = new Request(url, { method: 'POST', headers })
+  return {
+    params: { locale: 'en', id: String(id) },
+    request,
+    url,
+    platform: { env: { DB: db } },
+    locals: { moderator: options.moderator === undefined ? EMAIL : options.moderator },
   } as any
 }
 
@@ -205,6 +220,105 @@ describe('report route', () => {
   })
 })
 
+describe('report dismissal route', () => {
+  test('dismisses one open report without hiding the entry and redirects', async () => {
+    const db = testDatabase()
+    try {
+      const DB = d1Binding(db)
+      const entry = insertEntry(db)
+      const dismissed = insertReport(db, entry, 'spam', 'noise')
+      const remaining = insertReport(db, entry, 'rights', 'keep')
+
+      await expect(dismiss(dismissEvent(DB, dismissed))).rejects.toMatchObject({ status: 303, location: '/en/moderate/reports' })
+
+      const row = dismissalRows(db)[0]!
+      expect(row.report_id).toBe(dismissed)
+      expect(row.moderator).toBe(EMAIL)
+      expect(new Date(row.dismissed_at).toISOString()).toBe(row.dismissed_at)
+      const rows = reportRows(db)
+      expect(rows.find(report => report.id === dismissed)?.resolved_at).toBe(row.dismissed_at)
+      expect(rows.find(report => report.id === remaining)?.resolved_at).toBeNull()
+      expect(entryVisible(db, entry)).toBe(1)
+    } finally { db.close() }
+  })
+
+  test('returns 409 for a second dismissal', async () => {
+    const db = testDatabase()
+    try {
+      const DB = d1Binding(db)
+      const entry = insertEntry(db)
+      const report = insertReport(db, entry)
+      await expect(dismiss(dismissEvent(DB, report))).rejects.toMatchObject({ status: 303 })
+
+      await expect(dismiss(dismissEvent(DB, report))).rejects.toMatchObject({ status: 409 })
+      expect(dismissalRows(db)).toHaveLength(1)
+    } finally { db.close() }
+  })
+
+  test('returns 409 for missing, resolved and hidden reports', async () => {
+    const db = testDatabase()
+    try {
+      const DB = d1Binding(db)
+      const entry = insertEntry(db)
+      const resolved = insertReport(db, entry)
+      db.query('UPDATE entry_reports SET resolved_at = ? WHERE id = ?').run('2026-01-06T00:00:00.000Z', resolved)
+      const hiddenEntry = insertEntry(db)
+      const hidden = insertReport(db, hiddenEntry)
+      db.query('UPDATE entries SET visible = 0 WHERE id = ?').run(hiddenEntry)
+
+      for (const id of [999, resolved, hidden]) {
+        await expect(dismiss(dismissEvent(DB, id))).rejects.toMatchObject({ status: 409 })
+      }
+      expect(dismissalRows(db)).toHaveLength(0)
+      expect(reportRows(db).every(report => report.resolved_at === null || report.id === resolved)).toBe(true)
+    } finally { db.close() }
+  })
+
+  test('returns 404 without a moderator and for invalid report ids', async () => {
+    const db = testDatabase()
+    try {
+      const DB = d1Binding(db)
+      const entry = insertEntry(db)
+      const report = insertReport(db, entry)
+
+      const anonymous = await dismiss(dismissEvent(DB, report, { moderator: null })) as Response
+      expect(anonymous.status).toBe(404)
+
+      for (const id of ['0', 'abc', '1.5', '-1', '9007199254740992']) {
+        await expect(dismiss(dismissEvent(DB, id))).rejects.toMatchObject({ status: 404 })
+      }
+      expect(dismissalRows(db)).toHaveLength(0)
+      expect(reportRows(db)[0]!.resolved_at).toBeNull()
+    } finally { db.close() }
+  })
+
+  test('requires an exact same-origin POST', async () => {
+    const db = testDatabase()
+    try {
+      const DB = d1Binding(db)
+      const entry = insertEntry(db)
+      const report = insertReport(db, entry)
+
+      for (const origin of [null, 'https://evil.test', 'http://example.test']) {
+        const response = await dismiss(dismissEvent(DB, report, { origin })) as Response
+        expect(response.status).toBe(403)
+      }
+      expect(dismissalRows(db)).toHaveLength(0)
+      expect(reportRows(db)[0]!.resolved_at).toBeNull()
+    } finally { db.close() }
+  })
+
+  test('rejects GET with 405', async () => {
+    const db = testDatabase()
+    try {
+      const response = await dismissGet(dismissEvent(d1Binding(db), 1) as any) as Response
+      expect(response.status).toBe(405)
+      expect(response.headers.get('allow')).toBe('POST')
+      expect(await response.text()).toBe('Method Not Allowed')
+    } finally { db.close() }
+  })
+})
+
 describe('moderation report queue', () => {
   test('lists only open reports newest first with joined entry fields', async () => {
     const db = testDatabase()
@@ -277,6 +391,28 @@ describe('moderation report queue', () => {
       await expect(hide(hideEvent(db, entry))).rejects.toMatchObject({ status: 303, location: '/en/moderate' })
       expect((await reportsQueue(queueEvent(db)) as any).reports).toHaveLength(0)
       expect(reportRows(db).find(row => row.id === report)?.resolved_at).toBe(auditRows(db)[0]!.created_at)
+    } finally { db.close() }
+  })
+
+  test('dismissed reports leave the queue while other open reports and pagination remain', async () => {
+    const db = testDatabase()
+    try {
+      const entryIds = Array.from({ length: 25 }, () => insertEntry(db))
+      const reportIds = entryIds.map(id => insertReport(db, id))
+      await expect(dismiss(dismissEvent(d1Binding(db), reportIds[24]!))).rejects.toMatchObject({ status: 303 })
+
+      const first = await reportsQueue(queueEvent(db)) as any
+      expect(first.reports).toHaveLength(20)
+      expect(first.reports.map((report: { report_id: number }) => report.report_id)).toEqual(reportIds.slice(4, 24).reverse())
+      expect(first.next).toBe(reportIds[4])
+
+      const second = await reportsQueue(queueEvent(db, { before: first.next })) as any
+      expect(second.reports.map((report: { report_id: number }) => report.report_id)).toEqual(reportIds.slice(0, 4).reverse())
+      expect(second.next).toBeNull()
+
+      const listed = [...first.reports, ...second.reports].map((report: { report_id: number }) => report.report_id)
+      expect(listed).toHaveLength(24)
+      expect(listed).not.toContain(reportIds[24])
     } finally { db.close() }
   })
 

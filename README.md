@@ -1,6 +1,6 @@
 # Rare Character Compendium
 
-A community evidence wiki for characters and glyphs. Anyone can add or revise a record with a source image, view its revision history and report a public record. Moderators review reports and can hide records; hidden records can be restored from a private queue.
+A community evidence wiki for characters and glyphs. Anyone can add or revise a record with a source image, view its revision history and report a public record. Moderators review reports, can dismiss individual reports, and can hide records; hidden records can be restored from a private queue.
 
 A new record keeps one source image as its evidence: a photo, scan or screenshot of the character or glyph. The image is served only through its record at `/{locale}/entry/[id]/image`. Classifying the glyph is a later question.
 
@@ -150,7 +150,9 @@ A public entry page has a “Report this record” form. A report carries a reas
 
 Reports store no reporter identity. The database keeps the entry id, reason, note, creation time and resolution time. The rate limiter hashes the client network in memory and stores neither the address nor the digest, and the Worker does not log it. Notes are untrusted text, visible to moderators in the private queue at `/{locale}/moderate/reports`, and escaped when rendered. A hidden or missing entry cannot receive reports.
 
-Hiding an entry resolves its open reports in the same database statement as the visibility change, with `resolved_at` copied from the audit time. Restoring the entry leaves them resolved. An entry can hold at most 100 open reports; further reports return 429 until the entry is hidden, which resolves them. The cap bounds storage per entry, but it does not stop a network from filling the newest queue page with spam, so moderation coverage remains an operational requirement. Notes are capped at 2000 characters, and nothing prunes resolved rows automatically.
+Moderators can dismiss one open report from the private queue without hiding its entry. A dismissal stores the report id, moderator email and UTC time, then resolves that report in the same database statement; the entry and its other open reports are unchanged. Dismissal rows are append-only and contain no report content.
+
+Hiding an entry resolves every remaining open report in the same database statement as the visibility change, with `resolved_at` copied from the audit time. Restoring the entry leaves dismissed and otherwise resolved reports resolved. An entry can hold at most 100 open reports; further reports return 429 until reports are resolved. The cap bounds storage per entry, but it does not stop a network from filling the newest queue page with spam, so moderation coverage remains an operational requirement. Notes are capped at 2000 characters. Resolved reports and dismissal rows are not pruned automatically.
 
 ## Report rate limit
 
@@ -208,7 +210,7 @@ GitHub Actions runs `bun install --frozen-lockfile` and `bun run build` for pull
 
 ## Limitations
 
-This is a local prototype, not ready for public operation. It has no deletion. Hiding and restoring records is audited, but the audit keeps no entry content. Editing is anonymous and has no rate limit; creating a record and report submissions are limited per client network as described above. Pagination lists 20 records at a time. Reporting and moderation are not deployed.
+This is a local prototype, not ready for public operation. It has no deletion. Hiding and restoring records and report dismissals are audited, but the audit keeps no entry content. Editing is anonymous and has no rate limit; creating a record and report submissions are limited per client network as described above. Pagination lists 20 records at a time. Reporting and moderation are not deployed.
 
 Provider availability and the permitted endpoint layout have not been verified against a live Glyph Atlas deployment. Discovery and keys are fetched on each sign-in; each provider request has a five-second deadline and a 128 KiB response limit. The provider controls the identity assertions it issues.
 

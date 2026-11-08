@@ -317,6 +317,8 @@ describe('localized pages', () => {
     expect(body).toContain('class="card-grid"')
     expect(body).toContain('class="entry-card queue-card"')
     expect(body).toContain('class="entry-actions"')
+    expect(body).toContain('action="/ja/moderate/reports/12/dismiss"')
+    expect(body).toContain('却下')
     expect(body).toContain('action="/ja/moderate/7/hide"')
     expect(body).toContain('href="/ja/entry/7"')
     expect(body).toContain('プライバシー')

@@ -103,9 +103,10 @@
   "report.send": "发送举报",
   "report.summary": "举报此记录",
   "reports.back": "隐藏的记录",
+  "reports.dismiss": "驳回",
   "reports.empty": "没有待处理的举报。",
   "reports.eyebrow": "审核",
-  "reports.intro": "当前登录：{email}。举报匿名；隐藏记录后，该记录的待处理举报会一并解决。",
+  "reports.intro": "当前登录：{email}。举报匿名。驳回一条举报后记录仍会公开展示；隐藏记录会解决该记录的所有待处理举报。",
   "reports.older": "更早的举报",
   "reports.record": "举报{id}",
   "reports.title": "待处理举报"

@@ -103,9 +103,10 @@
   "report.send": "Send report",
   "report.summary": "Report this record",
   "reports.back": "Hidden entries",
+  "reports.dismiss": "Dismiss",
   "reports.empty": "No open reports.",
   "reports.eyebrow": "Moderation",
-  "reports.intro": "Signed in as {email}. Reports are anonymous; hiding a record resolves its open reports.",
+  "reports.intro": "Signed in as {email}. Reports are anonymous. Dismiss a report to leave the record visible; hiding the record resolves all of its open reports.",
   "reports.older": "Older reports",
   "reports.record": "Report {id}",
   "reports.title": "Open reports"

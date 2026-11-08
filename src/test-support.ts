@@ -15,6 +15,7 @@ export type Migration =
   | '0009_revision_redaction.sql'
   | '0010_moderation.sql'
   | '0011_reports.sql'
+  | '0012_report_dismissals.sql'
 
 export function applyMigration(db: Database, name: Migration): void {
   db.exec(readFileSync(new URL(name, migrations), 'utf8'))
@@ -33,6 +34,7 @@ export function createTestDatabase(): Database {
   applyMigration(db, '0009_revision_redaction.sql')
   applyMigration(db, '0010_moderation.sql')
   applyMigration(db, '0011_reports.sql')
+  applyMigration(db, '0012_report_dismissals.sql')
   return db
 }
 
@@ -123,4 +125,12 @@ export function insertReport(db: Database, entryId: number, reason = 'spam', not
 
 export function reportRows(db: Database): { id: number; entry_id: number; reason: string; note: string; created_at: string; resolved_at: string | null }[] {
   return db.query('SELECT id, entry_id, reason, note, created_at, resolved_at FROM entry_reports ORDER BY id').all() as never
+}
+
+export function insertDismissal(db: Database, reportId: number, moderator = 'mod@example.com', dismissedAt = '2026-02-03T04:05:06.000Z'): void {
+  db.query('INSERT INTO report_dismissals (report_id, moderator, dismissed_at) VALUES (?, ?, ?)').run(reportId, moderator, dismissedAt)
+}
+
+export function dismissalRows(db: Database): { report_id: number; moderator: string; dismissed_at: string }[] {
+  return db.query('SELECT report_id, moderator, dismissed_at FROM report_dismissals ORDER BY report_id').all() as never
 }

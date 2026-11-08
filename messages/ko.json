@@ -103,9 +103,10 @@
   "report.send": "신고 보내기",
   "report.summary": "이 기록 신고",
   "reports.back": "숨긴 기록",
+  "reports.dismiss": "기각",
   "reports.empty": "미처리 신고가 없습니다.",
   "reports.eyebrow": "관리",
-  "reports.intro": "{email}(으)로 로그인했습니다. 신고는 익명이며, 기록을 숨기면 미처리 신고도 해결됩니다.",
+  "reports.intro": "{email}(으)로 로그인했습니다. 신고는 익명입니다. 신고를 하나 기각해도 기록은 공개된 상태로 남으며, 기록을 숨기면 미처리 신고가 모두 해결됩니다.",
   "reports.older": "이전 신고",
   "reports.record": "신고 {id}",
   "reports.title": "미처리 신고"

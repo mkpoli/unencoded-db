@@ -41,9 +41,14 @@
           <a href={localizedHref(data.locale, `/entry/${report.entry_id}`)}>{t(data.locale, 'entry.record', { id: report.entry_id })}</a>
           · {t(data.locale, 'reports.record', { id: report.report_id })} · {formatDate(data.locale, report.created_at)}
         </span>
-        <form class="entry-actions" method="POST" action={localizedHref(data.locale, `/moderate/${report.entry_id}/hide`)}>
-          <button class="secondary" type="submit">{t(data.locale, 'moderate.hide')}</button>
-        </form>
+        <div class="entry-actions">
+          <form method="POST" action={localizedHref(data.locale, `/moderate/reports/${report.report_id}/dismiss`)}>
+            <button class="secondary" type="submit">{t(data.locale, 'reports.dismiss')}</button>
+          </form>
+          <form method="POST" action={localizedHref(data.locale, `/moderate/${report.entry_id}/hide`)}>
+            <button class="secondary" type="submit">{t(data.locale, 'moderate.hide')}</button>
+          </form>
+        </div>
       </article>
     {/each}
   </div>
