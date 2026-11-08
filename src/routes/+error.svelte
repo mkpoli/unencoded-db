@@ -3,4 +3,4 @@
   import ErrorPage from '$lib/components/ErrorPage.svelte'
 </script>
 
-<ErrorPage locale="en" status={page.status} />
+<main><ErrorPage locale="en" status={page.status} /></main>

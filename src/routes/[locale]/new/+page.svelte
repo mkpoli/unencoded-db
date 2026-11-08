@@ -68,6 +68,7 @@
       <div class="field"><label>{t(data.locale, 'field.ids')} <input name="ids" maxlength="200" value={form?.values?.ids ?? ''} aria-invalid={!!form?.errors?.ids} aria-describedby={form?.errors?.ids ? 'ids-error' : undefined} /></label>{#if form?.errors?.ids}<p class="field-error" id="ids-error">{form.errors.ids}</p>{/if}</div>
       <div class="field"><label>{t(data.locale, 'field.description')} <textarea name="description" maxlength="5000" aria-invalid={!!form?.errors?.description} aria-describedby={form?.errors?.description ? 'description-error' : undefined}>{form?.values?.description ?? ''}</textarea></label>{#if form?.errors?.description}<p class="field-error" id="description-error">{form.errors.description}</p>{/if}</div>
     </section>
+    <p class="field-help">{t(data.locale, 'new.attribution')}</p>
     <section class="panel" aria-labelledby="related-heading">
       <h2 id="related-heading">{t(data.locale, 'form.related')}</h2>
       <p>{t(data.locale, 'form.relatedIntro')}</p>

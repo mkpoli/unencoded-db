@@ -55,6 +55,10 @@ describe('public query plans', () => {
       '[locale]/entry/[id]/+page.server.ts',
       '[locale]/entry/[id]/image/+server.ts',
       '[locale]/new/+page.server.ts',
+      'auth/callback/+server.ts',
+      'auth/prepare/+server.ts',
+      'auth/sign-in/+server.ts',
+      'auth/sign-out/+server.ts',
     ].sort())
   })
 

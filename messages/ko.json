@@ -57,5 +57,9 @@
   "relationship.similar": "유사",
   "relationship.uncertain": "불확실",
   "error.comparisonRow": "문자와 관계를 입력하고 각 항목의 길이를 확인하세요.",
-  "error.relatedTooMany": "비교를 10개 이하로 줄이세요."
+  "error.relatedTooMany": "비교를 10개 이하로 줄이세요.",
+  "auth.signIn": "Glyph Atlas로 로그인",
+  "auth.link": "Glyph Atlas 계정 연결",
+  "auth.signOut": "로그아웃",
+  "new.attribution": "브라우저 쿠키가 365일 동안 기여 내용을 연결합니다. 쿠키가 만료되거나 삭제된 후에도 저장된 귀속 정보는 남습니다."
 }

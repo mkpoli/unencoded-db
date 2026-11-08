@@ -57,5 +57,9 @@
   "relationship.similar": "類似",
   "relationship.uncertain": "不明",
   "error.comparisonRow": "文字と関係を入力し、各項目の長さを確認してください。",
-  "error.relatedTooMany": "比較を10件以下にしてください。"
+  "error.relatedTooMany": "比較を10件以下にしてください。",
+  "auth.signIn": "Glyph Atlasでサインイン",
+  "auth.link": "Glyph Atlasアカウントを連携",
+  "auth.signOut": "サインアウト",
+  "new.attribution": "ブラウザのCookieが365日間、あなたの投稿を結び付けます。Cookieが期限切れまたは削除された後も、保存された帰属情報は残ります。"
 }

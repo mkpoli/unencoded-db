@@ -57,5 +57,9 @@
   "relationship.similar": "Similar",
   "relationship.uncertain": "Uncertain",
   "error.comparisonRow": "Enter a character and a valid relationship; check field lengths.",
-  "error.relatedTooMany": "Remove comparisons until there are at most 10."
+  "error.relatedTooMany": "Remove comparisons until there are at most 10.",
+  "auth.signIn": "Sign in with Glyph Atlas",
+  "auth.link": "Link Glyph Atlas account",
+  "auth.signOut": "Sign out",
+  "new.attribution": "A browser cookie links your contributions for 365 days. The stored attribution remains after the cookie expires or is deleted."
 }

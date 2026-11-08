@@ -57,5 +57,9 @@
   "relationship.similar": "相似",
   "relationship.uncertain": "不確定",
   "error.comparisonRow": "請填寫文字和關係，並檢查各欄位的長度。",
-  "error.relatedTooMany": "請將比較減少到10筆以內。"
+  "error.relatedTooMany": "請將比較減少到10筆以內。",
+  "auth.signIn": "使用Glyph Atlas登入",
+  "auth.link": "連結Glyph Atlas帳號",
+  "auth.signOut": "登出",
+  "new.attribution": "瀏覽器Cookie會將你的投稿關聯365天。Cookie過期或被刪除後，已儲存的歸屬資訊仍會保留。"
 }

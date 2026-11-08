@@ -3,7 +3,13 @@ import { readFileSync } from 'node:fs'
 
 const migrations = new URL('../migrations/', import.meta.url)
 
-export type Migration = '0001_init.sql' | '0002_entry_visibility.sql' | '0003_related_characters.sql' | '0004_source_images.sql'
+export type Migration =
+  | '0001_init.sql'
+  | '0002_entry_visibility.sql'
+  | '0003_related_characters.sql'
+  | '0004_attribution.sql'
+  | '0005_oidc.sql'
+  | '0006_source_images.sql'
 
 export function applyMigration(db: Database, name: Migration): void {
   db.exec(readFileSync(new URL(name, migrations), 'utf8'))
@@ -14,7 +20,9 @@ export function createTestDatabase(): Database {
   applyMigration(db, '0001_init.sql')
   applyMigration(db, '0002_entry_visibility.sql')
   applyMigration(db, '0003_related_characters.sql')
-  applyMigration(db, '0004_source_images.sql')
+  applyMigration(db, '0004_attribution.sql')
+  applyMigration(db, '0005_oidc.sql')
+  applyMigration(db, '0006_source_images.sql')
   return db
 }
 
@@ -26,10 +34,13 @@ export function d1Binding(db: Database) {
           return {
             first: async () => db.query(sql).get(...values),
             all: async () => ({ results: db.query(sql).all(...values) }),
+            run: () => ({ results: db.query(sql).all(...values) }),
+            execute: () => db.query(sql).all(...values),
           }
         },
       }
     },
+    batch: async (statements: { execute: () => unknown[] }[]) => db.transaction(() => statements.map(statement => ({ results: statement.execute() })))(),
   }
 }
 

@@ -57,5 +57,9 @@
   "relationship.similar": "Tương tự",
   "relationship.uncertain": "Chưa rõ",
   "error.comparisonRow": "Nhập chữ và quan hệ, rồi kiểm tra độ dài từng mục.",
-  "error.relatedTooMany": "Giảm số so sánh xuống tối đa 10."
+  "error.relatedTooMany": "Giảm số so sánh xuống tối đa 10.",
+  "auth.signIn": "Đăng nhập bằng Glyph Atlas",
+  "auth.link": "Liên kết tài khoản Glyph Atlas",
+  "auth.signOut": "Đăng xuất",
+  "new.attribution": "Cookie trình duyệt liên kết các đóng góp của bạn trong 365 ngày. Thông tin ghi công đã lưu vẫn còn sau khi cookie hết hạn hoặc bị xóa."
 }

@@ -36,13 +36,41 @@ describe('locale routing', () => {
     expect(thrown(() => redirectToLocale(event as any))).toMatchObject({ status: 303, location: '/en' })
   })
 
-  test('returns the locale the layout validated', () => {
-    for (const locale of LOCALES) expect(localeLayout({ params: { locale } } as any)).toEqual({ locale })
+  async function layoutEvent(locale: string, options: { token?: string; linked?: string | null } = {}) {
+    return {
+      params: { locale },
+      url: new URL(`https://example.test/${locale}`),
+      platform: {
+        env: {
+          ATLAS_ISSUER: 'https://id.example',
+          ATLAS_CLIENT_ID: 'client',
+          ATLAS_CLIENT_SECRET: 'secret',
+          ATLAS_PUBLIC_ORIGIN: 'https://example.test',
+          DB: { prepare: () => ({ bind: () => ({ first: async () => options.linked === undefined ? null : { linked: options.linked } }) }) },
+        },
+      },
+      cookies: { get: () => options.token },
+    }
+  }
+
+  test('returns the locale and anonymous layout state', async () => {
+    for (const locale of LOCALES) {
+      const event = await layoutEvent(locale)
+      event.platform = undefined as any
+      expect(await localeLayout(event as any)).toEqual({ locale, signInEnabled: false, signedIn: false, hasSession: false })
+    }
   })
 
-  test('rejects unknown and malformed locale segments with 404', () => {
+  test('reads the session and linked account from the layout cookie', async () => {
+    const anonymous = await localeLayout(await layoutEvent('ja', { token: 'a'.repeat(64), linked: null }) as any)
+    expect(anonymous).toEqual({ locale: 'ja', signInEnabled: true, signedIn: false, hasSession: true })
+    const linked = await localeLayout(await layoutEvent('ja', { token: 'a'.repeat(64), linked: 'person-1' }) as any)
+    expect(linked).toEqual({ locale: 'ja', signInEnabled: true, signedIn: true, hasSession: true })
+  })
+
+  test('rejects unknown and malformed locale segments with 404', async () => {
     for (const locale of ['fr', 'zh_hans', 'EN', 'zh-Hans-x', '']) {
-      expect(thrown(() => localeLayout({ params: { locale } } as any)).status, locale).toBe(404)
+      await expect(localeLayout({ params: { locale }, url: new URL('https://example.test/'), platform: undefined, cookies: { get: () => undefined } } as any)).rejects.toMatchObject({ status: 404 })
     }
   })
 
