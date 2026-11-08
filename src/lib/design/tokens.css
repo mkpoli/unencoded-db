@@ -42,7 +42,7 @@
   --shadow-soft: light-dark(#0001, rgb(0 0 0 / 30%));
   --shadow-menu: light-dark(#1111, rgb(0 0 0 / 35%));
 
-  --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans CJK JP", "Noto Sans CJK SC", sans-serif;
+  --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Consolas, "GenZui Sans", monospace;
 
   --text-xs: 11px;
@@ -77,6 +77,12 @@
   background: var(--paper);
   font-synthesis: none;
 }
+
+/* The HTML lang selects the CJK face, so Chinese and Korean use their own glyph variants. */
+:root:lang(ja) { --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans CJK JP", "Noto Sans JP", sans-serif; }
+:root:lang(zh-Hans) { --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans CJK SC", "Noto Sans SC", sans-serif; }
+:root:lang(zh-Hant) { --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans CJK TC", "Noto Sans TC", sans-serif; }
+:root:lang(ko) { --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans CJK KR", "Noto Sans KR", sans-serif; }
 
 /* A reader can pin a scheme, as in Glyph Atlas; without the attribute the OS wins. */
 :root[data-theme="light"] { color-scheme: light; }
