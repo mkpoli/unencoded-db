@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { readFileSync } from 'node:fs'
 
-export const migrationFiles = ['0001_init.sql', '0002_entry_visibility.sql', '0003_related_characters.sql', '0004_moderation.sql', '0005_reports.sql', '0006_report_dismissals.sql'] as const
+export const migrationFiles = ['0001_init.sql', '0002_entry_visibility.sql', '0003_related_characters.sql', '0004_attribution.sql', '0005_oidc.sql', '0010_moderation.sql', '0011_reports.sql', '0012_report_dismissals.sql'] as const
 
 export function migrationSql(name: typeof migrationFiles[number]): string {
   return readFileSync(new URL(`../../../migrations/${name}`, import.meta.url), 'utf8')

@@ -55,6 +55,10 @@ describe('public query plans', () => {
     expect(routes(new URL('.', import.meta.url).pathname).sort()).toEqual([
       '+layout.server.ts',
       '+page.server.ts',
+      'auth/callback/+server.ts',
+      'auth/prepare/+server.ts',
+      'auth/sign-in/+server.ts',
+      'auth/sign-out/+server.ts',
       'entry/[id]/+page.server.ts',
       'entry/[id]/report/+server.ts',
       'moderate/+page.server.ts',
