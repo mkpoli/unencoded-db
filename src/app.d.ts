@@ -8,6 +8,7 @@ declare global {
         ACCESS_AUD?: string
         MODERATOR_EMAILS?: string
         REPORT_RATE_LIMIT?: RateLimit
+        CONTRIBUTION_RATE_LIMIT?: { limit(options: { key: string }): Promise<{ success: boolean }> }
         LOCAL_RATE_LIMIT?: string
         ATLAS_ISSUER?: string
         ATLAS_CLIENT_ID?: string
