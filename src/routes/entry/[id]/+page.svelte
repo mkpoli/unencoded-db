@@ -27,6 +27,21 @@
   {#if entry.note}<dt>Notes</dt><dd>{entry.note}</dd>{/if}
   <dt>Added</dt><dd>{entry.created_at}</dd>
 </dl>
+{#if data.comparisons.length}
+  <section aria-labelledby="comparisons-heading">
+    <h2 id="comparisons-heading">Related characters</h2>
+    {#each data.comparisons as comparison}
+      <div class="panel">
+        <h3>{comparison.character}</h3>
+        <dl>
+          <dt>Relationship</dt><dd>{comparison.relationship === 'not_variant' ? 'Not a variant' : comparison.relationship === 'variant' ? 'Variant' : comparison.relationship === 'similar' ? 'Similar' : 'Uncertain'}</dd>
+          {#if comparison.differences}<dt>Differences</dt><dd>{comparison.differences}</dd>{/if}
+          {#if comparison.evidence}<dt>Evidence</dt><dd>{comparison.evidence}</dd>{/if}
+        </dl>
+      </div>
+    {/each}
+  </section>
+{/if}
 <details class="report">
   <summary>Report this record</summary>
   <form method="POST" action="/entry/{entry.id}/report" class="report-form">

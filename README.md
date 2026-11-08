@@ -112,7 +112,7 @@ Cloudflare rate limit counters are approximate and local to each Cloudflare loca
 
 Local simulation: put `LOCAL_RATE_LIMIT=true` in `.dev.vars` (gitignored). The Worker then keeps one in-process bucket of five requests per 60 seconds, and only when the request host is loopback and the client address is `127.0.0.1` or `::1`; every other request fails closed with 503. Requests through a deployed hostname do not match the loopback condition.
 
-This feature is not deployed. Apply migrations 0001–0005 before running it.
+This feature is not deployed. Apply migrations 0001–0006 before running it.
 
 ## Continuous integration
 

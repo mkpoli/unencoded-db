@@ -17,7 +17,7 @@ function database() {
 }
 
 // Exercise the route's actual SQL while avoiding any storage or network access.
-function capture(db: Database) {
+function capture(db: Database, found = false) {
   const plans: string[][] = []
   const sqls: string[] = []
   const binding = {
@@ -30,7 +30,7 @@ function capture(db: Database) {
             plans.push(plan.map(row => row.detail))
             sqls.push(sql)
           } finally { statement.finalize() }
-          return { all: async () => ({ results: [] }), first: async () => null }
+          return { all: async () => ({ results: [] }), first: async () => found ? { id: 1, comparisons: '[]' } : null }
         }
       }
     }
@@ -78,6 +78,16 @@ describe('public query plans', () => {
       const withoutIndex = capture(db)
       await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/?before=100') } as any)
       expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_visible_id \(id<\?\)/i)).toThrow()
+    } finally { db.close() }
+  })
+
+  test('detail loads bounded comparisons with the entry primary key', async () => {
+    const db = database()
+    try {
+      const { binding, plans } = capture(db, true)
+      await detail({ platform: { env: { DB: binding } }, params: { id: '1' } } as any)
+      expect(plans).toHaveLength(1)
+      assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
     } finally { db.close() }
   })
 
