@@ -8,6 +8,7 @@
   "auth.signOut": "Đăng xuất",
   "browse.addOne": "Thêm chữ",
   "browse.emptyAll": "Chưa có mục từ nào.",
+  "browse.export": "Xuất JSON",
   "browse.more": "Xem thêm",
   "edit.conflict": "Bản ghi đã thay đổi trong lúc bạn sửa. Hãy mở bản hiện tại ở thẻ khác rồi chép thay đổi sang đó.",
   "edit.intro": "Nội dung sửa đổi được công khai và ghi ẩn danh. Các bản trước vẫn được giữ lại.",

@@ -10,6 +10,7 @@ import { load as history } from './[locale]/entry/[id]/history/+page.server'
 import { GET as image } from './[locale]/entry/[id]/image/+server'
 import { load as queue } from './[locale]/moderate/+page.server'
 import { load as reportsQueue } from './[locale]/moderate/reports/+page.server'
+import { GET as exportJson } from './export.json/+server'
 
 type PlanRow = { detail: string }
 
@@ -73,6 +74,7 @@ describe('public query plans', () => {
       'auth/sign-in/+server.ts',
       'auth/sign-out/+server.ts',
       '[locale]/moderate/reports/[id]/dismiss/+server.ts',
+      'export.json/+server.ts',
     ].sort())
   })
 
@@ -89,6 +91,27 @@ describe('public query plans', () => {
       const withoutIndex = capture(db)
       await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/en?before=100') } as any)
       expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_visible_id \(id<\?\)/i)).toThrow()
+    } finally { db.close() }
+  })
+
+  test('export uses the visible index for ascending pages', async () => {
+    const db = database()
+    try {
+      const { binding, plans } = capture(db)
+      await exportJson({ platform: { env: { DB: binding } }, url: new URL('https://example.test/export.json?after=10&limit=50') } as any)
+      expect(plans).toHaveLength(1)
+      assertPlan(plans[0], /SEARCH entries USING INDEX entries_visible_id \(id>\?\)/i)
+
+      // The planner keeps the partial index with statistics and a long hidden tail.
+      for (let index = 0; index < 50; index++) db.exec(`INSERT INTO entries (script, place, created_at, visible) VALUES ('S${index}', 'book', '2026', ${index < 25 ? 1 : 0})`)
+      db.exec('ANALYZE')
+      const analyzed = capture(db)
+      await exportJson({ platform: { env: { DB: analyzed.binding } }, url: new URL('https://example.test/export.json?after=25&limit=10') } as any)
+      assertPlan(analyzed.plans[0], /SEARCH entries USING INDEX entries_visible_id \(id>\?\)/i)
+
+      db.exec('DROP INDEX entries_visible_id')
+      const withoutIndex = capture(db)
+      await expect(exportJson({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/export.json?after=10') } as any)).rejects.toThrow()
     } finally { db.close() }
   })
 

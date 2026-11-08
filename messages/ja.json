@@ -8,6 +8,7 @@
   "auth.signOut": "サインアウト",
   "browse.addOne": "文字を追加",
   "browse.emptyAll": "まだ記録はありません。",
+  "browse.export": "JSONで書き出す",
   "browse.more": "もっと見る",
   "edit.conflict": "編集中にこの記録が更新されました。現在の版を別のタブで開き、そちらに変更を反映してください。",
   "edit.intro": "変更は公開され、匿名で記録されます。以前の版も残ります。",

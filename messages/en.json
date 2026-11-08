@@ -8,6 +8,7 @@
   "auth.signOut": "Sign out",
   "browse.addOne": "Add a character",
   "browse.emptyAll": "Nothing has been recorded yet.",
+  "browse.export": "Export as JSON",
   "browse.more": "More",
   "edit.conflict": "This record changed while you were editing. Open the current version in another tab and copy your changes there.",
   "edit.intro": "Changes are public and anonymous. Earlier versions stay visible.",

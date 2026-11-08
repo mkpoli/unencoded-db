@@ -8,6 +8,7 @@
   "auth.signOut": "로그아웃",
   "browse.addOne": "문자 추가",
   "browse.emptyAll": "아직 기록된 문자가 없습니다.",
+  "browse.export": "JSON으로 내보내기",
   "browse.more": "더 보기",
   "edit.conflict": "편집하는 동안 이 기록이 바뀌었습니다. 새 탭에서 현재 버전을 열고 변경 내용을 옮겨 주세요.",
   "edit.intro": "수정 내용은 공개되며 익명으로 기록됩니다. 이전 버전도 남습니다.",

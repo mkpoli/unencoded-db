@@ -56,6 +56,8 @@ describe('localized pages', () => {
     expect(body).toContain('文字と字形の証拠を集めるコミュニティウィキ')
     expect(body).toContain('href="/ja/entry/7"')
     expect(body).toContain('href="/ja?before=42"')
+    expect(body).toContain('href="/export.json"')
+    expect(body).toContain('JSONで書き出す')
     expect(body).toContain('もっと見る')
   })
 

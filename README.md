@@ -204,13 +204,24 @@ Uploaders must have the rights to share the image. Image metadata is stripped, s
 
 A validation failure returns the form with its errors; an upload over the request limit returns 413. The browser clears the file input, so the image must be selected again. Text fields are preserved on validation errors. The request limit is 8 MiB plus framing for `/{locale}/new`.
 
+## JSON export
+
+`GET /export.json` returns visible records in ascending id order with `version: 1`. Read `next` and request `?after=<next>` until it is null. Pages default to 100 records; `limit` accepts 1 to 200. Hidden records are excluded and responses are not cached.
+
+```sh
+curl 'https://example.org/export.json?limit=200'
+curl 'https://example.org/export.json?limit=200&after=200'
+```
+
+Each record contains its id, script, IDS, description, place, title, author, publisher, year, page, note and creation time. Source images and related-character comparisons are not included.
+
 ## Continuous integration
 
 GitHub Actions runs `bun install --frozen-lockfile` and `bun run build` for pull requests and pushes to `main`.
 
 ## Limitations
 
-This is a local prototype, not ready for public operation. It has no deletion. Hiding and restoring records and report dismissals are audited, but the audit keeps no entry content. Editing is anonymous and has no rate limit; creating a record and report submissions are limited per client network as described above. Pagination lists 20 records at a time. Reporting and moderation are not deployed.
+This is a local prototype, not ready for public operation. It has no deletion. Hiding and restoring records and report dismissals are audited, but the audit keeps no entry content. Editing is anonymous and has no rate limit; creating a record and report submissions are limited per client network as described above. The collection page lists 20 records at a time; export pages use the cursor described above. Reporting and moderation are not deployed.
 
 Provider availability and the permitted endpoint layout have not been verified against a live Glyph Atlas deployment. Discovery and keys are fetched on each sign-in; each provider request has a five-second deadline and a 128 KiB response limit. The provider controls the identity assertions it issues.
 
