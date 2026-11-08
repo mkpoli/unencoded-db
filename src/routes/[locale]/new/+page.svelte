@@ -138,6 +138,7 @@
         {#if form?.errors?.description}<p class="field-error" id="description-error">{form.errors.description}</p>{/if}
       </div>
     </section>
+    <p class="field-help">{t(data.locale, 'new.attribution')}</p>
     <section class="form-section" aria-labelledby="related-heading">
       <h2 class="section-label" id="related-heading">{t(data.locale, 'form.related')}</h2>
       <p class="field-help">{t(data.locale, 'form.relatedIntro')}</p>

@@ -1,5 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import { fields, readEvidence } from '$lib/server/evidence'
+import { DefinitiveSaveFailure, cookieOptions, saveEvidence, sessionCookieSettings } from '$lib/server/attribution'
 import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, type ImageError } from '$lib/server/images'
 import { isLocale, localizedHref, t, type Locale } from '$lib/i18n'
 import { readComparisons } from '$lib/server/related'
@@ -32,7 +33,7 @@ function fieldValues(form: FormData): Record<FieldName, string> {
 }
 
 export const actions: Actions = {
-  default: async ({ request, platform, params }) => {
+  default: async ({ request, platform, params, url, cookies }) => {
     if (!isLocale(params.locale)) error(404)
     if (!platform) error(500, 'Storage unavailable')
     const locale = params.locale
@@ -61,6 +62,8 @@ export const actions: Actions = {
     if (!row || source.error || Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) return failForm(400, errors)
     if (!source.image) return failForm(400, { image: t(locale, 'error.imageMissing') })
     const image = source.image
+    const cookie = cookieOptions(url)
+    if (!cookie) error(403, 'Secure connection required')
 
     const key = createImageKey()
     try {
@@ -69,25 +72,26 @@ export const actions: Actions = {
       return failForm(500, { form: t(locale, 'error.save') })
     }
 
-    let result: { id: number } | null = null
+    let result: { id: number; token?: string }
     try {
-      result = await platform.env.DB.prepare(
-        `INSERT INTO entries (${fields.join(', ')}, image_key, image_type, image_size, created_at, comparisons) VALUES (${fields.map(() => '?').join(', ')}, ?, ?, ?, ?, ?) RETURNING id`
-      ).bind(...fields.map(name => row[name]), key, image.type, image.size, new Date().toISOString(), JSON.stringify(comparisons.rows)).first<{ id: number }>()
-    } catch {
-      // A transport error can arrive before or after the insert commits.
-      // Recover the row when it is visible and otherwise keep the object: a
-      // later commit would leave a record with a deleted image.
+      result = await saveEvidence(
+        platform.env.DB,
+        row,
+        cookies.get(cookie.name),
+        comparisons.rows,
+        { key, type: image.type, size: image.size },
+      )
+    } catch (caught) {
+      // A transport error can arrive before or after the insert commits. Recover
+      // the row when it is visible; otherwise keep the object because a later
+      // commit would leave a record pointing at a deleted image.
       const existing = await findEntryByImageKey(platform.env.DB, key)
       if (existing) redirect(303, localizedHref(locale, `/entry/${existing.id}`))
+      if (caught instanceof DefinitiveSaveFailure && existing === null) await deleteSourceImage(platform.env.IMAGES, key)
       return failForm(500, { form: t(locale, 'error.save') })
     }
-    if (!result) {
-      const existing = await findEntryByImageKey(platform.env.DB, key)
-      if (existing) redirect(303, localizedHref(locale, `/entry/${existing.id}`))
-      if (existing === null) await deleteSourceImage(platform.env.IMAGES, key)
-      return failForm(500, { form: t(locale, 'error.save') })
-    }
+
+    if (result.token) cookies.set(cookie.name, result.token, { ...sessionCookieSettings, secure: cookie.secure })
     redirect(303, localizedHref(locale, `/entry/${result.id}`))
   },
 }

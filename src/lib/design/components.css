@@ -34,7 +34,10 @@
 }
 .nav-link:hover { color: var(--ink); }
 .nav-link[aria-current="page"] { color: var(--ink); font-weight: 550; }
-.header-actions { display: flex; align-items: center; gap: var(--space-4); margin-left: auto; }
+.header-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-4); margin-left: auto; }
+.header-actions form { display: flex; }
+.header-actions .secondary { white-space: nowrap; }
+.header-actions .account { color: var(--muted); font-size: var(--text-sm); white-space: nowrap; }
 
 .site-main {
   max-width: var(--content-max);

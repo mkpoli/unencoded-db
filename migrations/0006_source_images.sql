@@ -1,7 +1,7 @@
 -- Records now carry a source image as their evidence. The source URL column is
 -- dropped; place remains required so a record still says where it came from.
--- Visibility and related comparisons are preserved. Image lookups by key are
--- rare, but the recovery path needs an index.
+-- Visibility, related comparisons and attribution are preserved. Image lookups
+-- by key are rare, but the recovery path needs an index.
 CREATE TABLE _entries_sequence AS SELECT seq FROM sqlite_sequence WHERE name = 'entries';
 
 CREATE TABLE entries_new (
@@ -22,16 +22,17 @@ CREATE TABLE entries_new (
   year TEXT,
   page TEXT,
   note TEXT,
+  creator_id TEXT REFERENCES persons(id),
   created_at TEXT NOT NULL
 );
 
 INSERT INTO entries_new (
   id, script, ids, description, place, visible, comparisons,
-  title, author, publisher, year, page, note, created_at
+  title, author, publisher, year, page, note, creator_id, created_at
 )
 SELECT
   id, script, ids, description, place, visible, comparisons,
-  title, author, publisher, year, page, note, created_at
+  title, author, publisher, year, page, note, creator_id, created_at
 FROM entries;
 
 DROP TABLE entries;
