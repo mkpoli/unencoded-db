@@ -1,0 +1,28 @@
+{
+  "name": "unencoded-db",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "vite build",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "svelte-kit sync && bun test src",
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "preview": "bun run build && wrangler dev --local --infer-origin-from-routes=false"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260819.1",
+    "@sveltejs/adapter-cloudflare": "^7.2.9",
+    "@sveltejs/kit": "^2.57.0",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@types/bun": "^1.2.0",
+    "svelte": "^5.55.2",
+    "svelte-check": "^4.4.6",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.7",
+    "wrangler": "^4.158.0"
+  },
+  "dependencies": {
+    "jose": "^6.2.15"
+  }
+}
