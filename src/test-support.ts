@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 
 const migrations = new URL('../migrations/', import.meta.url)
 
-export type Migration = '0001_init.sql' | '0002_entry_visibility.sql' | '0003_source_images.sql'
+export type Migration = '0001_init.sql' | '0002_entry_visibility.sql' | '0004_source_images.sql'
 
 export function applyMigration(db: Database, name: Migration): void {
   db.exec(readFileSync(new URL(name, migrations), 'utf8'))
@@ -13,7 +13,7 @@ export function createTestDatabase(): Database {
   const db = new Database(':memory:')
   applyMigration(db, '0001_init.sql')
   applyMigration(db, '0002_entry_visibility.sql')
-  applyMigration(db, '0003_source_images.sql')
+  applyMigration(db, '0004_source_images.sql')
   return db
 }
 
