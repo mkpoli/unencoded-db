@@ -52,6 +52,7 @@
       <div class="field"><label>IDS <input name="ids" maxlength="200" value={form?.values?.ids ?? ''} aria-invalid={!!form?.errors?.ids} aria-describedby={form?.errors?.ids ? 'ids-error' : undefined} /></label>{#if form?.errors?.ids}<p class="field-error" id="ids-error">{form.errors.ids}</p>{/if}</div>
       <div class="field"><label>Character description <textarea name="description" maxlength="5000" aria-invalid={!!form?.errors?.description} aria-describedby={form?.errors?.description ? 'description-error' : undefined}>{form?.values?.description ?? ''}</textarea></label>{#if form?.errors?.description}<p class="field-error" id="description-error">{form.errors.description}</p>{/if}</div>
     </section>
+    <p>A browser cookie links your contributions for 365 days. The stored attribution remains after the cookie expires or is deleted.</p>
     <section class="panel" aria-labelledby="related-heading">
       <h2 id="related-heading">Related characters</h2>
       <p>Compare up to 10 characters.</p>

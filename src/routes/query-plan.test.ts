@@ -53,7 +53,7 @@ describe('public query plans', () => {
         return entry.isDirectory() ? routes(join(dir, entry.name), path) : /^\+(?:page\.server|layout\.server|server)\.[jt]s$/.test(entry.name) ? [path] : []
       })
     }
-    expect(routes(new URL('.', import.meta.url).pathname).sort()).toEqual(['+page.server.ts', 'entry/[id]/+page.server.ts', 'entry/[id]/edit/+page.server.ts', 'entry/[id]/history/+page.server.ts', 'new/+page.server.ts'].sort())
+    expect(routes(new URL('.', import.meta.url).pathname).sort()).toEqual(['+layout.server.ts', '+page.server.ts', 'auth/callback/+server.ts', 'auth/prepare/+server.ts', 'auth/sign-in/+server.ts', 'auth/sign-out/+server.ts', 'entry/[id]/+page.server.ts', 'entry/[id]/edit/+page.server.ts', 'entry/[id]/history/+page.server.ts', 'new/+page.server.ts'].sort())
   })
   test('list uses the visible index for cursor and descending order', async () => {
     const db = database()
