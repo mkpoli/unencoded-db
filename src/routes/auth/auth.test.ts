@@ -16,7 +16,7 @@ afterEach(() => { globalThis.fetch = oldFetch })
 async function setup() {
   const sqlite = new Database(':memory:')
   sqlite.exec('PRAGMA foreign_keys = ON')
-  for (const file of ['0001_init.sql', '0002_entry_visibility.sql', '0003_attribution.sql', '0004_oidc.sql']) sqlite.exec(readFileSync(new URL(`../../../migrations/${file}`, import.meta.url), 'utf8'))
+  for (const file of ['0001_init.sql', '0002_entry_visibility.sql', '0003_related_characters.sql', '0004_attribution.sql', '0005_oidc.sql']) sqlite.exec(readFileSync(new URL(`../../../migrations/${file}`, import.meta.url), 'utf8'))
   const db = {
     prepare(sql: string) { return { bind(...args: any[]) {
       const execute = () => sqlite.prepare(sql).all(...args)
