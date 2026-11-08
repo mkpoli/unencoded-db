@@ -42,5 +42,20 @@
   "nav.add": "新增字",
   "nav.browse": "記錄",
   "nav.language": "語言",
-  "error.tooLarge": "上傳內容過大。"
+  "error.tooLarge": "上傳內容過大。",
+  "form.related": "相關文字",
+  "form.relatedIntro": "最多可比較10個字。",
+  "form.comparison": "比較{n}",
+  "form.addComparison": "新增比較",
+  "form.removeComparison": "刪除比較",
+  "field.comparisonCharacter": "文字",
+  "field.relationship": "關係",
+  "field.differences": "差異",
+  "field.comparisonEvidence": "依據",
+  "relationship.variant": "異體字",
+  "relationship.notVariant": "非異體字",
+  "relationship.similar": "相似",
+  "relationship.uncertain": "不確定",
+  "error.comparisonRow": "請填寫文字和關係，並檢查各欄位的長度。",
+  "error.relatedTooMany": "請將比較減少到10筆以內。"
 }

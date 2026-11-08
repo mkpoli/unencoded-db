@@ -42,5 +42,20 @@
   "nav.add": "添加字",
   "nav.browse": "记录",
   "nav.language": "语言",
-  "error.tooLarge": "上传内容过大。"
+  "error.tooLarge": "上传内容过大。",
+  "form.related": "相关文字",
+  "form.relatedIntro": "最多可比较10个字。",
+  "form.comparison": "比较{n}",
+  "form.addComparison": "添加比较",
+  "form.removeComparison": "删除比较",
+  "field.comparisonCharacter": "文字",
+  "field.relationship": "关系",
+  "field.differences": "差异",
+  "field.comparisonEvidence": "依据",
+  "relationship.variant": "异体字",
+  "relationship.notVariant": "非异体字",
+  "relationship.similar": "相似",
+  "relationship.uncertain": "不确定",
+  "error.comparisonRow": "请填写文字和关系，并检查各字段的长度。",
+  "error.relatedTooMany": "请将比较减少到10条以内。"
 }

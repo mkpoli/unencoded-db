@@ -1,8 +1,27 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
+  import { newComparison, relationshipLabel, removeComparison } from '$lib/comparison-rows'
   import { t, type Locale } from '$lib/i18n'
 
   type Values = Record<string, string>
-  let { form, data }: { form?: { errors?: Record<string, string>; values?: Values }; data: { locale: Locale } } = $props()
+  type Comparison = { character: string; relationship: string; differences: string; evidence: string }
+  type Form = {
+    errors?: Record<string, string>
+    values?: Values
+    comparisons?: { rows: Comparison[]; errors: boolean[]; tooMany: boolean }
+  }
+  let { form, data }: { form?: Form; data: { locale: Locale } } = $props()
+  let comparisons = $state<Comparison[]>(untrack(() => form?.comparisons?.rows ?? []))
+  let comparisonErrors = $state<boolean[]>(untrack(() => form?.comparisons?.errors ?? []))
+  function addComparison() {
+    comparisons.push(newComparison())
+    comparisonErrors.push(false)
+  }
+  function removeRow(index: number) {
+    const next = removeComparison(comparisons, comparisonErrors, index)
+    comparisons = next.rows
+    comparisonErrors = next.errors
+  }
 </script>
 
 <svelte:head><title>{t(data.locale, 'add.title')} · {t(data.locale, 'app.name')}</title></svelte:head>
@@ -48,6 +67,30 @@
       <div class="field"><label>{t(data.locale, 'field.script')} <input name="script" required maxlength="80" value={form?.values?.script ?? 'Han'} aria-invalid={!!form?.errors?.script} aria-describedby={form?.errors?.script ? 'script-error' : undefined} /></label>{#if form?.errors?.script}<p class="field-error" id="script-error">{form.errors.script}</p>{/if}</div>
       <div class="field"><label>{t(data.locale, 'field.ids')} <input name="ids" maxlength="200" value={form?.values?.ids ?? ''} aria-invalid={!!form?.errors?.ids} aria-describedby={form?.errors?.ids ? 'ids-error' : undefined} /></label>{#if form?.errors?.ids}<p class="field-error" id="ids-error">{form.errors.ids}</p>{/if}</div>
       <div class="field"><label>{t(data.locale, 'field.description')} <textarea name="description" maxlength="5000" aria-invalid={!!form?.errors?.description} aria-describedby={form?.errors?.description ? 'description-error' : undefined}>{form?.values?.description ?? ''}</textarea></label>{#if form?.errors?.description}<p class="field-error" id="description-error">{form.errors.description}</p>{/if}</div>
+    </section>
+    <section class="panel" aria-labelledby="related-heading">
+      <h2 id="related-heading">{t(data.locale, 'form.related')}</h2>
+      <p>{t(data.locale, 'form.relatedIntro')}</p>
+      {#if comparisons.length > 10}<p class="field-error" role="alert">{t(data.locale, 'error.relatedTooMany')}</p>{/if}
+      {#each comparisons as comparison, i}
+        <fieldset class="comparison">
+          <legend>{t(data.locale, 'form.comparison', { n: i + 1 })}</legend>
+          {#if comparisonErrors[i]}<p class="field-error" role="alert">{t(data.locale, 'error.comparisonRow')}</p>{/if}
+          <div class="comparison-fields">
+            <div class="field"><label>{t(data.locale, 'field.comparisonCharacter')} <input name="comparison_character" required maxlength="200" bind:value={comparison.character} /></label></div>
+            <div class="field"><label>{t(data.locale, 'field.relationship')} <select name="comparison_relationship" bind:value={comparison.relationship}>
+              <option value="variant">{relationshipLabel(data.locale, 'variant')}</option>
+              <option value="not_variant">{relationshipLabel(data.locale, 'not_variant')}</option>
+              <option value="similar">{relationshipLabel(data.locale, 'similar')}</option>
+              <option value="uncertain">{relationshipLabel(data.locale, 'uncertain')}</option>
+            </select></label></div>
+            <div class="field"><label>{t(data.locale, 'field.differences')} <textarea name="comparison_differences" maxlength="2000" bind:value={comparison.differences}></textarea></label></div>
+            <div class="field"><label>{t(data.locale, 'field.comparisonEvidence')} <textarea name="comparison_evidence" maxlength="2000" bind:value={comparison.evidence}></textarea></label></div>
+            <button class="secondary" type="button" onclick={() => removeRow(i)}>{t(data.locale, 'form.removeComparison')}</button>
+          </div>
+        </fieldset>
+      {/each}
+      <button class="secondary" type="button" disabled={comparisons.length >= 10} onclick={addComparison}>{t(data.locale, 'form.addComparison')}</button>
     </section>
     <button type="submit">{t(data.locale, 'form.save')}</button>
   </form>

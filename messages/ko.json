@@ -42,5 +42,20 @@
   "nav.add": "문자 추가",
   "nav.browse": "기록",
   "nav.language": "언어",
-  "error.tooLarge": "업로드가 너무 큽니다."
+  "error.tooLarge": "업로드가 너무 큽니다.",
+  "form.related": "관련 문자",
+  "form.relatedIntro": "최대 10개까지 비교할 수 있습니다.",
+  "form.comparison": "비교 {n}",
+  "form.addComparison": "비교 추가",
+  "form.removeComparison": "비교 삭제",
+  "field.comparisonCharacter": "문자",
+  "field.relationship": "관계",
+  "field.differences": "차이",
+  "field.comparisonEvidence": "근거",
+  "relationship.variant": "이체자",
+  "relationship.notVariant": "이체자 아님",
+  "relationship.similar": "유사",
+  "relationship.uncertain": "불확실",
+  "error.comparisonRow": "문자와 관계를 입력하고 각 항목의 길이를 확인하세요.",
+  "error.relatedTooMany": "비교를 10개 이하로 줄이세요."
 }

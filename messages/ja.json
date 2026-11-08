@@ -42,5 +42,20 @@
   "nav.add": "文字を追加",
   "nav.browse": "記録一覧",
   "nav.language": "言語",
-  "error.tooLarge": "アップロードが大きすぎます。"
+  "error.tooLarge": "アップロードが大きすぎます。",
+  "form.related": "関連する文字",
+  "form.relatedIntro": "最大10文字まで比較できます。",
+  "form.comparison": "比較{n}",
+  "form.addComparison": "比較を追加",
+  "form.removeComparison": "比較を削除",
+  "field.comparisonCharacter": "文字",
+  "field.relationship": "関係",
+  "field.differences": "相違点",
+  "field.comparisonEvidence": "根拠",
+  "relationship.variant": "異体字",
+  "relationship.notVariant": "異体字ではない",
+  "relationship.similar": "類似",
+  "relationship.uncertain": "不明",
+  "error.comparisonRow": "文字と関係を入力し、各項目の長さを確認してください。",
+  "error.relatedTooMany": "比較を10件以下にしてください。"
 }

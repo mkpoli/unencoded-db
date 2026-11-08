@@ -2,6 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit'
 import { fields, readEvidence } from '$lib/server/evidence'
 import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, type ImageError } from '$lib/server/images'
 import { isLocale, localizedHref, t, type Locale } from '$lib/i18n'
+import { readComparisons } from '$lib/server/related'
 import type { Actions } from './$types'
 
 function imageError(locale: Locale, error: ImageError): string {
@@ -55,8 +56,9 @@ export const actions: Actions = {
     const source = await readSourceImage(form)
     if (source.error) errors.image = imageError(locale, source.error)
     const row = readEvidence(form)
-    const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values })
-    if (!row || source.error || Object.keys(errors).length) return failForm(400, errors)
+    const comparisons = readComparisons(form)
+    const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values, comparisons })
+    if (!row || source.error || Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) return failForm(400, errors)
     if (!source.image) return failForm(400, { image: t(locale, 'error.imageMissing') })
     const image = source.image
 
@@ -70,8 +72,8 @@ export const actions: Actions = {
     let result: { id: number } | null = null
     try {
       result = await platform.env.DB.prepare(
-        `INSERT INTO entries (${fields.join(', ')}, image_key, image_type, image_size, created_at) VALUES (${fields.map(() => '?').join(', ')}, ?, ?, ?, ?) RETURNING id`
-      ).bind(...fields.map(name => row[name]), key, image.type, image.size, new Date().toISOString()).first<{ id: number }>()
+        `INSERT INTO entries (${fields.join(', ')}, image_key, image_type, image_size, created_at, comparisons) VALUES (${fields.map(() => '?').join(', ')}, ?, ?, ?, ?, ?) RETURNING id`
+      ).bind(...fields.map(name => row[name]), key, image.type, image.size, new Date().toISOString(), JSON.stringify(comparisons.rows)).first<{ id: number }>()
     } catch {
       // A transport error can arrive before or after the insert commits.
       // Recover the row when it is visible and otherwise keep the object: a

@@ -92,6 +92,9 @@ describe('localized pages', () => {
     expect(body).toContain('accept="image/jpeg,image/png,image/webp"')
     expect(body).not.toContain('name="url"')
     expect(body).not.toContain('HTTP或HTTPS網址')
+    expect(body).toContain('相關文字')
+    expect(body).toContain('最多可比較10個字。')
+    expect(body).toContain('新增比較')
     expect(body).toContain('>儲存</button>')
   })
 
@@ -100,6 +103,7 @@ describe('localized pages', () => {
       data: {
         locale: 'ko',
         entry: { id: 9, script: 'Han', ids: '⿰木木', description: null, place: '서울', title: null, author: null, publisher: null, year: null, page: null, note: null, created_at: '2026-11-08T05:00:00.000Z', has_image: 1 },
+        comparisons: [{ character: '漢', relationship: 'variant', differences: '획 하나 차이', evidence: '4쪽' }],
       },
     })
     expect(head).toContain('기록 9 · 진자집람')
@@ -109,6 +113,10 @@ describe('localized pages', () => {
     expect(body).toContain('표의 문자 구성 설명(IDS)')
     expect(body).toContain('발견한 곳')
     expect(body).toContain('추가일')
+    expect(body).toContain('관련 문자')
+    expect(body).toContain('이체자')
+    expect(body).toContain('획 하나 차이')
+    expect(body).toContain('4쪽')
     expect(body).not.toContain('https://example.org/source')
   })
 

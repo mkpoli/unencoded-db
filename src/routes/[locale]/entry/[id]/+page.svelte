@@ -1,9 +1,12 @@
 <script lang="ts">
+  import { relationshipLabel } from '$lib/comparison-rows'
   import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
 
+  type Comparison = { character: string; relationship: string; differences: string; evidence: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
-  let { data }: { data: { locale: Locale; entry: Entry } } = $props()
+  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[] } } = $props()
   let entry = $derived(data.entry)
+  let comparisons = $derived(data.comparisons)
 </script>
 
 <svelte:head><title>{t(data.locale, 'entry.record', { id: entry.id })} · {t(data.locale, 'app.name')}</title></svelte:head>
@@ -27,3 +30,18 @@
   {#if entry.note}<dt>{t(data.locale, 'field.note')}</dt><dd>{entry.note}</dd>{/if}
   <dt>{t(data.locale, 'entry.added')}</dt><dd>{formatDate(data.locale, entry.created_at)}</dd>
 </dl>
+{#if comparisons.length}
+  <section aria-labelledby="comparisons-heading">
+    <h2 id="comparisons-heading">{t(data.locale, 'form.related')}</h2>
+    {#each comparisons as comparison}
+      <div class="panel">
+        <h3>{comparison.character}</h3>
+        <dl>
+          <dt>{t(data.locale, 'field.relationship')}</dt><dd>{relationshipLabel(data.locale, comparison.relationship)}</dd>
+          {#if comparison.differences}<dt>{t(data.locale, 'field.differences')}</dt><dd>{comparison.differences}</dd>{/if}
+          {#if comparison.evidence}<dt>{t(data.locale, 'field.comparisonEvidence')}</dt><dd>{comparison.evidence}</dd>{/if}
+        </dl>
+      </div>
+    {/each}
+  </section>
+{/if}

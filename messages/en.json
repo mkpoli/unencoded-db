@@ -42,5 +42,20 @@
   "nav.add": "Add a character",
   "nav.browse": "Records",
   "nav.language": "Language",
-  "error.tooLarge": "The upload is too large."
+  "error.tooLarge": "The upload is too large.",
+  "form.related": "Related characters",
+  "form.relatedIntro": "Compare up to 10 characters.",
+  "form.comparison": "Comparison {n}",
+  "form.addComparison": "Add comparison",
+  "form.removeComparison": "Remove comparison",
+  "field.comparisonCharacter": "Character",
+  "field.relationship": "Relationship",
+  "field.differences": "Differences",
+  "field.comparisonEvidence": "Evidence",
+  "relationship.variant": "Variant",
+  "relationship.notVariant": "Not a variant",
+  "relationship.similar": "Similar",
+  "relationship.uncertain": "Uncertain",
+  "error.comparisonRow": "Enter a character and a valid relationship; check field lengths.",
+  "error.relatedTooMany": "Remove comparisons until there are at most 10."
 }

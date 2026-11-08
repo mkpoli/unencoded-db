@@ -42,5 +42,20 @@
   "nav.add": "Thêm chữ",
   "nav.browse": "Danh mục",
   "nav.language": "Ngôn ngữ",
-  "error.tooLarge": "Nội dung tải lên quá lớn."
+  "error.tooLarge": "Nội dung tải lên quá lớn.",
+  "form.related": "Chữ liên quan",
+  "form.relatedIntro": "So sánh tối đa 10 chữ.",
+  "form.comparison": "So sánh {n}",
+  "form.addComparison": "Thêm so sánh",
+  "form.removeComparison": "Xóa so sánh",
+  "field.comparisonCharacter": "Chữ",
+  "field.relationship": "Quan hệ",
+  "field.differences": "Khác biệt",
+  "field.comparisonEvidence": "Dẫn chứng",
+  "relationship.variant": "Dị thể",
+  "relationship.notVariant": "Không phải dị thể",
+  "relationship.similar": "Tương tự",
+  "relationship.uncertain": "Chưa rõ",
+  "error.comparisonRow": "Nhập chữ và quan hệ, rồi kiểm tra độ dài từng mục.",
+  "error.relatedTooMany": "Giảm số so sánh xuống tối đa 10."
 }
