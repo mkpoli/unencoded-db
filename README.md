@@ -1,6 +1,20 @@
 # 珍字集覽
 
-A collection of evidence for unencoded characters and unifiable variants. Anyone can create a record with a source URL and view the collection.
+A community evidence wiki for characters and glyphs. Anyone can create a record with a source image and view the collection.
+
+A record keeps a character or glyph as a person encountered it, with a source image and optional IDS. The collection gathers them in one place for discovering and sharing new characters, and keeps the evidence for analysis and IRG suggestions.
+
+## Names
+
+| Language | Name | Tagline |
+| --- | --- | --- |
+| English | Rare Character Compendium | A community evidence wiki for characters and glyphs |
+| Japanese | 珍字集覧 | 文字と字形の証拠を集めるコミュニティウィキ |
+| Simplified Chinese | 珍字集览 | 收集文字与字形证据的社区维基 |
+| Traditional Chinese | 珍字集覽 | 收集文字與字形證據的社群維基 |
+| Korean | 진자집람 | 문자와 글리프의 증거를 모으는 커뮤니티 위키 |
+| Vietnamese | Tuyển tập chữ quý | Wiki cộng đồng thu thập bằng chứng về chữ và glyph |
+
 
 ## Local development
 
@@ -25,6 +39,14 @@ The Cloudflare configuration contains a placeholder D1 ID. Provision a database 
 Production requires requests to reach the Worker through Cloudflare, which supplies `CF-Connecting-IP` and request `cf` metadata. For same-zone Worker subrequests, `CF-Connecting-IP` reflects `x-real-ip`, which the calling Worker can modify ([Cloudflare request headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/#cf-connecting-ip)). Do not expose an alternate origin that accepts client-supplied forwarding headers or allow untrusted Workers to invoke this Worker as if they were end users. For local Wrangler development only, set `LOCAL_RATE_LIMIT=true` in a local `.dev.vars` file and bind Wrangler to loopback. Local requests must use a loopback URL and address, and share one limiter key. Never set this variable in a deployed environment or expose the local server to a network. Wrangler's local limiter is a development simulation.
 
 The application uses IPv4 addresses and IPv6 /64 prefixes as limiter keys; IPv4-mapped IPv6 addresses return 503. It sends a SHA-256 digest of the key and does not store or log the IP. The digest is pseudonymous, not anonymous: IP addresses can be guessed. [Cloudflare's rate-limit binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) maintains local, eventually consistent counters at each Cloudflare location. They are not a global quota or comprehensive abuse prevention; users sharing an IPv4 address or IPv6 /64 prefix share a limit.
+
+## Visibility
+
+Apply the D1 migrations before serving code that reads visibility. Drain old application instances before hiding entries, since older readers do not filter them. Hiding an entry cannot retract responses already in flight or content already loaded or cached by a client.
+
+## Continuous integration
+
+GitHub Actions runs `bun install --frozen-lockfile` and `bun run build` for pull requests and pushes to `main`.
 
 ## Limitations
 
