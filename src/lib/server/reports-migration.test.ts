@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Database } from 'bun:sqlite'
-import { auditRows, entryVisible, insertEntry, insertReport, reportRows, testDatabase } from './test-db'
+import { createTestDatabase as testDatabase, entryVisible, insertEntry, insertReport, moderationAuditRows as auditRows, reportRows } from '../../test-support'
 
 function audit(db: Database, entryId: number, action: 'hide' | 'restore', createdAt = '2026-02-03T04:05:06.000Z') {
   return db

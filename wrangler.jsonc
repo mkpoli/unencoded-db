@@ -7,6 +7,7 @@
   "assets": { "binding": "ASSETS", "directory": ".svelte-kit/cloudflare" },
   "routes": [{ "pattern": "rare.glyphatlas.org", "custom_domain": true }],
   "d1_databases": [{ "binding": "DB", "database_name": "unencoded-db", "database_id": "5eb47628-085d-4a4f-a506-b927ed331de4", "migrations_dir": "migrations" }],
+  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "unencoded-db-images" }],
   "ratelimits": [
     {
       "name": "REPORT_RATE_LIMIT",

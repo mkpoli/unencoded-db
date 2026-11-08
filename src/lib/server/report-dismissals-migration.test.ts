@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import type { Database } from 'bun:sqlite'
 import {
+  createTestDatabase as testDatabase,
   dismissalRows,
   entryVisible,
   insertDismissal,
   insertEntry,
   insertReport,
   reportRows,
-  testDatabase,
-} from './test-db'
+} from '../../test-support'
 
 const MODERATOR = 'mod@example.com'
 const DISMISSED_AT = '2026-02-03T04:05:06.000Z'

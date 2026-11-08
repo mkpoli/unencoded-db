@@ -222,7 +222,7 @@ describe('local rate limit simulation', () => {
 })
 
 describe('report route matching', () => {
-  function event(method: string, path: string, routeId: string | null = '/entry/[id]/report') {
+  function event(method: string, path: string, routeId: string | null = '/[locale]/entry/[id]/report') {
     return {
       request: new Request(`https://example.test${path}`, { method }),
       route: { id: routeId },
@@ -231,21 +231,23 @@ describe('report route matching', () => {
   }
 
   test('matches only POSTs resolved to the report route on a report path', () => {
-    expect(isReportRequest(event('POST', '/entry/1/report') as any)).toBe(true)
-    expect(isReportRequest(event('POST', '/entry/%31/report') as any)).toBe(true)
-    expect(isReportRequest(event('POST', '/entry/1/report/') as any)).toBe(true)
-    expect(isReportRequest(event('POST', '/entry/1/reportx') as any)).toBe(false)
-    expect(isReportRequest(event('POST', '/entry/1/report', '/entry/[id]') as any)).toBe(false)
-    expect(isReportRequest(event('POST', '/entry/1/report', null) as any)).toBe(false)
-    expect(isReportRequest(event('GET', '/entry/1/report') as any)).toBe(false)
+    expect(isReportRequest(event('POST', '/en/entry/1/report') as any)).toBe(true)
+    expect(isReportRequest(event('POST', '/ja/entry/%31/report') as any)).toBe(true)
+    expect(isReportRequest(event('POST', '/zh-Hant/entry/1/report/') as any)).toBe(true)
+    expect(isReportRequest(event('POST', '/en/entry/1/reportx') as any)).toBe(false)
+    expect(isReportRequest(event('POST', '/en/entry/1/report', '/[locale]/entry/[id]') as any)).toBe(false)
+    expect(isReportRequest(event('POST', '/en/entry/1/report', null) as any)).toBe(false)
+    expect(isReportRequest(event('GET', '/en/entry/1/report') as any)).toBe(false)
   })
 
-  test('decodes the pathname before matching', () => {
-    expect(isReportPath('/entry/%31/report')).toBe(true)
-    expect(isReportPath('/entry/1/%72eport')).toBe(true)
-    expect(isReportPath('/entry/1/reportx')).toBe(false)
+  test('keeps locale prefixes and decodes the pathname before matching', () => {
+    expect(isReportPath('/en/entry/1/report')).toBe(true)
+    expect(isReportPath('/zh-Hant/entry/%31/report')).toBe(true)
+    expect(isReportPath('/ja/entry/1/%72eport')).toBe(true)
+    expect(isReportPath('/en/entry/1/reportx')).toBe(false)
     expect(isReportPath('/moderate/1/report')).toBe(false)
+    expect(isReportPath('/fr/entry/1/report')).toBe(false)
     // A malformed escape stays guarded when the raw path already looks like a report path.
-    expect(isReportPath('/entry/%ZZ/report')).toBe(true)
+    expect(isReportPath('/en/entry/%ZZ/report')).toBe(true)
   })
 })
