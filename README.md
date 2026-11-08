@@ -64,7 +64,7 @@ bun run build
 
 ## Images
 
-- One image per new record. Rows migrated from `0001` remain image-less. There is no editing or replacement flow.
+- One image per new record. Rows migrated from `0001` remain image-less. There is no image editing or replacement flow.
 - JPEG, PNG and WebP are accepted, identified by magic bytes. SVG, HTML, empty and unrecognised files are rejected.
 - The maximum file size is 8 MiB.
 - Bytes live in R2; content type and size live in D1.
@@ -73,6 +73,18 @@ bun run build
 - Image responses use the stored content type, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, so hiding takes effect on the next request. Missing, hidden and invalid-locale images also return an uncached 404.
 - Images are stripped of common metadata on upload: JPEG EXIF, XMP, IPTC and comments before the image scan, PNG text, tIME and EXIF chunks, and WebP EXIF/XMP chunks. JPEG EXIF orientation is kept; ICC colour profiles and pixel content are stored as uploaded. Image metadata is not preserved for attribution, so record credit in the bibliographic fields.
 
+
+## Contribution rate limit
+
+Creating a record is limited to five POST requests per IPv4 address or IPv6 /64 prefix per 60 seconds at each Cloudflare location. The `CONTRIBUTION_RATE_LIMIT` binding holds this limit; configure it separately for every named environment and choose a namespace ID unique to the limiter within the account. Counters are local to each location, eventually consistent and approximate: shared networks share a limit, and distributed clients can exceed it. This is not a global quota or a substitute for moderation.
+
+The limiter runs before the request body is read on `POST /{locale}/new`. An exhausted limit returns 429 with `Retry-After: 60`. A missing or unavailable binding, or a missing or malformed client address, returns 503. With JavaScript the form keeps its contents and shows a localized notice; without JavaScript the browser shows a localized error page and the submitted fields are not restored. Oversized requests return 413 after the limiter allows them and also do not preserve the form.
+
+Production requests must reach the Worker through Cloudflare, which supplies `CF-Connecting-IP` and request `cf` metadata. For same-zone Worker subrequests, `CF-Connecting-IP` reflects `x-real-ip`, which the calling Worker can modify ([Cloudflare request headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/#cf-connecting-ip)). Do not expose an alternate origin that accepts client-supplied forwarding headers or allow untrusted Workers to invoke this Worker as end users.
+
+The limiter key is the IPv4 address or the IPv6 /64 prefix; IPv4-mapped IPv6 addresses return 503. The Worker sends a SHA-256 digest and does not store or log the address. The digest is pseudonymous, not anonymous: addresses can be guessed. [Cloudflare's rate-limit binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/) keeps local, eventually consistent counters at each location.
+
+For local Wrangler development only, set `LOCAL_RATE_LIMIT=true` in `.dev.vars` and bind Wrangler to loopback. Local requests must use a loopback URL and address and share one limiter key. Never set this variable in a deployed environment or expose the local server to a network. Wrangler's local limiter is a development simulation.
 
 ## Glyph Atlas sign-in
 
@@ -108,7 +120,7 @@ bunx wrangler d1 migrations apply DB --remote
 
 Migration `0001` creates the base table. Migration `0002` adds `visible` and the `entries_visible_id` index. Migration `0003` adds related comparisons. Migration `0004` adds anonymous attribution. Migration `0005` adds OIDC identities and session rotation. Migration `0006` rebuilds `entries`, preserves `visible`, comparisons, attribution and the id high-water mark, recreates `entries_visible_id`, adds a unique partial `entries_image_key` index, removes the source URL column and adds `image_key`, `image_type` and `image_size`. Existing rows keep their ids and text fields; existing source URLs are dropped. Migration `0007` adds the `revision` column and `entry_revisions` with the backfill, snapshot and immutability triggers. Migration `0008` adds `edit_generation` and advances it on every visibility change.
 
-The Cloudflare configuration names the production D1 database and an R2 bucket. Configure real bindings for a separate environment.
+The Cloudflare configuration names the production D1 database and an R2 bucket. Configure real bindings for a separate environment, including `CONTRIBUTION_RATE_LIMIT` for each deployed environment.
 
 ## Storage gaps
 
@@ -126,9 +138,9 @@ GitHub Actions runs `bun install --frozen-lockfile` and `bun run build` for pull
 
 ## Limitations
 
-This is a local prototype without moderation, abuse prevention, rate limiting or deletion. Editing is anonymous and has no rate limit. Pagination lists 20 records at a time. Provider availability and the permitted endpoint layout have not been verified against a live Glyph Atlas deployment. Discovery and keys are fetched on each sign-in; each provider request has a five-second deadline and a 128 KiB response limit. The provider controls the identity assertions it issues.
+This is a local prototype without moderation, abuse prevention or deletion. Editing is anonymous and has no rate limit; creating a record is limited per client address as described above. Pagination lists 20 records at a time. Provider availability and the permitted endpoint layout have not been verified against a live Glyph Atlas deployment. Discovery and keys are fetched on each sign-in; each provider request has a five-second deadline and a 128 KiB response limit. The provider controls the identity assertions it issues.
 
-Sessions expire after 365 days. Clearing an anonymous cookie loses its link to future contributions. Simultaneous first submissions or sign-in preparations can create separate anonymous identities, with only one cookie retained by the browser. If concurrent preparations establish different session families, signing out of one family cannot revoke an in-flight callback bound to the other; avoid concurrent preparation tabs. Expired flows and revoked sessions are not cleaned up automatically. Attribution merges are stored as person mappings; a future contributor-facing view must resolve them. Rate limiting and storage retention need operational policy before public use.
+Sessions expire after 365 days. Clearing an anonymous cookie loses its link to future contributions. Simultaneous first submissions or sign-in preparations can create separate anonymous identities, with only one cookie retained by the browser. If concurrent preparations establish different session families, signing out of one family cannot revoke an in-flight callback bound to the other; avoid concurrent preparation tabs. Expired flows and revoked sessions are not cleaned up automatically. Attribution merges are stored as person mappings; a future contributor-facing view must resolve them. Storage retention needs operational policy before public use.
 
 **Public launch is blocked:** editing out sensitive text leaves it in public history. Hiding an entry conceals its history, but restoring the entry republishes every snapshot. Immutable triggers prevent selective deletion or alteration of snapshots; a separately reviewed redaction feature is required before launch.
 
