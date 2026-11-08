@@ -36,9 +36,13 @@ bun run build
 
 The Cloudflare configuration contains a placeholder D1 ID. Provision a database and configure its binding before using a separate environment.
 
+## Visibility
+
+Apply the D1 migrations before serving code that reads visibility. Drain old application instances before hiding entries, since older readers do not filter them. Hiding an entry cannot retract responses already in flight or content already loaded or cached by a client.
+
 ## Continuous integration
 
-GitHub Actions runs `bun install --frozen-lockfile`, `bun run test`, `bun run check` and `bun run build` for pull requests and pushes to `main`.
+GitHub Actions runs `bun install --frozen-lockfile` and `bun run build` for pull requests and pushes to `main`.
 
 ## Limitations
 
