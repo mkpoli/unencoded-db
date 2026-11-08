@@ -5,5 +5,6 @@
   "compatibility_date": "2026-10-30",
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "binding": "ASSETS", "directory": ".svelte-kit/cloudflare" },
+  "routes": [{ "pattern": "rare.glyphatlas.org", "custom_domain": true }],
   "d1_databases": [{ "binding": "DB", "database_name": "unencoded-db", "database_id": "5eb47628-085d-4a4f-a506-b927ed331de4", "migrations_dir": "migrations" }]
 }
