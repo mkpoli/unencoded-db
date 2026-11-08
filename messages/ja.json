@@ -70,6 +70,7 @@
   "form.save": "保存",
   "history.older": "さらに前の版",
   "history.recorded": "記録日時",
+  "history.redacted": "この版の内容は削除されました。",
   "history.revision": "第{n}版",
   "nav.add": "文字を追加",
   "nav.browse": "記録一覧",

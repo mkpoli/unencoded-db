@@ -179,7 +179,7 @@ describe('localized pages', () => {
         id: 9,
         next: 2,
         revisions: [
-          { revision: 3, script: 'Han', ids: null, description: null, place: '书', title: '题名', author: null, publisher: null, year: null, page: null, note: null, recorded_at: '2026-11-08T05:00:00.000Z' },
+          { entry_id: 9, revision: 3, tombstone: false, script: 'Han', ids: null, description: null, place: '书', title: '题名', author: null, publisher: null, year: null, page: null, note: null, recorded_at: '2026-11-08T05:00:00.000Z' },
         ],
       },
     })
@@ -191,6 +191,24 @@ describe('localized pages', () => {
     expect(body).toContain('2026')
     expect(body).toContain('href="?before=2"')
     expect(body).toContain('更早的版本')
+  })
+
+  test('history page shows a localized marker instead of redacted content', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/history/+page.svelte', 'history-redacted', {
+      data: {
+        locale: 'ja',
+        id: 9,
+        next: null,
+        revisions: [
+          { entry_id: 9, revision: 4, recorded_at: '2026-11-08T05:00:00.000Z', tombstone: true },
+          { entry_id: 9, revision: 3, tombstone: false, script: 'Han', ids: null, description: null, place: '本書', title: null, author: null, publisher: null, year: null, page: null, note: null, recorded_at: '2026-11-08T04:00:00.000Z' },
+        ],
+      },
+    })
+    expect(body).toContain('第4版')
+    expect(body).toContain('この版の内容は削除されました。')
+    expect(body).toContain('第3版')
+    expect(body).toContain('本書')
   })
 
   test('error page renders the localized not-found message and home link', async () => {

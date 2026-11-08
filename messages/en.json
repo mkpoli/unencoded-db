@@ -70,6 +70,7 @@
   "form.save": "Save",
   "history.older": "Older revisions",
   "history.recorded": "Recorded",
+  "history.redacted": "Revision redacted.",
   "history.revision": "Revision {n}",
   "nav.add": "Add a character",
   "nav.browse": "Records",

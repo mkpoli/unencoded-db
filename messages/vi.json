@@ -70,6 +70,7 @@
   "form.save": "Lưu",
   "history.older": "Các bản cũ hơn",
   "history.recorded": "Thời điểm ghi",
+  "history.redacted": "Nội dung của bản này đã bị xoá.",
   "history.revision": "Bản {n}",
   "nav.add": "Thêm chữ",
   "nav.browse": "Danh mục",

@@ -1,6 +1,9 @@
 import { Database } from 'bun:sqlite'
 import { describe, expect, test } from 'bun:test'
+import { writeFileSync, unlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { applyMigration } from '../test-support'
+import { redactRevision } from '../lib/server/revision-redaction'
 import { actions, load as editLoad } from './[locale]/entry/[id]/edit/+page.server'
 import { load as history } from './[locale]/entry/[id]/history/+page.server'
 
@@ -15,6 +18,7 @@ function dbSetup() {
   applyMigration(db, '0006_source_images.sql')
   applyMigration(db, '0007_revisions.sql')
   applyMigration(db, '0008_edit_generation.sql')
+  applyMigration(db, '0009_revision_redaction.sql')
   return db
 }
 function binding(db: Database) {
@@ -29,6 +33,99 @@ function event(db: Database, values: Record<string, string> = {}) {
 }
 
 describe('revisions', () => {
+  test('revision schema covers every content column', () => {
+    const db = dbSetup()
+    try {
+      const columns = db.query("SELECT name FROM pragma_table_info('entry_revisions')").all().map((row: any) => row.name)
+      expect(columns).toEqual(['entry_id', 'revision', 'script', 'ids', 'description', 'place', 'title', 'author', 'publisher', 'year', 'page', 'note', 'recorded_at', 'tombstone'])
+    } finally { db.close() }
+  })
+  test('edit and redaction serialize across database connections', async () => {
+    const initial = dbSetup()
+    const path = `${tmpdir()}/concurrency-test-${crypto.randomUUID()}.sqlite`
+    writeFileSync(path, initial.serialize())
+    initial.close()
+    const editor = new Database(path)
+    const redactor = new Database(path)
+    try {
+      const api = binding(redactor) as any
+      // Redaction first cannot remove the current revision.
+      await expect(redactRevision(api, 1, 1)).rejects.toThrow()
+      editor.exec('BEGIN IMMEDIATE')
+      editor.exec("UPDATE entries SET script='edited', revision=revision+1 WHERE id=1")
+      // The open write transaction blocks redaction, and its uncommitted edit stays invisible.
+      await expect(redactRevision(api, 1, 1)).rejects.toThrow()
+      expect(redactor.query('SELECT tombstone FROM entry_revisions WHERE revision=1').get()).toEqual({ tombstone: 0 })
+      expect(redactor.query('SELECT count(*) AS n FROM revision_redaction_audit').get()).toEqual({ n: 0 })
+      editor.exec('COMMIT')
+      expect(await redactRevision(api, 1, 1)).toBe(true)
+      await expect(redactRevision(api, 1, 2)).rejects.toThrow()
+      expect(redactor.query('SELECT revision, tombstone FROM entry_revisions ORDER BY revision').all()).toEqual([
+        { revision: 1, tombstone: 1 }, { revision: 2, tombstone: 0 }
+      ])
+    } finally { editor.close(); redactor.close(); unlinkSync(path) }
+  })
+  test('redaction guard, audit rollback, and projection', async () => {
+    const db = dbSetup()
+    try {
+      const api = binding(db) as any
+      const scrub = "script='', ids=NULL, description=NULL, place='', title=NULL, author=NULL, publisher=NULL, year=NULL, page=NULL, note=NULL, tombstone=1"
+      // A current snapshot remains protected; an edit makes the old snapshot eligible.
+      await expect(redactRevision(api, 1, 1)).rejects.toThrow()
+      db.exec("UPDATE entries SET script='current', revision=revision+1 WHERE id=1")
+      // An audit row cannot be pre-seeded for a revision that is not redacted.
+      expect(() => db.exec("INSERT INTO revision_redaction_audit (entry_id, revision, redacted_at) VALUES (1, 1, 'forged')")).toThrow()
+      for (const alteration of [
+        "script='tampered'", 'tombstone=1', `${scrub}, title='leak'`, `${scrub}, recorded_at='changed'`,
+        `${scrub}, revision=3`, `${scrub}, entry_id=2`, `${scrub}, ids='leak'`, `${scrub}, description='leak'`,
+        `${scrub}, place='leak'`, `${scrub}, author='leak'`, `${scrub}, publisher='leak'`,
+        `${scrub}, year='leak'`, `${scrub}, page='leak'`, `${scrub}, note='leak'`, `${scrub}, script='leak'`
+      ]) expect(() => db.exec(`UPDATE entry_revisions SET ${alteration} WHERE entry_id=1 AND revision=1`)).toThrow()
+      expect(() => db.exec("INSERT INTO entry_revisions (entry_id, revision, script, place, recorded_at, tombstone) VALUES (1, 99, '', '', 'time', 1)")).toThrow()
+      expect(() => db.exec("INSERT INTO entry_revisions (entry_id, revision, script, place, recorded_at) VALUES (1, 50, 'forged', 'p', 't')")).toThrow()
+      expect(() => db.exec(`UPDATE OR REPLACE entry_revisions SET ${scrub}, revision=3 WHERE entry_id=1 AND revision=1`)).toThrow()
+      expect(() => db.exec("INSERT OR REPLACE INTO entry_revisions (entry_id, revision, script, place, recorded_at) VALUES (1, 1, 'x', 'x', 'time')")).toThrow()
+      expect(() => db.exec('DELETE FROM entry_revisions WHERE revision=1')).toThrow()
+      db.exec("CREATE TRIGGER fail_audit BEFORE INSERT ON revision_redaction_audit BEGIN SELECT RAISE(ABORT, 'audit failure'); END")
+      await expect(redactRevision(api, 1, 1)).rejects.toThrow()
+      expect(db.query('SELECT script, tombstone FROM entry_revisions WHERE revision=1').get()).toEqual({ script: 'old', tombstone: 0 })
+      db.exec('DROP TRIGGER fail_audit')
+      expect(await redactRevision(api, 1, 1)).toBe(true)
+      expect(await redactRevision(api, 1, 99)).toBe(false)
+      await expect(redactRevision(api, 1, 1)).rejects.toThrow()
+      expect(db.query('SELECT entry_id, revision FROM revision_redaction_audit').all()).toEqual([{ entry_id: 1, revision: 1 }])
+      expect(() => db.exec('DELETE FROM revision_redaction_audit')).toThrow()
+      expect(() => db.exec("UPDATE revision_redaction_audit SET redacted_at='x'")).toThrow()
+      expect(() => db.exec("INSERT OR REPLACE INTO revision_redaction_audit VALUES (1, 1, 'x')")).toThrow()
+      expect(() => db.exec("INSERT INTO revision_redaction_audit (entry_id, revision, redacted_at) VALUES (1, 99, 'x')")).toThrow()
+      const result = await history(event(db)) as any
+      expect(result.revisions[0].script).toBe('current')
+      expect(result.revisions[1]).toEqual({ entry_id: 1, revision: 1, recorded_at: '2026', tombstone: true })
+      expect(JSON.stringify(result.revisions[1])).not.toContain('script')
+      db.exec('UPDATE entries SET visible=0 WHERE id=1')
+      await expect(history(event(db))).rejects.toMatchObject({ status: 404 })
+      db.exec('UPDATE entries SET visible=1 WHERE id=1')
+      expect((await history(event(db)) as any).revisions[1].tombstone).toBe(true)
+    } finally { db.close() }
+  })
+  test('redaction fails closed for an orphan revision', async () => {
+    const orphan = new Database(':memory:')
+    try {
+      applyMigration(orphan, '0001_init.sql')
+      applyMigration(orphan, '0002_entry_visibility.sql')
+      orphan.exec("INSERT INTO entries (script,place,url,created_at) VALUES ('old','book','https://example.org','2026')")
+      applyMigration(orphan, '0003_related_characters.sql')
+      applyMigration(orphan, '0004_attribution.sql')
+      applyMigration(orphan, '0005_oidc.sql')
+      applyMigration(orphan, '0006_source_images.sql')
+      applyMigration(orphan, '0007_revisions.sql')
+      applyMigration(orphan, '0008_edit_generation.sql')
+      applyMigration(orphan, '0009_revision_redaction.sql')
+      orphan.exec("UPDATE entries SET script='new', revision=revision+1 WHERE id=1")
+      orphan.exec('DELETE FROM entries WHERE id=1')
+      await expect(redactRevision(binding(orphan) as any, 1, 1)).rejects.toThrow()
+    } finally { orphan.close() }
+  })
   test('backfills, snapshots atomically, rejects stale edits and hides every revision', async () => {
     const db = dbSetup()
     try {
@@ -42,7 +139,7 @@ describe('revisions', () => {
       expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 2 })
       expect(() => db.exec("UPDATE entry_revisions SET title = 'tamper'")).toThrow()
       expect(() => db.exec('DELETE FROM entry_revisions')).toThrow()
-      expect(() => db.exec("INSERT OR REPLACE INTO entry_revisions SELECT entry_id, revision, script, ids, description, place, title, author, publisher, year, page, note, recorded_at FROM entry_revisions WHERE revision = 1")).toThrow()
+      expect(() => db.exec("INSERT OR REPLACE INTO entry_revisions (entry_id, revision, script, ids, description, place, title, author, publisher, year, page, note, recorded_at) SELECT entry_id, revision, script, ids, description, place, title, author, publisher, year, page, note, recorded_at FROM entry_revisions WHERE revision = 1")).toThrow()
       expect(() => db.exec('UPDATE entries SET revision = 5 WHERE id = 1')).toThrow()
       db.exec('UPDATE entries SET visible = 0 WHERE id = 1')
       expect(() => db.exec("INSERT OR REPLACE INTO entries (id, revision, script, place, created_at) VALUES (1, 5, 'replacement', 'book', '2026')")).toThrow()

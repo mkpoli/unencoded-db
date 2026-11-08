@@ -70,6 +70,7 @@
   "form.save": "保存",
   "history.older": "更早的版本",
   "history.recorded": "记录时间",
+  "history.redacted": "此版本的内容已删除。",
   "history.revision": "第{n}版",
   "nav.add": "添加字",
   "nav.browse": "记录",

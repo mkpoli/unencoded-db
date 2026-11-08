@@ -171,6 +171,7 @@
 .related-card .entry-meta { padding: 0; border: 0; background: none; }
 .related-card .entry-row { border-top: 1px solid var(--line); }
 .revision-card { display: grid; gap: var(--space-2); }
+.revision-date { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 
 /* Form pages. */
 .form-page { max-width: var(--form-max); margin: 0 auto; }
