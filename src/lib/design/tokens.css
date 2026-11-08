@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/InterVariable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 /*
  * Design tokens for the Rare Character Compendium.
  *
@@ -23,6 +31,7 @@
 
   --line: light-dark(#e3e3e7, #2e2e35);
   --line-strong: light-dark(#a6a6ae, #646470);
+  --line-control: light-dark(#8a8a94, #6f6f7a);
   --line-hover: light-dark(#ceccd9, #666174);
 
   --accent: light-dark(#6356e5, #9c92ff);

@@ -2,7 +2,15 @@
   import { LOCALES, LOCALE_NAMES, switchLocaleHref, t, type Locale } from '$lib/i18n'
   let { locale, pathname, search = '' }: { locale: Locale; pathname: string; search?: string } = $props()
   let options: HTMLDetailsElement
+
+  function closeOnEscape(event: KeyboardEvent) {
+    if (event.key !== 'Escape' || !options?.open) return
+    options.open = false
+    options.querySelector('summary')?.focus()
+  }
 </script>
+
+<svelte:window onkeydown={closeOnEscape} />
 
 <details class="language-menu" bind:this={options}>
   <summary aria-label={`${t(locale, 'nav.language')}: ${LOCALE_NAMES[locale]}`}>{LOCALE_NAMES[locale]}</summary>

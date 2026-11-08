@@ -50,7 +50,7 @@
 
 /* Page furniture. */
 .page-heading { display: grid; gap: 8px; max-width: 700px; margin-bottom: 28px; }
-.page-heading p { color: var(--muted); font-size: 15px; }
+.page-heading p { max-width: 64ch; color: var(--muted); font-size: 15px; text-wrap: pretty; }
 .eyebrow {
   color: var(--muted);
   font-family: var(--font-mono);
@@ -173,7 +173,7 @@
 }
 .field { display: grid; gap: 6px; min-width: 0; }
 .field-label { color: var(--ink); font-size: var(--text-sm); font-weight: 550; }
-.field-help { color: var(--muted); font-size: var(--text-sm); line-height: 1.45; max-width: 62ch; }
+.field-help { color: var(--muted); font-size: var(--text-sm); line-height: 1.45; max-width: 62ch; text-wrap: pretty; }
 .field-error { color: var(--wrong); font-size: var(--text-sm); }
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 
@@ -191,7 +191,7 @@
 }
 
 .details {
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-control);
   border-radius: var(--radius-md);
   background: var(--surface-subtle);
 }
@@ -212,13 +212,17 @@
 
 /* A file field: one clickable surface, a preview once chosen, and the same native input underneath. */
 .file-field {
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-control);
   border-radius: var(--radius-md);
   background: var(--surface-subtle);
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 .file-field:hover { border-color: var(--line-strong); }
-.file-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+.file-field:focus-within {
+  border-color: var(--accent);
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 .file-field.dragging { border-color: var(--accent); background: var(--accent-hover); }
 .file-field.invalid { border-color: var(--wrong); }
 .file-empty {
@@ -245,15 +249,17 @@
 .file-browse {
   flex: none;
   padding: 7px 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-control);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--ink);
   font-size: var(--text-sm);
 }
 .file-empty:hover .file-browse { border-color: var(--line-strong); }
+.file-control { display: grid; gap: 6px; }
+.file-hint { margin: 0; }
 .file-selected { display: flex; align-items: center; gap: 14px; padding: 12px; }
-.file-actions { display: flex; align-items: center; gap: 14px; flex: none; }
+.file-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 .file-thumb {
   flex: none;
   width: 56px;
@@ -261,13 +267,24 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: #fff;
-  object-fit: cover;
+  object-fit: contain;
 }
-.file-replace { flex: none; color: var(--accent); font-size: var(--text-sm); cursor: pointer; }
+.file-replace {
+  flex: none;
+  min-height: 40px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .file-remove {
   flex: none;
-  min-height: 0;
-  padding: 4px 2px;
+  min-height: 40px;
+  padding: 0 4px;
   border: 0;
   background: none;
   color: var(--muted);
@@ -283,9 +300,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 34px;
-  padding: 6px 10px;
-  border: 1px solid var(--line);
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-control);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--ink);

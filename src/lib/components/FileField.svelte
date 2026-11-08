@@ -10,6 +10,7 @@
     remove,
     previewAlt,
     hint,
+    hintId = 'file-formats',
     describedBy,
     error = '',
   }: {
@@ -23,6 +24,7 @@
     remove: string
     previewAlt: string
     hint: string
+    hintId?: string
     describedBy?: string
     error?: string
   } = $props()
@@ -67,6 +69,7 @@
   }
 </script>
 
+<div class="file-control">
 <div class="file-field" class:invalid={!!error} class:dragging>
   <input
     {id}
@@ -95,7 +98,7 @@
         <small>{size(file.size)}</small>
       </span>
       <span class="file-actions">
-        <label class="file-replace" for={id}>{replace}</label>
+        <button class="file-replace" type="button" onclick={() => input?.click()}>{replace}</button>
         <button class="file-remove" type="button" onclick={clear}>{remove}</button>
       </span>
     </div>
@@ -112,9 +115,10 @@
       </span>
       <span class="file-copy">
         <strong>{choose}</strong>
-        <small>{hint}</small>
       </span>
       <span class="file-browse" aria-hidden="true">{browse}</span>
     </label>
   {/if}
+</div>
+<p class="field-help file-hint" id={hintId}>{hint}</p>
 </div>
