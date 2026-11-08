@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Database } from 'bun:sqlite'
-import { auditRows, entryVisible, insertEntry, testDatabase } from './test-db'
+import { createTestDatabase, entryVisible, insertEntry, moderationAuditRows as auditRows } from '../../test-support'
 
 function audit(db: Database, entryId: number, action: string, moderator = 'mod@example.com', createdAt = '2026-01-02T03:04:05.000Z') {
   return db.query('INSERT INTO moderation_audit (entry_id, action, moderator, created_at) VALUES (?, ?, ?, ?)').run(entryId, action, moderator, createdAt)
@@ -12,7 +12,7 @@ function auditCount(db: Database): number {
 
 describe('moderation migration', () => {
   test('hide and restore transition visibility and append audit rows', () => {
-    const db = testDatabase()
+    const db = createTestDatabase()
     try {
       const first = insertEntry(db, 1)
       const second = insertEntry(db, 1)
@@ -35,7 +35,7 @@ describe('moderation migration', () => {
   })
 
   test('rejects a second hide and a restore of a visible entry', () => {
-    const db = testDatabase()
+    const db = createTestDatabase()
     try {
       const id = insertEntry(db, 1)
       audit(db, id, 'hide')
@@ -51,7 +51,7 @@ describe('moderation migration', () => {
   })
 
   test('rejects unknown actions and missing entries', () => {
-    const db = testDatabase()
+    const db = createTestDatabase()
     try {
       const id = insertEntry(db, 1)
       expect(() => audit(db, id, 'delete')).toThrow(/unknown action/)
@@ -64,7 +64,7 @@ describe('moderation migration', () => {
   })
 
   test('keeps audit rows append-only', () => {
-    const db = testDatabase()
+    const db = createTestDatabase()
     try {
       const id = insertEntry(db, 1)
       audit(db, id, 'hide')
@@ -80,7 +80,7 @@ describe('moderation migration', () => {
   })
 
   test('ignored audit inserts leave visibility unchanged', () => {
-    const db = testDatabase()
+    const db = createTestDatabase()
     try {
       const id = insertEntry(db, 1)
       const ignored = db.query("INSERT OR IGNORE INTO moderation_audit (entry_id, action, moderator, created_at) VALUES (?, 'hide', 'x', 'now')").run(id)
@@ -96,7 +96,7 @@ describe('moderation migration', () => {
   })
 
   test('rolls back the visibility transition when the audit insert fails', () => {
-    const db = testDatabase()
+    const db = createTestDatabase()
     try {
       const id = insertEntry(db, 1)
       db.exec(`CREATE TRIGGER test_reject AFTER INSERT ON moderation_audit
@@ -114,7 +114,7 @@ describe('moderation migration', () => {
   })
 
   test('audit rows contain only identifiers, action, moderator and time', () => {
-    const db = testDatabase()
+    const db = createTestDatabase()
     try {
       const columns = db.query('PRAGMA table_info(moderation_audit)').all() as { name: string }[]
       expect(columns.map(column => column.name)).toEqual(['id', 'entry_id', 'action', 'moderator', 'created_at'])

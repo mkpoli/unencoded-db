@@ -1,10 +1,8 @@
-import { error } from '@sveltejs/kit'
+import { redirect } from '@sveltejs/kit'
+import { negotiateLocale } from '$lib/i18n'
 import type { PageServerLoad } from './$types'
-import { publicEntryPredicate } from '$lib/server/visibility'
-export const load: PageServerLoad = async ({ platform, url }) => {
-  if (!platform) error(500, 'Database unavailable')
-  const before = url.searchParams.get('before')
-  const id = before && /^[1-9]\d*$/.test(before) && Number.isSafeInteger(Number(before)) ? Number(before) : Number.MAX_SAFE_INTEGER
-  const { results } = await platform.env.DB.prepare(`SELECT id, script, ids, place FROM entries WHERE ${publicEntryPredicate} AND id < ? ORDER BY id DESC LIMIT 21`).bind(id).all<{ id: number; script: string; ids: string | null; place: string }>()
-  return { entries: results.slice(0, 20), next: results.length > 20 ? results[19].id : null }
+
+export const load: PageServerLoad = ({ request, url, setHeaders }) => {
+  setHeaders({ vary: 'Accept-Language' })
+  redirect(303, `/${negotiateLocale(request.headers.get('accept-language'))}${url.search}`)
 }

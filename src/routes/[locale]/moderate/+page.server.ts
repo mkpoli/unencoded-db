@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit'
-import type { PageServerLoad } from './$types'
+import { isLocale } from '$lib/i18n'
 import { hiddenEntryPredicate } from '$lib/server/visibility'
+import type { PageServerLoad } from './$types'
 
 type HiddenEntry = {
   id: number
@@ -10,8 +11,9 @@ type HiddenEntry = {
   created_at: string
 }
 
-export const load: PageServerLoad = async ({ locals, platform, url }) => {
-  if (!locals.moderator) error(404)
+export const load: PageServerLoad = async ({ locals, platform, params, url }) => {
+  if (!isLocale(params.locale)) error(404)
+  if (!locals?.moderator) error(404)
   if (!platform) error(500, 'Database unavailable')
 
   const before = url.searchParams.get('before')
