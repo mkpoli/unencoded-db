@@ -1,5 +1,6 @@
-// Allow room for URL-encoded text fields and form framing.
-export const MAX_WRITE_BODY = 128 * 1024
+// Fits the maximum entry and ten comparisons with three-byte UTF-8 text
+// percent-encoded, plus form field names and framing.
+export const MAX_WRITE_BODY = 512 * 1024
 
 /** Read at most the limit before handing the request to a form parser. */
 export async function limitWriteBody(request: Request, limit = MAX_WRITE_BODY): Promise<Request | null> {
