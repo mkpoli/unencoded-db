@@ -1,7 +1,7 @@
 <script lang="ts">let { data } = $props()</script>
 <svelte:head><title>珍字集覽</title></svelte:head>
 <h1>珍字集覽</h1>
-<p>Evidence of unencoded characters and unifiable variants.</p>
+<p>A community evidence wiki for characters and glyphs.</p>
 <p><a href="/export.json">Export records as JSON</a></p>
 {#if data.entries.length}
   <div class="grid">
