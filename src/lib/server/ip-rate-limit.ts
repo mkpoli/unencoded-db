@@ -1,6 +1,7 @@
 import type { RequestEvent } from '@sveltejs/kit'
+import { pathAfterLocale } from '$lib/i18n'
 
-export const REPORT_ROUTE_ID = '/entry/[id]/report'
+export const REPORT_ROUTE_ID = '/[locale]/entry/[id]/report'
 export const REPORT_RATE_LIMIT_MAX = 5
 export const REPORT_RATE_LIMIT_PERIOD_SECONDS = 60
 
@@ -31,6 +32,12 @@ type ReportRouteEvent = Pick<RequestEvent, 'request' | 'route' | 'url'>
 
 const reportPath = /^\/entry\/[^/]+\/report\/?$/
 
+/** The report path after any locale prefix; a report route without a locale still counts. */
+function reportPathWithinLocale(pathname: string): string {
+  const rest = pathAfterLocale(pathname)
+  return rest.startsWith('/') ? rest : pathname
+}
+
 /** The hook guards only POSTs that SvelteKit resolved to the report route and whose path is the report path. */
 export function isReportRequest(event: ReportRouteEvent): boolean {
   if (event.request.method !== 'POST') return false
@@ -39,9 +46,9 @@ export function isReportRequest(event: ReportRouteEvent): boolean {
 }
 
 export function isReportPath(pathname: string): boolean {
-  if (reportPath.test(pathname)) return true
+  if (reportPath.test(reportPathWithinLocale(pathname))) return true
   try {
-    return reportPath.test(decodeURIComponent(pathname))
+    return reportPath.test(reportPathWithinLocale(decodeURIComponent(pathname)))
   } catch {
     return false
   }

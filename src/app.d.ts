@@ -3,6 +3,7 @@ declare global {
     interface Platform {
       env: {
         DB: D1Database
+        IMAGES: R2Bucket
         ACCESS_TEAM_DOMAIN?: string
         ACCESS_AUD?: string
         MODERATOR_EMAILS?: string

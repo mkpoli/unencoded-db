@@ -1,4 +1,5 @@
 import { error, redirect } from '@sveltejs/kit'
+import { isLocale, localizedHref } from '$lib/i18n'
 import type { RequestHandler } from '@sveltejs/kit'
 
 export type ModerationAction = 'hide' | 'restore'
@@ -35,6 +36,7 @@ export const methodNotAllowed: RequestHandler = () =>
 
 export function moderationPost(action: ModerationAction): RequestHandler {
   return async ({ params, request, platform, locals, url }) => {
+    if (!isLocale(params.locale)) error(404)
     if (!locals.moderator) return new Response(null, { status: 404 })
     if (!isSameOrigin(request, url)) return new Response('Forbidden', { status: 403 })
 
@@ -43,6 +45,6 @@ export function moderationPost(action: ModerationAction): RequestHandler {
     if (!platform) error(500, 'Database unavailable')
 
     await recordModeration(platform.env.DB, entryId, action, locals.moderator)
-    redirect(303, '/moderate')
+    redirect(303, localizedHref(params.locale, '/moderate'))
   }
 }

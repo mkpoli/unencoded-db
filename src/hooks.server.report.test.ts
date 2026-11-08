@@ -13,7 +13,7 @@ type HookOptions = {
 
 function makeEvent(options: HookOptions = {}) {
   const method = options.method ?? 'POST'
-  const path = options.path ?? '/entry/1/report'
+  const path = options.path ?? '/en/entry/1/report'
   const url = new URL(`https://example.test${path}`)
   const body = options.body !== undefined ? options.body : method === 'POST' ? 'reason=spam' : undefined
   const request = new Request(url, { method, body })
@@ -21,7 +21,7 @@ function makeEvent(options: HookOptions = {}) {
   return {
     request,
     url,
-    route: { id: options.routeId === undefined ? '/entry/[id]/report' : options.routeId },
+    route: { id: options.routeId === undefined ? '/[locale]/entry/[id]/report' : options.routeId },
     locals: { moderator: null },
     getClientAddress: () => options.address ?? '192.0.2.1',
     platform: options.cf === false ? { env } : { cf: { colo: 'NRT' }, env },
@@ -100,7 +100,7 @@ describe('report rate limit hook', () => {
       },
     }
 
-    const otherPost = makeEvent({ path: '/entry/1', routeId: '/entry/[id]', env: { REPORT_RATE_LIMIT: binding } })
+    const otherPost = makeEvent({ path: '/en/entry/1', routeId: '/[locale]/entry/[id]', env: { REPORT_RATE_LIMIT: binding } })
     expect((await run(otherPost)).response.status).toBe(200)
 
     const reportGet = makeEvent({ method: 'GET', env: { REPORT_RATE_LIMIT: binding } })
@@ -110,7 +110,7 @@ describe('report rate limit hook', () => {
   })
 
   test('keeps the existing moderation guard ahead of the report limiter', async () => {
-    const event = makeEvent({ path: '/moderate/1/hide', routeId: '/moderate/[id]/hide', env: {} })
+    const event = makeEvent({ path: '/en/moderate/1/hide', routeId: '/[locale]/moderate/[id]/hide', env: {} })
     const { response, resolveCalls } = await run(event)
     expect(response.status).toBe(404)
     expect(await response.text()).toBe('')
