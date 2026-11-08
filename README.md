@@ -1,6 +1,19 @@
 # 珍字集覽
 
-A collection of evidence for unencoded characters and unifiable variants. Anyone can create a record with a source URL and view the collection. Moderators can hide records and restore them from a private queue.
+A community evidence wiki for characters and glyphs. Anyone can create a record with a source image and view the collection. Moderators can hide records and restore them from a private queue.
+
+A record keeps a character or glyph as a person encountered it, with a source image and optional IDS. The collection gathers them in one place for discovering and sharing new characters, and keeps the evidence for analysis and IRG suggestions.
+
+## Names
+
+| Language | Name | Tagline |
+| --- | --- | --- |
+| English | Rare Character Compendium | A community evidence wiki for characters and glyphs |
+| Japanese | 珍字集覧 | 文字と字形の証拠を集めるコミュニティウィキ |
+| Simplified Chinese | 珍字集览 | 收集文字与字形证据的社区维基 |
+| Traditional Chinese | 珍字集覽 | 收集文字與字形證據的社群維基 |
+| Korean | 진자집람 | 문자와 글리프의 증거를 모으는 커뮤니티 위키 |
+| Vietnamese | Tuyển tập chữ quý | Wiki cộng đồng thu thập bằng chứng về chữ và glyph |
 
 ## Local development
 
@@ -22,9 +35,11 @@ bun run build
 
 The Cloudflare configuration contains a placeholder D1 ID. Provision a database and configure its binding before using a separate environment.
 
-Moderation development needs synthetic bindings for `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` and `MODERATOR_EMAILS`, plus an Access assertion from that team. The Worker verifies the assertion in every environment. Do not weaken HTTPS or add a development admin bypass.
+
 
 ## Moderation setup
+
+Moderation development needs synthetic bindings for `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` and `MODERATOR_EMAILS`, plus an Access assertion from that team. The Worker verifies the assertion in every environment. Do not weaken HTTPS or add a development admin bypass.
 
 Moderation is a private area at `/moderate`. Cloudflare Access controls who can reach it, and the Worker verifies the Access assertion independently. A request is accepted only when all of these hold:
 
@@ -66,6 +81,10 @@ bunx wrangler d1 migrations apply DB --remote
 ```
 
 Drain old application instances before hiding entries, since older readers do not filter them.
+
+## Continuous integration
+
+GitHub Actions runs `bun install --frozen-lockfile` and `bun run build` for pull requests and pushes to `main`.
 
 ## Limitations
 
