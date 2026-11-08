@@ -1,4 +1,4 @@
-<main>
+<main class="site-main">
   <div class="form-page">
     <div class="page-heading">
       <h1>Continue to Glyph Atlas</h1>

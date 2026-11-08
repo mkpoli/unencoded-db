@@ -13,37 +13,33 @@
   let { data, children }: { data: Data; children: Snippet } = $props()
   const locale = $derived((isLocale(data.locale) ? data.locale : 'en') as Locale)
   const canSwitch = $derived(isLocale(data.locale))
+  const path = $derived(page.url.pathname)
+  const home = $derived(localizedHref(locale))
+  const add = $derived(localizedHref(locale, '/new'))
 
   // The server sets lang in app.html; this keeps it right after client-side navigation.
   $effect(() => { document.documentElement.lang = locale })
 </script>
 
-<header>
-  <nav>
-    <a class="brand" href={localizedHref(locale)}>{t(locale, 'app.name')}</a>
-    <div class="nav-actions">
-      <a href={localizedHref(locale, '/new')}>{t(locale, 'nav.add')}</a>
+<header class="site-header">
+  <div class="site-header-inner">
+    <a class="wordmark" href={home}>{t(locale, 'app.name')}</a>
+    <nav class="site-nav" aria-label={t(locale, 'app.name')}>
+      <a class="nav-link" href={home} aria-current={path === home || path === `${home}/` ? 'page' : undefined}>{t(locale, 'nav.browse')}</a>
+      <a class="nav-link" href={add} aria-current={path === add ? 'page' : undefined}>{t(locale, 'nav.add')}</a>
+    </nav>
+    <div class="header-actions">
       {#if data.signedIn}
         <span class="account">Glyph Atlas</span>
-        <form method="POST" action="/auth/sign-out"><button class="nav-button">{t(locale, 'auth.signOut')}</button></form>
+        <form method="POST" action="/auth/sign-out"><button class="secondary" type="submit">{t(locale, 'auth.signOut')}</button></form>
       {:else if data.signInEnabled && data.hasSession}
-        <form method="POST" action="/auth/sign-in"><button class="nav-button">{t(locale, 'auth.link')}</button></form>
+        <form method="POST" action="/auth/sign-in"><button class="secondary" type="submit">{t(locale, 'auth.link')}</button></form>
       {:else if data.signInEnabled}
-        <form method="POST" action="/auth/prepare"><button class="nav-button">{t(locale, 'auth.signIn')}</button></form>
+        <form method="POST" action="/auth/prepare"><button class="secondary" type="submit">{t(locale, 'auth.signIn')}</button></form>
       {/if}
-      {#if canSwitch}<LanguageSwitcher {locale} pathname={page.url.pathname} search={page.url.search} />{/if}
+      {#if canSwitch}<LanguageSwitcher {locale} pathname={path} search={page.url.search} />{/if}
     </div>
-  </nav>
+  </div>
 </header>
-<main>{@render children()}</main>
-<footer><a href="/third-party/README.md">{t(locale, 'footer.thirdParty')}</a></footer>
-
-<style>
-  .nav-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: end; gap: 1rem; }
-  .nav-actions form { display: block; }
-  .account { color: var(--muted); font-size: 13px; }
-  @media (max-width: 720px) {
-    nav { flex-wrap: wrap; row-gap: 8px; }
-    .nav-actions { width: 100%; justify-content: space-between; }
-  }
-</style>
+<main class="site-main">{@render children()}</main>
+<footer class="site-footer"><p><a href="/third-party/README.md">{t(locale, 'footer.thirdParty')}</a></p></footer>
