@@ -41,10 +41,10 @@ export function readEvidenceFields(form: FormData): EvidenceFields | null {
   return row.place ? row : null
 }
 
-export type StoredEvidence = EvidenceFields & DateParts & { id: number; has_image: number; created_at: string }
+export type StoredEvidence = EvidenceFields & DateParts & { id: number; source_id: number | null; has_image: number; created_at: string }
 
 export async function listEvidence(db: D1Database, entryId: number): Promise<StoredEvidence[]> {
-  const { results } = await db.prepare(`SELECT id, place, title, author, publisher, year, page, note, date_year, date_month, date_day, date_precision, (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image, created_at FROM evidence INDEXED BY evidence_entry_date WHERE entry_id = ? ORDER BY date_year, date_month, date_day, id`).bind(entryId).all<StoredEvidence>()
+  const { results } = await db.prepare(`SELECT id, place, title, author, publisher, year, page, note, date_year, date_month, date_day, date_precision, (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image, created_at, (SELECT es.source_id FROM evidence_sources es WHERE es.evidence_id = evidence.id ORDER BY es.source_id LIMIT 1) AS source_id FROM evidence INDEXED BY evidence_entry_date WHERE entry_id = ? ORDER BY date_year, date_month, date_day, id`).bind(entryId).all<StoredEvidence>()
   return results
 }
 

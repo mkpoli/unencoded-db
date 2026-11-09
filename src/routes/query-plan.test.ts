@@ -73,6 +73,7 @@ describe('public query plans', () => {
       '[locale]/genre/[slug]/+page.server.ts',
       '[locale]/tag/[tag]/+page.server.ts',
       '[locale]/collection/[slug]/+page.server.ts',
+      '[locale]/source/[id]/+page.server.ts',
       '[locale]/entry/[id]/report/+server.ts',
       '[locale]/moderate/+page.server.ts',
       '[locale]/moderate/[id]/hide/+server.ts',
