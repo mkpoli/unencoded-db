@@ -155,7 +155,7 @@ describe('Access JWT verification', () => {
     const token = await signToken()
     expect(await verify(token, { fetch })).toBe('mod@example.com')
     expect(probe.calls).toBe(1)
-    expect(probe.requests[0]).toEqual({ url: `${ISSUER}/cdn-cgi/access/certs`, redirect: 'error' })
+    expect(probe.requests[0]).toEqual({ url: `${ISSUER}/cdn-cgi/access/certs`, redirect: 'manual' })
   })
 
   test('matches the allowlist case-insensitively and tolerates small clock skew', async () => {

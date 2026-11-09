@@ -167,7 +167,7 @@ async function fetchJwks(config: ModeratorConfig, options: VerifyOptions): Promi
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetchImpl(config.certsUrl, {
-      redirect: 'error',
+      redirect: 'manual',
       signal: controller.signal,
       headers: { accept: 'application/json' },
     })

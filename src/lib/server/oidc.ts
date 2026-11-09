@@ -10,7 +10,8 @@ export async function fetchJson(url: string, init: RequestInit = {}, maxBytes = 
   let finished = false
   let timer: ReturnType<typeof setTimeout> | undefined
   const work = async () => {
-    const response = await fetch(url, { ...init, redirect: 'error', signal: controller.signal })
+    // Workers fetch supports only 'follow' and 'manual'; a 3xx answer must fail closed.
+    const response = await fetch(url, { ...init, redirect: 'manual', signal: controller.signal })
     if (controller.signal.aborted || !response.ok || !response.body) throw new Error('Provider request failed')
     const declared = response.headers.get('content-length')
     if (declared && (!/^\d+$/.test(declared) || Number(declared) > maxBytes)) throw new Error('Provider response too large')
