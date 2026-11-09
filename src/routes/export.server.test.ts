@@ -16,6 +16,8 @@ type ExportedEvidence = {
   id: number
   place: string
   url: string | null
+  provider: string | null
+  provider_url: string | null
   title: string | null
   author: string | null
   publisher: string | null
@@ -82,7 +84,7 @@ describe('JSON export', () => {
         ivd_sequence: null,
         date_precision: 'year',
         comparisons: [],
-        evidence: [{ id: 0, place: 'Example collection', title: 'Title', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'First', date_precision: 'year', has_image: 0, url: null }],
+        evidence: [{ id: 0, place: 'Example collection', title: 'Title', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'First', date_precision: 'year', has_image: 0, url: null, provider: null, provider_url: null }],
       })
       expect(JSON.stringify(body)).not.toContain('Secret')
     } finally { db.close() }
@@ -158,6 +160,22 @@ describe('JSON export', () => {
         expect(response.headers.get('cache-control')).toBe('no-store')
         expect(body.error).toBe('Invalid after or limit parameter')
       }
+    } finally { db.close() }
+  })
+
+  test('exports provider attribution in JSON', async () => {
+    const db = database()
+    try {
+      const id = insert(db, 'Han', 1, 'With provider')
+      db.query(`INSERT INTO evidence (entry_id, place, provider, provider_url, date_precision, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(id, '', '難読漢字図書館', 'https://example.org/nandoku', 'text', '2026-01-02T00:00:00.000Z')
+
+      const { body: jsonBody } = await exportJson(db)
+      expect(jsonBody.records[0]!.evidence[0]).toMatchObject({
+        place: '',
+        provider: '難読漢字図書館',
+        provider_url: 'https://example.org/nandoku',
+      })
     } finally { db.close() }
   })
 })

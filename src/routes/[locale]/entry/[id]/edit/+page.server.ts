@@ -175,18 +175,23 @@ export const actions: Actions = {
     const evidenceId = positive(form.get('evidence'))
     if (!evidenceId) error(404)
     const row = await platform.env.DB.prepare(
-      `SELECT ev.id, ev.image_key, ev.image_type, ev.image_size FROM evidence ev
+      `SELECT ev.id, ev.image_key, ev.image_type, ev.image_size, ev.provider, ev.provider_url FROM evidence ev
        JOIN entries en ON en.id = ev.entry_id AND ${publicEntryPredicate}
        WHERE ev.id = ? AND ev.entry_id = ?`
-    ).bind(evidenceId, id).first<{ id: number; image_key: string | null; image_type: string | null; image_size: number | null }>()
+    ).bind(evidenceId, id).first<{ id: number; image_key: string | null; image_type: string | null; image_size: number | null; provider: string | null; provider_url: string | null }>()
     if (!row) error(404)
     const raw = Object.fromEntries(evidenceFields.map(name => [name, text(form, name)])) as Record<string, string>
     const errors: Record<string, string> = {}
-    const limits: Record<string, number> = { place: 500, url: 1000, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
+    const limits: Record<string, number> = { place: 500, url: 1000, provider: 300, provider_url: 1000, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
     for (const [name, limit] of Object.entries(limits)) if (raw[name]!.length > limit) errors[name] = t(locale, name === 'place' ? 'error.placeSeen' : 'error.length')
-    if (!raw.place) errors.place = t(locale, 'error.placeSeen')
+    if (!raw.place && !(raw.provider && (raw.provider_url || raw.url))) errors.place = t(locale, 'error.placeSeen')
     if (raw.url && !/^https?:\/\//i.test(raw.url)) errors.url = t(locale, 'error.length')
+    if (raw.provider_url && !/^https?:\/\//i.test(raw.provider_url)) errors.provider_url = t(locale, 'error.length')
     const fields = readEvidenceFields(form)
+    if (fields) {
+      if (!form.has('provider')) fields.provider = row.provider
+      if (!form.has('provider_url')) fields.provider_url = row.provider_url
+    }
     const revision = positive(form.get('revision'))
     const generation = positive(form.get('edit_generation'))
     const removeImage = form.get('remove_image') === '1'
@@ -250,10 +255,11 @@ export const actions: Actions = {
     const form = await request.formData()
     const values = Object.fromEntries(evidenceFields.map(name => [name, text(form, name)])) as Record<string, string>
     const errors: Record<string, string> = {}
-    const limits: Record<string, number> = { place: 500, url: 1000, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
+    const limits: Record<string, number> = { place: 500, url: 1000, provider: 300, provider_url: 1000, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
     for (const [name, limit] of Object.entries(limits)) if (values[name]!.length > limit) errors[name] = t(locale, name === 'place' ? 'error.placeSeen' : 'error.length')
-    if (!values.place) errors.place = t(locale, 'error.placeSeen')
+    if (!values.place && !(values.provider && (values.provider_url || values.url))) errors.place = t(locale, 'error.placeSeen')
     if (values.url && !/^https?:\/\//i.test(values.url)) errors.url = t(locale, 'error.length')
+    if (values.provider_url && !/^https?:\/\//i.test(values.provider_url)) errors.provider_url = t(locale, 'error.length')
     const fields = readEvidenceFields(form)
     let image: { key: string; type: string; size: number } | null = null
     const file = form.get('image')

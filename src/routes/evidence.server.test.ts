@@ -696,17 +696,20 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
-  test('offers the expanded twenty-category taxonomy and merges medicine', async () => {
+  test('offers the grouped category taxonomy and splits kokuji by origin', async () => {
     const db = createTestDatabase()
     try {
       const data = await newForm({ platform: { env: { DB: d1Binding(db) } } } as any) as any
-      expect(data.genres).toHaveLength(20)
+      expect(data.genres).toHaveLength(22)
       const labels = data.genres.map((genre: { label: string }) => genre.label)
-      for (const named of ['吳語', '閩東語', '樂譜', '醫藥', '化學', '度量衡', '道教', '切身', '音譯']) {
+      for (const named of ['方言字', '日本國字', '朝鮮國字', '吳語', '閩東語', '樂譜', '醫藥', '化學', '度量衡', '道教', '切身', '音譯']) {
         expect(labels).toContain(named)
       }
       expect(labels).not.toContain('醫學')
-      expect(data.genres.find((genre: { slug: string }) => genre.slug === 'medicine')).toEqual({ slug: 'medicine', label: '醫藥' })
+      expect(labels).not.toContain('國字')
+      expect(data.genres.find((genre: { slug: string }) => genre.slug === 'medicine')).toEqual({ slug: 'medicine', label: '醫藥', parent: null })
+      expect(data.genres.find((genre: { slug: string }) => genre.slug === 'kokuji')).toEqual({ slug: 'kokuji', label: '日本國字', parent: 'dialect' })
+      expect(data.genres.find((genre: { slug: string }) => genre.slug === 'dialect')).toEqual({ slug: 'dialect', label: '方言字', parent: null })
     } finally { db.close() }
   })
 
@@ -725,19 +728,97 @@ describe('evidence routes', () => {
 
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
       expect(result.genres).toEqual([
-        { slug: 'medicine', label: '醫藥' },
-        { slug: 'wu', label: '吳語' },
-        { slug: 'taoism', label: '道教' },
+        { slug: 'medicine', label: '醫藥', parent: null },
+        { slug: 'wu', label: '吳語', parent: 'dialect' },
+        { slug: 'taoism', label: '道教', parent: null },
       ])
 
       for (const genre of (await newForm({ platform: { env: { DB } } } as any) as any).genres as { slug: string; label: string }[]) {
         const browsed = await genrePage({ platform: { env: { DB } }, params: { locale: 'en', slug: genre.slug } } as any) as any
         expect(browsed.genre).toEqual(genre)
-        expect(browsed.genres).toHaveLength(20)
+        expect(browsed.genres).toHaveLength(22)
         expect(browsed.entries.map((row: { id: number }) => row.id)).toEqual(
-          ['medicine', 'wu', 'taoism'].includes(genre.slug) ? [1] : []
+          ['medicine', 'wu', 'taoism', 'dialect'].includes(genre.slug) ? [1] : []
         )
       }
+    } finally { db.close() }
+  })
+  test('accepts evidence with only a provider and link and keeps the credit through edits', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      await expect(
+        actions.default!(event({ script: 'Han', ids: '⿰木木', provider: '難読漢字図書館', provider_url: 'https://example.org/nandoku/1' }, DB, images, null))
+      ).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+
+      const initial = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(initial.evidence[0]).toMatchObject({
+        place: '',
+        author: null,
+        provider: '難読漢字図書館',
+        provider_url: 'https://example.org/nandoku/1',
+      })
+
+      const editEvent = (values: Record<string, string>) => {
+        const form = new FormData()
+        for (const [key, value] of Object.entries(values)) form.set(key, value)
+        return {
+          request: new Request('https://example.test/en/entry/1/edit', { method: 'POST', body: form }),
+          url: new URL('https://example.test/en/entry/1/edit'),
+          cookies: testCookies().cookies,
+          platform: { env: { DB, IMAGES: images.bucket } },
+          params: { locale: 'en', id: '1' },
+        } as any
+      }
+
+      await expect(
+        editActions.addEvidence!(editEvent({ url: 'https://example.org/nandoku/2', provider: '難読漢字図書館' }))
+      ).rejects.toMatchObject({ status: 303 })
+
+      const state = db.query('SELECT revision, edit_generation FROM entries').get() as { revision: number; edit_generation: number }
+      await expect(
+        editActions.evidence!(editEvent({
+          evidence: String(initial.evidence[0].id),
+          place: '『大漢和辞典』',
+          author: '諸橋轍次',
+          provider: '難読漢字図書館',
+          provider_url: 'https://example.org/nandoku/1',
+          revision: String(state.revision),
+          edit_generation: String(state.edit_generation),
+        }))
+      ).rejects.toMatchObject({ status: 303 })
+
+      const afterEdit = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(afterEdit.evidence[0]).toMatchObject({
+        place: '『大漢和辞典』',
+        author: '諸橋轍次',
+        provider: '難読漢字図書館',
+        provider_url: 'https://example.org/nandoku/1',
+      })
+      expect(afterEdit.evidence[1]).toMatchObject({
+        place: '',
+        author: null,
+        url: 'https://example.org/nandoku/2',
+        provider: '難読漢字図書館',
+        provider_url: null,
+      })
+      const state2 = db.query('SELECT revision, edit_generation FROM entries').get() as { revision: number; edit_generation: number }
+      await expect(
+        editActions.evidence!(editEvent({
+          evidence: String(initial.evidence[0].id),
+          place: '『大漢和辞典』',
+          note: 'provider fields omitted',
+          revision: String(state2.revision),
+          edit_generation: String(state2.edit_generation),
+        }))
+      ).rejects.toMatchObject({ status: 303 })
+      const withoutProvider = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(withoutProvider.evidence[0]).toMatchObject({
+        note: 'provider fields omitted',
+        provider: '難読漢字図書館',
+        provider_url: 'https://example.org/nandoku/1',
+      })
     } finally { db.close() }
   })
 })

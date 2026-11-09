@@ -62,7 +62,7 @@ export const actions = {
     const entry = await platform.env.DB.prepare(`SELECT id FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first<{ id: number }>()
     if (!entry) error(404)
     const form = await request.formData()
-    const values = Object.fromEntries(['place', 'url', 'title', 'author', 'publisher', 'year', 'page', 'note'].map(name => [name, typeof form.get(name) === 'string' ? form.get(name) : '']))
+    const values = Object.fromEntries(['place', 'url', 'provider', 'provider_url', 'title', 'author', 'publisher', 'year', 'page', 'note'].map(name => [name, typeof form.get(name) === 'string' ? form.get(name) : '']))
     const fields = readEvidenceFields(form)
     if (!fields) return fail(400, { error: 'place', values })
     let image = null

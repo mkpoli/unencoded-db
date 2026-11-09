@@ -1,13 +1,19 @@
-export type Genre = { slug: string; label: string }
+export type Genre = { slug: string; label: string; parent: string | null }
 
 export async function listGenres(db: D1Database): Promise<Genre[]> {
-  const { results } = await db.prepare('SELECT slug, label FROM genres ORDER BY rowid').bind().all<Genre>()
+  const { results } = await db.prepare('SELECT slug, label, parent FROM genres ORDER BY rowid').bind().all<Genre>()
   return results
 }
 
 export async function genresForEntry(db: D1Database, entryId: number): Promise<Genre[]> {
-  const { results } = await db.prepare('SELECT g.slug, g.label FROM genres g JOIN entry_genres eg ON eg.genre = g.slug WHERE eg.entry_id = ? ORDER BY g.rowid').bind(entryId).all<Genre>()
+  const { results } = await db.prepare('SELECT g.slug, g.label, g.parent FROM genres g JOIN entry_genres eg ON eg.genre = g.slug WHERE eg.entry_id = ? ORDER BY g.rowid').bind(entryId).all<Genre>()
   return results
+}
+
+/** The genre and every genre grouped under it, so browsing a parent includes its children. */
+export async function genreFamily(db: D1Database, slug: string): Promise<string[]> {
+  const { results } = await db.prepare('SELECT slug FROM genres WHERE slug = ? OR parent = ? ORDER BY rowid').bind(slug, slug).all<{ slug: string }>()
+  return results.map(row => row.slug)
 }
 
 export function selectedGenres(form: FormData): string[] {

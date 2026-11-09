@@ -582,4 +582,21 @@ describe('localized pages', () => {
     expect(body).toContain('href="/zh-Hant/entry/5"')
     expect(body).toContain('⿰口儂')
   })
+
+  test('entry page renders provider attribution with a link on evidence', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-provider', {
+      data: {
+        locale: 'ja',
+        entry: { id: 12, script: 'Han', ids: '⿰魚羊', description: null, radical: null, encoded_as: null, strokes: null, ivd_status: null, ivd_sequence: null, place: '', title: null, author: null, publisher: null, year: null, page: null, note: null, created_at: '2026-11-08T05:00:00.000Z', has_image: 0 },
+        glyph: null,
+        comparisons: [],
+        evidence: [
+          { id: 1, place: '', url: null, provider: '難読漢字図書館', provider_url: 'https://example.org/nandoku', title: null, author: null, publisher: null, year: null, page: null, note: null, source_id: 1, has_image: 0, created_at: '2026-11-08T05:00:00.000Z' },
+        ],
+      },
+    })
+    expect(body).toContain('提供者')
+    expect(body).toContain('href="https://example.org/nandoku"')
+    expect(body).toContain('難読漢字図書館 ↗')
+  })
 })
