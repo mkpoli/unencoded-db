@@ -29,3 +29,15 @@ export async function addEvidence(db: D1Database, entryId: number, fields: Evide
     .bind(entryId, ...evidenceFields.map(name => fields[name]), image?.key ?? null, image?.type ?? null, image?.size ?? null, new Date().toISOString(), creatorId)
     .first<{ id: number }>()
 }
+
+export type Crop = { id: number; evidence_id: number; x: number; y: number; w: number; h: number }
+
+export async function listCrops(db: D1Database, entryId: number): Promise<Crop[]> {
+  const { results } = await db.prepare('SELECT c.id, c.evidence_id, c.x, c.y, c.w, c.h FROM crops c JOIN evidence e ON e.id = c.evidence_id WHERE e.entry_id = ? ORDER BY c.id').bind(entryId).all<Crop>()
+  return results
+}
+
+export async function addCrop(db: D1Database, evidenceId: number, box: Omit<Crop, 'id' | 'evidence_id'>) {
+  return db.prepare('INSERT INTO crops (evidence_id, x, y, w, h, created_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING id')
+    .bind(evidenceId, box.x, box.y, box.w, box.h, new Date().toISOString()).first<{ id: number }>()
+}

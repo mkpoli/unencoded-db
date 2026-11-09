@@ -143,7 +143,7 @@ describe('public query plans', () => {
     try {
       const { binding, plans } = capture(db, true)
       await detail({ platform: { env: { DB: binding } }, params: { locale: 'en', id: '1' } } as any)
-      expect(plans).toHaveLength(3)
+      expect(plans).toHaveLength(4)
       assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
       assertPlan(plans[1], /SEARCH evidence USING INDEX evidence_entry \(entry_id=\?\)/i)
     } finally { db.close() }

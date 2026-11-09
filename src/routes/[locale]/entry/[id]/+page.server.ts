@@ -1,7 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import { MAX_COMPARISONS, type Comparison } from '$lib/server/related'
 import { publicEntryPredicate } from '$lib/server/visibility'
-import { addEvidence, listEvidence, readEvidenceFields } from '$lib/server/evidence-links'
+import { addCrop, addEvidence, listCrops, listEvidence, readEvidenceFields } from '$lib/server/evidence-links'
 import { genresForEntry } from '$lib/server/genres'
 import { createImageKey, putSourceImage, readSourceImage } from '$lib/server/images'
 import { cookieOptions, hashToken } from '$lib/server/attribution'
@@ -38,8 +38,9 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   const comparisons = JSON.parse(stored) as Comparison[]
   if (!Array.isArray(comparisons) || comparisons.length > MAX_COMPARISONS) error(500, 'Invalid related characters')
   const evidence = await listEvidence(platform.env.DB, Number(params.id))
+  const crops = await listCrops(platform.env.DB, Number(params.id))
   const genres = await genresForEntry(platform.env.DB, Number(params.id))
-  return { entry, comparisons, evidence, genres, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
+  return { entry, comparisons, evidence, crops, genres, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
 }
 
 export const actions = {
@@ -69,5 +70,19 @@ export const actions = {
       : null
     await addEvidence(platform.env.DB, id, fields, image, person?.person_id ?? null)
     redirect(303, localizedHref(params.locale as Locale, `/entry/${id}`))
+  },
+  crop: async ({ request, params, platform }) => {
+    if (!platform) error(500, 'Storage unavailable')
+    if (!/^[1-9]\d*$/.test(params.id)) error(404)
+    const entryId = Number(params.id)
+    const form = await request.formData()
+    const evidenceId = Number(form.get('evidence'))
+    if (!Number.isSafeInteger(evidenceId) || evidenceId <= 0) error(404)
+    const visible = await platform.env.DB.prepare(`SELECT e.id FROM evidence e JOIN entries en ON en.id = e.entry_id AND ${publicEntryPredicate} WHERE e.id = ? AND e.entry_id = ?`).bind(evidenceId, entryId).first()
+    if (!visible) error(404)
+    const box = { x: Number(form.get('x')), y: Number(form.get('y')), w: Number(form.get('w')), h: Number(form.get('h')) }
+    if (![box.x, box.y, box.w, box.h].every(Number.isFinite) || box.x < 0 || box.y < 0 || box.w <= 0 || box.h <= 0 || box.x + box.w > 100 || box.y + box.h > 100) return fail(400, { error: 'crop' })
+    await addCrop(platform.env.DB, evidenceId, box)
+    redirect(303, localizedHref(params.locale as Locale, `/entry/${entryId}`))
   },
 }
