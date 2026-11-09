@@ -457,12 +457,11 @@ describe('evidence routes', () => {
     const images = fakeImages()
     try {
       const base = d1Binding(db)
-      let key = ''
       const failing = {
         ...base,
         prepare(sql: string) {
           if (sql.includes('INSERT INTO entries')) {
-            return { bind: (...values: (string | number | null)[]) => ({ execute: () => { key = String(values[10]); throw new Error('network') } }) }
+            return { bind: (..._values: (string | number | null)[]) => ({ execute: () => { throw new Error('network') } }) }
           }
           return base.prepare(sql)
         },
@@ -472,8 +471,29 @@ describe('evidence routes', () => {
       expect(result.status).toBe(500)
       expect(images.deletes).toHaveLength(0)
       expect(images.objects.size).toBe(1)
+      const key = images.puts[0]!.key
       db.query("INSERT INTO entries (script, place, image_key, image_type, image_size, created_at) VALUES ('Han', 'Book', ?, 'image/png', 1, '2026')").run(key)
       expect(images.objects.has(key)).toBe(true)
+    } finally { db.close() }
+  })
+
+  test('stores radical and encoded-as while creating a character', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const e = event({ ...record, radical: '木', encoded_as: 'U+2A6D6' }, d1Binding(db), images)
+      await expect(actions.default!(e)).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT radical, encoded_as FROM entries WHERE id = 1').get()).toEqual({ radical: '木', encoded_as: 'U+2A6D6' })
+    } finally { db.close() }
+  })
+
+  test('stores free-form character tags', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const e = event({ ...record, tags: '客話, 木' }, d1Binding(db), images)
+      await expect(actions.default!(e)).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT tag FROM character_tags ORDER BY tag').all()).toEqual([{ tag: '客話' }, { tag: '木' }])
     } finally { db.close() }
   })
 

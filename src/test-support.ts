@@ -25,6 +25,8 @@ const migrationOrder = [
   '0019_crops.sql',
   '0020_script_counts.sql',
   '0021_relation_evidence.sql',
+  '0022_character_metadata.sql',
+  '0023_character_tags.sql',
 ] as const
 
 export type Migration = typeof migrationOrder[number]
@@ -33,7 +35,7 @@ export function applyMigration(db: Database, name: Migration): void {
   db.exec(readFileSync(new URL(name, migrations), 'utf8'))
 }
 
-export function createTestDatabase(through: Migration = '0021_relation_evidence.sql'): Database {
+export function createTestDatabase(through: Migration = '0023_character_tags.sql'): Database {
   const db = new Database(':memory:')
   for (const name of migrationOrder) {
     applyMigration(db, name)
