@@ -112,7 +112,8 @@
           <div class="field-grid">
             <div class="field">
               <label class="field-label" for="year">{t(data.locale, 'field.year')}</label>
-              <input id="year" name="year" maxlength="40" value={form?.values?.year ?? ''} aria-invalid={!!form?.errors?.year} aria-describedby={form?.errors?.year ? 'year-error' : undefined} />
+              <input id="year" name="year" maxlength="40" placeholder="1998 / 1998-05 / 1998-05-12 / 05" value={form?.values?.year ?? ''} aria-invalid={!!form?.errors?.year} aria-describedby={form?.errors?.year ? 'year-help year-error' : 'year-help'} />
+              <p class="field-help" id="year-help">{t(data.locale, 'field.dateHint')}</p>
               {#if form?.errors?.year}<p class="field-error" id="year-error">{form.errors.year}</p>{/if}
             </div>
             <div class="field">
