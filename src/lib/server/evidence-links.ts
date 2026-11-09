@@ -21,7 +21,8 @@ export function parseDate(value: string | null): DateParts {
 }
 
 function daysInMonth(year: number, month: number) {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate()
+  if (month === 2) return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31
 }
 
 export const evidenceFields = ['place', 'title', 'author', 'publisher', 'year', 'page', 'note'] as const

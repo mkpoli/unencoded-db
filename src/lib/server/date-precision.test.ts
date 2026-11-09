@@ -12,6 +12,13 @@ describe('partial dates', () => {
   test('rejects impossible parts and keeps free text', () => {
     expect(parseDate('1998-13')).toEqual({ date_year: null, date_month: null, date_day: null, date_precision: 'text' })
     expect(parseDate('1998-02-30').date_precision).toBe('text')
+    expect(parseDate('1900-02-29').date_precision).toBe('text')
     expect(parseDate('ca. 1900')).toEqual({ date_year: null, date_month: null, date_day: null, date_precision: 'text' })
+  })
+
+  test('accepts leap days in leap years, including year zero', () => {
+    expect(parseDate('2000-02-29').date_precision).toBe('day')
+    expect(parseDate('0400-02-29').date_precision).toBe('day')
+    expect(parseDate('0000-02-29').date_precision).toBe('day')
   })
 })
