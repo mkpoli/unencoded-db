@@ -2,6 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit'
 import { DefinitiveSaveFailure, cookieOptions, saveEvidence, sessionCookieSettings } from '$lib/server/attribution'
 import type { Evidence } from '$lib/server/evidence'
 import { addEvidence } from '$lib/server/evidence-links'
+import { isHttpUrl } from '$lib/server/evidence'
 import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage } from '$lib/server/images'
 import { isLocale, localizedHref, t } from '$lib/i18n'
 import type { Actions } from './$types'
@@ -40,25 +41,30 @@ export const actions: Actions = {
     const publisher = String(form.get('publisher') ?? '').trim().slice(0, 300) || null
     const year = String(form.get('year') ?? '').trim().slice(0, 40) || null
     const page = String(form.get('page') ?? '').trim().slice(0, 80) || null
-    const source = await readSourceImage(form)
-    if (source.error || !source.image) return fail(400, { error: 'image' })
+    const link = String(form.get('url') ?? '').trim().slice(0, 1000) || null
+    if (link && !isHttpUrl(link)) return fail(400, { error: 'url' })
+    const file = form.get('image')
+    const source = file instanceof File ? await readSourceImage(form) : null
+    if (source?.error) return fail(400, { error: 'image' })
     const cookie = cookieOptions(url)
     if (!cookie) error(403, 'Secure connection required')
-    const key = createImageKey()
-    try { await putSourceImage(platform.env.IMAGES, key, source.image) } catch { return fail(500, { error: 'save' }) }
+    const key = source?.image ? createImageKey() : null
+    if (source?.image && key) {
+      try { await putSourceImage(platform.env.IMAGES, key, source.image) } catch { return fail(500, { error: 'save' }) }
+    }
     let token = cookies.get(cookie.name)
     let first: number | null = null
     for (const row of entries) {
       let result: { id: number; token?: string }
       try {
-        result = await saveEvidence(platform.env.DB, { ...row, place, title, author, publisher, year, page }, token, [], { key, type: source.image.type, size: source.image.size })
+        result = await saveEvidence(platform.env.DB, { ...row, place, title, author, publisher, year, page }, token, [], source?.image && key ? { key, type: source.image.type, size: source.image.size } : undefined)
       } catch (caught) {
-        if (caught instanceof DefinitiveSaveFailure && first === null) await deleteSourceImage(platform.env.IMAGES, key)
+        if (caught instanceof DefinitiveSaveFailure && first === null && key) await deleteSourceImage(platform.env.IMAGES, key)
         return fail(500, { error: 'save' })
       }
       token = result.token ?? token
       first ??= result.id
-      await addEvidence(platform.env.DB, result.id, { place, title, author, publisher, year, page, note: null }, { key, type: source.image.type, size: source.image.size }, null)
+      await addEvidence(platform.env.DB, result.id, { place, title, author, publisher, year, page, note: null, url: link }, source?.image && key ? { key, type: source.image.type, size: source.image.size } : null, null)
     }
     if (!first) return fail(500, { error: 'save' })
     if (token) cookies.set(cookie.name, token, { ...sessionCookieSettings, secure: cookie.secure })

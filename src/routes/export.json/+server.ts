@@ -32,6 +32,7 @@ type ExportEvidence = {
   year: string | null
   page: string | null
   note: string | null
+  url: string | null
   date_precision: string
   has_image: number
 }
@@ -64,7 +65,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
   const page = results.slice(0, limit)
   const evidence = new Map<number, ExportEvidence[]>()
   if (page.length) {
-    const { results: rows } = await platform.env.DB.prepare(`SELECT id, entry_id, place, title, author, publisher, year, page, note, date_precision, (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image FROM evidence WHERE entry_id IN (${page.map(() => '?').join(', ')}) ORDER BY entry_id, date_year, date_month, date_day, id`).bind(...page.map(record => record.id)).all<ExportEvidence & { entry_id: number }>()
+    const { results: rows } = await platform.env.DB.prepare(`SELECT id, entry_id, place, title, author, publisher, year, page, note, url, date_precision, (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image FROM evidence WHERE entry_id IN (${page.map(() => '?').join(', ')}) ORDER BY entry_id, date_year, date_month, date_day, id`).bind(...page.map(record => record.id)).all<ExportEvidence & { entry_id: number }>()
     for (const row of rows) {
       const { entry_id, ...item } = row
       const list = evidence.get(entry_id) ?? []
@@ -76,7 +77,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
   const records = page.map(({ comparisons: stored, ...record }) => {
     const rows = evidence.get(record.id) ?? [{
       id: 0, place: record.place, title: record.title, author: record.author, publisher: record.publisher,
-      year: record.year, page: record.page, note: record.note,
+      year: record.year, page: record.page, note: record.note, url: null,
       date_precision: parseDate(record.year).date_precision, has_image: 0,
     }]
     return {

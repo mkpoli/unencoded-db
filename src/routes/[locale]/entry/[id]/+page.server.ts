@@ -61,7 +61,7 @@ export const actions = {
     const form = await request.formData()
     const values = Object.fromEntries(['place', 'title', 'author', 'publisher', 'year', 'page', 'note'].map(name => [name, typeof form.get(name) === 'string' ? form.get(name) : '']))
     const fields = readEvidenceFields(form)
-    if (!fields) return fail(400, { error: 'place', values })
+    if (!fields) return fail(400, { error: String(form.get('place') ?? '').trim() ? 'url' : 'place', values })
     let image = null
     const file = form.get('image')
     if (file instanceof File && file.size) {

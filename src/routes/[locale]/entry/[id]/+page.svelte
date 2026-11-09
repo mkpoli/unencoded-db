@@ -9,9 +9,9 @@
   type Collection = { slug: string; label: string }
   type Sense = { id: number; gloss: string; reading: string | null }
   type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
-  type Evidence = { id: number; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; has_image: number; created_at: string }
+  type Evidence = { id: number; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; url: string | null; has_image: number; created_at: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
-  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; isModerator: boolean; reported: boolean } } = $props()
+  let { data, form }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; isModerator: boolean; reported: boolean }; form?: { error?: string } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons)
   let evidence = $derived(data.evidence)
@@ -71,6 +71,7 @@
           <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} alt={item.place || t(data.locale, 'field.sourceImage')} loading="lazy" />
         {/if}
         <h3>{item.place}</h3>
+        {#if item.url}<a class="text-link" href={item.url} target="_blank" rel="noopener noreferrer">{item.url}</a>{/if}
         {#if crops.some(crop => crop.evidence_id === item.id)}
           <div class="crop-list">
             {#each crops.filter(crop => crop.evidence_id === item.id) as crop, n (crop.id)}
@@ -103,10 +104,12 @@
         {/if}
       </article>
     {/each}
-    <details class="details">
+    <details class="details" open={Boolean(form?.error)}>
       <summary>{t(data.locale, 'entry.addSighting')}</summary>
       <form class="details-body" method="POST" action="?/evidence" enctype="multipart/form-data">
+        {#if form?.error}<p class="notice error" role="alert">{t(data.locale, `error.${form.error}`)}</p>{/if}
         <div class="field"><label class="field-label" for="evidence-place">{t(data.locale, 'field.place')}</label><input id="evidence-place" name="place" required maxlength="500" /></div>
+        <div class="field"><label class="field-label" for="evidence-url">{t(data.locale, 'field.url')}</label><input id="evidence-url" name="url" type="url" maxlength="1000" placeholder="https://" /><p class="field-help">{t(data.locale, 'field.urlHint')}</p></div>
         <div class="field"><label class="field-label" for="evidence-image">{t(data.locale, 'field.sourceImage')}</label><input id="evidence-image" name="image" type="file" accept="image/jpeg,image/png,image/webp" /></div>
         <div class="grid-2">
           <div class="field"><label class="field-label" for="evidence-title">{t(data.locale, 'field.title')}</label><input id="evidence-title" name="title" maxlength="300" /></div>

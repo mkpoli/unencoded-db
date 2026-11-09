@@ -27,7 +27,7 @@
   let senses = $state([{ gloss: '', reading: '' }])
   // A validation notice belongs to the section that holds the failing field.
   const optionalError = $derived(!!(form?.errors?.description || form?.errors?.note || form?.errors?.title || form?.errors?.author || form?.errors?.publisher || form?.errors?.year || form?.errors?.page))
-  const errorOrder = ['image', 'place', 'script', 'ids', 'description', 'note', 'title', 'author', 'publisher', 'year', 'page'] as const
+  const errorOrder = ['image', 'place', 'url', 'script', 'ids', 'description', 'note', 'title', 'author', 'publisher', 'year', 'page'] as const
   const operators = new Set([...'⿰⿱⿲⿳⿴⿵⿶⿷⿸⿹⿺⿻'])
   const suggestions = $derived(related(data.suggestions ?? [], ids))
 
@@ -123,6 +123,12 @@
         <label class="field-label" for="place">{t(data.locale, 'field.place')}</label>
         <input id="place" name="place" required maxlength="500" value={form?.values?.place ?? ''} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} />
         {#if form?.errors?.place}<p class="field-error" id="place-error">{form.errors.place}</p>{/if}
+      </div>
+      <div class="field">
+        <label class="field-label" for="url">{t(data.locale, 'field.url')}</label>
+        <input id="url" name="url" type="url" maxlength="1000" value={form?.values?.url ?? ''} placeholder="https://" aria-invalid={!!form?.errors?.url} aria-describedby={form?.errors?.url ? 'url-help url-error' : 'url-help'} />
+        <p class="field-help" id="url-help">{t(data.locale, 'field.urlHint')}</p>
+        {#if form?.errors?.url}<p class="field-error" id="url-error">{form.errors.url}</p>{/if}
       </div>
     </section>
     <section class="form-section" aria-labelledby="character-heading">

@@ -19,6 +19,7 @@
         <FileField id="image" name="image" label={t(data.locale, 'field.sourceImage')} choose={t(data.locale, 'field.chooseImage')} browse={t(data.locale, 'field.browseImage')} replace={t(data.locale, 'field.replaceImage')} remove={t(data.locale, 'field.removeImage')} previewAlt={t(data.locale, 'field.imagePreview')} hint={t(data.locale, 'field.fileFormats')} describedBy="file-formats" />
       </div>
       <div class="field"><label class="field-label" for="place">{t(data.locale, 'field.place')}</label><input id="place" name="place" required maxlength="500" /></div>
+      <div class="field"><label class="field-label" for="url">{t(data.locale, 'field.url')}</label><input id="url" name="url" type="url" maxlength="1000" placeholder="https://" /><p class="field-help">{t(data.locale, 'field.urlHint')}</p></div>
       <details class="details"><summary>{t(data.locale, 'field.moreDetails')}</summary><div class="details-body">
         <div class="grid-2">
           <div class="field"><label class="field-label" for="title">{t(data.locale, 'field.title')}</label><input id="title" name="title" maxlength="300" /></div>

@@ -2,7 +2,7 @@
 
 A community evidence wiki for characters and glyphs. Anyone can add or revise a record with a source image, view its revision history and report a public record. Moderators review reports, can dismiss individual reports, and can hide records; hidden records can be restored from a private queue.
 
-A new record keeps one source image as its evidence: a photo, scan or screenshot of the character or glyph. The image is served only through its record at `/{locale}/entry/[id]/image`. Classifying the glyph is a later question.
+A new record keeps a source image, a link or a reference as its evidence: a photo, scan, screenshot or the page where the character appears. The image is served only through its record at `/{locale}/entry/[id]/image`. Classifying the glyph is a later question.
 
 ## Names
 

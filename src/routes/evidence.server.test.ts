@@ -311,15 +311,14 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
-  test('requires an image for a new record', async () => {
+  test('creates a record from a citation without an image', async () => {
     const db = createTestDatabase()
     const images = fakeImages()
     try {
-      const result = await actions.default!(event(record, d1Binding(db), images, null)) as any
-      expect(result.status).toBe(400)
-      expect(result.data.errors.image).toContain('source image')
+      await expect(actions.default!(event(record, d1Binding(db), images, null))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
       expect(images.puts).toHaveLength(0)
-      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
+      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 1 })
+      expect(db.query('SELECT url FROM evidence WHERE entry_id = 1').get()).toEqual({ url: null })
     } finally { db.close() }
   })
 
@@ -359,12 +358,12 @@ describe('evidence routes', () => {
     const db = createTestDatabase()
     const images = fakeImages()
     try {
-      const result = await actions.default!(event({ script: '', place: '', title: 'x'.repeat(301), note: 'notes' }, d1Binding(db), images, null)) as any
+      const result = await actions.default!(event({ script: '', place: '', title: 'x'.repeat(301), note: 'notes', url: 'ftp://example.org' }, d1Binding(db), images, null)) as any
       expect(result.status).toBe(400)
       expect(result.data.errors.script).toContain('script')
       expect(result.data.errors.place).toContain('where')
       expect(result.data.errors.title).toContain('length')
-      expect(result.data.errors.image).toBeDefined()
+      expect(result.data.errors.url).toBeDefined()
       expect(result.data.values.note).toBe('notes')
     } finally { db.close() }
   })
@@ -374,8 +373,8 @@ describe('evidence routes', () => {
     const images = fakeImages()
     try {
       const DB = d1Binding(db)
-      const missing = await actions.default!(event(record, DB, images, null, 'ja')) as any
-      expect(missing.data.errors.image).toBe('出典画像を選択してください。JPEG、PNG、WebPのいずれか、8 MiBまでです。')
+      const badLink = await actions.default!(event({ ...record, url: 'ftp://example.org' }, DB, images, null, 'ja')) as any
+      expect(badLink.data.errors.url).toBe('http(s)で始まる完全なURLを入力してください。')
       const unsupported = await actions.default!(event(record, DB, images, imageFile(new TextEncoder().encode('<svg/>'), 'x.svg', 'image/svg+xml'), 'zh-Hant')) as any
       expect(unsupported.data.errors.image).toBe('圖片必須是有效的JPEG、PNG或WebP檔案。')
       const empty = await actions.default!(event(record, DB, images, imageFile(new Uint8Array(), 'empty.png'), 'zh-Hans')) as any
@@ -557,16 +556,17 @@ describe('evidence routes', () => {
     expect(e.jar.size).toBe(0)
   })
 
-  test('ignores a submitted source URL', async () => {
+  test('saves a submitted source URL without an image', async () => {
     const db = createTestDatabase()
     const images = fakeImages()
     try {
       const DB = d1Binding(db)
-      await expect(actions.default!(event({ ...record, url: 'https://example.org/source' }, DB, images))).rejects.toMatchObject({ status: 303 })
-      const row = db.query('SELECT * FROM entries WHERE id = 1').get() as any
-      expect('url' in row).toBe(false)
+      await expect(actions.default!(event({ ...record, url: 'https://example.org/source' }, DB, images, null))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      expect(images.puts).toHaveLength(0)
+      expect(db.query('SELECT url FROM evidence WHERE entry_id = 1').get()).toEqual({ url: 'https://example.org/source' })
+      expect(db.query('SELECT url FROM sources ORDER BY id DESC LIMIT 1').get()).toEqual({ url: 'https://example.org/source' })
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
-      expect(JSON.stringify(result)).not.toContain('example.org')
+      expect(JSON.stringify(result)).toContain('example.org/source')
     } finally { db.close() }
   })
 })

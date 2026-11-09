@@ -21,6 +21,7 @@ type ExportedEvidence = {
   year: string | null
   page: string | null
   note: string | null
+  url: string | null
   date_precision: string
   has_image: number
 }
@@ -77,7 +78,7 @@ describe('JSON export', () => {
         created_at: '2026-01-01T00:00:00.000Z',
         date_precision: 'year',
         comparisons: [],
-        evidence: [{ id: 0, place: 'Example collection', title: 'Title', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'First', date_precision: 'year', has_image: 0 }],
+        evidence: [{ id: 0, place: 'Example collection', title: 'Title', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'First', url: null, date_precision: 'year', has_image: 0 }],
       })
       expect(JSON.stringify(body)).not.toContain('Secret')
     } finally { db.close() }
@@ -87,14 +88,14 @@ describe('JSON export', () => {
     const db = database()
     try {
       const id = insert(db, 'Han', 1, 'First')
-      db.query(`INSERT INTO evidence (entry_id, place, title, author, publisher, year, page, note, date_precision, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, 'Second place', 'Second title', null, null, '1901-04', null, null, 'month', '2026-01-02T00:00:00.000Z')
+      db.query(`INSERT INTO evidence (entry_id, place, title, author, publisher, year, page, note, url, date_precision, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, 'Second place', 'Second title', null, null, '1901-04', null, null, 'https://example.org/second', 'month', '2026-01-02T00:00:00.000Z')
       db.query(`INSERT INTO evidence (entry_id, place, created_at) VALUES (?, ?, ?)`).run(id, 'Third place', '2026-01-03T00:00:00.000Z')
       const { body } = await exportJson(db)
       expect(body.records[0].description).toBe('Description Han')
       const evidence = body.records[0]!.evidence as { place: string }[]
       expect(evidence).toHaveLength(2)
-      expect(evidence.find(row => row.place === 'Second place')).toMatchObject({ title: 'Second title', date_precision: 'month' })
+      expect(evidence.find(row => row.place === 'Second place')).toMatchObject({ title: 'Second title', date_precision: 'month', url: 'https://example.org/second' })
     } finally { db.close() }
   })
 

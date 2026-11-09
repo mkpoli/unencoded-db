@@ -4,6 +4,9 @@ export const fields = ['script', 'ids', 'description', 'place', 'title', 'author
 export type Evidence = Record<typeof fields[number], string | null>
 const limits = { script: SCRIPT_MAX, ids: 200, description: 5000, place: 500, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
 
+/** A link is kept only when it is a full http(s) address. */
+export const isHttpUrl = (value: string) => /^https?:\/\/[^\s]+$/i.test(value)
+
 /** The fields a submission fails, so an action can report every error in one pass. */
 export function invalidFields(form: FormData): (typeof fields[number])[] {
   const invalid: (typeof fields[number])[] = []
