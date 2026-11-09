@@ -52,7 +52,7 @@ bun run preview
 
 `bun run preview` starts Wrangler in local mode. D1 and R2 state is stored under `.wrangler/state`. Local R2 needs no account or bucket creation; the `IMAGES` binding in `wrangler.jsonc` points at `unencoded-db-images`.
 
-The bucket stays private. Object keys are generated as `entries/<uuid>` and never appear in page data or HTML.
+The bucket stays private. Image object keys are generated as `entries/<uuid>` and never appear in page data or HTML; the composer's files and drawings use prefixes of their own.
 
 To run the checks:
 
@@ -72,6 +72,10 @@ bun run build
 - `POST /{locale}/new` accepts up to 8 MiB plus form framing. Other POST routes keep the 128 KiB limit.
 - Image responses use the stored content type, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, so hiding takes effect on the next request. Missing, hidden and invalid-locale images also return an uncached 404.
 - Images are stripped of common metadata on upload: JPEG EXIF, XMP, IPTC and comments before the image scan, PNG text, tIME and EXIF chunks, and WebP EXIF/XMP chunks. JPEG EXIF orientation is kept; ICC colour profiles and pixel content are stored as uploaded. Image metadata is not preserved for attribution, so record credit in the bibliographic fields.
+
+## Character drawings
+
+The homepage draws each record's IDS with [han-compose](https://github.com/mkpoli/han-compose), from the composer export Glyph Atlas publishes at `https://glyphatlas.org/atlas/composer/`. The export's files and the drawn paths are cached in the `IMAGES` bucket under `composer/` and `glyphs/`. A missing drawing is warmed after the response, and `/api/glyph?ids=…` answers one the page did not have. Only descriptions on visible records are drawn.
 
 ## Contribution rate limit
 

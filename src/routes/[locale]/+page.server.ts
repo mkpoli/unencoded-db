@@ -1,5 +1,7 @@
 import { error } from '@sveltejs/kit'
 import { isHanScript, SCRIPT_MAX } from '$lib/script'
+import { cleanIds } from '$lib/ids'
+import { glyphPaths, warmGlyphs } from '$lib/server/glyphs'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import type { PageServerLoad } from './$types'
 
@@ -23,5 +25,15 @@ export const load: PageServerLoad = async ({ platform, url }) => {
     Number(isHanScript(b.script)) - Number(isHanScript(a.script)) || b.n - a.n || a.script.localeCompare(b.script))
   // A script whose last record was just hidden keeps its tab while it is the filter.
   if (script !== null && !scripts.some(row => row.script === script)) scripts.push({ script, n: 0 })
-  return { entries: page.results.slice(0, 20), next: page.results.length > 20 ? page.results[19].id : null, scripts, total, script }
+  const entries = page.results.slice(0, 20)
+  const sequences = entries.map(entry => entry.ids).filter((id): id is string => Boolean(id))
+  const paths = await glyphPaths(platform.env.IMAGES, sequences)
+  const glyphs: Record<string, string> = {}
+  for (const entry of entries) {
+    const path = entry.ids ? paths[cleanIds(entry.ids)] : null
+    if (entry.ids && path) glyphs[entry.ids] = path
+  }
+  const missing = [...new Set(sequences.map(cleanIds).filter(id => !paths[id]))]
+  if (missing.length) platform.ctx?.waitUntil(warmGlyphs(platform.env.IMAGES, missing))
+  return { entries, next: page.results.length > 20 ? page.results[19].id : null, glyphs, scripts, total, script }
 }
