@@ -553,16 +553,14 @@ describe('evidence routes', () => {
     expect(e.jar.size).toBe(0)
   })
 
-  test('ignores a submitted source URL', async () => {
+  test('stores a source URL on the evidence', async () => {
     const db = createTestDatabase()
     const images = fakeImages()
     try {
       const DB = d1Binding(db)
       await expect(actions.default!(event({ ...record, url: 'https://example.org/source' }, DB, images))).rejects.toMatchObject({ status: 303 })
-      const row = db.query('SELECT * FROM entries WHERE id = 1').get() as any
-      expect('url' in row).toBe(false)
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
-      expect(JSON.stringify(result)).not.toContain('example.org')
+      expect(result.evidence[0].url).toBe('https://example.org/source')
     } finally { db.close() }
   })
 })
