@@ -169,5 +169,8 @@
   "reports.record": "通報{id}",
   "reports.title": "未対応の通報",
   "sense.add": "意味を追加",
-  "sense.remove": "削除"
+  "sense.remove": "削除",
+  "source.intro": "この出典から記録された文字。",
+  "source.title": "出典",
+  "source.view": "出典の詳細"
 }

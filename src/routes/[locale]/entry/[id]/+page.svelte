@@ -9,7 +9,7 @@
   type Collection = { slug: string; label: string }
   type Sense = { id: number; gloss: string; reading: string | null }
   type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
-  type Evidence = { id: number; place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; has_image: number; created_at: string }
+  type Evidence = { id: number; place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; source_id: number | null; has_image: number; created_at: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; strokes: number | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
   let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
@@ -93,6 +93,7 @@
           {#if item.page}<div class="entry-row"><dt>{t(data.locale, 'field.page')}</dt><dd>{item.page}</dd></div>{/if}
           {#if item.note}<div class="entry-row"><dt>{t(data.locale, 'field.note')}</dt><dd>{item.note}</dd></div>{/if}
         </dl>
+        {#if item.source_id}<a class="text-link" href={localizedHref(data.locale, `/source/${item.source_id}`)}>{t(data.locale, 'source.view')}</a>{/if}
         {#if item.has_image}
           <details class="details">
             <summary>{t(data.locale, 'crop.add')}</summary>

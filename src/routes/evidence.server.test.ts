@@ -93,9 +93,6 @@ describe('evidence routes', () => {
       await expect(actions.default!(comparisonEvent(rows, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
       expect(result.comparisons).toEqual(rows)
-      await expect(actions.default!(comparisonEvent(rows, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/2' })
-      const second = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '2' } } as any) as any
-      expect(second.comparisons).toEqual(rows)
     } finally { db.close() }
   })
 
@@ -503,6 +500,18 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
+  test('adds evidence instead of a duplicate character', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      await expect(actions.default!(event(record, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      await expect(actions.default!(event({ ...record, place: 'Another page' }, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      expect((db.query('SELECT count(*) AS n FROM entries').get() as { n: number }).n).toBe(1)
+      expect((db.query('SELECT count(*) AS n FROM evidence').get() as { n: number }).n).toBe(2)
+    } finally { db.close() }
+  })
+
   test('stores a submitted stroke count', async () => {
     const db = createTestDatabase()
     const images = fakeImages()
@@ -530,7 +539,7 @@ describe('evidence routes', () => {
 
       db.exec("CREATE TRIGGER fail_entry BEFORE INSERT ON entries BEGIN SELECT RAISE(ABORT, 'failure'); END")
       set.length = 0
-      const failed = await actions.default!(event(record, d1Binding(db), images)) as any
+      const failed = await actions.default!(event({ ...record, ids: '⿱日木' }, d1Binding(db), images)) as any
       expect(failed.status).toBe(500)
       expect(set).toHaveLength(0)
       expect(db.query('SELECT count(*) AS n FROM persons').get()).toEqual({ n: 1 })

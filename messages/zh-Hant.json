@@ -169,5 +169,8 @@
   "reports.record": "檢舉{id}",
   "reports.title": "待處理檢舉",
   "sense.add": "新增義項",
-  "sense.remove": "刪除"
+  "sense.remove": "刪除",
+  "source.intro": "從這個出處記錄的文字。",
+  "source.title": "出處",
+  "source.view": "出處詳情"
 }

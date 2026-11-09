@@ -169,5 +169,8 @@
   "reports.record": "举报{id}",
   "reports.title": "待处理举报",
   "sense.add": "添加义项",
-  "sense.remove": "删除"
+  "sense.remove": "删除",
+  "source.intro": "从这个出处记录的文字。",
+  "source.title": "出处",
+  "source.view": "出处详情"
 }

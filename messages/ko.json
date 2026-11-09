@@ -169,5 +169,8 @@
   "reports.record": "신고 {id}",
   "reports.title": "미처리 신고",
   "sense.add": "뜻 추가",
-  "sense.remove": "삭제"
+  "sense.remove": "삭제",
+  "source.intro": "이 출처에서 기록된 문자.",
+  "source.title": "출처",
+  "source.view": "출처 상세"
 }
