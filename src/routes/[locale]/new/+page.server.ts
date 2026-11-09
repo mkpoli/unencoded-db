@@ -65,13 +65,15 @@ export const actions: Actions = {
     const radical = String(form.get('radical') ?? '').normalize('NFC').trim().slice(0, 20) || null
     const encoded = String(form.get('encoded_as') ?? '').normalize('NFC').trim().slice(0, 80) || null
     const link = String(form.get('url') ?? '').normalize('NFC').trim().slice(0, 1000) || null
+    const rawStrokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
+    const strokes = Number.isInteger(rawStrokes) && rawStrokes >= 0 && rawStrokes < 200 ? rawStrokes : null
     const comparisons = readComparisons(form)
     const genres = selectedGenres(form)
     const collections = selectedCollections(form)
     const tags = parseTags(String(form.get('tags') ?? ''))
     const senses = parseSenses(form)
     if (!senses) return fail(400, { errors, values: { ...values, genres, collections, tags: tags.join(', ') }, comparisons })
-    const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: { ...values, genres, collections, tags: tags.join(', ') }, comparisons })
+    const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: { ...values, radical, encoded_as: encoded, strokes, genres, collections, tags: tags.join(', ') }, comparisons })
     if (link && !/^https?:\/\//i.test(link)) errors.url = t(locale, 'error.length')
     if (!row || (source.error && source.error !== 'missing') || Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) return failForm(400, errors)
     const image = source.error === 'missing' ? null : source.image
@@ -98,7 +100,7 @@ export const actions: Actions = {
         cookies.get(cookie.name),
         comparisons.rows,
         imageMeta ?? undefined,
-        { radical, encoded_as: encoded },
+        { radical, encoded_as: encoded, strokes },
       )
     } catch (caught) {
       // A transport error can arrive before or after the insert commits. Recover

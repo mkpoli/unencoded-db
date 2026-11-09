@@ -85,6 +85,7 @@ describe('public query plans', () => {
       'auth/sign-in/+server.ts',
       'auth/sign-out/+server.ts',
       '[locale]/moderate/reports/[id]/dismiss/+server.ts',
+      'api/glyph/+server.ts',
       'export.json/+server.ts',
     ].sort())
   })

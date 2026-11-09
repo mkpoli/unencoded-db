@@ -23,6 +23,7 @@
     "wrangler": "^4.158.0"
   },
   "dependencies": {
+    "ids-input": "github:mkpoli/ids-input#e7b69691",
     "jose": "^6.2.15"
   }
 }

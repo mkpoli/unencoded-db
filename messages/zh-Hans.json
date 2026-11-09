@@ -95,6 +95,8 @@
   "field.source": "出处详情",
   "field.sourceImage": "出处图片",
   "field.sourceImageHint": "常见的位置和设备元数据会被移除，JPEG图片方向保留。",
+  "field.strokes": "笔画数",
+  "field.strokesHint": "由IDS估算，可按需修正。",
   "field.suggestionHint": "选择一条记录，填入文字体系和IDS。",
   "field.suggestions": "相关记录",
   "field.tags": "标签",

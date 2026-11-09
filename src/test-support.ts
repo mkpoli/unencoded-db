@@ -28,6 +28,7 @@ const migrationOrder = [
   '0022_character_metadata.sql',
   '0023_character_tags.sql',
   '0024_senses.sql',
+  '0025_strokes.sql',
   '0026_evidence_url.sql',
 ] as const
 

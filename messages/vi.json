@@ -95,6 +95,8 @@
   "field.source": "Thông tin nguồn",
   "field.sourceImage": "Ảnh nguồn",
   "field.sourceImageHint": "Siêu dữ liệu vị trí và thiết bị thông thường được xóa; hướng ảnh JPEG được giữ nguyên.",
+  "field.strokes": "Số nét",
+  "field.strokesHint": "Ước tính từ IDS; sửa nếu cần.",
   "field.suggestionHint": "Chọn một mục từ để điền hệ chữ và IDS.",
   "field.suggestions": "Mục từ liên quan",
   "field.tags": "Thẻ",

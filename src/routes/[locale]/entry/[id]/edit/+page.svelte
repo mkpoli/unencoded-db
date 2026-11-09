@@ -1,7 +1,7 @@
 <script lang="ts">
   import { localizedHref, t, type Locale } from '$lib/i18n'
 
-  type FieldName = 'script' | 'ids' | 'description' | 'radical' | 'encoded_as' | 'place' | 'title' | 'author' | 'publisher' | 'year' | 'page' | 'note'
+  type FieldName = 'script' | 'ids' | 'description' | 'radical' | 'encoded_as' | 'strokes' | 'place' | 'title' | 'author' | 'publisher' | 'year' | 'page' | 'note'
   type Entry = { id: number; revision: number; edit_generation: number } & Record<FieldName, string | null>
   type FormState = {
     message?: string
@@ -32,10 +32,11 @@
     { name: 'ids', label: 'field.ids', max: 200 },
     { name: 'radical', label: 'field.radical', max: 20 },
     { name: 'encoded_as', label: 'field.encodedAs', max: 80 },
+    { name: 'strokes', label: 'field.strokes', max: 3 },
     { name: 'description', label: 'field.description', max: 5000, multiline: true }
   ]
 
-  const order: FieldName[] = ['place', 'title', 'author', 'publisher', 'year', 'page', 'note', 'script', 'ids', 'radical', 'encoded_as', 'description']
+  const order: FieldName[] = ['place', 'title', 'author', 'publisher', 'year', 'page', 'note', 'script', 'ids', 'radical', 'encoded_as', 'strokes', 'description']
   const value = (name: FieldName) => form?.values?.[name] ?? data.entry[name] ?? ''
 
   // Move focus to what blocked the write: the first invalid field, or the notice.

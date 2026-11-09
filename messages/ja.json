@@ -95,6 +95,8 @@
   "field.source": "出典の詳細",
   "field.sourceImage": "出典画像",
   "field.sourceImageHint": "位置情報や端末情報などの一般的なメタデータは削除されますが、JPEGの向きは保持されます。",
+  "field.strokes": "画数",
+  "field.strokesHint": "IDSから推定します。必要なら修正してください。",
   "field.suggestionHint": "記録を選ぶと文字体系とIDSが入ります。",
   "field.suggestions": "関連する記録",
   "field.tags": "タグ",

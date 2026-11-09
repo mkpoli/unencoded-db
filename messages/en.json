@@ -95,6 +95,8 @@
   "field.source": "Source details",
   "field.sourceImage": "Source image",
   "field.sourceImageHint": "Common location and device metadata is removed; JPEG orientation is kept.",
+  "field.strokes": "Strokes",
+  "field.strokesHint": "Estimated from the IDS; correct it if needed.",
   "field.suggestionHint": "Choose a record to fill its script and IDS.",
   "field.suggestions": "Related records",
   "field.tags": "Tags",

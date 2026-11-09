@@ -95,6 +95,8 @@
   "field.source": "출처 상세 정보",
   "field.sourceImage": "출처 이미지",
   "field.sourceImageHint": "위치 및 기기 메타데이터는 제거되지만 JPEG 이미지 방향은 유지됩니다.",
+  "field.strokes": "획수",
+  "field.strokesHint": "IDS에서 추정합니다. 필요하면 수정하세요.",
   "field.suggestionHint": "기록을 선택하면 문자 체계와 IDS가 채워집니다.",
   "field.suggestions": "관련 기록",
   "field.tags": "태그",
