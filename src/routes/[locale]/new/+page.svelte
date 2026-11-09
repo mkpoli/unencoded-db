@@ -5,6 +5,8 @@
   import { newComparison, relationshipLabel, removeComparison } from '$lib/comparison-rows'
   import { handleContributionResult } from '$lib/contribution-result'
   import { localizedHref, t, type Locale } from '$lib/i18n'
+  import partsUrl from 'ids-input/data/han-parts.json.gz?url'
+  import { estimateStrokes } from '$lib/strokes'
 
   type Values = Record<string, string> & { genres?: string[]; collections?: string[] }
   type Comparison = { character: string; relationship: string; differences: string; evidence: string }
@@ -25,6 +27,27 @@
   let script = $state(untrack(() => form?.values?.script ?? 'Han'))
   let ids = $state(untrack(() => form?.values?.ids ?? ''))
   let senses = $state([{ gloss: '', reading: '' }])
+  let strokes = $state(String(untrack(() => form?.values?.strokes ?? '')))
+  let strokeCounts = $state.raw<Map<string, number | null> | null>(null)
+  let strokeGeneration = 0
+  async function loadStrokeCounts() {
+    if (strokeCounts) return strokeCounts
+    const response = await fetch(partsUrl)
+    const text = await new Response(new Blob([await response.arrayBuffer()]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
+    const data = JSON.parse(text) as { keys: string[]; strokes: (number | null)[] }
+    strokeCounts = new Map(data.keys.map((key, index) => [key, data.strokes[index] ?? null]))
+    return strokeCounts
+  }
+  $effect(() => {
+    const value = ids
+    const generation = ++strokeGeneration
+    if (!value) return
+    loadStrokeCounts().then(counts => {
+      if (generation !== strokeGeneration) return
+      const estimate = estimateStrokes(value, counts)
+      if (estimate) strokes = String(estimate.strokes)
+    }).catch(() => {})
+  })
   // A validation notice belongs to the section that holds the failing field.
   const optionalError = $derived(!!(form?.errors?.description || form?.errors?.note || form?.errors?.title || form?.errors?.author || form?.errors?.publisher || form?.errors?.year || form?.errors?.page))
   const errorOrder = ['image', 'place', 'script', 'ids', 'description', 'note', 'title', 'author', 'publisher', 'year', 'page'] as const
@@ -137,6 +160,11 @@
         <input id="ids" name="ids" maxlength="200" bind:value={ids} aria-invalid={!!form?.errors?.ids} aria-describedby={form?.errors?.ids ? 'ids-error' : suggestions.length ? 'ids-help' : undefined} />
         {#if form?.errors?.ids}<p class="field-error" id="ids-error">{form.errors.ids}</p>{/if}
         <div class="field-grid">
+          <div class="field">
+            <label class="field-label" for="strokes">{t(data.locale, 'field.strokes')}</label>
+            <input id="strokes" name="strokes" type="number" min="0" max="199" bind:value={strokes} aria-describedby="strokes-help" />
+            <p class="field-help" id="strokes-help">{t(data.locale, 'field.strokesHint')}</p>
+          </div>
           <div class="field">
             <label class="field-label" for="radical">{t(data.locale, 'field.radical')}</label>
             <input id="radical" name="radical" maxlength="20" value={form?.values?.radical ?? ''} />

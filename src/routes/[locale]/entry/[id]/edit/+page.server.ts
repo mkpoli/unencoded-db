@@ -44,6 +44,8 @@ export const actions: Actions = {
     const row = readEvidence(form)
     const radical = String(form.get('radical') ?? '').normalize('NFC').trim().slice(0, 20) || null
     const encoded = String(form.get('encoded_as') ?? '').normalize('NFC').trim().slice(0, 80) || null
+    const rawStrokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
+    const strokes = Number.isInteger(rawStrokes) && rawStrokes >= 0 && rawStrokes < 200 ? rawStrokes : null
     // Visibility is checked before returning even submitted data for a hidden entry.
     const current = await platform.env.DB.prepare(`SELECT revision FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first<{ revision: number }>()
     if (!current) error(404)
@@ -51,7 +53,7 @@ export const actions: Actions = {
     if (!Number.isSafeInteger(revision) || !Number.isSafeInteger(generation) || !row || Object.keys(errors).length) {
       return fail(400, { values, revision: version, generation: generationToken, errors, message: t(locale, 'error.fields') })
     }
-    const updated = await platform.env.DB.prepare(`UPDATE entries SET ${fields.map(name => `${name} = ?`).join(', ')}, radical = ?, encoded_as = ?, revision = revision + 1 WHERE id = ? AND ${publicEntryPredicate} AND revision = ? AND edit_generation = ? RETURNING id`).bind(...fields.map(name => row[name]), radical, encoded, id, revision, generation).first()
+    const updated = await platform.env.DB.prepare(`UPDATE entries SET ${fields.map(name => `${name} = ?`).join(', ')}, radical = ?, encoded_as = ?, strokes = ?, revision = revision + 1 WHERE id = ? AND ${publicEntryPredicate} AND revision = ? AND edit_generation = ? RETURNING id`).bind(...fields.map(name => row[name]), radical, encoded, strokes, id, revision, generation).first()
     if (!updated) {
       const visible = await platform.env.DB.prepare(`SELECT revision FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first()
       if (!visible) error(404)
