@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { describe, expect, test } from 'bun:test'
-import { applyMigration } from './test-support'
+import { parseDate } from './lib/server/evidence-links'
+import { applyMigration, createTestDatabase } from './test-support'
 
 const oldRow = {
   id: 42,
@@ -83,6 +84,31 @@ describe('source image migration', () => {
       applyMigration(db, '0006_source_images.sql')
       db.exec("INSERT INTO entries (script, place, created_at) VALUES ('New', 'Book', '2026')")
       expect(db.query('SELECT max(id) AS id FROM entries').get()).toEqual({ id: 4 })
+    } finally { db.close() }
+  })
+})
+
+describe('date precision migration', () => {
+  test('backfills the same parts and precision as parseDate', () => {
+    const db = createTestDatabase('0014_genres.sql')
+    try {
+      const entryId = db.query("INSERT INTO entries (script, place, created_at) VALUES ('Han', 'Book', '2026-01-01T00:00:00.000Z')").run().lastInsertRowid as number
+      const insert = db.query('INSERT INTO evidence (entry_id, place, year, created_at) VALUES (?, ?, ?, ?)')
+      const years: (string | null)[] = [
+        '1998', ' 1998 ',
+        '1998-5', '1998-05', '1998/5', '1998.05',
+        '1998-5-2', '1998-05-02', '1998/5.2', '1998.05/02', '1998-05/12',
+        '2000-02-29', '0400-02-29', '0000-02-29',
+        '1900-02-29', '1998-02-29', '1998-02-30', '1998-04-31', '0100-02-29',
+        '1998-13', '1998-00-10',
+        '5', '05', '12', '13', '00',
+        'ca. 1900', '1998-', '19980512', '',
+        null,
+      ]
+      for (const year of years) insert.run(entryId, 'Book', year, '2026-01-01T00:00:00.000Z')
+      applyMigration(db, '0015_date_precision.sql')
+      const rows = db.query('SELECT year, date_year, date_month, date_day, date_precision FROM evidence ORDER BY id').all() as { year: string | null }[]
+      expect(rows).toEqual(years.map(year => ({ year, ...parseDate(year) })))
     } finally { db.close() }
   })
 })

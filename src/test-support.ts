@@ -3,42 +3,36 @@ import { readFileSync } from 'node:fs'
 
 const migrations = new URL('../migrations/', import.meta.url)
 
-export type Migration =
-  | '0001_init.sql'
-  | '0002_entry_visibility.sql'
-  | '0003_related_characters.sql'
-  | '0004_attribution.sql'
-  | '0005_oidc.sql'
-  | '0006_source_images.sql'
-  | '0007_revisions.sql'
-  | '0008_edit_generation.sql'
-  | '0009_revision_redaction.sql'
-  | '0010_moderation.sql'
-  | '0011_reports.sql'
-  | '0012_report_dismissals.sql'
-  | '0013_evidence.sql'
-  | '0014_genres.sql'
+const migrationOrder = [
+  '0001_init.sql',
+  '0002_entry_visibility.sql',
+  '0003_related_characters.sql',
+  '0004_attribution.sql',
+  '0005_oidc.sql',
+  '0006_source_images.sql',
+  '0007_revisions.sql',
+  '0008_edit_generation.sql',
+  '0009_revision_redaction.sql',
+  '0010_moderation.sql',
+  '0011_reports.sql',
+  '0012_report_dismissals.sql',
+  '0013_evidence.sql',
+  '0014_genres.sql',
+  '0015_date_precision.sql',
+] as const
+
+export type Migration = typeof migrationOrder[number]
 
 export function applyMigration(db: Database, name: Migration): void {
   db.exec(readFileSync(new URL(name, migrations), 'utf8'))
 }
 
-export function createTestDatabase(): Database {
+export function createTestDatabase(through: Migration = '0015_date_precision.sql'): Database {
   const db = new Database(':memory:')
-  applyMigration(db, '0001_init.sql')
-  applyMigration(db, '0002_entry_visibility.sql')
-  applyMigration(db, '0003_related_characters.sql')
-  applyMigration(db, '0004_attribution.sql')
-  applyMigration(db, '0005_oidc.sql')
-  applyMigration(db, '0006_source_images.sql')
-  applyMigration(db, '0007_revisions.sql')
-  applyMigration(db, '0008_edit_generation.sql')
-  applyMigration(db, '0009_revision_redaction.sql')
-  applyMigration(db, '0010_moderation.sql')
-  applyMigration(db, '0011_reports.sql')
-  applyMigration(db, '0012_report_dismissals.sql')
-  applyMigration(db, '0013_evidence.sql')
-  applyMigration(db, '0014_genres.sql')
+  for (const name of migrationOrder) {
+    applyMigration(db, name)
+    if (name === through) break
+  }
   return db
 }
 
