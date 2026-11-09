@@ -58,6 +58,7 @@
   "extensionE.intro": "IRG N1841 rút {total} ký tự nguồn G khỏi CJK Extension E. {unresolved} ký tự chưa xác định mã hóa sau này.",
   "extensionE.later": "Mã hóa sau",
   "extensionE.title": "Extension E đã rút",
+  "extensionE.unihan": "Đã đối chiếu Unihan 18.0.0 kIRG_GSource: không có mã nguồn trùng; việc hợp nhất sau này chưa được xác minh.",
   "extensionE.unresolved": "Chưa xác định",
   "extensionE.withdrawal": "Rút",
   "extensionE.withdrawn": "Đã rút khỏi CJK Extension E",

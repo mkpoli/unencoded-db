@@ -58,6 +58,7 @@
   "extensionE.intro": "IRG N1841은 CJK 확장 E에서 G 출처 문자 {total}개를 철회했습니다. {unresolved}개는 이후 부호화가 확인되지 않았습니다.",
   "extensionE.later": "이후 부호화",
   "extensionE.title": "철회된 확장 E",
+  "extensionE.unihan": "Unihan 18.0.0 kIRG_GSource와 대조했습니다. 일치하는 출처 ID가 없으며 이후 통합은 확인되지 않았습니다.",
   "extensionE.unresolved": "미확인",
   "extensionE.withdrawal": "철회",
   "extensionE.withdrawn": "CJK 확장 E에서 철회",

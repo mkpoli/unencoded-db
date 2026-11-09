@@ -58,6 +58,7 @@
   "extensionE.intro": "IRG N1841はCJK拡張EからG來源の{total}字を撤回しました。{unresolved}字は後の符号化が未確認です。",
   "extensionE.later": "後の符号化",
   "extensionE.title": "撤回された拡張E",
+  "extensionE.unihan": "Unihan 18.0.0のkIRG_GSourceと照合しました。一致する來源IDはなく、後の統合は未確認です。",
   "extensionE.unresolved": "未確認",
   "extensionE.withdrawal": "撤回",
   "extensionE.withdrawn": "CJK拡張Eから撤回",

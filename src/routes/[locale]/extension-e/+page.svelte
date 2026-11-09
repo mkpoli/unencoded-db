@@ -17,6 +17,7 @@
     <a class="text-link" href="https://www.unicode.org/irg/docs/n1841-ExtensionEWithdraw.pdf">IRG N1841</a>
     · 2012-01-01 · {t(data.locale, 'extensionE.coverage', { wrong })}
   </p>
+  <p class="field-help">{t(data.locale, 'extensionE.unihan')}</p>
   <div class="table-wrap">
     <table>
       <thead><tr><th>{t(data.locale, 'extensionE.id')}</th><th>{t(data.locale, 'extensionE.withdrawal')}</th><th>{t(data.locale, 'extensionE.later')}</th></tr></thead>

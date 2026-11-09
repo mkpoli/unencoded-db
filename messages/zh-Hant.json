@@ -58,6 +58,7 @@
   "extensionE.intro": "IRG N1841從CJK擴展E撤回{total}個G源字。{unresolved}個字的後續編碼尚未確認。",
   "extensionE.later": "後續編碼",
   "extensionE.title": "已撤回的擴展E",
+  "extensionE.unihan": "已對照 Unihan 18.0.0 的 kIRG_GSource：沒有匹配的來源編號，後續統一仍未確認。",
   "extensionE.unresolved": "未確認",
   "extensionE.withdrawal": "撤回",
   "extensionE.withdrawn": "已從CJK擴展E撤回",

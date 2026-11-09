@@ -58,6 +58,7 @@
   "extensionE.intro": "IRG N1841 withdraws {total} G-source characters from CJK Ext E. {unresolved} remain unresolved for later encoding.",
   "extensionE.later": "Later encoding",
   "extensionE.title": "Withdrawn Extension E",
+  "extensionE.unihan": "Checked against Unihan 18.0.0 kIRG_GSource: no matching source id; later unification remains unverified.",
   "extensionE.unresolved": "Unresolved",
   "extensionE.withdrawal": "Withdrawal",
   "extensionE.withdrawn": "Withdrawn from CJK Ext E",
