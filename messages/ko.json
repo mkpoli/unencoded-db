@@ -48,6 +48,7 @@
   "field.description": "알아낸 내용",
   "field.differences": "차이",
   "field.fileFormats": "JPEG, PNG, WebP · 8 MiB",
+  "field.genre": "분야",
   "field.ids": "표의 문자 구성 설명(IDS)",
   "field.imagePreview": "선택한 이미지 미리보기",
   "field.moreDetails": "자세히",

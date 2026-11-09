@@ -64,6 +64,7 @@ describe('public query plans', () => {
       '[locale]/entry/[id]/history/+page.server.ts',
       '[locale]/entry/[id]/image/+server.ts',
       '[locale]/entry/[id]/evidence/[evidence]/image/+server.ts',
+      '[locale]/genre/[slug]/+page.server.ts',
       '[locale]/entry/[id]/report/+server.ts',
       '[locale]/moderate/+page.server.ts',
       '[locale]/moderate/[id]/hide/+server.ts',
@@ -142,7 +143,7 @@ describe('public query plans', () => {
     try {
       const { binding, plans } = capture(db, true)
       await detail({ platform: { env: { DB: binding } }, params: { locale: 'en', id: '1' } } as any)
-      expect(plans).toHaveLength(2)
+      expect(plans).toHaveLength(3)
       assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
       assertPlan(plans[1], /SEARCH evidence USING INDEX evidence_entry \(entry_id=\?\)/i)
     } finally { db.close() }

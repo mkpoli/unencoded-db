@@ -6,15 +6,16 @@
   import { handleContributionResult } from '$lib/contribution-result'
   import { t, type Locale } from '$lib/i18n'
 
-  type Values = Record<string, string>
+  type Values = Record<string, string> & { genres?: string[] }
   type Comparison = { character: string; relationship: string; differences: string; evidence: string }
   type Suggestion = { ids: string; script: string }
+  type Genre = { slug: string; label: string }
   type Form = {
     errors?: Record<string, string>
     values?: Values
     comparisons?: { rows: Comparison[]; errors: boolean[]; tooMany: boolean }
   }
-  let { form, data }: { form?: Form; data: { locale: Locale; suggestions?: Suggestion[] } } = $props()
+  let { form, data }: { form?: Form; data: { locale: Locale; suggestions?: Suggestion[]; genres?: Genre[] } } = $props()
   let rateLimitFailure = $state<429 | 503 | null>(null)
   const imageError = $derived(form?.errors?.image ?? '')
   let comparisons = $state<Comparison[]>(untrack(() => form?.comparisons?.rows ?? []))
@@ -132,6 +133,16 @@
         <label class="field-label" for="ids">{t(data.locale, 'field.ids')}</label>
         <input id="ids" name="ids" maxlength="200" bind:value={ids} aria-invalid={!!form?.errors?.ids} aria-describedby={form?.errors?.ids ? 'ids-error' : suggestions.length ? 'ids-help' : undefined} />
         {#if form?.errors?.ids}<p class="field-error" id="ids-error">{form.errors.ids}</p>{/if}
+        {#if data.genres?.length}
+          <fieldset class="field genre-field">
+            <legend class="field-label">{t(data.locale, 'field.genre')}</legend>
+            <div class="genre-options">
+              {#each data.genres as genre (genre.slug)}
+                <label class="genre-option"><input type="checkbox" name="genre" value={genre.slug} checked={form?.values?.genres?.includes(genre.slug)} /> {genre.label}</label>
+              {/each}
+            </div>
+          </fieldset>
+        {/if}
         {#if suggestions.length}
           <div class="suggestions">
             <p class="field-help suggestions-title">{t(data.locale, 'field.suggestions')}</p>

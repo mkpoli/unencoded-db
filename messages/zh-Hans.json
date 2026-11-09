@@ -48,6 +48,7 @@
   "field.description": "你的发现",
   "field.differences": "差异",
   "field.fileFormats": "JPEG、PNG 或 WebP · 8 MiB",
+  "field.genre": "类别",
   "field.ids": "汉字结构描述（IDS）",
   "field.imagePreview": "所选图片预览",
   "field.moreDetails": "更多信息",

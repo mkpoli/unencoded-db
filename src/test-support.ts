@@ -17,6 +17,7 @@ export type Migration =
   | '0011_reports.sql'
   | '0012_report_dismissals.sql'
   | '0013_evidence.sql'
+  | '0014_genres.sql'
 
 export function applyMigration(db: Database, name: Migration): void {
   db.exec(readFileSync(new URL(name, migrations), 'utf8'))
@@ -37,6 +38,7 @@ export function createTestDatabase(): Database {
   applyMigration(db, '0011_reports.sql')
   applyMigration(db, '0012_report_dismissals.sql')
   applyMigration(db, '0013_evidence.sql')
+  applyMigration(db, '0014_genres.sql')
   return db
 }
 

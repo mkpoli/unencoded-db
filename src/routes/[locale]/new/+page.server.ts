@@ -5,6 +5,7 @@ import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, typ
 import { isLocale, localizedHref, t, type Locale } from '$lib/i18n'
 import { readComparisons } from '$lib/server/related'
 import { addEvidence } from '$lib/server/evidence-links'
+import { listGenres, saveGenres, selectedGenres } from '$lib/server/genres'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import type { Actions, PageServerLoad } from './$types'
 
@@ -35,11 +36,11 @@ function fieldValues(form: FormData): Record<FieldName, string> {
 }
 
 export const load: PageServerLoad = async ({ platform }) => {
-  if (!platform) return { suggestions: [] }
+  if (!platform) return { suggestions: [], genres: [] }
   const { results } = await platform.env.DB.prepare(
     `SELECT ids, script FROM entries WHERE ${publicEntryPredicate} AND ids IS NOT NULL ORDER BY id DESC LIMIT 100`
   ).bind().all<{ ids: string; script: string }>()
-  return { suggestions: results }
+  return { suggestions: results, genres: await listGenres(platform.env.DB) }
 }
 
 export const actions: Actions = {
@@ -59,7 +60,8 @@ export const actions: Actions = {
     if (source.error) errors.image = imageError(locale, source.error)
     const row = readEvidence(form)
     const comparisons = readComparisons(form)
-    const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values, comparisons })
+    const genres = selectedGenres(form)
+    const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: { ...values, genres }, comparisons })
     if (!row || source.error || Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) return failForm(400, errors)
     if (!source.image) return failForm(400, { image: t(locale, 'error.imageMissing') })
     const image = source.image
@@ -93,6 +95,7 @@ export const actions: Actions = {
     }
 
     await addEvidence(platform.env.DB, result.id, { place: row.place, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, { key, type: image.type, size: image.size }, null)
+    await saveGenres(platform.env.DB, result.id, genres)
     if (result.token) cookies.set(cookie.name, result.token, { ...sessionCookieSettings, secure: cookie.secure })
     redirect(303, localizedHref(locale, `/entry/${result.id}`))
   },
