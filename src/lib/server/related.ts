@@ -1,7 +1,7 @@
 export const MAX_COMPARISONS = 10
 export const comparisonFields = ['character', 'relationship', 'differences', 'evidence'] as const
 const limits = { character: 200, relationship: 20, differences: 2000, evidence: 2000 }
-const relationships = ['variant', 'not_variant', 'similar', 'uncertain']
+const relationships = ['variant', 'not_variant', 'similar', 'uncertain', 'sound', 'meaning', 'glyph', 'usage']
 export type Comparison = Record<typeof comparisonFields[number], string>
 
 export function readComparisons(form: FormData) {
