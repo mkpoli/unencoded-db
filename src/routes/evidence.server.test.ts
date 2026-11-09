@@ -497,6 +497,16 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
+  test('stores multiple senses for one character', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const e = event({ ...record, sense_gloss: 'river', sense_reading: 'he' }, d1Binding(db), images)
+      await expect(actions.default!(e)).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT gloss, reading FROM senses ORDER BY id').all()).toEqual([{ gloss: 'river', reading: 'he' }])
+    } finally { db.close() }
+  })
+
   test('sets the bearer only after a successful atomic creation', async () => {
     const db = createTestDatabase()
     const images = fakeImages()

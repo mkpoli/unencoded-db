@@ -7,10 +7,11 @@
   type Genre = { slug: string; label: string }
   type Crop = { id: number; evidence_id: number; x: number; y: number; w: number; h: number }
   type Collection = { slug: string; label: string }
+  type Sense = { id: number; gloss: string; reading: string | null }
   type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
   type Evidence = { id: number; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; has_image: number; created_at: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
-  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; isModerator: boolean; reported: boolean } } = $props()
+  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons)
   let evidence = $derived(data.evidence)
@@ -19,6 +20,7 @@
   let collections = $derived(data.collections ?? [])
   let relations = $derived(data.relations ?? [])
   let tags = $derived(data.tags ?? [])
+  let senses = $derived(data.senses ?? [])
 </script>
 
 <svelte:head><title>{t(data.locale, 'entry.record', { id: entry.id })} · {t(data.locale, 'app.name')}</title></svelte:head>
@@ -130,6 +132,19 @@
               {#if comparison.differences}<div class="entry-row"><dt>{t(data.locale, 'field.differences')}</dt><dd>{comparison.differences}</dd></div>{/if}
               {#if comparison.evidence}<div class="entry-row"><dt>{t(data.locale, 'field.comparisonEvidence')}</dt><dd>{comparison.evidence}</dd></div>{/if}
             </dl>
+          </article>
+        {/each}
+      </div>
+    </section>
+  {/if}
+  {#if senses.length}
+    <section class="related-section" aria-labelledby="senses-heading">
+      <h2 class="section-label" id="senses-heading">{t(data.locale, 'field.senses')}</h2>
+      <div class="related-list">
+        {#each senses as sense (sense.id)}
+          <article class="related-card">
+            <h3>{sense.gloss}</h3>
+            {#if sense.reading}<p>{sense.reading}</p>{/if}
           </article>
         {/each}
       </div>

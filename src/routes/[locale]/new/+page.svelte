@@ -24,6 +24,7 @@
   // A failed submission seeds the fields once; after that the reader's edits own them.
   let script = $state(untrack(() => form?.values?.script ?? 'Han'))
   let ids = $state(untrack(() => form?.values?.ids ?? ''))
+  let senses = $state([{ gloss: '', reading: '' }])
   // A validation notice belongs to the section that holds the failing field.
   const optionalError = $derived(!!(form?.errors?.description || form?.errors?.note || form?.errors?.title || form?.errors?.author || form?.errors?.publisher || form?.errors?.year || form?.errors?.page))
   const errorOrder = ['image', 'place', 'script', 'ids', 'description', 'note', 'title', 'author', 'publisher', 'year', 'page'] as const
@@ -190,6 +191,17 @@
     <details class="details" open={optionalError}>
       <summary>{t(data.locale, 'field.moreDetails')} <span>{t(data.locale, 'form.optional')}</span></summary>
       <div class="details-body">
+        <fieldset class="field">
+          <legend class="field-label">{t(data.locale, 'field.senses')}</legend>
+          {#each senses as sense, i}
+            <div class="field-grid">
+              <div class="field"><label class="field-label" for={`sense-gloss-${i}`}>{t(data.locale, 'field.senseGloss')}</label><input id={`sense-gloss-${i}`} name="sense_gloss" maxlength="500" bind:value={sense.gloss} /></div>
+              <div class="field"><label class="field-label" for={`sense-reading-${i}`}>{t(data.locale, 'field.senseReading')}</label><input id={`sense-reading-${i}`} name="sense_reading" maxlength="200" bind:value={sense.reading} /></div>
+            </div>
+            {#if senses.length > 1}<button class="secondary" type="button" onclick={() => senses.splice(i, 1)}>{t(data.locale, 'sense.remove')}</button>{/if}
+          {/each}
+          <button class="secondary" type="button" onclick={() => senses.push({ gloss: '', reading: '' })}>{t(data.locale, 'sense.add')}</button>
+        </fieldset>
         <div class="field">
           <label class="field-label" for="description">{t(data.locale, 'field.description')}</label>
           <textarea id="description" name="description" maxlength="5000" aria-invalid={!!form?.errors?.description} aria-describedby={form?.errors?.description ? 'description-error' : undefined}>{form?.values?.description ?? ''}</textarea>
