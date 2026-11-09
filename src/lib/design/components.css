@@ -590,6 +590,7 @@
   .character-card { grid-template-columns: 1fr; gap: var(--space-4); padding: var(--space-4); }
   .character-glyph { width: min(100%, 220px); justify-self: center; font-size: 40px; }
   .character-actions { justify-content: center; }
+  .character-facts .entry-row { grid-template-columns: 1fr; gap: 2px; }
   .entry-figure { padding: 8px; }
   .evidence-card { padding: var(--space-4); }
   .entry-meta { padding: 2px 14px; }
