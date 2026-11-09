@@ -103,9 +103,9 @@ describe('localized links', () => {
 describe('translation lookup', () => {
   test('returns approved copy and fills placeholders', () => {
     expect(t('ja', 'error.home')).toBe('記録一覧に戻る')
-    expect(t('en', 'entry.record', { id: 3 })).toBe('Record 3')
-    expect(t('ko', 'entry.record', { id: 3 })).toBe('기록 3')
-    expect(t('vi', 'entry.record', { id: 3 })).toBe('Mục từ 3')
+    expect(t('en', 'entry.record', { id: 3 })).toBe('Character 3')
+    expect(t('ko', 'entry.record', { id: 3 })).toBe('문자 3')
+    expect(t('vi', 'entry.record', { id: 3 })).toBe('Chữ 3')
   })
 
   test('falls back to English for an unknown key', () => {

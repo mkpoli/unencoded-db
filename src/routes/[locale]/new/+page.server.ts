@@ -4,6 +4,7 @@ import { DefinitiveSaveFailure, cookieOptions, saveEvidence, sessionCookieSettin
 import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, type ImageError } from '$lib/server/images'
 import { isLocale, localizedHref, t, type Locale } from '$lib/i18n'
 import { readComparisons } from '$lib/server/related'
+import { addEvidence } from '$lib/server/evidence-links'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import type { Actions, PageServerLoad } from './$types'
 
@@ -91,6 +92,7 @@ export const actions: Actions = {
       return failForm(500, { form: t(locale, 'error.save') })
     }
 
+    await addEvidence(platform.env.DB, result.id, { place: row.place, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, { key, type: image.type, size: image.size }, null)
     if (result.token) cookies.set(cookie.name, result.token, { ...sessionCookieSettings, secure: cookie.secure })
     redirect(303, localizedHref(locale, `/entry/${result.id}`))
   },
