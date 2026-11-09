@@ -86,6 +86,19 @@ export const actions: Actions = {
       return failForm(500, { form: t(locale, 'error.save') })
     }
 
+    let duplicate: { id: number } | null = null
+    if (row.ids) {
+      try {
+        duplicate = await platform.env.DB.prepare(`SELECT id FROM entries WHERE script = ? AND ids = ? AND ${publicEntryPredicate} ORDER BY id LIMIT 1`).bind(row.script, row.ids).first<{ id: number }>()
+      } catch {
+        duplicate = null
+      }
+    }
+    if (duplicate) {
+      await addEvidence(platform.env.DB, duplicate.id, { place: row.place, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, { key, type: image.type, size: image.size }, null)
+      redirect(303, localizedHref(locale, `/entry/${duplicate.id}`))
+    }
+
     let result: { id: number; token?: string }
     try {
       result = await saveEvidence(
