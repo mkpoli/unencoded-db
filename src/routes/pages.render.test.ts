@@ -116,6 +116,21 @@ describe('localized pages', () => {
     expect(body).toContain('Add a character')
   })
 
+  test('populated home ends the gallery with an add row', async () => {
+    const { body } = await page('src/routes/[locale]/+page.svelte', 'home-add-row', {
+      data: { locale: 'zh-Hant', entries: [{ id: 7, script: 'Han', ids: '⿰木木', place: '本書' }], next: 42, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
+    })
+    // The add row is the gallery's last child; entry cards hold no divs, so the first closing div ends the grid.
+    const start = body.indexOf('class="card-grid gallery"')
+    const grid = body.slice(start, body.indexOf('</div>', start))
+    expect(start).toBeGreaterThan(-1)
+    expect(grid).toContain('href="/zh-Hant/entry/7"')
+    expect(grid).toContain('class="add-card"')
+    expect(grid).toContain('href="/zh-Hant/new"')
+    expect(grid).toContain('新增字')
+    expect(grid.indexOf('class="add-card"')).toBeGreaterThan(grid.indexOf('href="/zh-Hant/entry/7"'))
+  })
+
   test('home marks the chosen script and labels each card with its script', async () => {
     const { body } = await page('src/routes/[locale]/+page.svelte', 'home-scripts', {
       data: {
