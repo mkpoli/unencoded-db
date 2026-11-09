@@ -743,4 +743,82 @@ describe('evidence routes', () => {
       }
     } finally { db.close() }
   })
+  test('accepts evidence with only a provider and link and keeps the credit through edits', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      await expect(
+        actions.default!(event({ script: 'Han', ids: '⿰木木', provider: '難読漢字図書館', provider_url: 'https://example.org/nandoku/1' }, DB, images, null))
+      ).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+
+      const initial = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(initial.evidence[0]).toMatchObject({
+        place: '',
+        author: null,
+        provider: '難読漢字図書館',
+        provider_url: 'https://example.org/nandoku/1',
+      })
+
+      const editEvent = (values: Record<string, string>) => {
+        const form = new FormData()
+        for (const [key, value] of Object.entries(values)) form.set(key, value)
+        return {
+          request: new Request('https://example.test/en/entry/1/edit', { method: 'POST', body: form }),
+          url: new URL('https://example.test/en/entry/1/edit'),
+          cookies: testCookies().cookies,
+          platform: { env: { DB, IMAGES: images.bucket } },
+          params: { locale: 'en', id: '1' },
+        } as any
+      }
+
+      await expect(
+        editActions.addEvidence!(editEvent({ url: 'https://example.org/nandoku/2', provider: '難読漢字図書館' }))
+      ).rejects.toMatchObject({ status: 303 })
+
+      const state = db.query('SELECT revision, edit_generation FROM entries').get() as { revision: number; edit_generation: number }
+      await expect(
+        editActions.evidence!(editEvent({
+          evidence: String(initial.evidence[0].id),
+          place: '『大漢和辞典』',
+          author: '諸橋轍次',
+          provider: '難読漢字図書館',
+          provider_url: 'https://example.org/nandoku/1',
+          revision: String(state.revision),
+          edit_generation: String(state.edit_generation),
+        }))
+      ).rejects.toMatchObject({ status: 303 })
+
+      const afterEdit = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(afterEdit.evidence[0]).toMatchObject({
+        place: '『大漢和辞典』',
+        author: '諸橋轍次',
+        provider: '難読漢字図書館',
+        provider_url: 'https://example.org/nandoku/1',
+      })
+      expect(afterEdit.evidence[1]).toMatchObject({
+        place: '',
+        author: null,
+        url: 'https://example.org/nandoku/2',
+        provider: '難読漢字図書館',
+        provider_url: null,
+      })
+      const state2 = db.query('SELECT revision, edit_generation FROM entries').get() as { revision: number; edit_generation: number }
+      await expect(
+        editActions.evidence!(editEvent({
+          evidence: String(initial.evidence[0].id),
+          place: '『大漢和辞典』',
+          note: 'provider fields omitted',
+          revision: String(state2.revision),
+          edit_generation: String(state2.edit_generation),
+        }))
+      ).rejects.toMatchObject({ status: 303 })
+      const withoutProvider = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(withoutProvider.evidence[0]).toMatchObject({
+        note: 'provider fields omitted',
+        provider: '難読漢字図書館',
+        provider_url: 'https://example.org/nandoku/1',
+      })
+    } finally { db.close() }
+  })
 })

@@ -13,6 +13,8 @@
     id: number
     place: string
     url: string | null
+    provider: string | null
+    provider_url: string | null
     title: string | null
     author: string | null
     publisher: string | null
@@ -262,8 +264,12 @@
         </div>
         <div class="field">
           <label class="field-label" for={`place-${item.id}`}>{t(data.locale, 'field.place')}</label>
-          <input id={`place-${item.id}`} name="place" required maxlength="500" value={evidenceValue(item, 'place')} aria-invalid={!!evidenceError(item, 'place')} />
+          <input id={`place-${item.id}`} name="place" maxlength="500" value={evidenceValue(item, 'place')} aria-invalid={!!evidenceError(item, 'place')} />
           {#if evidenceError(item, 'place')}<p class="field-error">{evidenceError(item, 'place')}</p>{/if}
+        </div>
+        <div class="field-grid">
+          <div class="field"><label class="field-label" for={`provider-${item.id}`}>{t(data.locale, 'field.provider')}</label><input id={`provider-${item.id}`} name="provider" maxlength="300" value={evidenceValue(item, 'provider')} /></div>
+          <div class="field"><label class="field-label" for={`provider-url-${item.id}`}>{t(data.locale, 'field.providerUrl')}</label><input id={`provider-url-${item.id}`} name="provider_url" type="url" maxlength="1000" placeholder="https://" value={evidenceValue(item, 'provider_url')} /></div>
         </div>
         <div class="field-grid">
           <div class="field"><label class="field-label" for={`title-${item.id}`}>{t(data.locale, 'field.title')}</label><input id={`title-${item.id}`} name="title" maxlength="300" value={evidenceValue(item, 'title')} /></div>
@@ -307,8 +313,12 @@
       </div>
       <div class="field">
         <label class="field-label" for="new-place">{t(data.locale, 'field.place')}</label>
-        <input id="new-place" name="place" required maxlength="500" value={addValue('place')} aria-invalid={!!addError('place')} />
+        <input id="new-place" name="place" maxlength="500" value={addValue('place')} aria-invalid={!!addError('place')} />
         {#if addError('place')}<p class="field-error">{addError('place')}</p>{/if}
+      </div>
+      <div class="field-grid">
+        <div class="field"><label class="field-label" for="new-provider">{t(data.locale, 'field.provider')}</label><input id="new-provider" name="provider" maxlength="300" value={addValue('provider')} /></div>
+        <div class="field"><label class="field-label" for="new-provider-url">{t(data.locale, 'field.providerUrl')}</label><input id="new-provider-url" name="provider_url" type="url" maxlength="1000" placeholder="https://" value={addValue('provider_url')} /></div>
       </div>
       <div class="field-grid">
         <div class="field"><label class="field-label" for="new-title">{t(data.locale, 'field.title')}</label><input id="new-title" name="title" maxlength="300" value={addValue('title')} /></div>

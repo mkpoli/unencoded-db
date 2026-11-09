@@ -87,6 +87,8 @@
   "field.note": "Ghi chú về nguồn",
   "field.page": "Trang",
   "field.place": "Nơi tìm thấy",
+  "field.provider": "Đơn vị cung cấp",
+  "field.providerUrl": "Liên kết đơn vị cung cấp",
   "field.publisher": "Nhà xuất bản",
   "field.radical": "Bộ thủ",
   "field.removeImage": "Xóa",

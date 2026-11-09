@@ -9,7 +9,7 @@
   type Collection = { slug: string; label: string }
   type Sense = { id: number; gloss: string; reading: string | null }
   type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
-  type Evidence = { id: number; place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; source_id: number | null; has_image: number; created_at: string }
+  type Evidence = { id: number; place: string; url: string | null; provider?: string | null; provider_url?: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; source_id: number | null; has_image: number; created_at: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; strokes: number | null; ivd_status: 'registered' | 'none' | null; ivd_sequence: string | null; created_at: string }
   let { data }: { data: { locale: Locale; entry: Entry; glyph: string | null; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
@@ -84,9 +84,11 @@
     {#each evidence as item (item.id)}
       <article class="evidence-card" id={`evidence-${item.id}`}>
         {#if item.has_image}
-          <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} alt={item.place || t(data.locale, 'field.sourceImage')} loading="lazy" />
+          <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} alt={item.place || item.provider || t(data.locale, 'field.sourceImage')} loading="lazy" />
         {/if}
-        <h3>{#if isLink(item.place)}<a href={item.place} target="_blank" rel="noopener noreferrer">{item.place} <span aria-hidden="true">↗</span></a>{:else}{item.place}{/if}</h3>
+        {#if item.place}
+          <h3>{#if isLink(item.place)}<a href={item.place} target="_blank" rel="noopener noreferrer">{item.place} <span aria-hidden="true">↗</span></a>{:else}{item.place}{/if}</h3>
+        {/if}
         {#if item.url && item.url !== item.place}<p class="evidence-url"><a class="text-link" href={item.url} target="_blank" rel="noopener noreferrer">{item.url} ↗</a></p>{/if}
         {#if crops.some(crop => crop.evidence_id === item.id)}
           <div class="crop-list">
@@ -101,6 +103,25 @@
           </div>
         {/if}
         <dl class="entry-meta">
+          {#if item.provider}
+            <div class="entry-row">
+              <dt>{t(data.locale, 'field.provider')}</dt>
+              <dd>
+                {#if item.provider_url}
+                  <a class="text-link" href={item.provider_url} target="_blank" rel="noopener noreferrer">{item.provider} ↗</a>
+                {:else if item.url}
+                  <a class="text-link" href={item.url} target="_blank" rel="noopener noreferrer">{item.provider} ↗</a>
+                {:else}
+                  {item.provider}
+                {/if}
+              </dd>
+            </div>
+          {:else if item.provider_url}
+            <div class="entry-row">
+              <dt>{t(data.locale, 'field.providerUrl')}</dt>
+              <dd><a class="text-link" href={item.provider_url} target="_blank" rel="noopener noreferrer">{item.provider_url} ↗</a></dd>
+            </div>
+          {/if}
           {#if item.title}<div class="entry-row"><dt>{t(data.locale, 'field.title')}</dt><dd>{item.title}</dd></div>{/if}
           {#if item.author}<div class="entry-row"><dt>{t(data.locale, 'field.author')}</dt><dd>{item.author}</dd></div>{/if}
           {#if item.publisher}<div class="entry-row"><dt>{t(data.locale, 'field.publisher')}</dt><dd>{item.publisher}</dd></div>{/if}
@@ -126,7 +147,11 @@
       <form class="details-body" method="POST" action="?/evidence" enctype="multipart/form-data">
         <div class="field"><label class="field-label" for="evidence-image">{t(data.locale, 'field.sourceImage')}</label><input id="evidence-image" name="image" type="file" accept="image/jpeg,image/png,image/webp" /></div>
         <div class="field"><label class="field-label" for="evidence-url">{t(data.locale, 'field.url')}</label><input id="evidence-url" name="url" type="url" maxlength="1000" placeholder="https://" aria-describedby="evidence-url-help" /><p class="field-help" id="evidence-url-help">{t(data.locale, 'field.urlHint')}</p></div>
-        <div class="field"><label class="field-label" for="evidence-place">{t(data.locale, 'field.place')}</label><input id="evidence-place" name="place" required maxlength="500" /></div>
+        <div class="field"><label class="field-label" for="evidence-place">{t(data.locale, 'field.place')}</label><input id="evidence-place" name="place" maxlength="500" /></div>
+        <div class="grid-2">
+          <div class="field"><label class="field-label" for="evidence-provider">{t(data.locale, 'field.provider')}</label><input id="evidence-provider" name="provider" maxlength="300" /></div>
+          <div class="field"><label class="field-label" for="evidence-provider-url">{t(data.locale, 'field.providerUrl')}</label><input id="evidence-provider-url" name="provider_url" type="url" maxlength="1000" placeholder="https://" /></div>
+        </div>
         <div class="grid-2">
           <div class="field"><label class="field-label" for="evidence-title">{t(data.locale, 'field.title')}</label><input id="evidence-title" name="title" maxlength="300" /></div>
           <div class="field"><label class="field-label" for="evidence-author">{t(data.locale, 'field.author')}</label><input id="evidence-author" name="author" maxlength="300" /></div>

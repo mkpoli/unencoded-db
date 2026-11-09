@@ -87,6 +87,8 @@
   "field.note": "출처에 관한 메모",
   "field.page": "페이지",
   "field.place": "발견한 곳",
+  "field.provider": "제공자",
+  "field.providerUrl": "제공자 링크",
   "field.publisher": "출판사",
   "field.radical": "부수",
   "field.removeImage": "삭제",

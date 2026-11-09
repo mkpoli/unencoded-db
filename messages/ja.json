@@ -87,6 +87,8 @@
   "field.note": "出典についてのメモ",
   "field.page": "ページ",
   "field.place": "見つけた場所",
+  "field.provider": "提供者",
+  "field.providerUrl": "提供者リンク",
   "field.publisher": "出版者",
   "field.radical": "部首",
   "field.removeImage": "削除",

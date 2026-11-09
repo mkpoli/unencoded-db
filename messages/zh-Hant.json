@@ -87,6 +87,8 @@
   "field.note": "出處備註",
   "field.page": "頁碼",
   "field.place": "發現地點或出處",
+  "field.provider": "提供者",
+  "field.providerUrl": "提供者連結",
   "field.publisher": "出版者",
   "field.radical": "部首",
   "field.removeImage": "移除",

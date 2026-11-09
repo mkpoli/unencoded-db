@@ -87,6 +87,8 @@
   "field.note": "Note on this source",
   "field.page": "Page",
   "field.place": "Where you found it",
+  "field.provider": "Provider",
+  "field.providerUrl": "Provider link",
   "field.publisher": "Publisher",
   "field.radical": "Radical",
   "field.removeImage": "Remove",
