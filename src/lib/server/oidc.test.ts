@@ -21,6 +21,14 @@ describe('OIDC discovery and ID tokens', () => {
     globalThis.fetch = (() => new Promise(() => {})) as unknown as typeof fetch
     await expect(fetchJson(`${issuer}/test`, {}, 8, 20)).rejects.toThrow('timed out')
   })
+  test('uses a redirect mode Workers fetch accepts and rejects redirects', async () => {
+    let mode: string | undefined
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => { mode = init?.redirect; return Response.json({}) }) as unknown as typeof fetch
+    await fetchJson(`${issuer}/test`)
+    expect(mode).toBe('manual')
+    globalThis.fetch = (async () => new Response('{}', { status: 302, headers: { location: `${issuer}/elsewhere` } })) as unknown as typeof fetch
+    await expect(fetchJson(`${issuer}/test`)).rejects.toThrow('Provider request failed')
+  })
   test('allows only pinned HTTPS or loopback HTTP public origins', () => {
     const env = { DB: {} as D1Database, IMAGES: {} as R2Bucket, ATLAS_ISSUER: issuer, ATLAS_CLIENT_ID: 'client', ATLAS_CLIENT_SECRET: 'secret', ATLAS_PUBLIC_ORIGIN: 'http://localhost:5173' }
     expect(configured(env, new URL('http://localhost:5173/a'))).toBe(true)
