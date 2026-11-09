@@ -48,6 +48,7 @@
   "field.description": "What you noticed",
   "field.differences": "Differences",
   "field.fileFormats": "JPEG, PNG or WebP · 8 MiB",
+  "field.genre": "Genre",
   "field.ids": "Ideographic description (IDS)",
   "field.imagePreview": "Selected image preview",
   "field.moreDetails": "More details",

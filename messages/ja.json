@@ -48,6 +48,7 @@
   "field.description": "気づいたこと",
   "field.differences": "相違点",
   "field.fileFormats": "JPEG、PNG、WebP · 8 MiB",
+  "field.genre": "ジャンル",
   "field.ids": "漢字構成記述（IDS）",
   "field.imagePreview": "選択した画像のプレビュー",
   "field.moreDetails": "詳細を追加",
