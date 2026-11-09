@@ -222,6 +222,27 @@
 .field-error { color: var(--wrong); font-size: var(--text-sm); }
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 
+/* Related records found while typing an IDS: a compact choice that fills script and IDS. */
+.suggestions { display: grid; gap: 6px; }
+.suggestions-title { color: var(--ink); font-weight: 550; }
+.suggestion-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.suggestion {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  text-align: left;
+}
+.suggestion:hover { border-color: var(--accent); background: var(--accent-hover); }
+.suggestion-ids { font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
+.suggestion-script { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
+
 .notice {
   padding: 12px 14px;
   border: 1px solid var(--line);

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { PNG_BYTES, createTestDatabase, d1Binding, fakeImages, imageFile } from '../test-support'
 import { MAX_IMAGE_BYTES } from '../lib/server/images'
-import { actions } from './[locale]/new/+page.server'
+import { actions, load as newForm } from './[locale]/new/+page.server'
 import { load as list } from './[locale]/+page.server'
 import { load as detail } from './[locale]/entry/[id]/+page.server'
 
@@ -68,6 +68,16 @@ describe('evidence routes', () => {
       await expect(actions.default!(comparisonEvent(rows, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/2' })
       const second = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '2' } } as any) as any
       expect(second.comparisons).toEqual(rows)
+    } finally { db.close() }
+  })
+
+  test('suggests visible records that share an IDS', async () => {
+    const db = createTestDatabase()
+    try {
+      db.exec("INSERT INTO entries (script, ids, place, created_at) VALUES ('Han', '⿰木木', 'Book', '2026')")
+      db.exec("INSERT INTO entries (script, ids, place, created_at, visible) VALUES ('Han', '⿱日木', 'Hidden', '2026', 0)")
+      const data = await newForm({ platform: { env: { DB: d1Binding(db) } } } as any) as any
+      expect(data.suggestions).toEqual([{ ids: '⿰木木', script: 'Han' }])
     } finally { db.close() }
   })
 

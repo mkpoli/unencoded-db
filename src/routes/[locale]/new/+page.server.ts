@@ -4,7 +4,8 @@ import { DefinitiveSaveFailure, cookieOptions, saveEvidence, sessionCookieSettin
 import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, type ImageError } from '$lib/server/images'
 import { isLocale, localizedHref, t, type Locale } from '$lib/i18n'
 import { readComparisons } from '$lib/server/related'
-import type { Actions } from './$types'
+import { publicEntryPredicate } from '$lib/server/visibility'
+import type { Actions, PageServerLoad } from './$types'
 
 function imageError(locale: Locale, error: ImageError): string {
   switch (error) {
@@ -30,6 +31,14 @@ function fieldValues(form: FormData): Record<FieldName, string> {
     const value = form.get(name)
     return [name, typeof value === 'string' ? value : '']
   })) as Record<FieldName, string>
+}
+
+export const load: PageServerLoad = async ({ platform }) => {
+  if (!platform) return { suggestions: [] }
+  const { results } = await platform.env.DB.prepare(
+    `SELECT ids, script FROM entries WHERE ${publicEntryPredicate} AND ids IS NOT NULL ORDER BY id DESC LIMIT 100`
+  ).bind().all<{ ids: string; script: string }>()
+  return { suggestions: results }
 }
 
 export const actions: Actions = {
