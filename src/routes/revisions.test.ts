@@ -19,14 +19,22 @@ function dbSetup() {
   applyMigration(db, '0007_revisions.sql')
   applyMigration(db, '0008_edit_generation.sql')
   applyMigration(db, '0009_revision_redaction.sql')
+  applyMigration(db, '0013_evidence.sql')
+  applyMigration(db, '0014_genres.sql')
+  applyMigration(db, '0015_date_precision.sql')
+  applyMigration(db, '0016_collections.sql')
+  applyMigration(db, '0017_shared_sources.sql')
   applyMigration(db, '0022_character_metadata.sql')
+  applyMigration(db, '0023_character_tags.sql')
+  applyMigration(db, '0024_senses.sql')
   applyMigration(db, '0025_strokes.sql')
+  applyMigration(db, '0026_evidence_url.sql')
   applyMigration(db, '0027_ivd.sql')
   return db
 }
 function binding(db: Database) {
   return { prepare(sql: string) { return { bind(...values: (string | number | null)[]) { return {
-    first: async () => db.query(sql).get(...values), all: async () => ({ results: db.query(sql).all(...values) })
+    first: async () => db.query(sql).get(...values), all: async () => ({ results: db.query(sql).all(...values) }), run: async () => db.query(sql).run(...values)
   } } } } }
 }
 function event(db: Database, values: Record<string, string> = {}) {
@@ -133,12 +141,12 @@ describe('revisions', () => {
     const db = dbSetup()
     try {
       expect(db.query('SELECT revision, title FROM entry_revisions').get()).toEqual({ revision: 1, title: 'title' })
-      const values = { revision: '1', edit_generation: '1', script: 'new', place: 'page', title: 'new title', author: 'A', publisher: 'P', year: '1900', page: '8', note: 'N', ids: 'X', description: 'D' }
-      await expect(actions.default!(event(db, values))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
-      expect(db.query('SELECT revision, title, author, publisher, year, page, note, ids, description FROM entry_revisions WHERE revision = 2').get()).toEqual({ revision: 2, title: 'new title', author: 'A', publisher: 'P', year: '1900', page: '8', note: 'N', ids: 'X', description: 'D' })
-      const stale = await actions.default!(event(db, { ...values, title: 'unsaved' })) as any
+      const values = { revision: '1', edit_generation: '1', script: 'new', ids: 'X', description: 'D' }
+      await expect(actions.character!(event(db, values))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      expect(db.query('SELECT revision, script, ids, description, place, title FROM entry_revisions WHERE revision = 2').get()).toEqual({ revision: 2, script: 'new', ids: 'X', description: 'D', place: 'book', title: 'title' })
+      const stale = await actions.character!(event(db, { ...values, description: 'unsaved' })) as any
       expect(stale.status).toBe(409)
-      expect(stale.data.values.title).toBe('unsaved')
+      expect(stale.data.values.description).toBe('unsaved')
       expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 2 })
       expect(() => db.exec("UPDATE entry_revisions SET title = 'tamper'")).toThrow()
       expect(() => db.exec('DELETE FROM entry_revisions')).toThrow()
@@ -149,7 +157,7 @@ describe('revisions', () => {
       expect(db.query('SELECT visible, revision FROM entries WHERE id = 1').get()).toEqual({ visible: 0, revision: 2 })
       await expect(editLoad(event(db))).rejects.toMatchObject({ status: 404 })
       await expect(history(event(db))).rejects.toMatchObject({ status: 404 })
-      await expect(actions.default!(event(db, values))).rejects.toMatchObject({ status: 404 })
+      await expect(actions.character!(event(db, values))).rejects.toMatchObject({ status: 404 })
       db.exec('UPDATE entries SET visible = 1 WHERE id = 1')
       const restored = await history(event(db)) as any
       expect(restored.revisions.find((r: any) => r.revision === 1).title).toBe('title')
@@ -164,21 +172,21 @@ describe('revisions', () => {
       db.exec('UPDATE entries SET visible = 1 WHERE id = 1')
       expect(db.query('SELECT edit_generation FROM entries').get()).toEqual({ edit_generation: 1 })
       db.exec('UPDATE entries SET visible = 0 WHERE id = 1')
-      await expect(actions.default!(event(db, values))).rejects.toMatchObject({ status: 404 })
+      await expect(actions.character!(event(db, values))).rejects.toMatchObject({ status: 404 })
       db.exec('UPDATE entries SET visible = 1 WHERE id = 1')
       expect(db.query('SELECT revision, edit_generation FROM entries').get()).toEqual({ revision: 1, edit_generation: 3 })
-      const stale = await actions.default!(event(db, values)) as any
+      const stale = await actions.character!(event(db, values)) as any
       expect(stale.status).toBe(409)
       expect(stale.data.values.script).toBe('unsaved')
       expect(stale.data.generation).toBe('1')
-      const invalid = await actions.default!(event(db, { ...values, script: '' })) as any
+      const invalid = await actions.character!(event(db, { ...values, script: '' })) as any
       expect(invalid.status).toBe(400)
       expect(invalid.data.generation).toBe('1')
       expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 1 })
       expect(db.query('SELECT script FROM entries').get()).toEqual({ script: 'old' })
-      await expect(actions.default!(event(db, { ...values, edit_generation: '3' }))).rejects.toMatchObject({ status: 303 })
+      await expect(actions.character!(event(db, { ...values, edit_generation: '3' }))).rejects.toMatchObject({ status: 303 })
       expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 2 })
-      const missing = await actions.default!(event(db, { revision: '2', script: 'missing', place: 'book' })) as any
+      const missing = await actions.character!(event(db, { revision: '2', script: 'missing', place: 'book' })) as any
       expect(missing.status).toBe(400)
       expect(missing.data.generation).toBeNull()
     } finally { db.close() }
@@ -210,18 +218,23 @@ describe('revisions', () => {
   test('edits report every invalid field and keep the submitted text', async () => {
     const db = dbSetup()
     try {
-      const values = { revision: '1', edit_generation: '1', script: 'Han', place: 'x'.repeat(501), title: 't'.repeat(301), note: 'kept' }
-      const invalid = await actions.default!(event(db, values)) as any
+      const values = { revision: '1', edit_generation: '1', script: 'Han', ids: 'i'.repeat(201), description: 'd'.repeat(5001), radical: 'r'.repeat(21), encoded_as: 'e'.repeat(81), tags: 'kept' }
+      const invalid = await actions.character!(event(db, values)) as any
       expect(invalid.status).toBe(400)
-      expect(invalid.data.errors.place).toContain('where the character was seen')
-      expect(invalid.data.errors.title).toContain('length')
-      expect(invalid.data.values.note).toBe('kept')
+      expect(invalid.data.errors.ids).toContain('length')
+      expect(invalid.data.errors.description).toContain('length')
+      expect(invalid.data.errors.radical).toContain('length')
+      expect(invalid.data.errors.encoded_as).toContain('length')
+      expect(invalid.data.values.tags).toBe('kept')
       expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 1 })
-      const missingScript = await actions.default!(event(db, { ...values, place: 'book', script: '' })) as any
+      const missingScript = await actions.character!(event(db, { ...values, ids: '', description: '', radical: '', encoded_as: '', script: '' })) as any
       expect(missingScript.status).toBe(400)
       expect(missingScript.data.errors.script).toContain('script')
-      await expect(actions.default!(event(db, { ...values, place: 'book', title: 'new' }))).rejects.toMatchObject({ status: 303 })
-      expect(db.query('SELECT place, title FROM entry_revisions WHERE revision = 2').get()).toEqual({ place: 'book', title: 'new' })
+      await expect(actions.character!(event(db, { ...values, script: 'Han', ids: '', description: '', radical: '', encoded_as: '', tags: '新, 客家', sense_gloss: '意味', sense_reading: 'いみ', comparison_variant: '漢' }))).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT ids, description FROM entry_revisions WHERE revision = 2').get()).toEqual({ ids: null, description: null })
+      expect(db.query('SELECT tag FROM character_tags ORDER BY tag').all()).toEqual([{ tag: '客家' }, { tag: '新' }])
+      expect(db.query('SELECT gloss, reading FROM senses').get()).toEqual({ gloss: '意味', reading: 'いみ' })
+      expect(JSON.parse((db.query('SELECT comparisons FROM entries').get() as any).comparisons)).toHaveLength(1)
     } finally { db.close() }
   })
   test('snapshot failure rolls back both inserts and updates', () => {

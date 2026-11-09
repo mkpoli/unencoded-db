@@ -20,15 +20,12 @@ type Entry = {
   script: string
   ids: string | null
   description: string | null
-  place: string
-  title: string | null
-  author: string | null
-  publisher: string | null
-  year: string | null
-  page: string | null
-  note: string | null
+  radical: string | null
+  encoded_as: string | null
+  strokes: number | null
+  ivd_status: 'registered' | 'none' | null
+  ivd_sequence: string | null
   created_at: string
-  has_image: number
   comparisons: string
 }
 
@@ -36,8 +33,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   if (!platform) error(500, 'Database unavailable')
   if (!/^[1-9]\d*$/.test(params.id) || !Number.isSafeInteger(Number(params.id))) error(404)
   const row = await platform.env.DB.prepare(
-    `SELECT id, script, ids, description, radical, encoded_as, strokes, ivd_status, ivd_sequence, place, title, author, publisher, year, page, note, created_at,
-            (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image, comparisons
+    `SELECT id, script, ids, description, radical, encoded_as, strokes, ivd_status, ivd_sequence, created_at, comparisons
      FROM entries WHERE id = ? AND ${publicEntryPredicate}`
   ).bind(Number(params.id)).first<Entry>()
   if (!row) error(404)
@@ -66,7 +62,7 @@ export const actions = {
     const entry = await platform.env.DB.prepare(`SELECT id FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first<{ id: number }>()
     if (!entry) error(404)
     const form = await request.formData()
-    const values = Object.fromEntries(['place', 'title', 'author', 'publisher', 'year', 'page', 'note'].map(name => [name, typeof form.get(name) === 'string' ? form.get(name) : '']))
+    const values = Object.fromEntries(['place', 'url', 'title', 'author', 'publisher', 'year', 'page', 'note'].map(name => [name, typeof form.get(name) === 'string' ? form.get(name) : '']))
     const fields = readEvidenceFields(form)
     if (!fields) return fail(400, { error: 'place', values })
     let image = null

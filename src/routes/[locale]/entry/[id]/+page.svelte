@@ -10,11 +10,11 @@
   type Sense = { id: number; gloss: string; reading: string | null }
   type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
   type Evidence = { id: number; place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; source_id: number | null; has_image: number; created_at: string }
-  type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; strokes: number | null; ivd_status: 'registered' | 'none' | null; ivd_sequence: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
+  type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; strokes: number | null; ivd_status: 'registered' | 'none' | null; ivd_sequence: string | null; created_at: string }
   let { data }: { data: { locale: Locale; entry: Entry; glyph: string | null; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
-  let comparisons = $derived(data.comparisons)
-  let evidence = $derived(data.evidence)
+  let comparisons = $derived(data.comparisons ?? [])
+  let evidence = $derived(data.evidence ?? [])
   let genres = $derived(data.genres ?? [])
   let crops = $derived(data.crops ?? [])
   let collections = $derived(data.collections ?? [])
@@ -81,12 +81,6 @@
       <h2 class="section-label" id="evidence-heading">{t(data.locale, 'entry.sightings')}</h2>
       <p class="field-help">{t(data.locale, 'entry.addSightingHint')}</p>
     </div>
-    {#if entry.has_image}
-      <figure class="entry-figure">
-        <img src={localizedHref(data.locale, `/entry/${entry.id}/image`)} alt={entry.description || t(data.locale, 'field.sourceImage')} />
-        <figcaption>{t(data.locale, 'field.sourceImage')}</figcaption>
-      </figure>
-    {/if}
     {#each evidence as item (item.id)}
       <article class="evidence-card" id={`evidence-${item.id}`}>
         {#if item.has_image}
@@ -114,7 +108,7 @@
           {#if item.page}<div class="entry-row"><dt>{t(data.locale, 'field.page')}</dt><dd>{item.page}</dd></div>{/if}
           {#if item.note}<div class="entry-row"><dt>{t(data.locale, 'field.note')}</dt><dd>{item.note}</dd></div>{/if}
         </dl>
-        {#if item.source_id}<a class="text-link" href={localizedHref(data.locale, `/source/${item.source_id}`)}>{t(data.locale, 'source.view')}</a>{/if}
+        <p class="evidence-links"><a class="text-link" href={localizedHref(data.locale, `/entry/${entry.id}/edit#evidence-${item.id}`)}>{t(data.locale, 'evidence.edit')}</a>{#if item.source_id}<a class="text-link" href={localizedHref(data.locale, `/source/${item.source_id}`)}>{t(data.locale, 'source.view')}</a>{/if}</p>
         {#if item.has_image}
           <details class="details">
             <summary>{t(data.locale, 'crop.add')}</summary>
@@ -130,8 +124,9 @@
     <details class="details">
       <summary>{t(data.locale, 'entry.addSighting')}</summary>
       <form class="details-body" method="POST" action="?/evidence" enctype="multipart/form-data">
-        <div class="field"><label class="field-label" for="evidence-place">{t(data.locale, 'field.place')}</label><input id="evidence-place" name="place" required maxlength="500" /></div>
         <div class="field"><label class="field-label" for="evidence-image">{t(data.locale, 'field.sourceImage')}</label><input id="evidence-image" name="image" type="file" accept="image/jpeg,image/png,image/webp" /></div>
+        <div class="field"><label class="field-label" for="evidence-url">{t(data.locale, 'field.url')}</label><input id="evidence-url" name="url" type="url" maxlength="1000" placeholder="https://" aria-describedby="evidence-url-help" /><p class="field-help" id="evidence-url-help">{t(data.locale, 'field.urlHint')}</p></div>
+        <div class="field"><label class="field-label" for="evidence-place">{t(data.locale, 'field.place')}</label><input id="evidence-place" name="place" required maxlength="500" /></div>
         <div class="grid-2">
           <div class="field"><label class="field-label" for="evidence-title">{t(data.locale, 'field.title')}</label><input id="evidence-title" name="title" maxlength="300" /></div>
           <div class="field"><label class="field-label" for="evidence-author">{t(data.locale, 'field.author')}</label><input id="evidence-author" name="author" maxlength="300" /></div>

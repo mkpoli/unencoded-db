@@ -1,8 +1,8 @@
 # Rare Character Compendium
 
-A community evidence wiki for characters and glyphs. Anyone can add or revise a record with a source image, view its revision history and report a public record. Moderators review reports, can dismiss individual reports, and can hide records; hidden records can be restored from a private queue.
+A community evidence wiki for characters and glyphs. Anyone can add a character and attach evidence, revise its text, view the revision history and report a public record. Moderators review reports, can dismiss individual reports, and can hide records; hidden records can be restored from a private queue.
 
-A new record keeps one source image as its evidence: a photo, scan or screenshot of the character or glyph. The image is served only through its record at `/{locale}/entry/[id]/image`. Classifying the glyph is a later question.
+A character holds text: script, IDS, description, tags and meanings. Evidence holds what was seen elsewhere: an image, a place and its citation. A character page lists its evidence, and each image is served only through that evidence at `/{locale}/entry/[id]/evidence/[evidence]/image`. Classifying the glyph is a later question.
 
 ## Names
 
@@ -64,13 +64,13 @@ bun run build
 
 ## Images
 
-- One image per new record. Rows migrated from `0001` remain image-less. There is no image editing or replacement flow.
+- Each evidence record can carry one image. The edit page can replace or remove it; a new character starts with one evidence image. Rows migrated from `0001` remain image-less.
 - JPEG, PNG and WebP are accepted, identified by magic bytes. SVG, HTML, empty and unrecognised files are rejected.
 - The maximum file size is 8 MiB.
 - Bytes live in R2; content type and size live in D1.
 - Images are not decoded or re-encoded. A corrupt file with a valid signature may fail to render in the browser.
 - `POST /{locale}/new` accepts up to 8 MiB plus form framing. Other POST routes keep the 128 KiB limit.
-- Image responses use the stored content type, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, so hiding takes effect on the next request. Missing, hidden and invalid-locale images also return an uncached 404.
+- Evidence image responses use the stored content type, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, so hiding takes effect on the next request. Missing, hidden and invalid-locale images also return an uncached 404.
 - Images are stripped of common metadata on upload: JPEG EXIF, XMP, IPTC and comments before the image scan, PNG text, tIME and EXIF chunks, and WebP EXIF/XMP chunks. JPEG EXIF orientation is kept; ICC colour profiles and pixel content are stored as uploaded. Image metadata is not preserved for attribution, so record credit in the bibliographic fields.
 
 ## Character drawings
@@ -144,7 +144,7 @@ Drain old application instances before hiding entries, since older readers do no
 
 ## Revisions
 
-Revising a record submits the whole evidence text and advances its revision by one. `entry_revisions` stores every version; the history page lists 20 at a time, newest first. A redacted snapshot shows only its revision number, recording date and a redaction marker. Images and related characters are not versioned: edits change text fields only, so the current image and comparisons belong to every revision.
+Editing a character submits its character text and advances the entry revision by one. Editing the entry's first evidence also updates the mirrored source columns and advances the revision; later evidence edits change only that evidence record. `entry_revisions` stores every version of the character and first-evidence text; the history page lists 20 at a time, newest first. A redacted snapshot shows only its revision number, recording date and a redaction marker. Images, tags, meanings and related characters are not versioned: the current ones belong to every revision.
 
 Each edit form carries the revision and visibility generation it was opened at. A write succeeds only when both still match, so a form opened before another edit or a visibility change returns 409 rather than overwriting. Migration `0007_revisions.sql` backfills the current text of every record and installs triggers that require the next revision and reject changes to stored revisions. Migration `0008_edit_generation.sql` adds the generation that invalidates forms opened before a visibility change. Pause submissions, drain older writers and rehearse both migrations against a representative database before applying them; production-scale time and storage have not been measured.
 

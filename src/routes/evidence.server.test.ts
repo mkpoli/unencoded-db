@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { PNG_BYTES, createTestDatabase, d1Binding, fakeImages, imageFile } from '../test-support'
 import { MAX_IMAGE_BYTES } from '../lib/server/images'
 import { actions, load as newForm } from './[locale]/new/+page.server'
-import { actions as editActions } from './[locale]/entry/[id]/edit/+page.server'
+import { actions as editActions, load as editForm } from './[locale]/entry/[id]/edit/+page.server'
 import { actions as batchActions } from './[locale]/batch/+page.server'
 import { load as list } from './[locale]/+page.server'
 import { actions as entryActions } from './[locale]/entry/[id]/+page.server'
@@ -234,9 +234,12 @@ describe('evidence routes', () => {
       expect(listing.entries[0]).toMatchObject({ id: 1, ids: record.ids, place: record.place })
 
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
-      expect(result.entry).toMatchObject({ ...record, id: 1, has_image: 1 })
+      expect(result.entry).toMatchObject({ id: 1, script: record.script, ids: record.ids })
+      expect(result.entry.place).toBeUndefined()
+      expect(result.entry.has_image).toBeUndefined()
       expect(result.entry.image_key).toBeUndefined()
       expect(result.entry.url).toBeUndefined()
+      expect(result.evidence[0]).toMatchObject({ place: record.place, title: record.title, author: record.author, publisher: record.publisher, year: record.year, page: record.page, note: record.note, has_image: 1 })
       expect(JSON.stringify(result)).not.toContain(put.key)
     } finally { db.close() }
   })
@@ -244,14 +247,17 @@ describe('evidence routes', () => {
   test('lists and renders a historical record without an image', async () => {
     const db = createTestDatabase()
     try {
-      db.exec("INSERT INTO entries (script, ids, place, title, created_at) VALUES ('Han', '⿰木木', 'Book', 'Old source', '2026-01-01T00:00:00.000Z')")
+      const inserted = db.query("INSERT INTO entries (script, ids, place, title, created_at) VALUES ('Han', '⿰木木', 'Book', 'Old source', '2026-01-01T00:00:00.000Z')").run()
+      db.query("INSERT INTO evidence (entry_id, place, title, created_at) VALUES (?, 'Book', 'Old source', '2026-01-01T00:00:00.000Z')").run(Number(inserted.lastInsertRowid))
       const DB = d1Binding(db)
       const listing = await list({ platform: { env: { DB } }, url: new URL('https://example.test/en') } as any) as any
       expect(listing.entries).toHaveLength(1)
       expect(listing.entries[0]).toMatchObject({ id: 1, place: 'Book' })
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
-      expect(result.entry).toMatchObject({ id: 1, title: 'Old source', has_image: 0 })
+      expect(result.entry).toMatchObject({ id: 1, script: 'Han', ids: '⿰木木' })
+      expect(result.entry.title).toBeUndefined()
       expect(result.entry.url).toBeUndefined()
+      expect(result.evidence[0]).toMatchObject({ place: 'Book', title: 'Old source', has_image: 0 })
     } finally { db.close() }
   })
 
@@ -594,10 +600,11 @@ describe('evidence routes', () => {
       const post = (values: Record<string, string>) => {
         const form = new FormData()
         for (const [key, value] of Object.entries({ revision: '1', edit_generation: '1', script: 'Han', place: 'Book', encoded_as: 'U+4E00', ...values })) form.set(key, value)
-        return editActions.default!({ params: { locale: 'en', id: '1' }, platform: { env: { DB } }, request: new Request('https://example.test/en/entry/1/edit', { method: 'POST', body: form }) } as any)
+        return editActions.character!({ params: { locale: 'en', id: '1' }, platform: { env: { DB } }, request: new Request('https://example.test/en/entry/1/edit', { method: 'POST', body: form }) } as any)
       }
       await expect(post({ ivd_status: 'registered', ivd_sequence: '一\u{E0100}' })).rejects.toMatchObject({ status: 303 })
       expect(db.query('SELECT encoded_as, ivd_status, ivd_sequence, revision FROM entries WHERE id = 1').get()).toEqual({ encoded_as: 'U+4E00', ivd_status: 'registered', ivd_sequence: 'U+4E00 U+E0100', revision: 2 })
+      expect((await editForm({ params: { locale: 'en', id: '1' }, platform: { env: { DB } } } as any) as any).entry).toMatchObject({ ivd_status: 'registered', ivd_sequence: 'U+4E00 U+E0100' })
       const invalid = await post({ revision: '2', ivd_status: 'registered', ivd_sequence: 'nope' }) as { status: number }
       expect(invalid.status).toBe(400)
       expect(db.query('SELECT ivd_sequence, revision FROM entries WHERE id = 1').get()).toEqual({ ivd_sequence: 'U+4E00 U+E0100', revision: 2 })

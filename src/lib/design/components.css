@@ -293,7 +293,7 @@
 .entry-row dt { color: var(--muted); font-size: var(--text-sm); font-weight: 500; }
 .entry-row dd { min-width: 0; font-size: var(--text-base); white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* Evidence below the character card. A source's details stay inside its own card. */
+/* Evidence below the character card. Each source keeps its image and citation together. */
 .evidence-section { display: grid; gap: var(--space-3); margin-top: var(--space-8); }
 .section-head { display: grid; gap: var(--space-1); }
 .evidence-card {
@@ -318,7 +318,7 @@
 }
 .evidence-card .entry-meta { padding: 0; border: 0; background: none; }
 .evidence-card .entry-row:first-child { border-top: 1px solid var(--line); }
-.evidence-card > .text-link { justify-self: start; font-size: var(--text-sm); }
+.evidence-links { display: flex; flex-wrap: wrap; gap: var(--space-4); }
 .crop-list { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .crop-thumb { display: grid; gap: 6px; margin: 0; }
 .crop-thumb > div { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }

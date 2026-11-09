@@ -49,8 +49,7 @@
     }).catch(() => {})
   })
   // A validation notice belongs to the section that holds the failing field.
-  const optionalError = $derived(!!(form?.errors?.url || form?.errors?.description || form?.errors?.note || form?.errors?.title || form?.errors?.author || form?.errors?.publisher || form?.errors?.year || form?.errors?.page))
-  const errorOrder = ['image', 'place', 'script', 'ids', 'description', 'note', 'title', 'author', 'publisher', 'year', 'page'] as const
+  const errorOrder = ['image', 'url', 'place', 'note', 'title', 'author', 'publisher', 'year', 'page', 'script', 'ids', 'description'] as const
   const operators = new Set([...'⿰⿱⿲⿳⿴⿵⿶⿷⿸⿹⿺⿻'])
   const suggestions = $derived(related(data.suggestions ?? [], ids))
 
@@ -109,8 +108,8 @@
     rateLimitFailure = null
     return async ({ result, update }) => handleContributionResult(result, status => { rateLimitFailure = status }, update)
   }}>
-    <section class="form-section" aria-labelledby="source-heading">
-      <h2 class="section-label" id="source-heading">{t(data.locale, 'field.source')}</h2>
+    <section class="form-section" aria-labelledby="evidence-heading">
+      <h2 class="section-label" id="evidence-heading">{t(data.locale, 'form.evidence')}</h2>
       <div class="field">
         <label class="field-label" for="image">{t(data.locale, 'field.sourceImage')}</label>
         <FileField
@@ -142,6 +141,39 @@
         <input id="place" name="place" required maxlength="500" value={form?.values?.place ?? ''} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} />
         {#if form?.errors?.place}<p class="field-error" id="place-error">{form.errors.place}</p>{/if}
       </div>
+        <div class="field">
+          <label class="field-label" for="note">{t(data.locale, 'field.note')}</label>
+          <textarea id="note" name="note" maxlength="5000" aria-invalid={!!form?.errors?.note} aria-describedby={form?.errors?.note ? 'note-error' : undefined}>{form?.values?.note ?? ''}</textarea>
+          {#if form?.errors?.note}<p class="field-error" id="note-error">{form.errors.note}</p>{/if}
+        </div>
+        <div class="field">
+          <label class="field-label" for="title">{t(data.locale, 'field.title')}</label>
+          <input id="title" name="title" maxlength="300" value={form?.values?.title ?? ''} aria-invalid={!!form?.errors?.title} aria-describedby={form?.errors?.title ? 'title-error' : undefined} />
+          {#if form?.errors?.title}<p class="field-error" id="title-error">{form.errors.title}</p>{/if}
+        </div>
+        <div class="field">
+          <label class="field-label" for="author">{t(data.locale, 'field.author')}</label>
+          <input id="author" name="author" maxlength="300" value={form?.values?.author ?? ''} aria-invalid={!!form?.errors?.author} aria-describedby={form?.errors?.author ? 'author-error' : undefined} />
+          {#if form?.errors?.author}<p class="field-error" id="author-error">{form.errors.author}</p>{/if}
+        </div>
+        <div class="field">
+          <label class="field-label" for="publisher">{t(data.locale, 'field.publisher')}</label>
+          <input id="publisher" name="publisher" maxlength="300" value={form?.values?.publisher ?? ''} aria-invalid={!!form?.errors?.publisher} aria-describedby={form?.errors?.publisher ? 'publisher-error' : undefined} />
+          {#if form?.errors?.publisher}<p class="field-error" id="publisher-error">{form.errors.publisher}</p>{/if}
+        </div>
+        <div class="field-grid">
+          <div class="field">
+            <label class="field-label" for="year">{t(data.locale, 'field.year')}</label>
+            <input id="year" name="year" maxlength="40" placeholder="1998 / 1998-05 / 1998-05-12 / 05" value={form?.values?.year ?? ''} aria-invalid={!!form?.errors?.year} aria-describedby={form?.errors?.year ? 'year-help year-error' : 'year-help'} />
+            <p class="field-help" id="year-help">{t(data.locale, 'field.dateHint')}</p>
+            {#if form?.errors?.year}<p class="field-error" id="year-error">{form.errors.year}</p>{/if}
+          </div>
+          <div class="field">
+            <label class="field-label" for="page">{t(data.locale, 'field.page')}</label>
+            <input id="page" name="page" maxlength="80" value={form?.values?.page ?? ''} aria-invalid={!!form?.errors?.page} aria-describedby={form?.errors?.page ? 'page-error' : undefined} />
+            {#if form?.errors?.page}<p class="field-error" id="page-error">{form.errors.page}</p>{/if}
+          </div>
+        </div>
     </section>
     <section class="form-section" aria-labelledby="character-heading">
       <h2 class="section-label" id="character-heading">{t(data.locale, 'form.character')}</h2>
@@ -224,10 +256,6 @@
           </div>
         {/if}
       </div>
-    </section>
-    <details class="details" open={optionalError}>
-      <summary>{t(data.locale, 'field.moreDetails')} <span>{t(data.locale, 'form.optional')}</span></summary>
-      <div class="details-body">
         <fieldset class="field">
           <legend class="field-label">{t(data.locale, 'field.senses')}</legend>
           {#each senses as sense, i}
@@ -244,41 +272,7 @@
           <textarea id="description" name="description" maxlength="5000" aria-invalid={!!form?.errors?.description} aria-describedby={form?.errors?.description ? 'description-error' : undefined}>{form?.values?.description ?? ''}</textarea>
           {#if form?.errors?.description}<p class="field-error" id="description-error">{form.errors.description}</p>{/if}
         </div>
-        <div class="field">
-          <label class="field-label" for="note">{t(data.locale, 'field.note')}</label>
-          <textarea id="note" name="note" maxlength="5000" aria-invalid={!!form?.errors?.note} aria-describedby={form?.errors?.note ? 'note-error' : undefined}>{form?.values?.note ?? ''}</textarea>
-          {#if form?.errors?.note}<p class="field-error" id="note-error">{form.errors.note}</p>{/if}
-        </div>
-        <div class="field">
-          <label class="field-label" for="title">{t(data.locale, 'field.title')}</label>
-          <input id="title" name="title" maxlength="300" value={form?.values?.title ?? ''} aria-invalid={!!form?.errors?.title} aria-describedby={form?.errors?.title ? 'title-error' : undefined} />
-          {#if form?.errors?.title}<p class="field-error" id="title-error">{form.errors.title}</p>{/if}
-        </div>
-        <div class="field">
-          <label class="field-label" for="author">{t(data.locale, 'field.author')}</label>
-          <input id="author" name="author" maxlength="300" value={form?.values?.author ?? ''} aria-invalid={!!form?.errors?.author} aria-describedby={form?.errors?.author ? 'author-error' : undefined} />
-          {#if form?.errors?.author}<p class="field-error" id="author-error">{form.errors.author}</p>{/if}
-        </div>
-        <div class="field">
-          <label class="field-label" for="publisher">{t(data.locale, 'field.publisher')}</label>
-          <input id="publisher" name="publisher" maxlength="300" value={form?.values?.publisher ?? ''} aria-invalid={!!form?.errors?.publisher} aria-describedby={form?.errors?.publisher ? 'publisher-error' : undefined} />
-          {#if form?.errors?.publisher}<p class="field-error" id="publisher-error">{form.errors.publisher}</p>{/if}
-        </div>
-        <div class="field-grid">
-          <div class="field">
-            <label class="field-label" for="year">{t(data.locale, 'field.year')}</label>
-            <input id="year" name="year" maxlength="40" placeholder="1998 / 1998-05 / 1998-05-12 / 05" value={form?.values?.year ?? ''} aria-invalid={!!form?.errors?.year} aria-describedby={form?.errors?.year ? 'year-help year-error' : 'year-help'} />
-            <p class="field-help" id="year-help">{t(data.locale, 'field.dateHint')}</p>
-            {#if form?.errors?.year}<p class="field-error" id="year-error">{form.errors.year}</p>{/if}
-          </div>
-          <div class="field">
-            <label class="field-label" for="page">{t(data.locale, 'field.page')}</label>
-            <input id="page" name="page" maxlength="80" value={form?.values?.page ?? ''} aria-invalid={!!form?.errors?.page} aria-describedby={form?.errors?.page ? 'page-error' : undefined} />
-            {#if form?.errors?.page}<p class="field-error" id="page-error">{form.errors.page}</p>{/if}
-          </div>
-        </div>
-      </div>
-    </details>
+    </section>
     <p class="field-help">{t(data.locale, 'new.attribution')}</p>
     <section class="form-section" aria-labelledby="related-heading">
       <h2 class="section-label" id="related-heading">{t(data.locale, 'form.related')}</h2>
