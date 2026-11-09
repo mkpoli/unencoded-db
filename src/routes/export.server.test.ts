@@ -26,9 +26,16 @@ type ExportedRecord = {
   [key: string]: unknown
 }
 
+type ExportBody = {
+  version?: number
+  records: ExportedRecord[]
+  next: number | null
+  error?: string
+}
+
 async function exportJson(db: Database, query = '') {
   const response = await GET({ platform: { env: { DB: d1Binding(db) } }, url: new URL(`https://example.test/export.json${query}`) } as any)
-  return { response, body: await response.json() as { version?: number; records: ExportedRecord[]; next: number | null; error?: string } }
+  return { response, body: await response.json() as ExportBody }
 }
 
 describe('JSON export', () => {
