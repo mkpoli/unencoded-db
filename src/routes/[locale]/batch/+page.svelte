@@ -1,10 +1,12 @@
 <script lang="ts">
   import FileField from '$lib/components/FileField.svelte'
+  import ScriptSelect from '$lib/components/ScriptSelect.svelte'
+  import { DEFAULT_SCRIPT } from '$lib/script'
   import { t, type Locale } from '$lib/i18n'
   type Row = { script: string; ids: string; description: string }
   let { data }: { data: { locale: Locale } } = $props()
-  let rows = $state<Row[]>([{ script: 'Han', ids: '', description: '' }])
-  const add = () => rows.push({ script: 'Han', ids: '', description: '' })
+  let rows = $state<Row[]>([{ script: DEFAULT_SCRIPT, ids: '', description: '' }])
+  const add = () => rows.push({ script: DEFAULT_SCRIPT, ids: '', description: '' })
   const remove = (index: number) => { if (rows.length > 1) rows.splice(index, 1) }
 </script>
 
@@ -34,7 +36,7 @@
       {#each rows as row, i}
         <fieldset class="comparison">
           <legend>{t(data.locale, 'batch.character', { n: i + 1 })}</legend>
-          <div class="field"><label class="field-label" for={`script-${i}`}>{t(data.locale, 'field.script')}</label><input id={`script-${i}`} name="script" required maxlength="80" bind:value={row.script} /></div>
+          <div class="field"><label class="field-label" for={`script-${i}`}>{t(data.locale, 'field.script')}</label><ScriptSelect id={`script-${i}`} bind:value={row.script} /></div>
           <div class="field"><label class="field-label" for={`ids-${i}`}>{t(data.locale, 'field.ids')}</label><input id={`ids-${i}`} name="ids" maxlength="200" bind:value={row.ids} /></div>
           <div class="field"><label class="field-label" for={`description-${i}`}>{t(data.locale, 'field.description')}</label><textarea id={`description-${i}`} name="description" maxlength="5000" bind:value={row.description}></textarea></div>
           {#if rows.length > 1}<button class="secondary" type="button" onclick={() => remove(i)}>{t(data.locale, 'batch.remove')}</button>{/if}

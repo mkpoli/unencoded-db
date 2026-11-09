@@ -105,6 +105,8 @@
   "field.tags": "Thẻ",
   "field.tagsHint": "Nhãn ngắn, cách nhau bằng dấu phẩy, ví dụ từ tiếng Hakka.",
   "field.title": "Nhan đề",
+  "field.url": "Liên kết",
+  "field.urlHint": "Bản quét, bài đăng hoặc trang mục lục.",
   "field.year": "Ngày hoặc năm",
   "footer.thirdParty": "Thông báo bên thứ ba (tiếng Anh)",
   "form.addComparison": "Thêm so sánh",

@@ -173,9 +173,10 @@ export const actions: Actions = {
     if (!row) error(404)
     const raw = Object.fromEntries(evidenceFields.map(name => [name, text(form, name)])) as Record<string, string>
     const errors: Record<string, string> = {}
-    const limits: Record<string, number> = { place: 500, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
+    const limits: Record<string, number> = { place: 500, url: 1000, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
     for (const [name, limit] of Object.entries(limits)) if (raw[name]!.length > limit) errors[name] = t(locale, name === 'place' ? 'error.placeSeen' : 'error.length')
     if (!raw.place) errors.place = t(locale, 'error.placeSeen')
+    if (raw.url && !/^https?:\/\//i.test(raw.url)) errors.url = t(locale, 'error.length')
     const fields = readEvidenceFields(form)
     const revision = positive(form.get('revision'))
     const generation = positive(form.get('edit_generation'))
@@ -229,9 +230,10 @@ export const actions: Actions = {
     const form = await request.formData()
     const values = Object.fromEntries(evidenceFields.map(name => [name, text(form, name)])) as Record<string, string>
     const errors: Record<string, string> = {}
-    const limits: Record<string, number> = { place: 500, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
+    const limits: Record<string, number> = { place: 500, url: 1000, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
     for (const [name, limit] of Object.entries(limits)) if (values[name]!.length > limit) errors[name] = t(locale, name === 'place' ? 'error.placeSeen' : 'error.length')
     if (!values.place) errors.place = t(locale, 'error.placeSeen')
+    if (values.url && !/^https?:\/\//i.test(values.url)) errors.url = t(locale, 'error.length')
     const fields = readEvidenceFields(form)
     let image: { key: string; type: string; size: number } | null = null
     const file = form.get('image')

@@ -2,9 +2,11 @@
   import { enhance } from '$app/forms'
   import { untrack } from 'svelte'
   import FileField from '$lib/components/FileField.svelte'
+  import ScriptSelect from '$lib/components/ScriptSelect.svelte'
   import { newComparison, relationshipLabel, removeComparison } from '$lib/comparison-rows'
   import { handleContributionResult } from '$lib/contribution-result'
   import { localizedHref, t, type Locale } from '$lib/i18n'
+  import { DEFAULT_SCRIPT } from '$lib/script'
   import partsUrl from 'ids-input/data/han-parts.json.gz?url'
   import { estimateStrokes } from '$lib/strokes'
 
@@ -24,7 +26,7 @@
   let comparisons = $state<Comparison[]>(untrack(() => form?.comparisons?.rows ?? []))
   let comparisonErrors = $state<boolean[]>(untrack(() => form?.comparisons?.errors ?? []))
   // A failed submission seeds the fields once; after that the reader's edits own them.
-  let script = $state(untrack(() => form?.values?.script ?? 'Han'))
+  let script = $state(untrack(() => form?.values?.script ?? DEFAULT_SCRIPT))
   let ids = $state(untrack(() => form?.values?.ids ?? ''))
   let senses = $state([{ gloss: '', reading: '' }])
   let strokes = $state(String(untrack(() => form?.values?.strokes ?? '')))
@@ -49,7 +51,7 @@
     }).catch(() => {})
   })
   // A validation notice belongs to the section that holds the failing field.
-  const errorOrder = ['image', 'place', 'note', 'title', 'author', 'publisher', 'year', 'page', 'script', 'ids', 'description'] as const
+  const errorOrder = ['image', 'url', 'place', 'note', 'title', 'author', 'publisher', 'year', 'page', 'script', 'ids', 'description'] as const
   const operators = new Set([...'⿰⿱⿲⿳⿴⿵⿶⿷⿸⿹⿺⿻'])
   const suggestions = $derived(related(data.suggestions ?? [], ids))
 
@@ -142,6 +144,12 @@
         {#if imageError}<p class="field-error" id="image-error">{imageError}</p>{/if}
       </div>
       <div class="field">
+        <label class="field-label" for="url">{t(data.locale, 'field.url')}</label>
+        <input id="url" name="url" type="url" maxlength="1000" placeholder="https://" value={form?.values?.url ?? ''} aria-invalid={!!form?.errors?.url} aria-describedby="url-help" />
+        <p class="field-help" id="url-help">{t(data.locale, 'field.urlHint')}</p>
+        {#if form?.errors?.url}<p class="field-error">{form.errors.url}</p>{/if}
+      </div>
+      <div class="field">
         <label class="field-label" for="place">{t(data.locale, 'field.place')}</label>
         <input id="place" name="place" required maxlength="500" value={form?.values?.place ?? ''} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} />
         {#if form?.errors?.place}<p class="field-error" id="place-error">{form.errors.place}</p>{/if}
@@ -184,7 +192,7 @@
       <h2 class="section-label" id="character-heading">{t(data.locale, 'form.character')}</h2>
       <div class="field">
         <label class="field-label" for="script">{t(data.locale, 'field.script')}</label>
-        <input id="script" name="script" required maxlength="80" bind:value={script} aria-invalid={!!form?.errors?.script} aria-describedby={form?.errors?.script ? 'script-error' : undefined} />
+        <ScriptSelect bind:value={script} invalid={!!form?.errors?.script} describedBy={form?.errors?.script ? 'script-error' : undefined} />
         {#if form?.errors?.script}<p class="field-error" id="script-error">{form.errors.script}</p>{/if}
       </div>
       <div class="field">

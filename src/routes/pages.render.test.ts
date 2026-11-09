@@ -12,12 +12,14 @@ const script = resolve('src/lib/script.ts')
 const fileField = resolve('src/lib/components/FileField.svelte')
 const cropField = resolve('src/lib/components/CropField.svelte')
 const idsGlyph = resolve('src/lib/components/IdsGlyph.svelte')
+const scriptSelect = resolve('src/lib/components/ScriptSelect.svelte')
 const appForms = resolve(tmp, 'app-forms.js')
 writeFileSync(appForms, 'export function enhance() { return {} }\n')
 const components = new Map<string, Promise<any>>()
 let fileFieldModule: Promise<string> | null = null
 let cropFieldModule: Promise<string> | null = null
 let idsGlyphModule: Promise<string> | null = null
+let scriptSelectModule: Promise<string> | null = null
 
 function loadFileField(): Promise<string> {
   if (!fileFieldModule) {
@@ -58,6 +60,20 @@ function loadIdsGlyph(): Promise<string> {
   return idsGlyphModule
 }
 
+function loadScriptSelect(): Promise<string> {
+  if (!scriptSelectModule) {
+    scriptSelectModule = (async () => {
+      const preprocessed = await preprocess(readFileSync(scriptSelect, 'utf8'), vitePreprocess({ script: true }), { filename: scriptSelect })
+      let { js } = compile(preprocessed.code, { filename: scriptSelect, generate: 'server' })
+      const code = js.code.replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`)
+      const target = resolve(tmp, 'scriptselect.js')
+      writeFileSync(target, code)
+      return target
+    })()
+  }
+  return scriptSelectModule
+}
+
 async function load(path: string, name: string) {
   let pending = components.get(name)
   if (!pending) {
@@ -68,7 +84,8 @@ async function load(path: string, name: string) {
       const dep = await loadFileField()
       const crop = await loadCropField()
       const glyph = await loadIdsGlyph()
-      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
+      const select = await loadScriptSelect()
+      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`).replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
@@ -179,8 +196,11 @@ describe('localized pages', () => {
     expect(body).toContain('name="image"')
     expect(body).toContain('type="file"')
     expect(body).toContain('accept="image/jpeg,image/png,image/webp"')
-    expect(body).not.toContain('name="url"')
-    expect(body).not.toContain('HTTP或HTTPS網址')
+    expect(body).toContain('<select id="script" name="script"')
+    expect(body).toMatch(/<option value="Han" selected="">Han<\/option>/)
+    expect(body).toContain('<option value="Chữ Nôm">Chữ Nôm</option>')
+    expect(body).toContain('name="url"')
+    expect(body).toContain('連結')
     expect(body).toContain('相關文字')
     expect(body).toContain('最多可比較10個字。')
     expect(body).toContain('新增比較')
@@ -205,12 +225,19 @@ describe('localized pages', () => {
       data: {
         locale: 'ko',
         entry: { id: 9, script: 'Han', ids: '⿰木木', description: null, radical: null, encoded_as: null, strokes: null, created_at: '2026-11-08T05:00:00.000Z' },
+        glyph: 'M0 0',
         comparisons: [{ character: '漢', relationship: 'variant', differences: '획 하나 차이', evidence: '4쪽' }],
-        evidence: [{ id: 4, place: '서울', title: null, author: null, publisher: null, year: null, page: null, note: null, source_id: null, has_image: 1, created_at: '2026-11-08T05:00:00.000Z' }],
+        evidence: [{ id: 4, place: '서울', url: null, title: null, author: null, publisher: null, year: null, page: null, note: null, source_id: null, has_image: 1, created_at: '2026-11-08T05:00:00.000Z' }],
       },
     })
     expect(head).toContain('문자 9 · 진자집람')
     expect(body).toContain('href="/ko"')
+    expect(body).toContain('class="character-card"')
+    expect(body).toContain('class="character-glyph"')
+    expect(body).toContain('<span class="visually-hidden">⿰木木</span>')
+    expect(body).toContain('<svg viewBox="0 0 1000 1000"')
+    expect(body).toContain('d="M0 0"')
+    expect(body).toContain('class="evidence-section"')
     expect(body).toContain('src="/ko/entry/9/evidence/4/image"')
     expect(body).toContain('alt="서울"')
     expect(body).toContain('표의 문자 구성 설명(IDS)')
@@ -226,6 +253,25 @@ describe('localized pages', () => {
     expect(body).toContain('수정 이력')
     expect(body).not.toContain('src="/ko/entry/9/image"')
     expect(body).not.toContain('https://example.org/source')
+  })
+
+  test('entry page keeps evidence below the character card and links a URL source', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-evidence', {
+      data: {
+        locale: 'en',
+        entry: { id: 9, script: 'Han', ids: null, description: null, place: 'Seoul', title: null, author: null, publisher: null, year: null, page: null, note: null, created_at: '2026-11-08T05:00:00.000Z', has_image: 0 },
+        glyph: null,
+        comparisons: [],
+        evidence: [{ id: 5, place: 'https://example.org/scan', url: null, title: 'Scan', author: null, publisher: null, year: '2026', page: null, note: null, source_id: 3, has_image: 0, created_at: '2026-11-08T05:00:00.000Z' }],
+        crops: [],
+      },
+    })
+    expect(body.indexOf('character-card')).toBeLessThan(body.indexOf('evidence-section'))
+    expect(body).toContain('class="evidence-card"')
+    expect(body).toContain('href="https://example.org/scan"')
+    expect(body).toContain('↗')
+    expect(body).toContain('href="/en/source/3"')
+    expect(body).toContain('Source details')
   })
 
   test('entry page shows moderator controls only when a moderator is present', async () => {
@@ -274,7 +320,7 @@ describe('localized pages', () => {
       data: {
         locale: 'ja',
         entry: { id: 9, revision: 2, edit_generation: 5, script: 'Han', ids: '⿰木木', description: '説明', radical: null, encoded_as: null, strokes: null, comparisons: [] },
-        evidence: [{ id: 4, place: '本書', title: '題名', author: '著者', publisher: '出版者', year: '1900', page: '8', note: 'メモ', has_image: 1, source_id: null }],
+        evidence: [{ id: 4, place: '本書', url: 'https://example.org/scan', title: '題名', author: '著者', publisher: '出版者', year: '1900', page: '8', note: 'メモ', has_image: 1, source_id: null }],
         senses: [{ id: 1, gloss: '意味', reading: 'いみ' }],
         tags: ['客家'],
         genres: [],
@@ -289,7 +335,7 @@ describe('localized pages', () => {
         message: '編集中にこの記録が更新されました。現在の版を別のタブで開き、そちらに変更を反映してください。',
         revision: '2',
         generation: '5',
-        values: { place: '未保存の場所', title: '題名', note: 'メモ' },
+        values: { place: '未保存の場所', url: 'https://example.org/scan', title: '題名', note: 'メモ' },
         errors: { place: '文字を見つけた場所を入力してください（500文字以内）。' },
       },
     })
@@ -303,6 +349,9 @@ describe('localized pages', () => {
     expect(body).toContain('証拠を保存')
     expect(body).toContain('href="/ja/entry/9"')
     expect(body).toContain('name="script"')
+    expect(body).toContain('<select id="script" name="script"')
+    expect(body).toContain('name="url"')
+    expect(body).toContain('value="https://example.org/scan"')
     expect(body).toContain('name="description"')
     expect(body).toContain('name="sense_gloss"')
     expect(body).toContain('name="evidence"')

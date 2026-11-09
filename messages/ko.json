@@ -105,6 +105,8 @@
   "field.tags": "태그",
   "field.tagsHint": "하카어 같은 짧은 라벨을 쉼표로 구분하세요.",
   "field.title": "제목",
+  "field.url": "링크",
+  "field.urlHint": "스캔, 게시물 또는 목록 페이지.",
   "field.year": "날짜 또는 연도",
   "footer.thirdParty": "제3자 고지(영어)",
   "form.addComparison": "비교 추가",

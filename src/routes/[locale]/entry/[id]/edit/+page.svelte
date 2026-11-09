@@ -2,6 +2,7 @@
   import { untrack } from 'svelte'
   import FileField from '$lib/components/FileField.svelte'
   import { newComparison, relationshipLabel, removeComparison } from '$lib/comparison-rows'
+  import ScriptSelect from '$lib/components/ScriptSelect.svelte'
   import { localizedHref, t, type Locale } from '$lib/i18n'
   import type { Comparison } from '$lib/server/related'
 
@@ -11,6 +12,7 @@
   type Evidence = {
     id: number
     place: string
+    url: string | null
     title: string | null
     author: string | null
     publisher: string | null
@@ -118,7 +120,7 @@
       <h2 class="section-label" id="character-heading">{t(data.locale, 'form.character')}</h2>
       <div class="field">
         <label class="field-label" for="script">{t(data.locale, 'field.script')}</label>
-        <input id="script" name="script" required maxlength="80" value={current('script')} aria-invalid={!!characterError('script')} aria-describedby={characterError('script') ? 'script-error' : undefined} />
+        <ScriptSelect id="script" name="script" value={current('script')} invalid={!!characterError('script')} describedBy={characterError('script') ? 'script-error' : undefined} />
         {#if characterError('script')}<p class="field-error" id="script-error">{characterError('script')}</p>{/if}
       </div>
       <div class="field">
@@ -279,6 +281,12 @@
           <p class="field-help" id={`evidence-keep-${item.id}`}>{t(data.locale, 'evidence.keepImage')}</p>
         </div>
         <div class="field">
+          <label class="field-label" for={`url-${item.id}`}>{t(data.locale, 'field.url')}</label>
+          <input id={`url-${item.id}`} name="url" type="url" maxlength="1000" placeholder="https://" value={evidenceValue(item, 'url')} aria-invalid={!!evidenceError(item, 'url')} aria-describedby={`url-help-${item.id}`} />
+          <p class="field-help" id={`url-help-${item.id}`}>{t(data.locale, 'field.urlHint')}</p>
+          {#if evidenceError(item, 'url')}<p class="field-error">{evidenceError(item, 'url')}</p>{/if}
+        </div>
+        <div class="field">
           <label class="field-label" for={`place-${item.id}`}>{t(data.locale, 'field.place')}</label>
           <input id={`place-${item.id}`} name="place" required maxlength="500" value={evidenceValue(item, 'place')} aria-invalid={!!evidenceError(item, 'place')} />
           {#if evidenceError(item, 'place')}<p class="field-error">{evidenceError(item, 'place')}</p>{/if}
@@ -316,6 +324,12 @@
           describedBy="new-formats"
           error={addError('image') ?? ''}
         />
+      </div>
+      <div class="field">
+        <label class="field-label" for="new-url">{t(data.locale, 'field.url')}</label>
+        <input id="new-url" name="url" type="url" maxlength="1000" placeholder="https://" value={addValue('url')} aria-invalid={!!addError('url')} aria-describedby="new-url-help" />
+        <p class="field-help" id="new-url-help">{t(data.locale, 'field.urlHint')}</p>
+        {#if addError('url')}<p class="field-error">{addError('url')}</p>{/if}
       </div>
       <div class="field">
         <label class="field-label" for="new-place">{t(data.locale, 'field.place')}</label>
