@@ -82,7 +82,7 @@
     </div>
     {#if entry.has_image}
       <figure class="entry-figure">
-        <img src={localizedHref(data.locale, `/entry/${entry.id}/image`)} alt={entry.description || t(data.locale, 'field.sourceImage')} />
+        <img src={localizedHref(data.locale, `/entry/${entry.id}/image`)} alt={entry.description || ''} />
         <figcaption>{t(data.locale, 'field.sourceImage')}</figcaption>
       </figure>
     {/if}

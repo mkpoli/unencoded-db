@@ -199,7 +199,7 @@ describe('localized pages', () => {
     expect(body).toContain('<svg viewBox="0 0 1000 1000"')
     expect(body).toContain('d="M0 0"')
     expect(body).toContain('src="/ko/entry/9/image"')
-    expect(body).toContain('alt="출처 이미지"')
+    expect(body).toContain('alt=""')
     expect(body).toContain('class="evidence-section"')
     expect(body).toContain('표의 문자 구성 설명(IDS)')
     expect(body).toContain('발견한 곳')
@@ -226,12 +226,28 @@ describe('localized pages', () => {
         crops: [],
       },
     })
+    expect(body).toContain('class="character-card"')
     expect(body.indexOf('character-card')).toBeLessThan(body.indexOf('evidence-section'))
     expect(body).toContain('class="evidence-card"')
     expect(body).toContain('href="https://example.org/scan"')
     expect(body).toContain('↗')
     expect(body).toContain('href="/en/source/3"')
     expect(body).toContain('Source details')
+  })
+
+  test('entry page falls back to the IDS text when no drawing is cached', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-no-glyph', {
+      data: {
+        locale: 'en',
+        entry: { id: 9, script: 'Han', ids: '⿰木木', description: null, place: 'Seoul', title: null, author: null, publisher: null, year: null, page: null, note: null, created_at: '2026-11-08T05:00:00.000Z', has_image: 0 },
+        glyph: null,
+        comparisons: [],
+        evidence: [],
+        crops: [],
+      },
+    })
+    expect(body).toContain('<span class="fallback')
+    expect(body).not.toContain('<svg viewBox="0 0 1000 1000"')
   })
 
   test('entry page shows moderator controls only when a moderator is present', async () => {
