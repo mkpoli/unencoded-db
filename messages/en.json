@@ -167,5 +167,8 @@
   "reports.record": "Report {id}",
   "reports.title": "Open reports",
   "sense.add": "Add meaning",
-  "sense.remove": "Remove"
+  "sense.remove": "Remove",
+  "source.intro": "Characters recorded from this source.",
+  "source.title": "Source",
+  "source.view": "Source details"
 }

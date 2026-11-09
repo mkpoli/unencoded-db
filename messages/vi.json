@@ -167,5 +167,8 @@
   "reports.record": "Báo cáo {id}",
   "reports.title": "Báo cáo chưa xử lý",
   "sense.add": "Thêm nghĩa",
-  "sense.remove": "Xóa"
+  "sense.remove": "Xóa",
+  "source.intro": "Các chữ được ghi nhận từ nguồn này.",
+  "source.title": "Nguồn",
+  "source.view": "Chi tiết nguồn"
 }
