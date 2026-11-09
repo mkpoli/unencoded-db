@@ -3,10 +3,12 @@
   import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
 
   type Comparison = { character: string; relationship: string; differences: string; evidence: string }
+  type Evidence = { id: number; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; has_image: number; created_at: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
-  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; isModerator: boolean; reported: boolean } } = $props()
+  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons)
+  let evidence = $derived(data.evidence)
 </script>
 
 <svelte:head><title>{t(data.locale, 'entry.record', { id: entry.id })} · {t(data.locale, 'app.name')}</title></svelte:head>
@@ -35,15 +37,44 @@
     <div class="entry-row"><dt>{t(data.locale, 'field.script')}</dt><dd>{entry.script}</dd></div>
     {#if entry.ids}<div class="entry-row"><dt>{t(data.locale, 'field.ids')}</dt><dd>{entry.ids}</dd></div>{/if}
     {#if entry.description}<div class="entry-row"><dt>{t(data.locale, 'field.description')}</dt><dd>{entry.description}</dd></div>{/if}
-    <div class="entry-row"><dt>{t(data.locale, 'field.place')}</dt><dd>{entry.place}</dd></div>
-    {#if entry.title}<div class="entry-row"><dt>{t(data.locale, 'field.title')}</dt><dd>{entry.title}</dd></div>{/if}
-    {#if entry.author}<div class="entry-row"><dt>{t(data.locale, 'field.author')}</dt><dd>{entry.author}</dd></div>{/if}
-    {#if entry.publisher}<div class="entry-row"><dt>{t(data.locale, 'field.publisher')}</dt><dd>{entry.publisher}</dd></div>{/if}
-    {#if entry.year}<div class="entry-row"><dt>{t(data.locale, 'field.year')}</dt><dd>{entry.year}</dd></div>{/if}
-    {#if entry.page}<div class="entry-row"><dt>{t(data.locale, 'field.page')}</dt><dd>{entry.page}</dd></div>{/if}
-    {#if entry.note}<div class="entry-row"><dt>{t(data.locale, 'field.note')}</dt><dd>{entry.note}</dd></div>{/if}
     <div class="entry-row"><dt>{t(data.locale, 'entry.added')}</dt><dd>{formatDate(data.locale, entry.created_at)}</dd></div>
   </dl>
+  <section class="evidence-section" aria-labelledby="evidence-heading">
+    <h2 class="section-label" id="evidence-heading">{t(data.locale, 'entry.sightings')}</h2>
+    <p class="field-help">{t(data.locale, 'entry.addSightingHint')}</p>
+    {#each evidence as item (item.id)}
+      <article class="evidence-card">
+        {#if item.has_image}
+          <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} alt={item.place || t(data.locale, 'field.sourceImage')} loading="lazy" />
+        {/if}
+        <h3>{item.place}</h3>
+        <dl class="entry-meta">
+          {#if item.title}<div class="entry-row"><dt>{t(data.locale, 'field.title')}</dt><dd>{item.title}</dd></div>{/if}
+          {#if item.author}<div class="entry-row"><dt>{t(data.locale, 'field.author')}</dt><dd>{item.author}</dd></div>{/if}
+          {#if item.publisher}<div class="entry-row"><dt>{t(data.locale, 'field.publisher')}</dt><dd>{item.publisher}</dd></div>{/if}
+          {#if item.year}<div class="entry-row"><dt>{t(data.locale, 'field.year')}</dt><dd>{item.year}</dd></div>{/if}
+          {#if item.page}<div class="entry-row"><dt>{t(data.locale, 'field.page')}</dt><dd>{item.page}</dd></div>{/if}
+          {#if item.note}<div class="entry-row"><dt>{t(data.locale, 'field.note')}</dt><dd>{item.note}</dd></div>{/if}
+        </dl>
+      </article>
+    {/each}
+    <details class="details">
+      <summary>{t(data.locale, 'entry.addSighting')}</summary>
+      <form class="details-body" method="POST" action="?/evidence" enctype="multipart/form-data">
+        <div class="field"><label class="field-label" for="evidence-place">{t(data.locale, 'field.place')}</label><input id="evidence-place" name="place" required maxlength="500" /></div>
+        <div class="field"><label class="field-label" for="evidence-image">{t(data.locale, 'field.sourceImage')}</label><input id="evidence-image" name="image" type="file" accept="image/jpeg,image/png,image/webp" /></div>
+        <div class="grid-2">
+          <div class="field"><label class="field-label" for="evidence-title">{t(data.locale, 'field.title')}</label><input id="evidence-title" name="title" maxlength="300" /></div>
+          <div class="field"><label class="field-label" for="evidence-author">{t(data.locale, 'field.author')}</label><input id="evidence-author" name="author" maxlength="300" /></div>
+          <div class="field"><label class="field-label" for="evidence-publisher">{t(data.locale, 'field.publisher')}</label><input id="evidence-publisher" name="publisher" maxlength="300" /></div>
+          <div class="field"><label class="field-label" for="evidence-year">{t(data.locale, 'field.year')}</label><input id="evidence-year" name="year" maxlength="40" placeholder="1998 / 1998-05 / 1998-05-12 / 05" /></div>
+          <div class="field"><label class="field-label" for="evidence-page">{t(data.locale, 'field.page')}</label><input id="evidence-page" name="page" maxlength="80" /></div>
+        </div>
+        <div class="field"><label class="field-label" for="evidence-note">{t(data.locale, 'field.note')}</label><textarea id="evidence-note" name="note" maxlength="5000"></textarea></div>
+        <div class="form-actions"><button class="primary" type="submit">{t(data.locale, 'entry.addSighting')}</button></div>
+      </form>
+    </details>
+  </section>
   {#if comparisons.length}
     <section class="related-section" aria-labelledby="related-heading">
       <h2 class="section-label" id="related-heading">{t(data.locale, 'form.related')}</h2>

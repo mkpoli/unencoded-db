@@ -142,7 +142,7 @@ describe('localized pages', () => {
         comparisons: [{ character: '漢', relationship: 'variant', differences: '획 하나 차이', evidence: '4쪽' }],
       },
     })
-    expect(head).toContain('기록 9 · 진자집람')
+    expect(head).toContain('문자 9 · 진자집람')
     expect(body).toContain('href="/ko"')
     expect(body).toContain('src="/ko/entry/9/image"')
     expect(body).toContain('alt="출처 이미지"')
