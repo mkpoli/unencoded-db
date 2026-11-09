@@ -1,5 +1,5 @@
 {
-  "add.intro": "上傳文字或字形的照片、掃描件或截圖。上傳內容將公開，投稿者匿名。",
+  "add.intro": "上傳文字或字形的照片、掃描件或截圖，或提供連結。上傳內容將公開，投稿者匿名。",
   "add.title": "新增字",
   "app.name": "珍字集覽",
   "app.tagline": "收集文字與字形證據的社群維基",
@@ -39,8 +39,6 @@
   "error.comparisonRow": "請填寫文字和關係，並檢查各欄位的長度。",
   "error.fields": "請檢查以下各項。",
   "error.home": "返回記錄列表",
-  "error.imageEmpty": "圖片檔案為空。",
-  "error.imageMissing": "請選擇出處圖片：JPEG、PNG或WebP，最大8 MiB。",
   "error.imageOversize": "圖片超過8 MiB。",
   "error.imageUnsupported": "圖片必須是有效的JPEG、PNG或WebP檔案。",
   "error.length": "請檢查此欄位的長度。",

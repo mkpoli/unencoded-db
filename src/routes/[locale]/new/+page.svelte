@@ -130,6 +130,7 @@
         <FileField
           id="image"
           name="image"
+          optional
           label={t(data.locale, 'field.sourceImage')}
           choose={t(data.locale, 'field.chooseImage')}
           browse={t(data.locale, 'field.browseImage')}

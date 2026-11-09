@@ -8,7 +8,7 @@ export type SourceImage = {
   size: number
 }
 
-export type ImageError = 'missing' | 'empty' | 'oversize' | 'unsupported'
+export type ImageError = 'missing' | 'oversize' | 'unsupported'
 
 export type SourceImageResult =
   | { image: SourceImage; error?: never }
@@ -210,12 +210,15 @@ function isFile(value: FormDataEntryValue | null): value is File {
   return typeof value === 'object' && value !== null && typeof (value as File).arrayBuffer === 'function' && typeof (value as File).size === 'number'
 }
 
-/** Validate the required image field and read its bytes. */
+/** Validate the image field and read its bytes. */
 export async function readSourceImage(form: FormData, name = 'image'): Promise<SourceImageResult> {
   const file = form.get(name)
   if (file === null) return { error: 'missing' }
+  // An untouched file input arrives as an empty string on Workers; an empty
+  // file arrives with no bytes. Neither is a picture, so a link can stand in.
+  if (typeof file === 'string') return file === '' ? { error: 'missing' } : { error: 'unsupported' }
   if (!isFile(file)) return { error: 'unsupported' }
-  if (file.size === 0) return { error: 'empty' }
+  if (file.size === 0) return { error: 'missing' }
   if (file.size > MAX_IMAGE_BYTES) return { error: 'oversize' }
   let bytes: Uint8Array
   try {
@@ -224,7 +227,6 @@ export async function readSourceImage(form: FormData, name = 'image'): Promise<S
     return { error: 'unsupported' }
   }
   if (bytes.byteLength > MAX_IMAGE_BYTES) return { error: 'oversize' }
-  if (bytes.byteLength === 0) return { error: 'empty' }
   const type = detectImageType(bytes)
   if (!type) return { error: 'unsupported' }
   const stripped = stripImageMetadata(bytes, type)
