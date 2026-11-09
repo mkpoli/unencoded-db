@@ -224,6 +224,10 @@
                     <option value="variant">{relationshipLabel(data.locale, 'variant')}</option>
                     <option value="not_variant">{relationshipLabel(data.locale, 'not_variant')}</option>
                     <option value="similar">{relationshipLabel(data.locale, 'similar')}</option>
+                    <option value="sound">{relationshipLabel(data.locale, 'sound')}</option>
+                    <option value="meaning">{relationshipLabel(data.locale, 'meaning')}</option>
+                    <option value="glyph">{relationshipLabel(data.locale, 'glyph')}</option>
+                    <option value="usage">{relationshipLabel(data.locale, 'usage')}</option>
                     <option value="uncertain">{relationshipLabel(data.locale, 'uncertain')}</option>
                   </select>
                 </div>
