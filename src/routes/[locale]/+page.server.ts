@@ -1,11 +1,27 @@
 import { error } from '@sveltejs/kit'
+import { isHanScript, SCRIPT_MAX } from '$lib/script'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import type { PageServerLoad } from './$types'
+
+type ListedEntry = { id: number; script: string; ids: string | null; place: string }
+type ScriptCount = { script: string; n: number }
 
 export const load: PageServerLoad = async ({ platform, url }) => {
   if (!platform) error(500, 'Database unavailable')
   const before = url.searchParams.get('before')
   const id = before && /^[1-9]\d*$/.test(before) && Number.isSafeInteger(Number(before)) ? Number(before) : Number.MAX_SAFE_INTEGER
-  const { results } = await platform.env.DB.prepare(`SELECT id, script, ids, place FROM entries WHERE ${publicEntryPredicate} AND id < ? ORDER BY id DESC LIMIT 21`).bind(id).all<{ id: number; script: string; ids: string | null; place: string }>()
-  return { entries: results.slice(0, 20), next: results.length > 20 ? results[19].id : null }
+  const requested = url.searchParams.get('script')
+  const script = requested === null ? null : requested.normalize('NFC').trim()
+  if (script !== null && (!script || script.length > SCRIPT_MAX)) error(404)
+  const filter = script === null ? '' : ' AND script = ?'
+  const [page, counted] = await Promise.all([
+    platform.env.DB.prepare(`SELECT id, script, ids, place FROM entries WHERE ${publicEntryPredicate}${filter} AND id < ? ORDER BY id DESC LIMIT 21`).bind(...(script === null ? [] : [script]), id).all<ListedEntry>(),
+    platform.env.DB.prepare('SELECT script, n FROM script_counts').bind().all<ScriptCount>(),
+  ])
+  const total = counted.results.reduce((sum, row) => sum + row.n, 0)
+  const scripts = counted.results.sort((a, b) =>
+    Number(isHanScript(b.script)) - Number(isHanScript(a.script)) || b.n - a.n || a.script.localeCompare(b.script))
+  // A script whose last record was just hidden keeps its tab while it is the filter.
+  if (script !== null && !scripts.some(row => row.script === script)) scripts.push({ script, n: 0 })
+  return { entries: page.results.slice(0, 20), next: page.results.length > 20 ? page.results[19].id : null, scripts, total, script }
 }

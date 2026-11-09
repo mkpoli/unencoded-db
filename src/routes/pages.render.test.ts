@@ -8,6 +8,7 @@ import { resolve } from 'node:path'
 const tmp = resolve('.svelte-kit/render-tmp')
 mkdirSync(tmp, { recursive: true })
 const i18n = resolve('src/lib/i18n.ts')
+const script = resolve('src/lib/script.ts')
 const fileField = resolve('src/lib/components/FileField.svelte')
 const appForms = resolve(tmp, 'app-forms.js')
 writeFileSync(appForms, 'export function enhance() { return {} }\n')
@@ -35,7 +36,7 @@ async function load(path: string, name: string) {
       const preprocessed = await preprocess(readFileSync(file, 'utf8'), vitePreprocess({ script: true }), { filename: file })
       let { js } = compile(preprocessed.code, { filename: file, generate: 'server' })
       const dep = await loadFileField()
-      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
+      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
@@ -50,7 +51,7 @@ const page = (path: string, name: string, props: Record<string, unknown>) => loa
 describe('localized pages', () => {
   test('home renders the Japanese title, tagline and locale-prefixed links', async () => {
     const { head, body } = await page('src/routes/[locale]/+page.svelte', 'home', {
-      data: { locale: 'ja', entries: [{ id: 7, script: 'Han', ids: '⿰木木', place: '本書' }], next: 42 },
+      data: { locale: 'ja', entries: [{ id: 7, script: 'Han', ids: '⿰木木', place: '本書' }], next: 42, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
     })
     expect(head).toContain('珍字集覧')
     expect(body).toContain('文字と字形の証拠を集めるコミュニティウィキ')
@@ -63,13 +64,34 @@ describe('localized pages', () => {
 
   test('empty home renders the localized empty state and add link', async () => {
     const { head, body } = await page('src/routes/[locale]/+page.svelte', 'home', {
-      data: { locale: 'en', entries: [], next: null },
+      data: { locale: 'en', entries: [], next: null, scripts: [], total: 0, script: null },
     })
     expect(head).toContain('Rare Character Compendium')
     expect(body).toContain('A community evidence wiki for characters and glyphs')
     expect(body).toContain('Nothing has been recorded yet.')
     expect(body).toContain('href="/en/new"')
     expect(body).toContain('Add a character')
+  })
+
+  test('home marks the chosen script and labels each card with its script', async () => {
+    const { body } = await page('src/routes/[locale]/+page.svelte', 'home-scripts', {
+      data: {
+        locale: 'en',
+        entries: [
+          { id: 3, script: 'Tangut', ids: '⿰𘠀𘠁', place: 'Book' },
+          { id: 2, script: 'Han', ids: '⿰木木', place: 'Book' },
+        ],
+        next: 1,
+        scripts: [{ script: 'Han', n: 1 }, { script: 'Tangut', n: 1 }],
+        total: 2,
+        script: 'Tangut',
+      },
+    })
+    expect(body).toMatch(/<a class="script-tab" aria-current="page" href="\/en\?script=Tangut"/)
+    expect(body).toMatch(/<span class="script-count">2<\/span>/)
+    expect(body).toMatch(/<span class="script-tag han" title="Han">Han<\/span>/)
+    expect(body).toMatch(/<span class="script-tag" title="Tangut">Tangut<\/span>/)
+    expect(body).toContain('href="/en?script=Tangut&amp;before=1"')
   })
 
   test('every locale has its approved name and corrected tagline', async () => {

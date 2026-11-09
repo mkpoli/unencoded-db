@@ -107,6 +107,47 @@
   font-family: var(--font-mono);
   font-size: 10px;
 }
+.entry-card .script-tag {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entry-card .script-tag:not(.han) { background: var(--accent-light); color: var(--accent); }
+
+/* Script filter tabs above the collection. */
+.script-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 22px; }
+.script-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 3px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+.script-tab:not([aria-current="page"]):hover { border-color: var(--accent); color: var(--accent); }
+.script-tab[aria-current="page"] {
+  border-color: var(--line-strong);
+  background: var(--surface-selected);
+  color: var(--ink);
+  font-weight: 550;
+}
+.script-tab .script-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.script-tab .script-count { color: var(--faint); font-variant-numeric: tabular-nums; }
+.script-tab[aria-current="page"] .script-count { color: var(--muted); }
 /* A queue card shows a record rather than linking to one, so it keeps the resting surface. */
 .entry-card.queue-card:hover { border-color: var(--line); background: var(--surface); }
 .queue-card .description { color: var(--muted); font-size: var(--text-sm); text-wrap: pretty; overflow-wrap: anywhere; }

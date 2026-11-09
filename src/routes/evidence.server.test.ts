@@ -251,10 +251,10 @@ describe('evidence routes', () => {
         if (before !== undefined) url.searchParams.set('before', String(before))
         return await list({ platform: { env: { DB } }, url } as any) as any
       }
-      expect(await page()).toEqual({ entries: [], next: null })
+      expect(await page()).toMatchObject({ entries: [], next: null, script: null, total: 0, scripts: [] })
       const insert = db.query("INSERT INTO entries (script, place, created_at, visible) VALUES ('Han', 'book', '2026', ?)")
       for (let i = 0; i < 21; i++) insert.run(0)
-      expect(await page()).toEqual({ entries: [], next: null })
+      expect(await page()).toMatchObject({ entries: [], next: null, script: null, total: 0, scripts: [] })
       db.exec('UPDATE entries SET visible = 1 WHERE id <= 20')
       const twenty = await page()
       expect(twenty.entries).toHaveLength(20)
@@ -266,6 +266,27 @@ describe('evidence routes', () => {
       const last = await page(first.next)
       expect(last.entries.map((entry: { id: number }) => entry.id)).toEqual([1])
       expect(last.next).toBeNull()
+    } finally { db.close() }
+  })
+
+  test('filters by script and reports one count per script', async () => {
+    const db = createTestDatabase()
+    try {
+      const insert = db.query("INSERT INTO entries (script, place, created_at, visible) VALUES (?, 'book', '2026', ?)")
+      insert.run('Han', 1); insert.run('Han', 1); insert.run('Tangut', 1); insert.run('Kana', 0)
+      const DB = d1Binding(db)
+      const listAt = (query: string) => list({ platform: { env: { DB } }, url: new URL(`https://example.test/en${query}`) } as any) as any
+
+      const filtered = await listAt('?script=Tangut')
+      expect(filtered.entries.map((entry: { id: number; script: string }) => [entry.id, entry.script])).toEqual([[3, 'Tangut']])
+      expect(filtered).toMatchObject({ script: 'Tangut', total: 3, scripts: [{ script: 'Han', n: 2 }, { script: 'Tangut', n: 1 }] })
+
+      const empty = await listAt('?script=Kana')
+      expect(empty.entries).toEqual([])
+      expect(empty.scripts.at(-1)).toEqual({ script: 'Kana', n: 0 })
+
+      await expect(listAt(`?script=${'x'.repeat(81)}`)).rejects.toMatchObject({ status: 404 })
+      await expect(listAt('?script=%20')).rejects.toMatchObject({ status: 404 })
     } finally { db.close() }
   })
 
