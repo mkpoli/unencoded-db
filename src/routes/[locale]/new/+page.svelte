@@ -49,7 +49,7 @@
     }).catch(() => {})
   })
   // A validation notice belongs to the section that holds the failing field.
-  const optionalError = $derived(!!(form?.errors?.description || form?.errors?.note || form?.errors?.title || form?.errors?.author || form?.errors?.publisher || form?.errors?.year || form?.errors?.page))
+  const optionalError = $derived(!!(form?.errors?.url || form?.errors?.description || form?.errors?.note || form?.errors?.title || form?.errors?.author || form?.errors?.publisher || form?.errors?.year || form?.errors?.page))
   const errorOrder = ['image', 'place', 'script', 'ids', 'description', 'note', 'title', 'author', 'publisher', 'year', 'page'] as const
   const operators = new Set([...'⿰⿱⿲⿳⿴⿵⿶⿷⿸⿹⿺⿻'])
   const suggestions = $derived(related(data.suggestions ?? [], ids))
@@ -141,6 +141,12 @@
         <p class="field-help" id="image-help">{t(data.locale, 'field.sourceImageHint')}</p>
         <p class="field-help" id="image-rights">{t(data.locale, 'field.rightsHint')}</p>
         {#if imageError}<p class="field-error" id="image-error">{imageError}</p>{/if}
+      </div>
+      <div class="field">
+        <label class="field-label" for="url">{t(data.locale, 'field.url')}</label>
+        <input id="url" name="url" type="url" maxlength="1000" placeholder="https://" value={form?.values?.url ?? ''} aria-invalid={!!form?.errors?.url} aria-describedby="url-help" />
+        <p class="field-help" id="url-help">{t(data.locale, 'field.urlHint')}</p>
+        {#if form?.errors?.url}<p class="field-error">{form.errors.url}</p>{/if}
       </div>
       <div class="field">
         <label class="field-label" for="place">{t(data.locale, 'field.place')}</label>

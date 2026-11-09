@@ -308,15 +308,13 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
-  test('requires an image for a new record', async () => {
+  test('accepts a citation without an image', async () => {
     const db = createTestDatabase()
     const images = fakeImages()
     try {
-      const result = await actions.default!(event(record, d1Binding(db), images, null)) as any
-      expect(result.status).toBe(400)
-      expect(result.data.errors.image).toContain('source image')
+      await expect(actions.default!(event(record, d1Binding(db), images, null))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
       expect(images.puts).toHaveLength(0)
-      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
+      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 1 })
     } finally { db.close() }
   })
 
@@ -361,7 +359,6 @@ describe('evidence routes', () => {
       expect(result.data.errors.script).toContain('script')
       expect(result.data.errors.place).toContain('where')
       expect(result.data.errors.title).toContain('length')
-      expect(result.data.errors.image).toBeDefined()
       expect(result.data.values.note).toBe('notes')
     } finally { db.close() }
   })
@@ -371,8 +368,7 @@ describe('evidence routes', () => {
     const images = fakeImages()
     try {
       const DB = d1Binding(db)
-      const missing = await actions.default!(event(record, DB, images, null, 'ja')) as any
-      expect(missing.data.errors.image).toBe('出典画像を選択してください。JPEG、PNG、WebPのいずれか、8 MiBまでです。')
+      await expect(actions.default!(event(record, DB, images, null, 'ja'))).rejects.toMatchObject({ status: 303, location: '/ja/entry/1' })
       const unsupported = await actions.default!(event(record, DB, images, imageFile(new TextEncoder().encode('<svg/>'), 'x.svg', 'image/svg+xml'), 'zh-Hant')) as any
       expect(unsupported.data.errors.image).toBe('圖片必須是有效的JPEG、PNG或WebP檔案。')
       const empty = await actions.default!(event(record, DB, images, imageFile(new Uint8Array(), 'empty.png'), 'zh-Hans')) as any
@@ -382,7 +378,7 @@ describe('evidence routes', () => {
       const place = await actions.default!(event({ ...record, place: '' }, DB, images, imageFile(PNG_BYTES), 'vi')) as any
       expect(place.data.errors.place).toBe('Nhập nơi tìm thấy chữ (tối đa 500 ký tự).')
       expect(images.puts).toHaveLength(0)
-      await expect(actions.default!(event(record, DB, images, imageFile(PNG_BYTES), 'ko'))).rejects.toMatchObject({ status: 303, location: '/ko/entry/1' })
+      await expect(actions.default!(event({ ...record, ids: '⿱日木' }, DB, images, imageFile(PNG_BYTES), 'ko'))).rejects.toMatchObject({ status: 303, location: '/ko/entry/2' })
     } finally { db.close() }
   })
 
@@ -576,16 +572,14 @@ describe('evidence routes', () => {
     expect(e.jar.size).toBe(0)
   })
 
-  test('ignores a submitted source URL', async () => {
+  test('stores a source URL on the evidence', async () => {
     const db = createTestDatabase()
     const images = fakeImages()
     try {
       const DB = d1Binding(db)
       await expect(actions.default!(event({ ...record, url: 'https://example.org/source' }, DB, images))).rejects.toMatchObject({ status: 303 })
-      const row = db.query('SELECT * FROM entries WHERE id = 1').get() as any
-      expect('url' in row).toBe(false)
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
-      expect(JSON.stringify(result)).not.toContain('example.org')
+      expect(result.evidence[0].url).toBe('https://example.org/source')
     } finally { db.close() }
   })
 })

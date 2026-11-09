@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { createTestDatabase, d1Binding } from '../../test-support'
 import { addEvidence } from './evidence-links'
 
-const fields = { place: 'Book', title: 'Source', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: null }
+const fields = { place: 'Book', title: 'Source', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: null, url: null }
 const image = { key: 'images/source.png', type: 'image/png', size: 12 }
 
 describe('shared sources', () => {

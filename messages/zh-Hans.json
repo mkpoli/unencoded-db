@@ -102,6 +102,8 @@
   "field.tags": "标签",
   "field.tagsHint": "用逗号分隔的短标签，例如客语词。",
   "field.title": "书名或标题",
+  "field.url": "链接",
+  "field.urlHint": "扫描页、帖子或目录页。",
   "field.year": "日期或年份",
   "footer.thirdParty": "第三方声明（英文）",
   "form.addComparison": "添加比较",

@@ -29,7 +29,7 @@ async function findEntryByImageKey(db: D1Database, key: string): Promise<{ id: n
   }
 }
 type FieldName = typeof fields[number]
-type FormErrors = Partial<Record<FieldName | 'image' | 'form', string>>
+type FormErrors = Partial<Record<FieldName | 'image' | 'form' | 'url', string>>
 
 function fieldValues(form: FormData): Record<FieldName, string> {
   return Object.fromEntries(fields.map(name => {
@@ -60,10 +60,11 @@ export const actions: Actions = {
         : t(locale, 'error.length')
     }
     const source = await readSourceImage(form)
-    if (source.error) errors.image = imageError(locale, source.error)
+    if (source.error && source.error !== 'missing') errors.image = imageError(locale, source.error)
     const row = readEvidence(form)
     const radical = String(form.get('radical') ?? '').normalize('NFC').trim().slice(0, 20) || null
     const encoded = String(form.get('encoded_as') ?? '').normalize('NFC').trim().slice(0, 80) || null
+    const link = String(form.get('url') ?? '').normalize('NFC').trim().slice(0, 1000) || null
     const rawStrokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
     const strokes = Number.isInteger(rawStrokes) && rawStrokes >= 0 && rawStrokes < 200 ? rawStrokes : null
     const comparisons = readComparisons(form)
@@ -73,17 +74,22 @@ export const actions: Actions = {
     const senses = parseSenses(form)
     if (!senses) return fail(400, { errors, values: { ...values, genres, collections, tags: tags.join(', ') }, comparisons })
     const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: { ...values, radical, encoded_as: encoded, strokes, genres, collections, tags: tags.join(', ') }, comparisons })
-    if (!row || source.error || Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) return failForm(400, errors)
-    if (!source.image) return failForm(400, { image: t(locale, 'error.imageMissing') })
-    const image = source.image
+    if (link && !/^https?:\/\//i.test(link)) errors.url = t(locale, 'error.length')
+    if (!row || (source.error && source.error !== 'missing') || Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) return failForm(400, errors)
+    const image = source.error === 'missing' ? null : source.image
     const cookie = cookieOptions(url)
     if (!cookie) error(403, 'Secure connection required')
 
-    const key = createImageKey()
-    try {
-      await putSourceImage(platform.env.IMAGES, key, image)
-    } catch {
-      return failForm(500, { form: t(locale, 'error.save') })
+    let key: string | null = null
+    let imageMeta: { key: string; type: string; size: number } | null = null
+    if (image) {
+      key = createImageKey()
+      try {
+        await putSourceImage(platform.env.IMAGES, key, image)
+        imageMeta = { key, type: image.type, size: image.size }
+      } catch {
+        return failForm(500, { form: t(locale, 'error.save') })
+      }
     }
 
     let duplicate: { id: number } | null = null
@@ -95,7 +101,7 @@ export const actions: Actions = {
       }
     }
     if (duplicate) {
-      await addEvidence(platform.env.DB, duplicate.id, { place: row.place, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, { key, type: image.type, size: image.size }, null)
+      await addEvidence(platform.env.DB, duplicate.id, { place: row.place, url: link, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, imageMeta, null)
       redirect(303, localizedHref(locale, `/entry/${duplicate.id}`))
     }
 
@@ -106,20 +112,20 @@ export const actions: Actions = {
         row,
         cookies.get(cookie.name),
         comparisons.rows,
-        { key, type: image.type, size: image.size },
+        imageMeta ?? undefined,
         { radical, encoded_as: encoded, strokes },
       )
     } catch (caught) {
       // A transport error can arrive before or after the insert commits. Recover
       // the row when it is visible; otherwise keep the object because a later
       // commit would leave a record pointing at a deleted image.
-      const existing = await findEntryByImageKey(platform.env.DB, key)
+      const existing = key ? await findEntryByImageKey(platform.env.DB, key) : null
       if (existing) redirect(303, localizedHref(locale, `/entry/${existing.id}`))
-      if (caught instanceof DefinitiveSaveFailure && existing === null) await deleteSourceImage(platform.env.IMAGES, key)
+      if (key && caught instanceof DefinitiveSaveFailure && existing === null) await deleteSourceImage(platform.env.IMAGES, key)
       return failForm(500, { form: t(locale, 'error.save') })
     }
 
-    const first = await addEvidence(platform.env.DB, result.id, { place: row.place, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, { key, type: image.type, size: image.size }, null)
+    const first = await addEvidence(platform.env.DB, result.id, { place: row.place, url: link, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, imageMeta, null)
     await saveGenres(platform.env.DB, result.id, genres)
     await saveCollections(platform.env.DB, result.id, collections, first?.id ?? null)
     await saveTags(platform.env.DB, result.id, tags)

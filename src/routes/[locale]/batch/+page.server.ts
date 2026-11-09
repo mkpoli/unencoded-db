@@ -58,7 +58,7 @@ export const actions: Actions = {
       }
       token = result.token ?? token
       first ??= result.id
-      await addEvidence(platform.env.DB, result.id, { place, title, author, publisher, year, page, note: null }, { key, type: source.image.type, size: source.image.size }, null)
+      await addEvidence(platform.env.DB, result.id, { place, url: null, title, author, publisher, year, page, note: null }, { key, type: source.image.type, size: source.image.size }, null)
     }
     if (!first) return fail(500, { error: 'save' })
     if (token) cookies.set(cookie.name, token, { ...sessionCookieSettings, secure: cookie.secure })

@@ -25,9 +25,9 @@ function daysInMonth(year: number, month: number) {
   return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31
 }
 
-export const evidenceFields = ['place', 'title', 'author', 'publisher', 'year', 'page', 'note'] as const
+export const evidenceFields = ['place', 'url', 'title', 'author', 'publisher', 'year', 'page', 'note'] as const
 export type EvidenceFields = Record<typeof evidenceFields[number], string | null>
-const limits = { place: 500, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
+const limits = { place: 500, url: 1000, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
 
 export function readEvidenceFields(form: FormData): EvidenceFields | null {
   const row = {} as EvidenceFields
@@ -38,21 +38,22 @@ export function readEvidenceFields(form: FormData): EvidenceFields | null {
     if (text.length > limits[name]) return null
     row[name] = text || null
   }
+  if (row.url && !/^https?:\/\//i.test(row.url)) return null
   return row.place ? row : null
 }
 
 export type StoredEvidence = EvidenceFields & DateParts & { id: number; source_id: number | null; has_image: number; created_at: string }
 
 export async function listEvidence(db: D1Database, entryId: number): Promise<StoredEvidence[]> {
-  const { results } = await db.prepare(`SELECT id, place, title, author, publisher, year, page, note, date_year, date_month, date_day, date_precision, (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image, created_at, (SELECT es.source_id FROM evidence_sources es WHERE es.evidence_id = evidence.id ORDER BY es.source_id LIMIT 1) AS source_id FROM evidence INDEXED BY evidence_entry_date WHERE entry_id = ? ORDER BY date_year, date_month, date_day, id`).bind(entryId).all<StoredEvidence>()
+  const { results } = await db.prepare(`SELECT id, place, url, title, author, publisher, year, page, note, date_year, date_month, date_day, date_precision, (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image, created_at, (SELECT es.source_id FROM evidence_sources es WHERE es.evidence_id = evidence.id ORDER BY es.source_id LIMIT 1) AS source_id FROM evidence INDEXED BY evidence_entry_date WHERE entry_id = ? ORDER BY date_year, date_month, date_day, id`).bind(entryId).all<StoredEvidence>()
   return results
 }
 
 export async function addEvidence(db: D1Database, entryId: number, fields: EvidenceFields, image: SourceImageMeta | null, creatorId: string | null) {
   const now = new Date().toISOString()
   const date = parseDate(fields.year)
-  const row = await db.prepare(`INSERT INTO evidence (entry_id, place, title, author, publisher, year, page, note, date_year, date_month, date_day, date_precision, image_key, image_type, image_size, created_at, creator_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`)
+  const row = await db.prepare(`INSERT INTO evidence (entry_id, place, url, title, author, publisher, year, page, note, date_year, date_month, date_day, date_precision, image_key, image_type, image_size, created_at, creator_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`)
     .bind(entryId, ...evidenceFields.map(name => fields[name]), date.date_year, date.date_month, date.date_day, date.date_precision, image?.key ?? null, image?.type ?? null, image?.size ?? null, now, creatorId)
     .first<{ id: number }>()
   if (!row) throw new Error('Could not save evidence')
@@ -66,11 +67,11 @@ export async function addEvidence(db: D1Database, entryId: number, fields: Evide
 }
 
 async function sourceId(db: D1Database, fields: EvidenceFields, now: string) {
-  const existing = await db.prepare('SELECT id FROM sources WHERE kind = ? AND title IS ? AND author IS ? AND publisher IS ? AND year IS ? AND place IS ? LIMIT 1')
-    .bind('other', fields.title, fields.author, fields.publisher, fields.year, fields.place).first<{ id: number }>()
+  const existing = await db.prepare('SELECT id FROM sources WHERE kind = ? AND title IS ? AND author IS ? AND publisher IS ? AND year IS ? AND place IS ? AND url IS ? LIMIT 1')
+    .bind('other', fields.title, fields.author, fields.publisher, fields.year, fields.place, fields.url).first<{ id: number }>()
   if (existing) return existing.id
-  const created = await db.prepare('INSERT INTO sources (kind, title, author, publisher, year, place, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id')
-    .bind('other', fields.title, fields.author, fields.publisher, fields.year, fields.place, now).first<{ id: number }>()
+  const created = await db.prepare('INSERT INTO sources (kind, title, author, publisher, year, place, url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id')
+    .bind('other', fields.title, fields.author, fields.publisher, fields.year, fields.place, fields.url, now).first<{ id: number }>()
   if (!created) throw new Error('Could not save source')
   return created.id
 }

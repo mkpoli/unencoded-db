@@ -102,6 +102,8 @@
   "field.tags": "標籤",
   "field.tagsHint": "用逗號分隔的短標籤，例如客語詞。",
   "field.title": "書名或標題",
+  "field.url": "連結",
+  "field.urlHint": "掃描頁、貼文或目錄頁。",
   "field.year": "日期或年份",
   "footer.thirdParty": "第三方聲明（英文）",
   "form.addComparison": "新增比較",
