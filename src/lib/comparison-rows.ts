@@ -14,6 +14,10 @@ export function relationshipLabel(locale: Locale, relationship: string): string 
     case 'variant': return t(locale, 'relationship.variant')
     case 'not_variant': return t(locale, 'relationship.notVariant')
     case 'similar': return t(locale, 'relationship.similar')
+    case 'sound': return t(locale, 'relationship.sound')
+    case 'meaning': return t(locale, 'relationship.meaning')
+    case 'glyph': return t(locale, 'relationship.glyph')
+    case 'usage': return t(locale, 'relationship.usage')
     default: return t(locale, 'relationship.uncertain')
   }
 }

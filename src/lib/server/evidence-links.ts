@@ -1,5 +1,30 @@
 import type { SourceImageMeta } from './attribution'
 
+export type DatePrecision = 'day' | 'month' | 'year' | 'month-only' | 'text'
+export type DateParts = { date_year: number | null; date_month: number | null; date_day: number | null; date_precision: DatePrecision }
+
+export function parseDate(value: string | null): DateParts {
+  const text = (value ?? '').trim()
+  const full = /^(\d{4})[-/.](\d{1,2})(?:[-/.](\d{1,2}))?$/.exec(text)
+  if (full) {
+    const year = Number(full[1]), month = Number(full[2]), day = full[3] ? Number(full[3]) : null
+    if (month >= 1 && month <= 12 && (day === null || (day >= 1 && day <= daysInMonth(year, month)))) {
+      return { date_year: year, date_month: month, date_day: day, date_precision: day === null ? 'month' : 'day' }
+    }
+  }
+  if (/^\d{4}$/.test(text)) return { date_year: Number(text), date_month: null, date_day: null, date_precision: 'year' }
+  if (/^\d{1,2}$/.test(text)) {
+    const month = Number(text)
+    if (month >= 1 && month <= 12) return { date_year: null, date_month: month, date_day: null, date_precision: 'month-only' }
+  }
+  return { date_year: null, date_month: null, date_day: null, date_precision: 'text' }
+}
+
+function daysInMonth(year: number, month: number) {
+  if (month === 2) return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31
+}
+
 export const evidenceFields = ['place', 'title', 'author', 'publisher', 'year', 'page', 'note'] as const
 export type EvidenceFields = Record<typeof evidenceFields[number], string | null>
 const limits = { place: 500, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
@@ -16,17 +41,18 @@ export function readEvidenceFields(form: FormData): EvidenceFields | null {
   return row.place ? row : null
 }
 
-export type StoredEvidence = EvidenceFields & { id: number; has_image: number; created_at: string }
+export type StoredEvidence = EvidenceFields & DateParts & { id: number; has_image: number; created_at: string }
 
 export async function listEvidence(db: D1Database, entryId: number): Promise<StoredEvidence[]> {
-  const { results } = await db.prepare(`SELECT id, place, title, author, publisher, year, page, note, (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image, created_at FROM evidence WHERE entry_id = ? ORDER BY id`).bind(entryId).all<StoredEvidence>()
+  const { results } = await db.prepare(`SELECT id, place, title, author, publisher, year, page, note, date_year, date_month, date_day, date_precision, (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image, created_at FROM evidence INDEXED BY evidence_entry_date WHERE entry_id = ? ORDER BY date_year, date_month, date_day, id`).bind(entryId).all<StoredEvidence>()
   return results
 }
 
 export async function addEvidence(db: D1Database, entryId: number, fields: EvidenceFields, image: SourceImageMeta | null, creatorId: string | null) {
-  return db.prepare(`INSERT INTO evidence (entry_id, place, title, author, publisher, year, page, note, image_key, image_type, image_size, created_at, creator_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`)
-    .bind(entryId, ...evidenceFields.map(name => fields[name]), image?.key ?? null, image?.type ?? null, image?.size ?? null, new Date().toISOString(), creatorId)
+  const date = parseDate(fields.year)
+  return db.prepare(`INSERT INTO evidence (entry_id, place, title, author, publisher, year, page, note, date_year, date_month, date_day, date_precision, image_key, image_type, image_size, created_at, creator_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`)
+    .bind(entryId, ...evidenceFields.map(name => fields[name]), date.date_year, date.date_month, date.date_day, date.date_precision, image?.key ?? null, image?.type ?? null, image?.size ?? null, new Date().toISOString(), creatorId)
     .first<{ id: number }>()
 }
 

@@ -145,7 +145,8 @@ describe('public query plans', () => {
       await detail({ platform: { env: { DB: binding } }, params: { locale: 'en', id: '1' } } as any)
       expect(plans).toHaveLength(4)
       assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
-      assertPlan(plans[1], /SEARCH evidence USING INDEX evidence_entry \(entry_id=\?\)/i)
+      assertPlan(plans[1], /SEARCH evidence USING INDEX evidence_entry_date \(entry_id=\?\)/i)
+      expect(plans[2].some(line => /SEARCH c USING INDEX crops_evidence \(evidence_id=\?\)/i.test(line))).toBe(true)
     } finally { db.close() }
   })
 

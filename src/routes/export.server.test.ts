@@ -28,7 +28,7 @@ describe('JSON export', () => {
       expect(response.status).toBe(200)
       expect(response.headers.get('cache-control')).toBe('no-store')
       expect(response.headers.get('content-type')).toContain('application/json')
-      expect(body.version).toBe(1)
+      expect(body.version).toBe(2)
       expect(body.next).toBeNull()
       expect(body.records.map(record => record.id)).toEqual([first, third])
       expect(body.records[0]).toEqual({
@@ -44,8 +44,26 @@ describe('JSON export', () => {
         page: '12',
         note: 'First',
         created_at: '2026-01-01T00:00:00.000Z',
+        date_precision: 'year',
+        comparisons: [],
+        evidence: [{ id: 0, place: 'Example collection', title: 'Title', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'First', date_precision: 'year', has_image: 0 }],
       })
       expect(JSON.stringify(body)).not.toContain('Secret')
+    } finally { db.close() }
+  })
+
+  test('exports every evidence row with the character description', async () => {
+    const db = database()
+    try {
+      const id = insert(db, 'Han', 1, 'First')
+      db.query(`INSERT INTO evidence (entry_id, place, title, author, publisher, year, page, note, date_precision, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, 'Second place', 'Second title', null, null, '1901-04', null, null, 'month', '2026-01-02T00:00:00.000Z')
+      db.query(`INSERT INTO evidence (entry_id, place, created_at) VALUES (?, ?, ?)`).run(id, 'Third place', '2026-01-03T00:00:00.000Z')
+      const { body } = await exportJson(db)
+      expect(body.records[0].description).toBe('Description Han')
+      const evidence = body.records[0]!.evidence as { place: string }[]
+      expect(evidence).toHaveLength(2)
+      expect(evidence.find(row => row.place === 'Second place')).toMatchObject({ title: 'Second title', date_precision: 'month' })
     } finally { db.close() }
   })
 
