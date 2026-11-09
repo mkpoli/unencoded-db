@@ -13,29 +13,39 @@ function insert(db: Database, script: string, visible = 1, note: string | null =
 }
 
 type ExportedEvidence = {
+  id: number
   place: string
   title: string | null
+  author: string | null
+  publisher: string | null
+  year: string | null
+  page: string | null
+  note: string | null
   date_precision: string
-  [key: string]: unknown
+  has_image: number
 }
 
 type ExportedRecord = {
   id: number
-  description: string | null
+  script: string
+  ids: string | null
+  description: string
+  place: string
+  title: string | null
+  author: string | null
+  publisher: string | null
+  year: string | null
+  page: string | null
+  note: string | null
+  created_at: string
+  date_precision: string
+  comparisons: { relationship: string; script: string; character: string }[]
   evidence: ExportedEvidence[]
-  [key: string]: unknown
-}
-
-type ExportBody = {
-  version?: number
-  records: ExportedRecord[]
-  next: number | null
-  error?: string
 }
 
 async function exportJson(db: Database, query = '') {
   const response = await GET({ platform: { env: { DB: d1Binding(db) } }, url: new URL(`https://example.test/export.json${query}`) } as any)
-  return { response, body: await response.json() as ExportBody }
+  return { response, body: await response.json() as { version?: number; records: ExportedRecord[]; next: number | null; error?: string } }
 }
 
 describe('JSON export', () => {
