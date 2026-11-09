@@ -321,6 +321,25 @@ describe('localized pages', () => {
     expect(body).toContain('name="description"')
   })
 
+  test('edit page selects a script outside the list and normalises the stored value', async () => {
+    const entry = { id: 9, revision: 2, edit_generation: 5, script: '  Old script  ', ids: null, description: null, place: '書', title: null, author: null, publisher: null, year: null, page: null, note: null }
+    const { body } = await page('src/routes/[locale]/entry/[id]/edit/+page.svelte', 'edit-script-fallback', {
+      data: { locale: 'en', entry },
+    })
+    expect(body).toContain('<option value="Old script" selected="">Old script</option>')
+
+    const decomposed = await page('src/routes/[locale]/entry/[id]/edit/+page.svelte', 'edit-script-nfd', {
+      data: { locale: 'en', entry: { ...entry, script: 'Chữ Nôm'.normalize('NFD') } },
+    })
+    expect(decomposed.body).toContain('<option value="Chữ Nôm" selected="">Chữ Nôm</option>')
+  })
+
+  test('batch form starts each row with Han', async () => {
+    const { body } = await page('src/routes/[locale]/batch/+page.svelte', 'batch', { data: { locale: 'ja' } })
+    expect(body).toContain('<select id="script-0" name="script"')
+    expect(body).toMatch(/<option value="Han" selected="">Han<\/option>/)
+  })
+
   test('history page renders revisions, dates and the older link', async () => {
     const { head, body } = await page('src/routes/[locale]/entry/[id]/history/+page.svelte', 'history', {
       data: {
