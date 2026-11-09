@@ -10,11 +10,13 @@ mkdirSync(tmp, { recursive: true })
 const i18n = resolve('src/lib/i18n.ts')
 const script = resolve('src/lib/script.ts')
 const fileField = resolve('src/lib/components/FileField.svelte')
+const cropField = resolve('src/lib/components/CropField.svelte')
 const idsGlyph = resolve('src/lib/components/IdsGlyph.svelte')
 const appForms = resolve(tmp, 'app-forms.js')
 writeFileSync(appForms, 'export function enhance() { return {} }\n')
 const components = new Map<string, Promise<any>>()
 let fileFieldModule: Promise<string> | null = null
+let cropFieldModule: Promise<string> | null = null
 let idsGlyphModule: Promise<string> | null = null
 
 function loadFileField(): Promise<string> {
@@ -28,6 +30,19 @@ function loadFileField(): Promise<string> {
     })()
   }
   return fileFieldModule
+}
+
+function loadCropField(): Promise<string> {
+  if (!cropFieldModule) {
+    cropFieldModule = (async () => {
+      const preprocessed = await preprocess(readFileSync(cropField, 'utf8'), vitePreprocess({ script: true }), { filename: cropField })
+      const { js } = compile(preprocessed.code, { filename: cropField, generate: 'server' })
+      const target = resolve(tmp, 'cropfield.js')
+      writeFileSync(target, js.code)
+      return target
+    })()
+  }
+  return cropFieldModule
 }
 
 function loadIdsGlyph(): Promise<string> {
@@ -51,8 +66,9 @@ async function load(path: string, name: string) {
       const preprocessed = await preprocess(readFileSync(file, 'utf8'), vitePreprocess({ script: true }), { filename: file })
       let { js } = compile(preprocessed.code, { filename: file, generate: 'server' })
       const dep = await loadFileField()
+      const crop = await loadCropField()
       const glyph = await loadIdsGlyph()
-      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
+      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
@@ -152,9 +168,11 @@ describe('localized pages', () => {
     expect(body).toContain('aria-describedby="file-formats image-help image-rights image-error"')
     expect(body).toContain('id="file-formats"')
     expect(body).toContain('發現地點或出處')
-    expect(body).toContain('出處詳情')
-    expect(body).toContain('更多資訊')
-    expect(body).toContain('選填')
+    expect(body).toContain('證據')
+    expect(body).toContain('出處備註')
+    expect(body).toContain('義項')
+    expect(body).toContain('釋義')
+    expect(body).toContain('你的發現')
     expect(body).toContain('請檢查以下各項。')
     expect(body).toContain('圖片必須是有效的JPEG、PNG或WebP檔案。')
     expect(body).toContain('enctype="multipart/form-data"')
@@ -182,18 +200,19 @@ describe('localized pages', () => {
     expect(body).toContain('suggestion-list')
   })
 
-  test('entry page renders the Korean image, labels and alt fallback', async () => {
+  test('entry page keeps the character text apart from its evidence', async () => {
     const { head, body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry', {
       data: {
         locale: 'ko',
-        entry: { id: 9, script: 'Han', ids: '⿰木木', description: null, place: '서울', title: null, author: null, publisher: null, year: null, page: null, note: null, created_at: '2026-11-08T05:00:00.000Z', has_image: 1 },
+        entry: { id: 9, script: 'Han', ids: '⿰木木', description: null, radical: null, encoded_as: null, strokes: null, created_at: '2026-11-08T05:00:00.000Z' },
         comparisons: [{ character: '漢', relationship: 'variant', differences: '획 하나 차이', evidence: '4쪽' }],
+        evidence: [{ id: 4, place: '서울', title: null, author: null, publisher: null, year: null, page: null, note: null, source_id: null, has_image: 1, created_at: '2026-11-08T05:00:00.000Z' }],
       },
     })
     expect(head).toContain('문자 9 · 진자집람')
     expect(body).toContain('href="/ko"')
-    expect(body).toContain('src="/ko/entry/9/image"')
-    expect(body).toContain('alt="출처 이미지"')
+    expect(body).toContain('src="/ko/entry/9/evidence/4/image"')
+    expect(body).toContain('alt="서울"')
     expect(body).toContain('표의 문자 구성 설명(IDS)')
     expect(body).toContain('발견한 곳')
     expect(body).toContain('추가일')
@@ -201,10 +220,11 @@ describe('localized pages', () => {
     expect(body).toContain('이체자')
     expect(body).toContain('획 하나 차이')
     expect(body).toContain('4쪽')
-    expect(body).toContain('href="/ko/entry/9/edit"')
+    expect(body).toContain('href="/ko/entry/9/edit#evidence-4"')
     expect(body).toContain('href="/ko/entry/9/history"')
-    expect(body).toContain('기록 수정')
+    expect(body).toContain('기록 편집')
     expect(body).toContain('수정 이력')
+    expect(body).not.toContain('src="/ko/entry/9/image"')
     expect(body).not.toContain('https://example.org/source')
   })
 
@@ -249,29 +269,45 @@ describe('localized pages', () => {
     expect(body).toContain('Không có mục từ nào bị ẩn.')
   })
 
-  test('edit page renders localized evidence fields, tokens and a stale-form notice', async () => {
+  test('edit page keeps character fields and evidence forms apart', async () => {
     const { head, body } = await page('src/routes/[locale]/entry/[id]/edit/+page.svelte', 'edit', {
-      data: { locale: 'ja', entry: { id: 9, revision: 2, edit_generation: 5, script: 'Han', ids: '⿰木木', description: '説明', place: '本書', title: '題名', author: '著者', publisher: '出版者', year: '1900', page: '8', note: 'メモ' } },
+      data: {
+        locale: 'ja',
+        entry: { id: 9, revision: 2, edit_generation: 5, script: 'Han', ids: '⿰木木', description: '説明', radical: null, encoded_as: null, strokes: null, comparisons: [] },
+        evidence: [{ id: 4, place: '本書', title: '題名', author: '著者', publisher: '出版者', year: '1900', page: '8', note: 'メモ', has_image: 1, source_id: null }],
+        senses: [{ id: 1, gloss: '意味', reading: 'いみ' }],
+        tags: ['客家'],
+        genres: [],
+        collections: [],
+        allGenres: [],
+        allCollections: [],
+        allTags: ['客家'],
+      },
       form: {
+        action: 'evidence',
+        evidenceId: 4,
         message: '編集中にこの記録が更新されました。現在の版を別のタブで開き、そちらに変更を反映してください。',
         revision: '2',
         generation: '5',
-        values: { place: '未保存の場所', script: 'Han' },
+        values: { place: '未保存の場所', title: '題名', note: 'メモ' },
         errors: { place: '文字を見つけた場所を入力してください（500文字以内）。' },
       },
     })
-    expect(head).toContain('記録を修正 · 珍字集覧')
-    expect(body).toContain('<h1>記録を修正</h1>')
+    expect(head).toContain('記録を編集 · 珍字集覧')
+    expect(body).toContain('<h1>記録を編集</h1>')
     expect(body).toContain('name="revision"')
     expect(body).toContain('name="edit_generation"')
     expect(body).toContain('value="未保存の場所"')
     expect(body).toContain('編集中にこの記録が更新されました。')
-    expect(body).toContain('id="place-error"')
     expect(body).toContain('aria-invalid="true"')
-    expect(body).toContain('修正を保存')
+    expect(body).toContain('証拠を保存')
     expect(body).toContain('href="/ja/entry/9"')
     expect(body).toContain('name="script"')
     expect(body).toContain('name="description"')
+    expect(body).toContain('name="sense_gloss"')
+    expect(body).toContain('name="evidence"')
+    expect(body).toContain('証拠を追加')
+    expect(body).toContain('src="/ja/entry/9/evidence/4/image"')
   })
 
   test('history page renders revisions, dates and the older link', async () => {

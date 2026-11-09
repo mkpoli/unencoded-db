@@ -27,3 +27,8 @@ export async function saveSenses(db: D1Database, entryId: number, senses: Sense[
     await db.prepare('INSERT INTO senses (entry_id, gloss, reading, evidence_id, created_at) VALUES (?, ?, ?, ?, ?)').bind(entryId, sense.gloss, sense.reading, evidenceId, now).run()
   }
 }
+
+export async function replaceSenses(db: D1Database, entryId: number, senses: Sense[], evidenceId: number | null) {
+  await db.prepare('DELETE FROM senses WHERE entry_id = ?').bind(entryId).run()
+  await saveSenses(db, entryId, senses, evidenceId)
+}

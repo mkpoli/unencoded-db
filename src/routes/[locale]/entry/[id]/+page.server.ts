@@ -17,15 +17,10 @@ type Entry = {
   script: string
   ids: string | null
   description: string | null
-  place: string
-  title: string | null
-  author: string | null
-  publisher: string | null
-  year: string | null
-  page: string | null
-  note: string | null
+  radical: string | null
+  encoded_as: string | null
+  strokes: number | null
   created_at: string
-  has_image: number
   comparisons: string
 }
 
@@ -33,8 +28,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   if (!platform) error(500, 'Database unavailable')
   if (!/^[1-9]\d*$/.test(params.id) || !Number.isSafeInteger(Number(params.id))) error(404)
   const row = await platform.env.DB.prepare(
-    `SELECT id, script, ids, description, radical, encoded_as, strokes, place, title, author, publisher, year, page, note, created_at,
-            (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image, comparisons
+    `SELECT id, script, ids, description, radical, encoded_as, strokes, created_at, comparisons
      FROM entries WHERE id = ? AND ${publicEntryPredicate}`
   ).bind(Number(params.id)).first<Entry>()
   if (!row) error(404)

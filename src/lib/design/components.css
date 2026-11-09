@@ -235,6 +235,33 @@
 .entry-row dt { color: var(--muted); font-size: var(--text-sm); font-weight: 500; }
 .entry-row dd { min-width: 0; font-size: var(--text-base); white-space: pre-wrap; overflow-wrap: anywhere; }
 
+/* Evidence on a record: each source keeps its image and citation together. */
+.evidence-section { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
+.evidence-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.evidence-card > img {
+  display: block;
+  max-width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.evidence-card h3 { font-size: var(--text-xl); font-weight: 550; letter-spacing: -0.2px; }
+.evidence-card .entry-meta { padding: 0; border: 0; background: none; }
+.evidence-links { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.crop-list { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.crop-thumb { display: grid; gap: 4px; margin: 0; }
+.crop-thumb div { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-xs); background: var(--surface-sunken); }
+.crop-thumb img { display: block; max-width: none; }
+.crop-thumb figcaption { color: var(--muted); font-size: var(--text-xs); }
+
 /* Related characters on a record: one card per comparison, rows like the record's own. */
 .related-section { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
 .related-list { display: grid; gap: var(--space-3); }

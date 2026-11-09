@@ -32,7 +32,7 @@ function capture(db: Database, found = false) {
             plans.push(plan.map(row => row.detail))
             sqls.push(sql)
           } finally { statement.finalize() }
-          return { all: async () => ({ results: [] }), first: async () => found ? { id: 1, revision: 1, edit_generation: 1, comparisons: '[]' } : null }
+          return { all: async () => ({ results: [] }), first: async () => found ? { id: 1, revision: 1, edit_generation: 1, comparisons: '[]' } : null, run: async () => ({}) }
         }
       }
     }
@@ -151,18 +151,21 @@ describe('public query plans', () => {
       const { binding, plans } = capture(db, true)
       const base = { platform: { env: { DB: binding } }, params: { locale: 'en', id: '1' } }
       await edit(base as any)
+      expect(plans.length).toBeGreaterThan(0)
+      assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
+      const loaded = plans.length
       for (const path of ['/en/entry/1/history', '/en/entry/1/history?before=5']) {
         await history({ ...base, url: new URL(path, 'https://example.test') } as any)
       }
       const form = new FormData()
-      form.set('script', 'Han'); form.set('place', 'Book'); form.set('revision', '1'); form.set('edit_generation', '1')
-      await expect(editActions.default!({ ...base, request: new Request('https://example.test/en/entry/1/edit', { method: 'POST', body: form }) } as any)).rejects.toMatchObject({ status: 303 })
-      expect(plans).toHaveLength(7)
-      for (const i of [0, 1, 3, 5, 6]) assertPlan(plans[i], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
-      for (const i of [2, 4]) {
-        expect(plans[i].some(line => /SEARCH r USING PRIMARY KEY \(entry_id=\? AND revision<\?\)/i.test(line))).toBe(true)
-        expect(plans[i].some(line => /SCAN|TEMP B-TREE/i.test(line))).toBe(false)
+      form.set('script', 'Han'); form.set('revision', '1'); form.set('edit_generation', '1')
+      await expect(editActions.character!({ ...base, request: new Request('https://example.test/en/entry/1/edit', { method: 'POST', body: form }) } as any)).rejects.toMatchObject({ status: 303 })
+      for (const plan of plans) {
+        expect(plan.some(line => /\bSCAN\s+entries\b/i.test(line))).toBe(false)
       }
+      const revisions = plans.filter(plan => plan.some(line => /SEARCH r USING PRIMARY KEY \(entry_id=\? AND revision<\?\)/i.test(line)))
+      expect(revisions).toHaveLength(2)
+      for (const plan of revisions) expect(plan.some(line => /SCAN|TEMP B-TREE/i.test(line))).toBe(false)
     } finally { db.close() }
   })
 

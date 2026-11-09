@@ -211,9 +211,12 @@ describe('evidence routes', () => {
       expect(listing.entries[0]).toMatchObject({ id: 1, ids: record.ids, place: record.place })
 
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
-      expect(result.entry).toMatchObject({ ...record, id: 1, has_image: 1 })
+      expect(result.entry).toMatchObject({ id: 1, script: record.script, ids: record.ids })
+      expect(result.entry.place).toBeUndefined()
+      expect(result.entry.has_image).toBeUndefined()
       expect(result.entry.image_key).toBeUndefined()
       expect(result.entry.url).toBeUndefined()
+      expect(result.evidence[0]).toMatchObject({ place: record.place, title: record.title, author: record.author, publisher: record.publisher, year: record.year, page: record.page, note: record.note, has_image: 1 })
       expect(JSON.stringify(result)).not.toContain(put.key)
     } finally { db.close() }
   })
@@ -221,14 +224,17 @@ describe('evidence routes', () => {
   test('lists and renders a historical record without an image', async () => {
     const db = createTestDatabase()
     try {
-      db.exec("INSERT INTO entries (script, ids, place, title, created_at) VALUES ('Han', '⿰木木', 'Book', 'Old source', '2026-01-01T00:00:00.000Z')")
+      const inserted = db.query("INSERT INTO entries (script, ids, place, title, created_at) VALUES ('Han', '⿰木木', 'Book', 'Old source', '2026-01-01T00:00:00.000Z')").run()
+      db.query("INSERT INTO evidence (entry_id, place, title, created_at) VALUES (?, 'Book', 'Old source', '2026-01-01T00:00:00.000Z')").run(Number(inserted.lastInsertRowid))
       const DB = d1Binding(db)
       const listing = await list({ platform: { env: { DB } }, url: new URL('https://example.test/en') } as any) as any
       expect(listing.entries).toHaveLength(1)
       expect(listing.entries[0]).toMatchObject({ id: 1, place: 'Book' })
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
-      expect(result.entry).toMatchObject({ id: 1, title: 'Old source', has_image: 0 })
+      expect(result.entry).toMatchObject({ id: 1, script: 'Han', ids: '⿰木木' })
+      expect(result.entry.title).toBeUndefined()
       expect(result.entry.url).toBeUndefined()
+      expect(result.evidence[0]).toMatchObject({ place: 'Book', title: 'Old source', has_image: 0 })
     } finally { db.close() }
   })
 

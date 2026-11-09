@@ -65,6 +65,41 @@ export async function addEvidence(db: D1Database, entryId: number, fields: Evide
   return row
 }
 
+/** The evidence record a new entry was created from; it mirrors the entry's source columns. */
+export async function primaryEvidenceId(db: D1Database, entryId: number): Promise<number | null> {
+  const row = await db.prepare('SELECT id FROM evidence WHERE entry_id = ? ORDER BY id LIMIT 1').bind(entryId).first<{ id: number }>()
+  return row?.id ?? null
+}
+
+/**
+ * Change one evidence record. `image` is `undefined` to keep the current image,
+ * `null` to remove it, or a new image to replace it.
+ */
+export async function updateEvidence(db: D1Database, entryId: number, evidenceId: number, fields: EvidenceFields, image: SourceImageMeta | null | undefined) {
+  const now = new Date().toISOString()
+  const date = parseDate(fields.year)
+  const columns = [...evidenceFields, 'date_year', 'date_month', 'date_day', 'date_precision']
+  const values: (string | number | null)[] = [...evidenceFields.map(name => fields[name]), date.date_year, date.date_month, date.date_day, date.date_precision]
+  if (image !== undefined) {
+    columns.push('image_key', 'image_type', 'image_size')
+    values.push(image?.key ?? null, image?.type ?? null, image?.size ?? null)
+  }
+  const row = await db.prepare(`UPDATE evidence SET ${columns.map(column => `${column} = ?`).join(', ')} WHERE id = ? AND entry_id = ? RETURNING id`)
+    .bind(...values, evidenceId, entryId).first<{ id: number }>()
+  if (!row) return null
+  await db.prepare('DELETE FROM evidence_sources WHERE evidence_id = ?').bind(evidenceId).run()
+  const source = await sourceId(db, fields, now)
+  await db.prepare('INSERT OR IGNORE INTO evidence_sources (evidence_id, source_id) VALUES (?, ?)').bind(evidenceId, source).run()
+  if (image !== undefined) {
+    await db.prepare('DELETE FROM evidence_media WHERE evidence_id = ?').bind(evidenceId).run()
+    if (image) {
+      const media = await mediaId(db, image, now)
+      await db.prepare('INSERT OR IGNORE INTO evidence_media (evidence_id, media_id) VALUES (?, ?)').bind(evidenceId, media).run()
+    }
+  }
+  return row
+}
+
 async function sourceId(db: D1Database, fields: EvidenceFields, now: string) {
   const existing = await db.prepare('SELECT id FROM sources WHERE kind = ? AND title IS ? AND author IS ? AND publisher IS ? AND year IS ? AND place IS ? LIMIT 1')
     .bind('other', fields.title, fields.author, fields.publisher, fields.year, fields.place).first<{ id: number }>()
