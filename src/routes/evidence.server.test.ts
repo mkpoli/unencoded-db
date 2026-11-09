@@ -377,8 +377,6 @@ describe('evidence routes', () => {
       await expect(actions.default!(event(record, DB, images, null, 'ja'))).rejects.toMatchObject({ status: 303, location: '/ja/entry/1' })
       const unsupported = await actions.default!(event(record, DB, images, imageFile(new TextEncoder().encode('<svg/>'), 'x.svg', 'image/svg+xml'), 'zh-Hant')) as any
       expect(unsupported.data.errors.image).toBe('圖片必須是有效的JPEG、PNG或WebP檔案。')
-      const empty = await actions.default!(event(record, DB, images, imageFile(new Uint8Array(), 'empty.png'), 'zh-Hans')) as any
-      expect(empty.data.errors.image).toBe('图片文件为空。')
       const oversize = await actions.default!(event(record, DB, images, imageFile(new Uint8Array(MAX_IMAGE_BYTES + 1)), 'ko')) as any
       expect(oversize.data.errors.image).toBe('이미지가 8 MiB를 초과합니다.')
       const place = await actions.default!(event({ ...record, place: '' }, DB, images, imageFile(PNG_BYTES), 'vi')) as any
@@ -586,6 +584,18 @@ describe('evidence routes', () => {
       await expect(actions.default!(event({ ...record, url: 'https://example.org/source' }, DB, images))).rejects.toMatchObject({ status: 303 })
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
       expect(result.evidence[0].url).toBe('https://example.org/source')
+    } finally { db.close() }
+  })
+
+  test('accepts a link when the picture input is left empty', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      await expect(actions.default!(event({ ...record, url: 'https://example.org/source' }, DB, images, '' as any))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(result.evidence[0].url).toBe('https://example.org/source')
+      expect(images.puts).toHaveLength(0)
     } finally { db.close() }
   })
 })

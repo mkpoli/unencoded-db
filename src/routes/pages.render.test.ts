@@ -177,6 +177,8 @@ describe('localized pages', () => {
     expect(head).toContain('新增字 · 珍字集覽')
     expect(body).toContain('<h1>新增字</h1>')
     expect(body).toContain('出處圖片')
+    expect(body).toContain('或提供連結')
+    expect(body).not.toMatch(/id="image"[^>]*required/)
     expect(body).toContain('常見的位置與裝置中繼資料會被移除，JPEG圖片方向保留。')
     expect(body).toContain('JPEG、PNG 或 WebP · 8 MiB')
     expect(body).toContain('瀏覽')
@@ -357,6 +359,25 @@ describe('localized pages', () => {
     expect(body).toContain('name="evidence"')
     expect(body).toContain('証拠を追加')
     expect(body).toContain('src="/ja/entry/9/evidence/4/image"')
+  })
+
+  test('edit page selects a script outside the list and normalises the stored value', async () => {
+    const entry = { id: 9, revision: 2, edit_generation: 5, script: '  Old script  ', ids: null, description: null, place: '書', title: null, author: null, publisher: null, year: null, page: null, note: null }
+    const { body } = await page('src/routes/[locale]/entry/[id]/edit/+page.svelte', 'edit-script-fallback', {
+      data: { locale: 'en', entry },
+    })
+    expect(body).toContain('<option value="Old script" selected="">Old script</option>')
+
+    const decomposed = await page('src/routes/[locale]/entry/[id]/edit/+page.svelte', 'edit-script-nfd', {
+      data: { locale: 'en', entry: { ...entry, script: 'Chữ Nôm'.normalize('NFD') } },
+    })
+    expect(decomposed.body).toContain('<option value="Chữ Nôm" selected="">Chữ Nôm</option>')
+  })
+
+  test('batch form starts each row with Han', async () => {
+    const { body } = await page('src/routes/[locale]/batch/+page.svelte', 'batch', { data: { locale: 'ja' } })
+    expect(body).toContain('<select id="script-0" name="script"')
+    expect(body).toMatch(/<option value="Han" selected="">Han<\/option>/)
   })
 
   test('history page renders revisions, dates and the older link', async () => {

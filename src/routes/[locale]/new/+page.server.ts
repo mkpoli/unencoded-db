@@ -14,8 +14,6 @@ import type { Actions, PageServerLoad } from './$types'
 
 function imageError(locale: Locale, error: ImageError): string {
   switch (error) {
-    case 'missing': return t(locale, 'error.imageMissing')
-    case 'empty': return t(locale, 'error.imageEmpty')
     case 'oversize': return t(locale, 'error.imageOversize')
     default: return t(locale, 'error.imageUnsupported')
   }

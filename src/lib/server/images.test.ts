@@ -40,9 +40,15 @@ describe('source image validation', () => {
     expect(result.error).toBe('missing')
   })
 
-  test('rejects an empty file', async () => {
+  test('treats an empty file as no image', async () => {
     const result = await readSourceImage(formWith(imageFile(new Uint8Array(), 'empty.png')))
-    expect(result.error).toBe('empty')
+    expect(result.error).toBe('missing')
+  })
+
+  test('treats an untouched file input as no image', async () => {
+    const form = new FormData()
+    form.set('image', '')
+    expect((await readSourceImage(form)).error).toBe('missing')
   })
 
   test('rejects SVG and HTML even with an image filename or type', async () => {

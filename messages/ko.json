@@ -1,5 +1,5 @@
 {
-  "add.intro": "문자나 글리프의 사진, 스캔, 스크린샷을 업로드해 주세요. 기여 내용은 공개되며 기여자는 익명입니다.",
+  "add.intro": "문자나 글리프의 사진, 스캔, 스크린샷 또는 링크를 올려 주세요. 기여 내용은 공개되며 기여자는 익명입니다.",
   "add.title": "문자 추가",
   "app.name": "진자집람",
   "app.tagline": "문자와 글리프의 증거를 모으는 커뮤니티 위키",
@@ -39,8 +39,6 @@
   "error.comparisonRow": "문자와 관계를 입력하고 각 항목의 길이를 확인하세요.",
   "error.fields": "아래 항목을 확인해 주세요.",
   "error.home": "기록으로 돌아가기",
-  "error.imageEmpty": "이미지 파일이 비어 있습니다.",
-  "error.imageMissing": "출처 이미지를 선택해 주세요. JPEG, PNG, WebP 파일, 최대 8 MiB입니다.",
   "error.imageOversize": "이미지가 8 MiB를 초과합니다.",
   "error.imageUnsupported": "이미지는 유효한 JPEG, PNG, WebP 파일이어야 합니다.",
   "error.length": "이 항목의 길이를 확인해 주세요.",

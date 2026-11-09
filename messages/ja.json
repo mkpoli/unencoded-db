@@ -1,5 +1,5 @@
 {
-  "add.intro": "文字や字形の写真・スキャン・スクリーンショットをアップロードしてください。投稿は公開され、投稿者は匿名です。",
+  "add.intro": "文字や字形の写真・スキャン・スクリーンショット、またはリンクを追加してください。投稿は公開され、投稿者は匿名です。",
   "add.title": "文字を追加",
   "app.name": "珍字集覧",
   "app.tagline": "文字と字形の証拠を集めるコミュニティウィキ",
@@ -39,8 +39,6 @@
   "error.comparisonRow": "文字と関係を入力し、各項目の長さを確認してください。",
   "error.fields": "次の項目を確認してください。",
   "error.home": "記録一覧に戻る",
-  "error.imageEmpty": "画像ファイルが空です。",
-  "error.imageMissing": "出典画像を選択してください。JPEG、PNG、WebPのいずれか、8 MiBまでです。",
   "error.imageOversize": "画像が8 MiBを超えています。",
   "error.imageUnsupported": "画像は有効なJPEG、PNG、WebPのいずれかである必要があります。",
   "error.length": "この項目の長さを確認してください。",

@@ -13,6 +13,7 @@
     hintId = 'file-formats',
     describedBy,
     error = '',
+    optional = false,
   }: {
     id?: string
     name?: string
@@ -27,6 +28,7 @@
     hintId?: string
     describedBy?: string
     error?: string
+    optional?: boolean
   } = $props()
 
   let input: HTMLInputElement
@@ -82,7 +84,7 @@
     aria-label={label}
     aria-invalid={!!error}
     aria-describedby={describedBy}
-    required
+    required={!optional}
   />
   {#if file}
     <div class="file-selected">
