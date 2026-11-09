@@ -94,33 +94,6 @@
     rateLimitFailure = null
     return async ({ result, update }) => handleContributionResult(result, status => { rateLimitFailure = status }, update)
   }}>
-    <section class="form-section" aria-labelledby="source-heading">
-      <h2 class="section-label" id="source-heading">{t(data.locale, 'field.source')}</h2>
-      <div class="field">
-        <label class="field-label" for="image">{t(data.locale, 'field.sourceImage')}</label>
-        <FileField
-          id="image"
-          name="image"
-          label={t(data.locale, 'field.sourceImage')}
-          choose={t(data.locale, 'field.chooseImage')}
-          browse={t(data.locale, 'field.browseImage')}
-          replace={t(data.locale, 'field.replaceImage')}
-          remove={t(data.locale, 'field.removeImage')}
-          previewAlt={t(data.locale, 'field.imagePreview')}
-          hint={t(data.locale, 'field.fileFormats')}
-          describedBy={imageError ? 'file-formats image-help image-rights image-error' : 'file-formats image-help image-rights'}
-          error={imageError}
-        />
-        <p class="field-help" id="image-help">{t(data.locale, 'field.sourceImageHint')}</p>
-        <p class="field-help" id="image-rights">{t(data.locale, 'field.rightsHint')}</p>
-        {#if imageError}<p class="field-error" id="image-error">{imageError}</p>{/if}
-      </div>
-      <div class="field">
-        <label class="field-label" for="place">{t(data.locale, 'field.place')}</label>
-        <input id="place" name="place" required maxlength="500" value={form?.values?.place ?? ''} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} />
-        {#if form?.errors?.place}<p class="field-error" id="place-error">{form.errors.place}</p>{/if}
-      </div>
-    </section>
     <section class="form-section" aria-labelledby="character-heading">
       <h2 class="section-label" id="character-heading">{t(data.locale, 'form.character')}</h2>
       <div class="field">
@@ -146,6 +119,33 @@
             </div>
           </div>
         {/if}
+      </div>
+    </section>
+    <section class="form-section" aria-labelledby="source-heading">
+      <h2 class="section-label" id="source-heading">{t(data.locale, 'field.source')}</h2>
+      <div class="field">
+        <label class="field-label" for="image">{t(data.locale, 'field.sourceImage')}</label>
+        <FileField
+          id="image"
+          name="image"
+          label={t(data.locale, 'field.sourceImage')}
+          choose={t(data.locale, 'field.chooseImage')}
+          browse={t(data.locale, 'field.browseImage')}
+          replace={t(data.locale, 'field.replaceImage')}
+          remove={t(data.locale, 'field.removeImage')}
+          previewAlt={t(data.locale, 'field.imagePreview')}
+          hint={t(data.locale, 'field.fileFormats')}
+          describedBy={imageError ? 'file-formats image-help image-rights image-error' : 'file-formats image-help image-rights'}
+          error={imageError}
+        />
+        <p class="field-help" id="image-help">{t(data.locale, 'field.sourceImageHint')}</p>
+        <p class="field-help" id="image-rights">{t(data.locale, 'field.rightsHint')}</p>
+        {#if imageError}<p class="field-error" id="image-error">{imageError}</p>{/if}
+      </div>
+      <div class="field">
+        <label class="field-label" for="place">{t(data.locale, 'field.place')}</label>
+        <input id="place" name="place" required maxlength="500" value={form?.values?.place ?? ''} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} />
+        {#if form?.errors?.place}<p class="field-error" id="place-error">{form.errors.place}</p>{/if}
       </div>
     </section>
     <details class="details" open={optionalError}>
