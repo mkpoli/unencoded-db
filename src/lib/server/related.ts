@@ -1,27 +1,23 @@
-export const MAX_COMPARISONS = 10
-export const comparisonFields = ['character', 'relationship', 'differences', 'evidence'] as const
-const limits = { character: 200, relationship: 20, differences: 2000, evidence: 2000 }
-const relationships = ['variant', 'not_variant', 'similar', 'uncertain', 'sound', 'meaning', 'glyph', 'usage']
-export type Comparison = Record<typeof comparisonFields[number], string>
+import { COMPARISON_BOXES, COMPARISON_KINDS, splitCharacters, type Comparison } from '$lib/comparison-rows'
 
+export const MAX_COMPARISONS = COMPARISON_BOXES * COMPARISON_KINDS.length
+
+/** Read the add form's relationship boxes: one character per box, ten boxes per kind. */
 export function readComparisons(form: FormData) {
-  const columns = comparisonFields.map(name => form.getAll(`comparison_${name}`))
-  const count = Math.max(...columns.map(column => column.length))
   const rows: Comparison[] = []
-  const errors: boolean[] = []
-  for (let i = 0; i < count; i++) {
-    const row = {} as Comparison
-    let invalid = false
-    for (let j = 0; j < comparisonFields.length; j++) {
-      const name = comparisonFields[j]
-      const value = columns[j][i]
-      if (typeof value !== 'string') invalid = true
-      row[name] = typeof value === 'string' ? value : ''
-      if (row[name].length > limits[name]) invalid = true
+  let invalid = false
+  for (const kind of COMPARISON_KINDS) {
+    const boxes = form.getAll(`comparison_${kind}`)
+    if (boxes.length > COMPARISON_BOXES) invalid = true
+    for (const box of boxes) {
+      if (typeof box !== 'string') { invalid = true; continue }
+      const character = box.normalize('NFC').trim()
+      if (!character) continue
+      // A box that holds more than one character is refused but kept, so the
+      // reader can correct it after the failed submission.
+      if (splitCharacters(character).length !== 1) invalid = true
+      if (!rows.some(row => row.character === character && row.relationship === kind)) rows.push({ character, relationship: kind })
     }
-    if (!row.character.trim() || !relationships.includes(row.relationship)) invalid = true
-    rows.push(row)
-    errors.push(invalid)
   }
-  return { rows, errors, tooMany: count > MAX_COMPARISONS }
+  return { rows, invalid }
 }

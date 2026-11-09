@@ -14,12 +14,7 @@ describe('write body limit', () => {
   test('accepts maximum-length text fields', async () => {
     const values = { script: 80, ids: 200, description: 5000, place: 500, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
     const body = new URLSearchParams(Object.fromEntries(Object.entries(values).map(([key, length]) => [key, '字'.repeat(length)])))
-    for (let i = 0; i < 10; i++) {
-      body.append('comparison_character', '字'.repeat(200))
-      body.append('comparison_relationship', 'not_variant')
-      body.append('comparison_differences', '字'.repeat(2000))
-      body.append('comparison_evidence', '字'.repeat(2000))
-    }
+    for (let i = 0; i < 10; i++) { body.append('comparison_variant', '字'); body.append('comparison_erroneous', '字') }
     const req = new Request('https://example.test/', { method: 'POST', body })
     expect(new TextEncoder().encode(body.toString()).length).toBeLessThan(MAX_WRITE_BODY)
     const result = await limitWriteBody(req)

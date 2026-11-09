@@ -1,5 +1,5 @@
 import { fields, type Evidence } from './evidence'
-import type { Comparison } from './related'
+import type { Comparison } from '$lib/comparison-rows'
 
 const lifetimeSeconds = 60 * 60 * 24 * 365
 const secureCookie = '__Host-contributor'

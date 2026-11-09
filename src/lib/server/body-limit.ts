@@ -1,7 +1,7 @@
 import { isLocale } from '$lib/i18n'
 import { MAX_IMAGE_BYTES } from './images'
 
-// Fits the maximum entry and ten comparisons with three-byte UTF-8 text
+// Fits the maximum entry text fields with three-byte UTF-8 text
 // percent-encoded, plus form field names and framing.
 export const MAX_WRITE_BODY = 512 * 1024
 
