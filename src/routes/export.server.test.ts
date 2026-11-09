@@ -12,9 +12,17 @@ function insert(db: Database, script: string, visible = 1, note: string | null =
     .run(script, null, `Description ${script}`, 'Example collection', 'Title', 'Author', 'Publisher', '1900', '12', note, '2026-01-01T00:00:00.000Z', visible).lastInsertRowid as number
 }
 
+type ExportEvidence = { place: string; [key: string]: unknown }
+type ExportBody = {
+  version?: number
+  records: ({ id: number; evidence: ExportEvidence[] } & Record<string, unknown>)[]
+  next: number | null
+  error?: string
+}
+
 async function exportJson(db: Database, query = '') {
   const response = await GET({ platform: { env: { DB: d1Binding(db) } }, url: new URL(`https://example.test/export.json${query}`) } as any)
-  return { response, body: await response.json() as { version?: number; records: Record<string, unknown>[]; next: number | null; error?: string } }
+  return { response, body: await response.json() as ExportBody }
 }
 
 describe('JSON export', () => {
