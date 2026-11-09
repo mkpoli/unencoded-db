@@ -13,7 +13,7 @@ describe('script counts', () => {
     try {
       const add = insert(db)
       add.run('Han', 1); add.run('Han', 1); add.run('Tangut', 1); add.run('Kana', 0)
-      applyMigration(db, '0019_script_counts.sql')
+      applyMigration(db, '0020_script_counts.sql')
       expect(counts(db)).toEqual({ Han: 2, Tangut: 1 })
       const index = db.query("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'entries_visible_script'").get() as { sql: string } | null
       expect(index?.sql).toContain('ON entries(script, id DESC) WHERE visible = 1')

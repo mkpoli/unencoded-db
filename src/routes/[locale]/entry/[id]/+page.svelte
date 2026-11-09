@@ -1,17 +1,20 @@
 <script lang="ts">
   import { relationshipLabel } from '$lib/comparison-rows'
+  import CropField from '$lib/components/CropField.svelte'
   import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
 
   type Comparison = { character: string; relationship: string; differences: string; evidence: string }
   type Genre = { slug: string; label: string }
+  type Crop = { id: number; evidence_id: number; x: number; y: number; w: number; h: number }
   type Collection = { slug: string; label: string }
   type Evidence = { id: number; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; has_image: number; created_at: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
-  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; genres: Genre[]; collections: Collection[]; isModerator: boolean; reported: boolean } } = $props()
+  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons)
   let evidence = $derived(data.evidence)
   let genres = $derived(data.genres ?? [])
+  let crops = $derived(data.crops ?? [])
   let collections = $derived(data.collections ?? [])
 </script>
 
@@ -58,6 +61,18 @@
           <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} alt={item.place || t(data.locale, 'field.sourceImage')} loading="lazy" />
         {/if}
         <h3>{item.place}</h3>
+        {#if crops.some(crop => crop.evidence_id === item.id)}
+          <div class="crop-list">
+            {#each crops.filter(crop => crop.evidence_id === item.id) as crop, n (crop.id)}
+              <figure class="crop-thumb">
+                <div style={`width:120px;height:${120 * crop.h / crop.w}px`}>
+                  <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} alt={t(data.locale, 'crop.label', { n: n + 1 })} style={`width:${12000 / crop.w}px;margin-left:-${120 * crop.x / crop.w}px;margin-top:-${120 * crop.y / crop.w}px`} />
+                </div>
+                <figcaption>{t(data.locale, 'crop.label', { n: n + 1 })}</figcaption>
+              </figure>
+            {/each}
+          </div>
+        {/if}
         <dl class="entry-meta">
           {#if item.title}<div class="entry-row"><dt>{t(data.locale, 'field.title')}</dt><dd>{item.title}</dd></div>{/if}
           {#if item.author}<div class="entry-row"><dt>{t(data.locale, 'field.author')}</dt><dd>{item.author}</dd></div>{/if}
@@ -66,6 +81,16 @@
           {#if item.page}<div class="entry-row"><dt>{t(data.locale, 'field.page')}</dt><dd>{item.page}</dd></div>{/if}
           {#if item.note}<div class="entry-row"><dt>{t(data.locale, 'field.note')}</dt><dd>{item.note}</dd></div>{/if}
         </dl>
+        {#if item.has_image}
+          <details class="details">
+            <summary>{t(data.locale, 'crop.add')}</summary>
+            <form class="details-body" method="POST" action="?/crop">
+              <input type="hidden" name="evidence" value={item.id} />
+              <CropField image={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} hint={t(data.locale, 'crop.hint')} />
+              <button class="secondary" type="submit">{t(data.locale, 'crop.save')}</button>
+            </form>
+          </details>
+        {/if}
       </article>
     {/each}
     <details class="details">
