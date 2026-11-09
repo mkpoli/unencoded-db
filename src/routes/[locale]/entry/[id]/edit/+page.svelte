@@ -1,5 +1,6 @@
 <script lang="ts">
   import { localizedHref, t, type Locale } from '$lib/i18n'
+  import ScriptSelect from '$lib/components/ScriptSelect.svelte'
 
   type FieldName = 'script' | 'ids' | 'description' | 'radical' | 'encoded_as' | 'strokes' | 'place' | 'title' | 'author' | 'publisher' | 'year' | 'page' | 'note'
   type Entry = { id: number; revision: number; edit_generation: number } & Record<FieldName, string | null>
@@ -51,7 +52,9 @@
 {#snippet control(field: EditField)}
   <div class="field">
     <label class="field-label" for={field.name}>{t(data.locale, field.label)}</label>
-    {#if field.multiline}
+    {#if field.name === 'script'}
+      <ScriptSelect id={field.name} name={field.name} value={value(field.name)} invalid={!!form?.errors?.[field.name]} describedBy={form?.errors?.[field.name] ? `${field.name}-error` : undefined} />
+    {:else if field.multiline}
       <textarea id={field.name} name={field.name} maxlength={field.max} aria-invalid={!!form?.errors?.[field.name]} aria-describedby={form?.errors?.[field.name] ? `${field.name}-error` : undefined}>{value(field.name)}</textarea>
     {:else}
       <input id={field.name} name={field.name} maxlength={field.max} required={field.required === true} value={value(field.name)} aria-invalid={!!form?.errors?.[field.name]} aria-describedby={form?.errors?.[field.name] ? `${field.name}-error` : undefined} />

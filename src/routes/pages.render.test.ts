@@ -11,11 +11,13 @@ const i18n = resolve('src/lib/i18n.ts')
 const script = resolve('src/lib/script.ts')
 const fileField = resolve('src/lib/components/FileField.svelte')
 const idsGlyph = resolve('src/lib/components/IdsGlyph.svelte')
+const scriptSelect = resolve('src/lib/components/ScriptSelect.svelte')
 const appForms = resolve(tmp, 'app-forms.js')
 writeFileSync(appForms, 'export function enhance() { return {} }\n')
 const components = new Map<string, Promise<any>>()
 let fileFieldModule: Promise<string> | null = null
 let idsGlyphModule: Promise<string> | null = null
+let scriptSelectModule: Promise<string> | null = null
 
 function loadFileField(): Promise<string> {
   if (!fileFieldModule) {
@@ -43,6 +45,20 @@ function loadIdsGlyph(): Promise<string> {
   return idsGlyphModule
 }
 
+function loadScriptSelect(): Promise<string> {
+  if (!scriptSelectModule) {
+    scriptSelectModule = (async () => {
+      const preprocessed = await preprocess(readFileSync(scriptSelect, 'utf8'), vitePreprocess({ script: true }), { filename: scriptSelect })
+      let { js } = compile(preprocessed.code, { filename: scriptSelect, generate: 'server' })
+      const code = js.code.replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`)
+      const target = resolve(tmp, 'scriptselect.js')
+      writeFileSync(target, code)
+      return target
+    })()
+  }
+  return scriptSelectModule
+}
+
 async function load(path: string, name: string) {
   let pending = components.get(name)
   if (!pending) {
@@ -52,7 +68,8 @@ async function load(path: string, name: string) {
       let { js } = compile(preprocessed.code, { filename: file, generate: 'server' })
       const dep = await loadFileField()
       const glyph = await loadIdsGlyph()
-      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
+      const select = await loadScriptSelect()
+      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`).replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
@@ -161,6 +178,9 @@ describe('localized pages', () => {
     expect(body).toContain('name="image"')
     expect(body).toContain('type="file"')
     expect(body).toContain('accept="image/jpeg,image/png,image/webp"')
+    expect(body).toContain('<select id="script" name="script"')
+    expect(body).toMatch(/<option value="Han" selected="">Han<\/option>/)
+    expect(body).toContain('<option value="Chữ Nôm">Chữ Nôm</option>')
     expect(body).toContain('name="url"')
     expect(body).toContain('連結')
     expect(body).toContain('相關文字')
@@ -271,6 +291,7 @@ describe('localized pages', () => {
     expect(body).toContain('修正を保存')
     expect(body).toContain('href="/ja/entry/9"')
     expect(body).toContain('name="script"')
+    expect(body).toContain('<select id="script" name="script"')
     expect(body).toContain('name="description"')
   })
 
