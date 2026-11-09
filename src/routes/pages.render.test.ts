@@ -10,10 +10,12 @@ mkdirSync(tmp, { recursive: true })
 const i18n = resolve('src/lib/i18n.ts')
 const script = resolve('src/lib/script.ts')
 const fileField = resolve('src/lib/components/FileField.svelte')
+const idsGlyph = resolve('src/lib/components/IdsGlyph.svelte')
 const appForms = resolve(tmp, 'app-forms.js')
 writeFileSync(appForms, 'export function enhance() { return {} }\n')
 const components = new Map<string, Promise<any>>()
 let fileFieldModule: Promise<string> | null = null
+let idsGlyphModule: Promise<string> | null = null
 
 function loadFileField(): Promise<string> {
   if (!fileFieldModule) {
@@ -28,6 +30,19 @@ function loadFileField(): Promise<string> {
   return fileFieldModule
 }
 
+function loadIdsGlyph(): Promise<string> {
+  if (!idsGlyphModule) {
+    idsGlyphModule = (async () => {
+      const preprocessed = await preprocess(readFileSync(idsGlyph, 'utf8'), vitePreprocess({ script: true }), { filename: idsGlyph })
+      const { js } = compile(preprocessed.code, { filename: idsGlyph, generate: 'server' })
+      const target = resolve(tmp, 'idsglyph.js')
+      writeFileSync(target, js.code)
+      return target
+    })()
+  }
+  return idsGlyphModule
+}
+
 async function load(path: string, name: string) {
   let pending = components.get(name)
   if (!pending) {
@@ -36,7 +51,8 @@ async function load(path: string, name: string) {
       const preprocessed = await preprocess(readFileSync(file, 'utf8'), vitePreprocess({ script: true }), { filename: file })
       let { js } = compile(preprocessed.code, { filename: file, generate: 'server' })
       const dep = await loadFileField()
-      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
+      const glyph = await loadIdsGlyph()
+      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
@@ -57,9 +73,19 @@ describe('localized pages', () => {
     expect(body).toContain('文字と字形の証拠を集めるコミュニティウィキ')
     expect(body).toContain('href="/ja/entry/7"')
     expect(body).toContain('href="/ja?before=42"')
+    expect(body).toContain('<span class="visually-hidden">⿰木木</span>')
     expect(body).toContain('href="/export.json"')
     expect(body).toContain('JSONで書き出す')
     expect(body).toContain('もっと見る')
+  })
+
+  test('home draws a cached description and keeps its IDS for assistive tech', async () => {
+    const { body } = await page('src/routes/[locale]/+page.svelte', 'home-glyph', {
+      data: { locale: 'en', entries: [{ id: 7, script: 'Han', ids: '⿰木木', place: 'Book' }], glyphs: { '⿰木木': 'M0 0' }, next: null, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
+    })
+    expect(body).toContain('<svg viewBox="0 0 1000 1000"')
+    expect(body).toContain('d="M0 0"')
+    expect(body).toContain('<span class="visually-hidden">⿰木木</span>')
   })
 
   test('empty home renders the localized empty state and add link', async () => {
