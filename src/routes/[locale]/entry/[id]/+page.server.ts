@@ -4,6 +4,7 @@ import { publicEntryPredicate } from '$lib/server/visibility'
 import { addCrop, addEvidence, listCrops, listEvidence, readEvidenceFields } from '$lib/server/evidence-links'
 import { genresForEntry } from '$lib/server/genres'
 import { collectionsForEntry } from '$lib/server/collections'
+import { addRelation, listRelations } from '$lib/server/relation-graph'
 import { createImageKey, putSourceImage, readSourceImage } from '$lib/server/images'
 import { cookieOptions, hashToken } from '$lib/server/attribution'
 import { localizedHref, type Locale } from '$lib/i18n'
@@ -42,7 +43,8 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   const crops = await listCrops(platform.env.DB, Number(params.id))
   const genres = await genresForEntry(platform.env.DB, Number(params.id))
   const collections = await collectionsForEntry(platform.env.DB, Number(params.id))
-  return { entry, comparisons, evidence, crops, genres, collections, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
+  const relations = await listRelations(platform.env.DB, Number(params.id))
+  return { entry, comparisons, evidence, crops, genres, collections, relations, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
 }
 
 export const actions = {
@@ -86,5 +88,21 @@ export const actions = {
     if (![box.x, box.y, box.w, box.h].every(Number.isFinite) || box.x < 0 || box.y < 0 || box.w <= 0 || box.h <= 0 || box.x + box.w > 100 || box.y + box.h > 100) return fail(400, { error: 'crop' })
     await addCrop(platform.env.DB, evidenceId, box)
     redirect(303, localizedHref(params.locale as Locale, `/entry/${entryId}`))
+  },
+  relation: async ({ request, params, platform }) => {
+    if (!platform) error(500, 'Storage unavailable')
+    if (!/^[1-9]\d*$/.test(params.id)) error(404)
+    const id = Number(params.id)
+    const entry = await platform.env.DB.prepare(`SELECT id FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first<{ id: number }>()
+    if (!entry) error(404)
+    const form = await request.formData()
+    const target = String(form.get('target') ?? '').normalize('NFC').trim().slice(0, 80)
+    const kind = String(form.get('kind') ?? '')
+    const evidence = Number(form.get('evidence'))
+    const difference = String(form.get('difference') ?? '').normalize('NFC').trim().slice(0, 5000) || null
+    if (!target || !Number.isSafeInteger(evidence)) return fail(400, { error: 'relation' })
+    const pair = await addRelation(platform.env.DB, id, target, kind, evidence, difference)
+    if (!pair) return fail(400, { error: 'relation' })
+    redirect(303, localizedHref(params.locale as Locale, `/entry/${id}`))
   },
 }
