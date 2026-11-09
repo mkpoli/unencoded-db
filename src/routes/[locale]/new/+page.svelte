@@ -135,6 +135,16 @@
         <label class="field-label" for="ids">{t(data.locale, 'field.ids')}</label>
         <input id="ids" name="ids" maxlength="200" bind:value={ids} aria-invalid={!!form?.errors?.ids} aria-describedby={form?.errors?.ids ? 'ids-error' : suggestions.length ? 'ids-help' : undefined} />
         {#if form?.errors?.ids}<p class="field-error" id="ids-error">{form.errors.ids}</p>{/if}
+        <div class="field-grid">
+          <div class="field">
+            <label class="field-label" for="radical">{t(data.locale, 'field.radical')}</label>
+            <input id="radical" name="radical" maxlength="20" value={form?.values?.radical ?? ''} />
+          </div>
+          <div class="field">
+            <label class="field-label" for="encoded_as">{t(data.locale, 'field.encodedAs')}</label>
+            <input id="encoded_as" name="encoded_as" maxlength="80" value={form?.values?.encoded_as ?? ''} />
+          </div>
+        </div>
         {#if data.genres?.length}
           <fieldset class="field genre-field">
             <legend class="field-label">{t(data.locale, 'field.genre')}</legend>

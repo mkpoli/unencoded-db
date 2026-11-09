@@ -27,9 +27,10 @@ export type SourceImageMeta = { key: string; type: string; size: number }
 /** A save that failed without committing anything, so the stored image is safe to delete. */
 export class DefinitiveSaveFailure extends Error {}
 
-export async function saveEvidence(db: D1Database, row: Evidence, token: string | undefined, comparisons: Comparison[] = [], image?: SourceImageMeta) {
-  const columns = [...fields, ...(image ? ['image_key', 'image_type', 'image_size'] : [])]
+export async function saveEvidence(db: D1Database, row: Evidence, token: string | undefined, comparisons: Comparison[] = [], image?: SourceImageMeta, meta?: { radical: string | null; encoded_as: string | null }) {
+  const columns = [...fields, ...(meta ? ['radical', 'encoded_as'] : []), ...(image ? ['image_key', 'image_type', 'image_size'] : [])]
   const values: (string | number | null)[] = fields.map(name => row[name])
+  if (meta) values.push(meta.radical, meta.encoded_as)
   if (image) values.push(image.key, image.type, image.size)
   const comparisonJson = JSON.stringify(comparisons)
   const columnList = columns.join(', ')

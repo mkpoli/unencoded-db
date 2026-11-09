@@ -31,7 +31,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   if (!platform) error(500, 'Database unavailable')
   if (!/^[1-9]\d*$/.test(params.id) || !Number.isSafeInteger(Number(params.id))) error(404)
   const row = await platform.env.DB.prepare(
-    `SELECT id, script, ids, description, place, title, author, publisher, year, page, note, created_at,
+    `SELECT id, script, ids, description, radical, encoded_as, place, title, author, publisher, year, page, note, created_at,
             (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image, comparisons
      FROM entries WHERE id = ? AND ${publicEntryPredicate}`
   ).bind(Number(params.id)).first<Entry>()

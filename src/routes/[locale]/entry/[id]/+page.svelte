@@ -9,7 +9,7 @@
   type Collection = { slug: string; label: string }
   type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
   type Evidence = { id: number; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; has_image: number; created_at: string }
-  type Entry = { id: number; script: string; ids: string | null; description: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
+  type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
   let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons)
@@ -52,6 +52,8 @@
     <div class="entry-row"><dt>{t(data.locale, 'field.script')}</dt><dd>{entry.script}</dd></div>
     {#if entry.ids}<div class="entry-row"><dt>{t(data.locale, 'field.ids')}</dt><dd>{entry.ids}</dd></div>{/if}
     {#if entry.description}<div class="entry-row"><dt>{t(data.locale, 'field.description')}</dt><dd>{entry.description}</dd></div>{/if}
+    {#if entry.radical}<div class="entry-row"><dt>{t(data.locale, 'field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
+    {#if entry.encoded_as}<div class="entry-row"><dt>{t(data.locale, 'field.encodedAs')}</dt><dd>{entry.encoded_as}</dd></div>{/if}
     <div class="entry-row"><dt>{t(data.locale, 'entry.added')}</dt><dd>{formatDate(data.locale, entry.created_at)}</dd></div>
   </dl>
   <section class="evidence-section" aria-labelledby="evidence-heading">

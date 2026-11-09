@@ -60,6 +60,8 @@ export const actions: Actions = {
     const source = await readSourceImage(form)
     if (source.error) errors.image = imageError(locale, source.error)
     const row = readEvidence(form)
+    const radical = String(form.get('radical') ?? '').normalize('NFC').trim().slice(0, 20) || null
+    const encoded = String(form.get('encoded_as') ?? '').normalize('NFC').trim().slice(0, 80) || null
     const comparisons = readComparisons(form)
     const genres = selectedGenres(form)
     const collections = selectedCollections(form)
@@ -85,6 +87,7 @@ export const actions: Actions = {
         cookies.get(cookie.name),
         comparisons.rows,
         { key, type: image.type, size: image.size },
+        { radical, encoded_as: encoded },
       )
     } catch (caught) {
       // A transport error can arrive before or after the insert commits. Recover
