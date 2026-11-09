@@ -135,4 +135,4 @@ export const EXTENSION_E_WITHDRAWN = [
   'G_ZFY01044',
 ] as const
 
-export const EXTENSION_E_WRONG_GLYPH = new Set(['G_CY101438', 'G_GH100129'])
+export const EXTENSION_E_WRONG_GLYPH = new Set<(typeof EXTENSION_E_WITHDRAWN)[number]>(['G_CY101438', 'G_GH100129'])
