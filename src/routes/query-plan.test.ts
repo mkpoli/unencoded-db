@@ -40,6 +40,12 @@ function capture(db: Database, found = false) {
   return { binding, plans, sqls }
 }
 
+// The counts table is one row per script; it must never make the page read the records.
+function assertCountPlan(plan: string[]) {
+  expect(plan.some(line => /SCAN script_counts/i.test(line))).toBe(true)
+  expect(plan.some(line => /\bSCAN\s+entries\b|USE TEMP B-TREE/i.test(line))).toBe(false)
+}
+
 function assertPlan(plan: string[], expected: RegExp) {
   expect(plan.some(line => expected.test(line))).toBe(true)
   expect(plan.some(line => /USE TEMP B-TREE/i.test(line))).toBe(false)
@@ -89,12 +95,29 @@ describe('public query plans', () => {
       for (const path of ['/en', '/en?before=100', '/ja?before=100']) {
         await list({ platform: { env: { DB: binding } }, url: new URL(path, 'https://example.test') } as any)
       }
-      expect(plans).toHaveLength(3)
-      for (const plan of plans) assertPlan(plan, /SEARCH entries USING INDEX entries_visible_id \(id<\?\)/i)
+      expect(plans).toHaveLength(6)
+      for (const i of [0, 2, 4]) assertPlan(plans[i], /SEARCH entries USING INDEX entries_visible_id \(id<\?\)/i)
+      for (const i of [1, 3, 5]) assertCountPlan(plans[i])
       db.exec('DROP INDEX entries_visible_id')
       const withoutIndex = capture(db)
       await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/en?before=100') } as any)
       expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_visible_id \(id<\?\)/i)).toThrow()
+    } finally { db.close() }
+  })
+
+  test('the script filter uses the script index and keeps counts off the records', async () => {
+    const db = database()
+    try {
+      const { binding, plans } = capture(db)
+      await list({ platform: { env: { DB: binding } }, url: new URL('https://example.test/en?script=Han&before=100') } as any)
+      expect(plans).toHaveLength(2)
+      assertPlan(plans[0], /SEARCH entries USING INDEX entries_visible_script \(script=\? AND id<\?\)/i)
+      assertCountPlan(plans[1])
+
+      db.exec('DROP INDEX entries_visible_script')
+      const withoutIndex = capture(db)
+      await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/en?script=Han') } as any)
+      expect(() => assertPlan(withoutIndex.plans[0], /entries_visible_script/i)).toThrow()
     } finally { db.close() }
   })
 
