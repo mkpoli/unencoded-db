@@ -187,13 +187,20 @@ describe('localized pages', () => {
       data: {
         locale: 'ko',
         entry: { id: 9, script: 'Han', ids: '⿰木木', description: null, place: '서울', title: null, author: null, publisher: null, year: null, page: null, note: null, created_at: '2026-11-08T05:00:00.000Z', has_image: 1 },
+        glyph: 'M0 0',
         comparisons: [{ character: '漢', relationship: 'variant', differences: '획 하나 차이', evidence: '4쪽' }],
       },
     })
     expect(head).toContain('문자 9 · 진자집람')
     expect(body).toContain('href="/ko"')
+    expect(body).toContain('class="character-card"')
+    expect(body).toContain('class="character-glyph"')
+    expect(body).toContain('<span class="visually-hidden">⿰木木</span>')
+    expect(body).toContain('<svg viewBox="0 0 1000 1000"')
+    expect(body).toContain('d="M0 0"')
     expect(body).toContain('src="/ko/entry/9/image"')
     expect(body).toContain('alt="출처 이미지"')
+    expect(body).toContain('class="evidence-section"')
     expect(body).toContain('표의 문자 구성 설명(IDS)')
     expect(body).toContain('발견한 곳')
     expect(body).toContain('추가일')
@@ -206,6 +213,25 @@ describe('localized pages', () => {
     expect(body).toContain('기록 수정')
     expect(body).toContain('수정 이력')
     expect(body).not.toContain('https://example.org/source')
+  })
+
+  test('entry page keeps evidence below the character card and links a URL source', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-evidence', {
+      data: {
+        locale: 'en',
+        entry: { id: 9, script: 'Han', ids: null, description: null, place: 'Seoul', title: null, author: null, publisher: null, year: null, page: null, note: null, created_at: '2026-11-08T05:00:00.000Z', has_image: 0 },
+        glyph: null,
+        comparisons: [],
+        evidence: [{ id: 5, place: 'https://example.org/scan', url: null, title: 'Scan', author: null, publisher: null, year: '2026', page: null, note: null, source_id: 3, has_image: 0, created_at: '2026-11-08T05:00:00.000Z' }],
+        crops: [],
+      },
+    })
+    expect(body.indexOf('character-card')).toBeLessThan(body.indexOf('evidence-section'))
+    expect(body).toContain('class="evidence-card"')
+    expect(body).toContain('href="https://example.org/scan"')
+    expect(body).toContain('↗')
+    expect(body).toContain('href="/en/source/3"')
+    expect(body).toContain('Source details')
   })
 
   test('entry page shows moderator controls only when a moderator is present', async () => {

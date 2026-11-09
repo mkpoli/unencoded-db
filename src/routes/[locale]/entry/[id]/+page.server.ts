@@ -9,6 +9,8 @@ import { collectionsForEntry } from '$lib/server/collections'
 import { addRelation, listRelations } from '$lib/server/relation-graph'
 import { createImageKey, putSourceImage, readSourceImage } from '$lib/server/images'
 import { cookieOptions, hashToken } from '$lib/server/attribution'
+import { glyphPaths, warmGlyphs } from '$lib/server/glyphs'
+import { cleanIds } from '$lib/ids'
 import { localizedHref, type Locale } from '$lib/i18n'
 import type { PageServerLoad } from './$types'
 
@@ -48,7 +50,11 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   const relations = await listRelations(platform.env.DB, Number(params.id))
   const tags = await tagsForEntry(platform.env.DB, Number(params.id))
   const senses = await listSenses(platform.env.DB, Number(params.id))
-  return { entry, comparisons, evidence, crops, genres, collections, relations, tags, senses, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
+  const sequence = entry.ids ? cleanIds(entry.ids) : null
+  const paths = await glyphPaths(platform.env.IMAGES, sequence ? [sequence] : [])
+  const glyph = sequence ? paths[sequence] ?? null : null
+  if (sequence && !glyph) platform.ctx?.waitUntil(warmGlyphs(platform.env.IMAGES, [sequence]))
+  return { entry, glyph, comparisons, evidence, crops, genres, collections, relations, tags, senses, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
 }
 
 export const actions = {

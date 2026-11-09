@@ -6,6 +6,22 @@
   font-display: swap;
 }
 
+/* The ideographic description operators are absent from most UI fonts. */
+@font-face {
+  font-family: "IDS Operators";
+  src: url("/fonts/NotoSansCJKjp-ids-operators.woff2") format("woff2");
+  font-weight: normal;
+  font-display: swap;
+  unicode-range: U+2FF0-2FFB;
+}
+@font-face {
+  font-family: "IDS Operators";
+  src: url("/fonts/Jigmo-ids-operators.woff2") format("woff2");
+  font-weight: normal;
+  font-display: swap;
+  unicode-range: U+2FFC-2FFF;
+}
+
 /*
  * Design tokens for the Rare Character Compendium.
  *
@@ -51,8 +67,8 @@
   --shadow-soft: light-dark(#0001, rgb(0 0 0 / 30%));
   --shadow-menu: light-dark(#1111, rgb(0 0 0 / 35%));
 
-  --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Consolas, "GenZui Sans", monospace;
+  --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "IDS Operators", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, "GenZui Sans", "IDS Operators", monospace;
 
   --text-xs: 11px;
   --text-sm: 12px;
@@ -88,10 +104,10 @@
 }
 
 /* The HTML lang selects the CJK face, so Chinese and Korean use their own glyph variants. */
-:root:lang(ja) { --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans CJK JP", "Noto Sans JP", sans-serif; }
-:root:lang(zh-Hans) { --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans CJK SC", "Noto Sans SC", sans-serif; }
-:root:lang(zh-Hant) { --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans CJK TC", "Noto Sans TC", sans-serif; }
-:root:lang(ko) { --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans CJK KR", "Noto Sans KR", sans-serif; }
+:root:lang(ja) { --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans CJK JP", "Noto Sans JP", "IDS Operators", sans-serif; }
+:root:lang(zh-Hans) { --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans CJK SC", "Noto Sans SC", "IDS Operators", sans-serif; }
+:root:lang(zh-Hant) { --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans CJK TC", "Noto Sans TC", "IDS Operators", sans-serif; }
+:root:lang(ko) { --font-ui: Inter, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans CJK KR", "Noto Sans KR", "IDS Operators", sans-serif; }
 
 /* A reader can pin a scheme, as in Glyph Atlas; without the attribute the OS wins. */
 :root[data-theme="light"] { color-scheme: light; }
