@@ -1,10 +1,10 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import FileField from '$lib/components/FileField.svelte'
-  import { newComparison, relationshipLabel, removeComparison } from '$lib/comparison-rows'
+  import ComparisonGrid from '$lib/components/ComparisonGrid.svelte'
   import ScriptSelect from '$lib/components/ScriptSelect.svelte'
   import { localizedHref, t, type Locale } from '$lib/i18n'
-  import type { Comparison } from '$lib/server/related'
+  import type { Comparison } from '$lib/comparison-rows'
 
   type Sense = { id?: number; gloss: string; reading: string | null }
   type Genre = { slug: string; label: string }
@@ -42,7 +42,7 @@
     message?: string
     errors?: Record<string, string>
     values?: Record<string, string | string[]>
-    comparisons?: { rows: Comparison[]; errors: boolean[]; tooMany: boolean }
+    comparisons?: { rows: Comparison[] }
     senses?: Sense[]
     revision?: unknown
     generation?: unknown
@@ -77,23 +77,12 @@
   const selectedCollections = $derived(form?.action === 'character' && Array.isArray(form.values?.collections) ? form.values.collections as string[] : (data.collections ?? []).map(collection => collection.slug))
   let senses = $state<Sense[]>(untrack(() => form?.action === 'character' && Array.isArray(form.senses) ? form.senses.map(sense => ({ gloss: sense.gloss, reading: sense.reading })) : (data.senses ?? [])))
   let comparisons = $state<Comparison[]>(untrack(() => form?.action === 'character' ? form.comparisons?.rows ?? [] : (data.entry.comparisons ?? [])))
-  let comparisonErrors = $state<boolean[]>(untrack(() => form?.action === 'character' ? form.comparisons?.errors ?? [] : []))
 
   function addSense() {
     if (senses.length < 10) senses.push({ gloss: '', reading: '' })
   }
   function removeSense(index: number) {
     senses.splice(index, 1)
-  }
-  function addComparison() {
-    if (comparisons.length >= 10) return
-    comparisons.push(newComparison() as Comparison)
-    comparisonErrors.push(false)
-  }
-  function removeRow(index: number) {
-    const next = removeComparison(comparisons, comparisonErrors, index)
-    comparisons = next.rows
-    comparisonErrors = next.errors
   }
 
   const evidenceValue = (item: Evidence, name: string) => {
@@ -218,43 +207,8 @@
     <section class="form-section" aria-labelledby="related-heading">
       <h2 class="section-label" id="related-heading">{t(data.locale, 'form.related')}</h2>
       <p class="field-help">{t(data.locale, 'form.relatedIntro')}</p>
-      {#if comparisons.length > 10}<p class="field-error" role="alert">{t(data.locale, 'error.relatedTooMany')}</p>{/if}
-      {#if comparisons.length}
-        <div class="comparison-list">
-          {#each comparisons as comparison, i}
-            <fieldset class="comparison">
-              <legend>{t(data.locale, 'form.comparison', { n: i + 1 })}</legend>
-              {#if comparisonErrors[i]}<p class="field-error" id={`comparison-error-${i}`} role="alert">{t(data.locale, 'error.comparisonRow')}</p>{/if}
-              <div class="comparison-fields">
-                <div class="field">
-                  <label class="field-label" for={`comparison-character-${i}`}>{t(data.locale, 'field.comparisonCharacter')}</label>
-                  <input id={`comparison-character-${i}`} name="comparison_character" maxlength="200" bind:value={comparison.character} aria-invalid={comparisonErrors[i]} />
-                </div>
-                <div class="field">
-                  <label class="field-label" for={`comparison-relationship-${i}`}>{t(data.locale, 'field.relationship')}</label>
-                  <select id={`comparison-relationship-${i}`} name="comparison_relationship" bind:value={comparison.relationship}>
-                    {#each ['variant', 'not_variant', 'similar', 'sound', 'meaning', 'glyph', 'usage', 'uncertain'] as relationship}
-                      <option value={relationship}>{relationshipLabel(data.locale, relationship)}</option>
-                    {/each}
-                  </select>
-                </div>
-                <div class="field">
-                  <label class="field-label" for={`comparison-differences-${i}`}>{t(data.locale, 'field.differences')}</label>
-                  <textarea id={`comparison-differences-${i}`} name="comparison_differences" maxlength="2000" bind:value={comparison.differences}></textarea>
-                </div>
-                <div class="field">
-                  <label class="field-label" for={`comparison-evidence-${i}`}>{t(data.locale, 'field.comparisonEvidence')}</label>
-                  <textarea id={`comparison-evidence-${i}`} name="comparison_evidence" maxlength="2000" bind:value={comparison.evidence}></textarea>
-                </div>
-                <div class="comparison-actions">
-                  <button class="secondary" type="button" onclick={() => removeRow(i)}>{t(data.locale, 'form.removeComparison')}</button>
-                </div>
-              </div>
-            </fieldset>
-          {/each}
-        </div>
-      {/if}
-      <button class="secondary comparison-add" type="button" disabled={comparisons.length >= 10} onclick={addComparison}>{t(data.locale, 'form.addComparison')}</button>
+      {#if characterError('comparison')}<p class="field-error" id="comparison-error" role="alert">{characterError('comparison')}</p>{/if}
+      <ComparisonGrid locale={data.locale} rows={comparisons} invalid={!!characterError('comparison')} describedBy={characterError('comparison') ? 'comparison-error' : undefined} />
     </section>
 
     <div class="form-actions">

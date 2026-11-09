@@ -9,10 +9,12 @@ const tmp = resolve('.svelte-kit/render-tmp')
 mkdirSync(tmp, { recursive: true })
 const i18n = resolve('src/lib/i18n.ts')
 const script = resolve('src/lib/script.ts')
+const comparisonRows = resolve('src/lib/comparison-rows.ts')
 const fileField = resolve('src/lib/components/FileField.svelte')
 const cropField = resolve('src/lib/components/CropField.svelte')
 const idsGlyph = resolve('src/lib/components/IdsGlyph.svelte')
 const scriptSelect = resolve('src/lib/components/ScriptSelect.svelte')
+const comparisonGrid = resolve('src/lib/components/ComparisonGrid.svelte')
 const appForms = resolve(tmp, 'app-forms.js')
 writeFileSync(appForms, 'export function enhance() { return {} }\n')
 const components = new Map<string, Promise<any>>()
@@ -20,6 +22,7 @@ let fileFieldModule: Promise<string> | null = null
 let cropFieldModule: Promise<string> | null = null
 let idsGlyphModule: Promise<string> | null = null
 let scriptSelectModule: Promise<string> | null = null
+let comparisonGridModule: Promise<string> | null = null
 
 function loadFileField(): Promise<string> {
   if (!fileFieldModule) {
@@ -45,6 +48,19 @@ function loadCropField(): Promise<string> {
     })()
   }
   return cropFieldModule
+}
+
+function loadComparisonGrid(): Promise<string> {
+  if (!comparisonGridModule) {
+    comparisonGridModule = (async () => {
+      const preprocessed = await preprocess(readFileSync(comparisonGrid, 'utf8'), vitePreprocess({ script: true }), { filename: comparisonGrid })
+      const { js } = compile(preprocessed.code, { filename: comparisonGrid, generate: 'server' })
+      const target = resolve(tmp, 'comparison-grid.js')
+      writeFileSync(target, js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/comparison-rows'", `'${comparisonRows}'`).replaceAll('"$lib/comparison-rows"', `"${comparisonRows}"`))
+      return target
+    })()
+  }
+  return comparisonGridModule
 }
 
 function loadIdsGlyph(): Promise<string> {
@@ -85,7 +101,8 @@ async function load(path: string, name: string) {
       const crop = await loadCropField()
       const glyph = await loadIdsGlyph()
       const select = await loadScriptSelect()
-      const code = js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`).replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
+      const grid = await loadComparisonGrid()
+      const code = js.code.replaceAll('"$lib/components/ComparisonGrid.svelte"', `"${grid}"`).replaceAll("'$lib/components/ComparisonGrid.svelte'", `'${grid}'`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/CropField.svelte'", `'${crop}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`).replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`).replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
@@ -130,6 +147,21 @@ describe('localized pages', () => {
     expect(body).toContain('Nothing has been recorded yet.')
     expect(body).toContain('href="/en/new"')
     expect(body).toContain('Add a character')
+  })
+
+  test('populated home ends the gallery with an add row', async () => {
+    const { body } = await page('src/routes/[locale]/+page.svelte', 'home-add-row', {
+      data: { locale: 'zh-Hant', entries: [{ id: 7, script: 'Han', ids: '⿰木木', place: '本書' }], next: 42, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
+    })
+    // The add row is the gallery's last child; entry cards hold no divs, so the first closing div ends the grid.
+    const start = body.indexOf('class="card-grid gallery"')
+    const grid = body.slice(start, body.indexOf('</div>', start))
+    expect(start).toBeGreaterThan(-1)
+    expect(grid).toContain('href="/zh-Hant/entry/7"')
+    expect(grid).toContain('class="add-card"')
+    expect(grid).toContain('href="/zh-Hant/new"')
+    expect(grid).toContain('新增字')
+    expect(grid.indexOf('class="add-card"')).toBeGreaterThan(grid.indexOf('href="/zh-Hant/entry/7"'))
   })
 
   test('home marks the chosen script and labels each card with its script', async () => {
@@ -207,8 +239,9 @@ describe('localized pages', () => {
     expect(body).toContain('name="url"')
     expect(body).toContain('連結')
     expect(body).toContain('相關文字')
-    expect(body).toContain('最多可比較10個字。')
-    expect(body).toContain('新增比較')
+    expect(body).toContain('在方框裡填入異體字和訛體。')
+    expect(body).toContain('異體字 1')
+    expect(body).toContain('訛體 10')
     expect(body).toContain('>儲存 <span aria-hidden="true">→</span></button>')
     expect(body).toContain('class="file-field invalid"')
     expect(body).toContain('選擇圖片')
@@ -231,7 +264,7 @@ describe('localized pages', () => {
         locale: 'ko',
         entry: { id: 9, script: 'Han', ids: '⿰木木', description: null, radical: null, encoded_as: null, strokes: null, created_at: '2026-11-08T05:00:00.000Z' },
         glyph: 'M0 0',
-        comparisons: [{ character: '漢', relationship: 'variant', differences: '획 하나 차이', evidence: '4쪽' }],
+        comparisons: [{ character: '漢', relationship: 'variant' }],
         evidence: [{ id: 4, place: '서울', url: null, title: null, author: null, publisher: null, year: null, page: null, note: null, source_id: null, has_image: 1, created_at: '2026-11-08T05:00:00.000Z' }],
       },
     })
@@ -250,8 +283,6 @@ describe('localized pages', () => {
     expect(body).toContain('추가일')
     expect(body).toContain('관련 문자')
     expect(body).toContain('이체자')
-    expect(body).toContain('획 하나 차이')
-    expect(body).toContain('4쪽')
     expect(body).toContain('href="/ko/entry/9/edit#evidence-4"')
     expect(body).toContain('href="/ko/entry/9/history"')
     expect(body).toContain('기록 편집')

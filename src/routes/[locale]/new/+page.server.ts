@@ -28,7 +28,7 @@ async function findEntryByImageKey(db: D1Database, key: string): Promise<{ id: n
   }
 }
 type FieldName = typeof fields[number]
-type FormErrors = Partial<Record<FieldName | 'image' | 'form' | 'url' | 'ivd_sequence', string>>
+type FormErrors = Partial<Record<FieldName | 'image' | 'form' | 'url' | 'ivd_sequence' | 'comparison', string>>
 
 function fieldValues(form: FormData): Record<FieldName, string> {
   return Object.fromEntries(fields.map(name => {
@@ -71,6 +71,7 @@ export const actions: Actions = {
     const rawStrokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
     const strokes = Number.isInteger(rawStrokes) && rawStrokes >= 0 && rawStrokes < 200 ? rawStrokes : null
     const comparisons = readComparisons(form)
+    if (comparisons.invalid) errors.comparison = t(locale, 'error.comparison')
     const genres = selectedGenres(form)
     const collections = selectedCollections(form)
     const tags = parseTags(String(form.get('tags') ?? ''))
@@ -79,7 +80,7 @@ export const actions: Actions = {
     if (!senses) return fail(400, { errors, values: submitted, comparisons })
     const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: submitted, comparisons })
     if (link && !/^https?:\/\//i.test(link)) errors.url = t(locale, 'error.length')
-    if (!ivd || !row || (source.error && source.error !== 'missing') || Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) return failForm(400, errors)
+    if (!ivd || !row || (source.error && source.error !== 'missing') || Object.keys(errors).length) return failForm(400, errors)
     const image = source.error === 'missing' ? null : source.image
     const cookie = cookieOptions(url)
     if (!cookie) error(403, 'Secure connection required')

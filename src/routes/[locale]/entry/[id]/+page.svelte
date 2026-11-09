@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { relationshipLabel } from '$lib/comparison-rows'
+  import { groupedComparisons, relationshipLabel, type Comparison } from '$lib/comparison-rows'
   import CropField from '$lib/components/CropField.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
 
-  type Comparison = { character: string; relationship: string; differences: string; evidence: string }
   type Genre = { slug: string; label: string }
   type Crop = { id: number; evidence_id: number; x: number; y: number; w: number; h: number }
   type Collection = { slug: string; label: string }
@@ -143,16 +142,12 @@
   {#if comparisons.length}
     <section class="related-section" aria-labelledby="related-heading">
       <h2 class="section-label" id="related-heading">{t(data.locale, 'form.related')}</h2>
-      <div class="related-list">
-        {#each comparisons as comparison}
-          <article class="related-card">
-            <h3>{comparison.character}</h3>
-            <dl class="entry-meta">
-              <div class="entry-row"><dt>{t(data.locale, 'field.relationship')}</dt><dd>{relationshipLabel(data.locale, comparison.relationship)}</dd></div>
-              {#if comparison.differences}<div class="entry-row"><dt>{t(data.locale, 'field.differences')}</dt><dd>{comparison.differences}</dd></div>{/if}
-              {#if comparison.evidence}<div class="entry-row"><dt>{t(data.locale, 'field.comparisonEvidence')}</dt><dd>{comparison.evidence}</dd></div>{/if}
-            </dl>
-          </article>
+      <div class="comparison-rows">
+        {#each groupedComparisons(comparisons) as group (group.relationship)}
+          <span class="comparison-kind" id={`comparison-${group.relationship}-label`}>{relationshipLabel(data.locale, group.relationship)}</span>
+          <ul class="character-tiles" aria-labelledby={`comparison-${group.relationship}-label`}>
+            {#each group.characters as character}<li class="character-tile">{character}</li>{/each}
+          </ul>
         {/each}
       </div>
     </section>

@@ -40,11 +40,12 @@ const record = {
   note: 'Notes',
 }
 
-function comparisonEvent(rows: Record<string, string>[], DB: unknown, images: ReturnType<typeof fakeImages>, locale = 'en', requestUrl = `https://example.test/${locale}/new`) {
+function comparisonEvent(variants: string[], erroneous: string[], DB: unknown, images: ReturnType<typeof fakeImages>, locale = 'en', requestUrl = `https://example.test/${locale}/new`) {
   const form = new FormData()
   for (const [key, value] of Object.entries(record)) form.set(key, value)
   form.set('image', imageFile(PNG_BYTES))
-  for (const row of rows) for (const [key, value] of Object.entries(row)) form.append(`comparison_${key}`, value)
+  for (const character of variants) form.append('comparison_variant', character)
+  for (const character of erroneous) form.append('comparison_erroneous', character)
   const { jar, cookies } = testCookies()
   return {
     request: new Request(requestUrl, { method: 'POST', body: form }),
@@ -55,8 +56,6 @@ function comparisonEvent(rows: Record<string, string>[], DB: unknown, images: Re
     params: { locale },
   } as any
 }
-
-const comparison = { character: '漢', relationship: 'not_variant', differences: 'Different component', evidence: 'Source page 4' }
 
 describe('evidence routes', () => {
   test('batch creates one character per row from one source', async () => {
@@ -85,15 +84,46 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
-  test('persists multiple comparisons and displays their explanations', async () => {
+  test('persists variants and erroneous forms from the boxes', async () => {
     const db = createTestDatabase()
     const images = fakeImages()
     try {
       const DB = d1Binding(db)
-      const rows = [comparison, { ...comparison, character: '字', relationship: 'uncertain' }]
-      await expect(actions.default!(comparisonEvent(rows, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      await expect(actions.default!(comparisonEvent(['漢', '字'], ['叓'], DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
-      expect(result.comparisons).toEqual(rows)
+      expect(result.comparisons).toEqual([
+        { character: '漢', relationship: 'variant' },
+        { character: '字', relationship: 'variant' },
+        { character: '叓', relationship: 'erroneous' },
+      ])
+    } finally { db.close() }
+  })
+
+  test('keeps supplementary characters and variation selectors whole', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      await expect(actions.default!(comparisonEvent(['𠀀', '木\uFE00'], [], DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(result.comparisons).toEqual([
+        { character: '𠀀', relationship: 'variant' },
+        { character: '木\uFE00', relationship: 'variant' },
+      ])
+    } finally { db.close() }
+  })
+
+  test('stores a repeated character once per relationship', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      await expect(actions.default!(comparisonEvent(['木', '木'], ['木'], DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(result.comparisons).toEqual([
+        { character: '木', relationship: 'variant' },
+        { character: '木', relationship: 'erroneous' },
+      ])
     } finally { db.close() }
   })
 
@@ -145,35 +175,26 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
-  test('rejects excess and invalid comparisons without saving', async () => {
+  test('rejects more than ten boxes of one relationship without saving', async () => {
     const db = createTestDatabase()
     const images = fakeImages()
     try {
-      const rows = Array.from({ length: 11 }, () => ({ ...comparison }))
-      rows[10].relationship = 'wrong'
-      const result = await actions.default!(comparisonEvent(rows, d1Binding(db), images)) as any
+      const result = await actions.default!(comparisonEvent(Array.from({ length: 11 }, (_, i) => String.fromCharCode(0x4e00 + i)), [], d1Binding(db), images)) as any
       expect(result.status).toBe(400)
-      expect(result.data.comparisons.tooMany).toBe(true)
-      expect(result.data.comparisons.errors[10]).toBe(true)
-      expect(result.data.comparisons.rows).toEqual(rows)
+      expect(result.data.errors.comparison).toBeTruthy()
       expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
       expect(images.puts).toHaveLength(0)
     } finally { db.close() }
   })
 
-  test('rejects incomplete, overlong and misaligned rows', async () => {
+  test('rejects a box holding more than one character', async () => {
     const db = createTestDatabase()
     const images = fakeImages()
     try {
-      for (const row of [
-        { ...comparison, character: ' ' },
-        { ...comparison, evidence: 'x'.repeat(2001) },
-        { character: '漢', relationship: 'variant', differences: '' },
-      ]) {
-        const result = await actions.default!(comparisonEvent([row], d1Binding(db), images)) as any
-        expect(result.status).toBe(400)
-        expect(result.data.comparisons.errors[0]).toBe(true)
-      }
+      const result = await actions.default!(comparisonEvent(['漢字'], [], d1Binding(db), images)) as any
+      expect(result.status).toBe(400)
+      expect(result.data.errors.comparison).toBeTruthy()
+      expect(result.data.comparisons.rows).toEqual([{ character: '漢字', relationship: 'variant' }])
       expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
       expect(images.puts).toHaveLength(0)
     } finally { db.close() }
@@ -184,7 +205,7 @@ describe('evidence routes', () => {
     const images = fakeImages()
     try {
       db.exec("CREATE TRIGGER reject_comparisons BEFORE INSERT ON entries WHEN json_array_length(NEW.comparisons) > 0 BEGIN SELECT RAISE(ABORT, 'rejected'); END")
-      const result = await actions.default!(comparisonEvent([comparison], d1Binding(db), images)) as any
+      const result = await actions.default!(comparisonEvent(['漢'], [], d1Binding(db), images)) as any
       expect(result.status).toBe(500)
       expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
     } finally { db.close() }

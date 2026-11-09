@@ -3,7 +3,8 @@ import { SCRIPT_MAX } from '$lib/script'
 import { readIvd } from '$lib/server/ivd'
 import { addEvidence, evidenceFields, listEvidence, primaryEvidenceId, readEvidenceFields, updateEvidence } from '$lib/server/evidence-links'
 import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, type ImageError } from '$lib/server/images'
-import { readComparisons, type Comparison } from '$lib/server/related'
+import { readComparisons } from '$lib/server/related'
+import type { Comparison } from '$lib/comparison-rows'
 import { listGenres, genresForEntry, selectedGenres, saveGenres } from '$lib/server/genres'
 import { listCollections, collectionsForEntry, selectedCollections, saveCollections } from '$lib/server/collections'
 import { listTags, tagsForEntry, parseTags, saveTags } from '$lib/server/tags'
@@ -135,6 +136,7 @@ export const actions: Actions = {
     if (values.encodedAs.length > 80) errors.encoded_as = t(locale, 'error.length')
     if (senses === null) errors.senses = t(locale, 'error.length')
     if (!ivd) errors.ivd_sequence = t(locale, 'error.ivd')
+    if (comparisons.invalid) errors.comparison = t(locale, 'error.comparison')
     const failForm = (status: 400 | 404 | 409, message: string) => fail(status, {
       action: 'character',
       values: submitted,
@@ -145,7 +147,7 @@ export const actions: Actions = {
       senses: senses ?? [],
       message,
     })
-    if (!ivd || Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) return failForm(400, t(locale, 'error.fields'))
+    if (!ivd || Object.keys(errors).length) return failForm(400, t(locale, 'error.fields'))
     if (!revision || !generation) return failForm(400, t(locale, 'error.fields'))
     const updated = await platform.env.DB.prepare(
       `UPDATE entries SET script = ?, ids = ?, description = ?, radical = ?, encoded_as = ?, strokes = ?, ivd_status = ?, ivd_sequence = ?, comparisons = ?, revision = revision + 1

@@ -1,5 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit'
-import { MAX_COMPARISONS, type Comparison } from '$lib/server/related'
+import type { Comparison } from '$lib/comparison-rows'
+import { MAX_COMPARISONS } from '$lib/server/related'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import { addCrop, addEvidence, listCrops, listEvidence, readEvidenceFields } from '$lib/server/evidence-links'
 import { genresForEntry } from '$lib/server/genres'

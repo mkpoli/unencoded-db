@@ -230,7 +230,7 @@ describe('revisions', () => {
       const missingScript = await actions.character!(event(db, { ...values, ids: '', description: '', radical: '', encoded_as: '', script: '' })) as any
       expect(missingScript.status).toBe(400)
       expect(missingScript.data.errors.script).toContain('script')
-      await expect(actions.character!(event(db, { ...values, script: 'Han', ids: '', description: '', radical: '', encoded_as: '', tags: '新, 客家', sense_gloss: '意味', sense_reading: 'いみ', comparison_character: '漢', comparison_relationship: 'variant', comparison_differences: '一画', comparison_evidence: '4頁' }))).rejects.toMatchObject({ status: 303 })
+      await expect(actions.character!(event(db, { ...values, script: 'Han', ids: '', description: '', radical: '', encoded_as: '', tags: '新, 客家', sense_gloss: '意味', sense_reading: 'いみ', comparison_variant: '漢' }))).rejects.toMatchObject({ status: 303 })
       expect(db.query('SELECT ids, description FROM entry_revisions WHERE revision = 2').get()).toEqual({ ids: null, description: null })
       expect(db.query('SELECT tag FROM character_tags ORDER BY tag').all()).toEqual([{ tag: '客家' }, { tag: '新' }])
       expect(db.query('SELECT gloss, reading FROM senses').get()).toEqual({ gloss: '意味', reading: 'いみ' })

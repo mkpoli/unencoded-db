@@ -37,10 +37,8 @@
       {#if data.signedIn}
         <span class="account">Glyph Atlas</span>
         <form method="POST" action="/auth/sign-out"><button class="secondary" type="submit">{t(locale, 'auth.signOut')}</button></form>
-      {:else if data.signInEnabled && data.hasSession}
-        <form method="POST" action="/auth/sign-in"><button class="secondary" type="submit">{t(locale, 'auth.link')}</button></form>
       {:else if data.signInEnabled}
-        <form method="POST" action="/auth/prepare"><button class="secondary" type="submit">{t(locale, 'auth.signIn')}</button></form>
+        <form method="POST" action={data.hasSession ? '/auth/sign-in' : '/auth/prepare'}><button class="secondary" type="submit">{t(locale, 'auth.signIn')}</button></form>
       {/if}
       {#if canSwitch}<LanguageSwitcher {locale} pathname={path} search={page.url.search} />{/if}
     </div>
