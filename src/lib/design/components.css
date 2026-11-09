@@ -659,9 +659,33 @@
   .file-actions { grid-column: 2; justify-self: start; }
 }
 
-.genre-options { display: flex; flex-wrap: wrap; gap: 8px 16px; }
-.genre-option { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 7px; font-size: var(--text-sm); white-space: nowrap; }
+.genre-field { min-width: 0; padding: 0; border: 0; }
+.genre-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.genre-option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line-control);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.genre-option:hover { border-color: var(--accent); }
+.genre-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.genre-option:has(input:focus-visible) { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+.genre-option:has(input:checked) { border-color: var(--accent); background: var(--accent-tile); color: var(--accent); }
+.genre-tick { width: 1ch; opacity: 0; font-size: var(--text-xs); }
+.genre-option:has(input:checked) .genre-tick { opacity: 1; }
+.genre-group { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.genre-group .genre-option-parent { margin-bottom: 10px; }
 .genre-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
+.genre-list-group { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
 .genre-chip {
   display: inline-flex;
   align-items: center;

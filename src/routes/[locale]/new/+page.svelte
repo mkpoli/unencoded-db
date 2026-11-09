@@ -13,7 +13,7 @@
 
   type Values = Record<string, string> & { genres?: string[]; collections?: string[] }
   type Suggestion = { ids: string; script: string }
-  type Genre = { slug: string; label: string }
+  type Genre = { slug: string; label: string; parent: string | null }
   type Collection = { slug: string; label: string }
   type Form = {
     errors?: Record<string, string>
@@ -21,6 +21,9 @@
     comparisons?: { rows: Comparison[] }
   }
   let { form, data }: { form?: Form; data: { locale: Locale; suggestions?: Suggestion[]; genres?: Genre[]; collections?: Collection[]; tags?: string[] } } = $props()
+  const topGenres = $derived((data.genres ?? []).filter(genre => !genre.parent && genre.slug !== 'dialect'))
+  const dialect = $derived((data.genres ?? []).find(genre => genre.slug === 'dialect'))
+  const dialectGenres = $derived((data.genres ?? []).filter(genre => genre.parent === 'dialect'))
   let rateLimitFailure = $state<429 | 503 | null>(null)
   const imageError = $derived(form?.errors?.image ?? '')
   // A failed submission seeds the fields once; after that the reader's edits own them.
@@ -225,10 +228,29 @@
           <fieldset class="field genre-field">
             <legend class="field-label">{t(data.locale, 'field.genre')}</legend>
             <div class="genre-options">
-              {#each data.genres as genre (genre.slug)}
-                <label class="genre-option"><input type="checkbox" name="genre" value={genre.slug} checked={form?.values?.genres?.includes(genre.slug)} /> {genre.label}</label>
+              {#each topGenres as genre (genre.slug)}
+                <label class="genre-option">
+                  <input type="checkbox" name="genre" value={genre.slug} checked={form?.values?.genres?.includes(genre.slug)} />
+                  <span class="genre-tick" aria-hidden="true">✓</span>{genre.label}
+                </label>
               {/each}
             </div>
+            {#if dialect && dialectGenres.length}
+              <div class="genre-group">
+                <label class="genre-option genre-option-parent">
+                  <input type="checkbox" name="genre" value={dialect.slug} checked={form?.values?.genres?.includes(dialect.slug)} />
+                  <span class="genre-tick" aria-hidden="true">✓</span>{dialect.label}
+                </label>
+                <div class="genre-options">
+                  {#each dialectGenres as genre (genre.slug)}
+                    <label class="genre-option">
+                      <input type="checkbox" name="genre" value={genre.slug} checked={form?.values?.genres?.includes(genre.slug)} />
+                      <span class="genre-tick" aria-hidden="true">✓</span>{genre.label}
+                    </label>
+                  {/each}
+                </div>
+              </div>
+            {/if}
           </fieldset>
         {/if}
         {#if data.collections?.length}
@@ -236,7 +258,10 @@
             <legend class="field-label">{t(data.locale, 'field.collection')}</legend>
             <div class="genre-options">
               {#each data.collections as collection (collection.slug)}
-                <label class="genre-option"><input type="checkbox" name="collection" value={collection.slug} checked={form?.values?.collections?.includes(collection.slug)} /> {collection.label}</label>
+                <label class="genre-option">
+                  <input type="checkbox" name="collection" value={collection.slug} checked={form?.values?.collections?.includes(collection.slug)} />
+                  <span class="genre-tick" aria-hidden="true">✓</span>{collection.label}
+                </label>
               {/each}
             </div>
           </fieldset>
