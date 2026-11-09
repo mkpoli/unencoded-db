@@ -1,6 +1,7 @@
 <script lang="ts">
   import { relationshipLabel } from '$lib/comparison-rows'
   import CropField from '$lib/components/CropField.svelte'
+  import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
 
   type Comparison = { character: string; relationship: string; differences: string; evidence: string }
@@ -11,7 +12,7 @@
   type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
   type Evidence = { id: number; place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; source_id: number | null; has_image: number; created_at: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; strokes: number | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
-  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; isModerator: boolean; reported: boolean } } = $props()
+  let { data }: { data: { locale: Locale; entry: Entry; glyph: string | null; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons)
   let evidence = $derived(data.evidence)
@@ -21,25 +22,12 @@
   let relations = $derived(data.relations ?? [])
   let tags = $derived(data.tags ?? [])
   let senses = $derived(data.senses ?? [])
+  const isLink = (text: string) => /^https?:\/\//i.test(text.trim())
 </script>
 
 <svelte:head><title>{t(data.locale, 'entry.record', { id: entry.id })} · {t(data.locale, 'app.name')}</title></svelte:head>
 <div class="entry-page">
   <a class="back-link" href={localizedHref(data.locale)}>← {t(data.locale, 'nav.browse')}</a>
-  <header class="entry-header">
-    <p class="eyebrow">{t(data.locale, 'entry.record', { id: entry.id })}</p>
-    <h1>{entry.ids || entry.script}</h1>
-    <p><a href={localizedHref(data.locale, `/entry/${entry.id}/edit`)}>{t(data.locale, 'entry.revise')}</a> · <a href={localizedHref(data.locale, `/entry/${entry.id}/history`)}>{t(data.locale, 'entry.history')}</a></p>
-    {#if genres.length}
-      <p class="genre-list">{#each genres as genre (genre.slug)}<a class="genre-chip" href={localizedHref(data.locale, `/genre/${genre.slug}`)}>{genre.label}</a>{/each}</p>
-    {/if}
-    {#if collections.length}
-      <p class="genre-list">{#each collections as collection (collection.slug)}<a class="genre-chip" href={localizedHref(data.locale, `/collection/${collection.slug}`)}>{collection.label}</a>{/each}</p>
-    {/if}
-    {#if tags.length}
-      <p class="genre-list">{#each tags as tag}<a class="genre-chip" href={localizedHref(data.locale, `/tag/${encodeURIComponent(tag)}`)}>{tag}</a>{/each}</p>
-    {/if}
-  </header>
   {#if data.reported}<p class="notice" role="status">{t(data.locale, 'report.received')}</p>{/if}
   {#if data.isModerator}
     <div class="moderation-bar">
@@ -49,30 +37,62 @@
       </form>
     </div>
   {/if}
-  {#if entry.has_image}
-    <figure class="entry-figure">
-      <img src={localizedHref(data.locale, `/entry/${entry.id}/image`)} alt={entry.description || t(data.locale, 'field.sourceImage')} />
-    </figure>
-  {/if}
-  <dl class="entry-meta">
-    <div class="entry-row"><dt>{t(data.locale, 'field.script')}</dt><dd>{entry.script}</dd></div>
-    {#if entry.ids}<div class="entry-row"><dt>{t(data.locale, 'field.ids')}</dt><dd>{entry.ids}</dd></div>{/if}
-    {#if entry.description}<div class="entry-row"><dt>{t(data.locale, 'field.description')}</dt><dd>{entry.description}</dd></div>{/if}
-    {#if entry.radical}<div class="entry-row"><dt>{t(data.locale, 'field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
-    {#if entry.encoded_as}<div class="entry-row"><dt>{t(data.locale, 'field.encodedAs')}</dt><dd>{entry.encoded_as}</dd></div>{/if}
-    {#if entry.strokes != null}<div class="entry-row"><dt>{t(data.locale, 'field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
-    <div class="entry-row"><dt>{t(data.locale, 'entry.added')}</dt><dd>{formatDate(data.locale, entry.created_at)}</dd></div>
-  </dl>
+  <header class="entry-header">
+    <p class="eyebrow">{t(data.locale, 'entry.record', { id: entry.id })}</p>
+  </header>
+  <section class="character-card" aria-labelledby="character-name">
+    <div class="character-mark">
+      <h1 class="character-glyph" class:character-glyph-text={!entry.ids} id="character-name">
+        {#if entry.ids}
+          <span class="visually-hidden">{entry.ids}</span>
+          <IdsGlyph ids={entry.ids} text={entry.ids} path={data.glyph} />
+        {:else}
+          {entry.script}
+        {/if}
+      </h1>
+      <p class="character-actions">
+        <a href={localizedHref(data.locale, `/entry/${entry.id}/edit`)}>{t(data.locale, 'entry.revise')}</a>
+        <span aria-hidden="true">·</span>
+        <a href={localizedHref(data.locale, `/entry/${entry.id}/history`)}>{t(data.locale, 'entry.history')}</a>
+      </p>
+    </div>
+    <div class="character-facts">
+      {#if genres.length || collections.length || tags.length}
+        <p class="genre-list">
+          {#each genres as genre (genre.slug)}<a class="genre-chip" href={localizedHref(data.locale, `/genre/${genre.slug}`)}>{genre.label}</a>{/each}
+          {#each collections as collection (collection.slug)}<a class="genre-chip" href={localizedHref(data.locale, `/collection/${collection.slug}`)}>{collection.label}</a>{/each}
+          {#each tags as tag}<a class="genre-chip" href={localizedHref(data.locale, `/tag/${encodeURIComponent(tag)}`)}>{tag}</a>{/each}
+        </p>
+      {/if}
+      <dl class="entry-meta">
+        <div class="entry-row"><dt>{t(data.locale, 'field.script')}</dt><dd>{entry.script}</dd></div>
+        {#if entry.ids}<div class="entry-row"><dt>{t(data.locale, 'field.ids')}</dt><dd>{entry.ids}</dd></div>{/if}
+        {#if entry.description}<div class="entry-row"><dt>{t(data.locale, 'field.description')}</dt><dd>{entry.description}</dd></div>{/if}
+        {#if entry.radical}<div class="entry-row"><dt>{t(data.locale, 'field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
+        {#if entry.encoded_as}<div class="entry-row"><dt>{t(data.locale, 'field.encodedAs')}</dt><dd>{entry.encoded_as}</dd></div>{/if}
+        {#if entry.strokes != null}<div class="entry-row"><dt>{t(data.locale, 'field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
+        <div class="entry-row"><dt>{t(data.locale, 'entry.added')}</dt><dd>{formatDate(data.locale, entry.created_at)}</dd></div>
+      </dl>
+    </div>
+  </section>
   <section class="evidence-section" aria-labelledby="evidence-heading">
-    <h2 class="section-label" id="evidence-heading">{t(data.locale, 'entry.sightings')}</h2>
-    <p class="field-help">{t(data.locale, 'entry.addSightingHint')}</p>
+    <div class="section-head">
+      <h2 class="section-label" id="evidence-heading">{t(data.locale, 'entry.sightings')}</h2>
+      <p class="field-help">{t(data.locale, 'entry.addSightingHint')}</p>
+    </div>
+    {#if entry.has_image}
+      <figure class="entry-figure">
+        <img src={localizedHref(data.locale, `/entry/${entry.id}/image`)} alt={entry.description || t(data.locale, 'field.sourceImage')} />
+        <figcaption>{t(data.locale, 'field.sourceImage')}</figcaption>
+      </figure>
+    {/if}
     {#each evidence as item (item.id)}
       <article class="evidence-card" id={`evidence-${item.id}`}>
         {#if item.has_image}
           <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} alt={item.place || t(data.locale, 'field.sourceImage')} loading="lazy" />
         {/if}
-        <h3>{item.place}</h3>
-        {#if item.url}<p><a class="text-link" href={item.url} target="_blank" rel="noopener noreferrer">{item.url} ↗</a></p>{/if}
+        <h3>{#if isLink(item.place)}<a href={item.place} target="_blank" rel="noopener noreferrer">{item.place} <span aria-hidden="true">↗</span></a>{:else}{item.place}{/if}</h3>
+        {#if item.url && item.url !== item.place}<p class="evidence-url"><a class="text-link" href={item.url} target="_blank" rel="noopener noreferrer">{item.url} ↗</a></p>{/if}
         {#if crops.some(crop => crop.evidence_id === item.id)}
           <div class="crop-list">
             {#each crops.filter(crop => crop.evidence_id === item.id) as crop, n (crop.id)}
