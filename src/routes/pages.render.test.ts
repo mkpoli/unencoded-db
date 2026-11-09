@@ -495,4 +495,22 @@ describe('localized pages', () => {
     expect(body).toContain('Tiếng Việt')
     expect(body.match(/aria-current="page"/g)).toHaveLength(1)
   })
+
+  test('genre browse page renders the taxonomy chips and matching entries', async () => {
+    const { head, body } = await page('src/routes/[locale]/genre/[slug]/+page.svelte', 'genre', {
+      data: {
+        locale: 'zh-Hant',
+        genre: { slug: 'wu', label: '吳語' },
+        genres: [{ slug: 'music', label: '樂譜' }, { slug: 'medicine', label: '醫藥' }, { slug: 'wu', label: '吳語' }],
+        entries: [{ id: 5, script: 'Han', ids: '⿰口儂', description: '吳語代詞' }],
+      },
+    })
+    expect(head).toContain('吳語 · 珍字集覽')
+    expect(body).toContain('<h1>吳語</h1>')
+    expect(body).toContain('href="/zh-Hant/genre/medicine"')
+    expect(body).toContain('醫藥')
+    expect(body).toContain('aria-current="page" href="/zh-Hant/genre/wu"')
+    expect(body).toContain('href="/zh-Hant/entry/5"')
+    expect(body).toContain('⿰口儂')
+  })
 })
