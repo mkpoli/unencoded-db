@@ -65,6 +65,7 @@ describe('public query plans', () => {
       '[locale]/entry/[id]/image/+server.ts',
       '[locale]/entry/[id]/evidence/[evidence]/image/+server.ts',
       '[locale]/genre/[slug]/+page.server.ts',
+      '[locale]/collection/[slug]/+page.server.ts',
       '[locale]/entry/[id]/report/+server.ts',
       '[locale]/moderate/+page.server.ts',
       '[locale]/moderate/[id]/hide/+server.ts',
@@ -143,10 +144,12 @@ describe('public query plans', () => {
     try {
       const { binding, plans } = capture(db, true)
       await detail({ platform: { env: { DB: binding } }, params: { locale: 'en', id: '1' } } as any)
-      expect(plans).toHaveLength(4)
+      expect(plans).toHaveLength(5)
       assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
       assertPlan(plans[1], /SEARCH evidence USING INDEX evidence_entry_date \(entry_id=\?\)/i)
       expect(plans[2].some(line => /SEARCH c USING INDEX crops_evidence \(evidence_id=\?\)/i.test(line))).toBe(true)
+      expect(plans[3].some(line => /SEARCH eg USING .*entry_genres.*\(entry_id=\?\)/i.test(line))).toBe(true)
+      expect(plans[4].some(line => /SEARCH ec USING .*entry_collections.*\(entry_id=\?\)/i.test(line))).toBe(true)
     } finally { db.close() }
   })
 

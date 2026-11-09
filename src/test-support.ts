@@ -19,6 +19,7 @@ const migrationOrder = [
   '0013_evidence.sql',
   '0014_genres.sql',
   '0015_date_precision.sql',
+  '0016_collections.sql',
   '0019_crops.sql',
 ] as const
 

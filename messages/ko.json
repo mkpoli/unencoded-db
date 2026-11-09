@@ -46,6 +46,7 @@
   "field.author": "저자",
   "field.browseImage": "찾아보기",
   "field.chooseImage": "이미지 선택",
+  "field.collection": "컬렉션",
   "field.comparisonCharacter": "문자",
   "field.comparisonEvidence": "근거",
   "field.dateHint": "연도, 연월, 전체 날짜, 월 중 하나를 입력하세요. 예: 1998, 1998-05, 1998-05-12, 05.",
