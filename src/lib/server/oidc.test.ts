@@ -26,7 +26,7 @@ describe('OIDC discovery and ID tokens', () => {
     globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => { mode = init?.redirect; return Response.json({}) }) as unknown as typeof fetch
     await fetchJson(`${issuer}/test`)
     expect(mode).toBe('manual')
-    globalThis.fetch = (async () => new Response(null, { status: 302, headers: { location: `${issuer}/elsewhere` } })) as unknown as typeof fetch
+    globalThis.fetch = (async () => new Response('{}', { status: 302, headers: { location: `${issuer}/elsewhere` } })) as unknown as typeof fetch
     await expect(fetchJson(`${issuer}/test`)).rejects.toThrow('Provider request failed')
   })
   test('allows only pinned HTTPS or loopback HTTP public origins', () => {

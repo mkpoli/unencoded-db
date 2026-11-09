@@ -225,12 +225,12 @@ describe('Access JWKS fetching', () => {
   test('rejects redirects and failed downloads', async () => {
     const token = await signToken()
     const redirectFetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-      expect(init?.redirect).toBe('error')
+      expect(init?.redirect).toBe('manual')
       return new Response(null, { status: 302, headers: { location: 'https://attacker.test/certs' } })
     }) as typeof fetch
     expect(await verify(token, { fetch: redirectFetch })).toBeNull()
 
-    const throwingFetch = (async () => { throw new TypeError('redirect mode is set to error') }) as unknown as typeof fetch
+    const throwingFetch = (async () => { throw new TypeError('network failure') }) as unknown as typeof fetch
     expect(await verify(token, { fetch: throwingFetch })).toBeNull()
 
     const errorFetch = (async () => jwksResponse([publicJwk], 500)) as unknown as typeof fetch
