@@ -305,7 +305,7 @@
 .crop-thumb img { display: block; max-width: none; }
 .crop-thumb figcaption { color: var(--muted); font-size: var(--text-xs); }
 
-/* Related characters on a record: one card per comparison, rows like the record's own. */
+/* Related characters on a record: one row of tiles per relationship. */
 .related-section { display: grid; gap: var(--space-3); margin-top: var(--space-8); }
 .related-list { display: grid; gap: var(--space-3); }
 .related-card {
@@ -317,6 +317,20 @@
 .related-card h3 { margin-bottom: var(--space-1); font-size: var(--text-xl); font-weight: 550; letter-spacing: -0.2px; }
 .related-card .entry-meta { padding: 0; border: 0; background: none; }
 .related-card .entry-row { border-top: 1px solid var(--line); }
+.comparison-rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; column-gap: var(--space-3); row-gap: var(--space-2); }
+.comparison-kind { color: var(--muted); font-size: var(--text-sm); font-weight: 550; }
+.character-tiles { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.character-tile {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 26px;
+  line-height: 1;
+}
 .revision-card { display: grid; gap: var(--space-2); }
 .revision-date { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 
@@ -402,8 +416,7 @@
 .details-body { display: grid; gap: 16px; padding: 2px 14px 16px; }
 .form-actions { display: flex; justify-content: flex-end; }
 
-/* Related comparisons in the add form. */
-.comparison-list { display: grid; gap: var(--space-3); }
+/* One character row on the batch form. */
 .comparison {
   min-width: 0;
   margin: 0;
@@ -421,9 +434,23 @@
   letter-spacing: 1.1px;
   text-transform: uppercase;
 }
-.comparison-fields { display: grid; gap: var(--space-4); min-width: 0; }
-.comparison-actions { display: flex; justify-content: flex-end; }
-.comparison-add { justify-self: start; }
+/* Relationship boxes on the add form: one row of ten squares per kind. */
+.relation-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; column-gap: var(--space-3); row-gap: 10px; }
+.relation-label { color: var(--muted); font-size: var(--text-sm); font-weight: 550; }
+.relation-boxes { display: flex; flex-wrap: wrap; gap: 6px; }
+.relation-box {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 22px;
+  line-height: 1;
+  text-align: center;
+}
 
 /* A file field: one clickable surface, a preview once chosen, and the same native input underneath. */
 .file-field {
@@ -595,6 +622,7 @@
   .entry-meta { padding: 2px 14px; }
   .entry-row { grid-template-columns: 1fr; gap: 2px; padding: 11px 0; }
   .related-card { padding: var(--space-3) var(--space-4); }
+  .relation-box { width: 38px; height: 38px; }
   .form-panel { padding: 16px; gap: 18px; }
   .field-grid { grid-template-columns: 1fr; }
   .form-actions .primary { width: 100%; }

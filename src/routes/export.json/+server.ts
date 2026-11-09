@@ -2,7 +2,7 @@ import { error, json } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import { parseDate } from '$lib/server/evidence-links'
-import type { Comparison } from '$lib/server/related'
+import type { Comparison } from '$lib/comparison-rows'
 
 const DEFAULT_LIMIT = 100
 const MAX_LIMIT = 200
