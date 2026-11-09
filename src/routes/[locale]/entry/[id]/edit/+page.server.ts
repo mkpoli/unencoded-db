@@ -1,5 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import { fields, invalidFields, readEvidence } from '$lib/server/evidence'
+import { readIvd } from '$lib/server/ivd'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import { isLocale, localizedHref, t, type Locale } from '$lib/i18n'
 import type { Actions, PageServerLoad } from './$types'
@@ -12,7 +13,7 @@ function idOf(id: string) {
 }
 
 function fieldErrors(locale: Locale, form: FormData) {
-  const errors: Partial<Record<FieldName, string>> = {}
+  const errors: Partial<Record<FieldName | 'ivd_sequence', string>> = {}
   for (const name of invalidFields(form)) {
     errors[name] = name === 'script' ? t(locale, 'error.script')
       : name === 'place' ? t(locale, 'error.placeSeen')
@@ -24,7 +25,7 @@ function fieldErrors(locale: Locale, form: FormData) {
 export const load: PageServerLoad = async ({ params, platform }) => {
   if (!isLocale(params.locale)) error(404)
   if (!platform) error(500, 'Database unavailable')
-  const entry = await platform.env.DB.prepare(`SELECT id, revision, edit_generation, ${fields.join(', ')} FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(idOf(params.id)).first()
+  const entry = await platform.env.DB.prepare(`SELECT id, revision, edit_generation, ${fields.join(', ')}, radical, encoded_as, strokes, ivd_status, ivd_sequence FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(idOf(params.id)).first()
   if (!entry) error(404)
   return { entry }
 }
@@ -44,20 +45,25 @@ export const actions: Actions = {
     const row = readEvidence(form)
     const radical = String(form.get('radical') ?? '').normalize('NFC').trim().slice(0, 20) || null
     const encoded = String(form.get('encoded_as') ?? '').normalize('NFC').trim().slice(0, 80) || null
+    const ivdStatus = typeof form.get('ivd_status') === 'string' ? form.get('ivd_status') as string : ''
+    const ivdSequence = typeof form.get('ivd_sequence') === 'string' ? form.get('ivd_sequence') as string : ''
+    const ivd = readIvd(form.get('ivd_status'), form.get('ivd_sequence'))
     const rawStrokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
     const strokes = Number.isInteger(rawStrokes) && rawStrokes >= 0 && rawStrokes < 200 ? rawStrokes : null
     // Visibility is checked before returning even submitted data for a hidden entry.
     const current = await platform.env.DB.prepare(`SELECT revision FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first<{ revision: number }>()
     if (!current) error(404)
     const errors = fieldErrors(locale, form)
-    if (!Number.isSafeInteger(revision) || !Number.isSafeInteger(generation) || !row || Object.keys(errors).length) {
-      return fail(400, { values, revision: version, generation: generationToken, errors, message: t(locale, 'error.fields') })
+    if (!ivd) errors.ivd_sequence = t(locale, 'error.ivd')
+    const rejected = { values, revision: version, generation: generationToken, errors, ivd_status: ivdStatus, ivd_sequence: ivdSequence }
+    if (!ivd || !Number.isSafeInteger(revision) || !Number.isSafeInteger(generation) || !row || Object.keys(errors).length) {
+      return fail(400, { ...rejected, message: t(locale, 'error.fields') })
     }
-    const updated = await platform.env.DB.prepare(`UPDATE entries SET ${fields.map(name => `${name} = ?`).join(', ')}, radical = ?, encoded_as = ?, strokes = ?, revision = revision + 1 WHERE id = ? AND ${publicEntryPredicate} AND revision = ? AND edit_generation = ? RETURNING id`).bind(...fields.map(name => row[name]), radical, encoded, strokes, id, revision, generation).first()
+    const updated = await platform.env.DB.prepare(`UPDATE entries SET ${fields.map(name => `${name} = ?`).join(', ')}, radical = ?, encoded_as = ?, strokes = ?, ivd_status = ?, ivd_sequence = ?, revision = revision + 1 WHERE id = ? AND ${publicEntryPredicate} AND revision = ? AND edit_generation = ? RETURNING id`).bind(...fields.map(name => row[name]), radical, encoded, strokes, ivd.status, ivd.sequence, id, revision, generation).first()
     if (!updated) {
       const visible = await platform.env.DB.prepare(`SELECT revision FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first()
       if (!visible) error(404)
-      return fail(409, { values, revision: version, generation: generationToken, errors, message: t(locale, 'edit.conflict') })
+      return fail(409, { ...rejected, message: t(locale, 'edit.conflict') })
     }
     redirect(303, localizedHref(locale, `/entry/${id}`))
   },
