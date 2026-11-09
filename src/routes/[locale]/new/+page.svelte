@@ -4,7 +4,7 @@
   import FileField from '$lib/components/FileField.svelte'
   import { newComparison, relationshipLabel, removeComparison } from '$lib/comparison-rows'
   import { handleContributionResult } from '$lib/contribution-result'
-  import { t, type Locale } from '$lib/i18n'
+  import { localizedHref, t, type Locale } from '$lib/i18n'
 
   type Values = Record<string, string> & { genres?: string[]; collections?: string[] }
   type Comparison = { character: string; relationship: string; differences: string; evidence: string }
@@ -83,6 +83,7 @@
   <div class="page-heading">
     <h1>{t(data.locale, 'add.title')}</h1>
     <p>{t(data.locale, 'add.intro')}</p>
+    <p><a class="text-link" href={localizedHref(data.locale, '/batch')}>{t(data.locale, 'batch.link')}</a></p>
   </div>
   {#if form?.errors?.form}
     <p class="notice error" id="form-error" tabindex="-1" role="alert">{form.errors.form}</p>
