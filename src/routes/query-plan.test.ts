@@ -124,6 +124,34 @@ describe('public query plans', () => {
     } finally { db.close() }
   })
 
+  test('the IVD filter uses its index alone and with a script', async () => {
+    const db = database()
+    try {
+      const { binding, plans } = capture(db)
+      await list({ platform: { env: { DB: binding } }, url: new URL('https://example.test/en?ivd=registered&before=100') } as any)
+      await list({ platform: { env: { DB: binding } }, url: new URL('https://example.test/en?ivd=none&script=Han&before=100') } as any)
+      expect(plans).toHaveLength(4)
+      assertPlan(plans[0], /SEARCH entries USING INDEX entries_visible_ivd \(ivd_status=\? AND id<\?\)/i)
+      assertCountPlan(plans[1])
+      assertPlan(plans[2], /SEARCH entries USING INDEX entries_visible_ivd_script \(ivd_status=\? AND script=\? AND id<\?\)/i)
+      assertCountPlan(plans[3])
+
+      for (let index = 0; index < 40; index++) {
+        db.exec(`INSERT INTO entries (script, place, created_at, visible, ivd_status, ivd_sequence) VALUES ('${index % 2 ? 'Han' : 'Tangut'}', 'book', '2026', ${index < 30 ? 1 : 0}, ${index % 2 ? "'registered', 'U+4E00 U+E0100'" : "'none', NULL"})`)
+      }
+      db.exec('ANALYZE')
+      const analyzed = capture(db)
+      await list({ platform: { env: { DB: analyzed.binding } }, url: new URL('https://example.test/en?ivd=registered&script=Han') } as any)
+      assertPlan(analyzed.plans[0], /SEARCH entries USING INDEX entries_visible_ivd_script \(ivd_status=\? AND script=\? AND id<\?\)/i)
+
+      db.exec('DROP INDEX entries_visible_ivd')
+      const withoutIndex = capture(db)
+      await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/en?ivd=none') } as any)
+      expect(() => assertPlan(withoutIndex.plans[0], /entries_visible_ivd \(ivd_status=\? AND id<\?\)/i)).toThrow()
+      await expect(list({ platform: { env: { DB: binding } }, url: new URL('https://example.test/en?ivd=unknown') } as any)).rejects.toMatchObject({ status: 404 })
+    } finally { db.close() }
+  })
+
   test('export uses the visible index for ascending pages', async () => {
     const db = database()
     try {

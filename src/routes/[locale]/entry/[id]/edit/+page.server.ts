@@ -1,5 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import { SCRIPT_MAX } from '$lib/script'
+import { readIvd } from '$lib/server/ivd'
 import { addEvidence, evidenceFields, listEvidence, primaryEvidenceId, readEvidenceFields, updateEvidence } from '$lib/server/evidence-links'
 import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, type ImageError } from '$lib/server/images'
 import { readComparisons, type Comparison } from '$lib/server/related'
@@ -22,6 +23,8 @@ type EntryRow = {
   radical: string | null
   encoded_as: string | null
   strokes: number | null
+  ivd_status: 'registered' | 'none' | null
+  ivd_sequence: string | null
   comparisons: string
 }
 
@@ -66,7 +69,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
   if (!platform) error(500, 'Database unavailable')
   const id = idOf(params.id)
   const row = await platform.env.DB.prepare(
-    `SELECT id, revision, edit_generation, script, ids, description, radical, encoded_as, strokes, comparisons
+    `SELECT id, revision, edit_generation, script, ids, description, radical, encoded_as, strokes, ivd_status, ivd_sequence, comparisons
      FROM entries WHERE id = ? AND ${publicEntryPredicate}`
   ).bind(id).first<EntryRow>()
   if (!row) error(404)
@@ -101,6 +104,9 @@ export const actions: Actions = {
     const id = idOf(params.id)
     const form = await request.formData()
     const values = readCharacter(form)
+    const ivdStatus = text(form, 'ivd_status')
+    const ivdSequence = text(form, 'ivd_sequence')
+    const ivd = readIvd(form.get('ivd_status'), form.get('ivd_sequence'))
     const tags = parseTags(String(form.get('tags') ?? ''))
     const genres = selectedGenres(form)
     const collections = selectedCollections(form)
@@ -115,6 +121,8 @@ export const actions: Actions = {
       radical: values.radical,
       encoded_as: values.encodedAs,
       strokes: values.strokes === null ? '' : String(values.strokes),
+      ivd_status: ivdStatus,
+      ivd_sequence: ivdSequence,
       tags: tags.join(', '),
       genres,
       collections,
@@ -126,6 +134,7 @@ export const actions: Actions = {
     if (values.radical.length > 20) errors.radical = t(locale, 'error.length')
     if (values.encodedAs.length > 80) errors.encoded_as = t(locale, 'error.length')
     if (senses === null) errors.senses = t(locale, 'error.length')
+    if (!ivd) errors.ivd_sequence = t(locale, 'error.ivd')
     const failForm = (status: 400 | 404 | 409, message: string) => fail(status, {
       action: 'character',
       values: submitted,
@@ -136,13 +145,13 @@ export const actions: Actions = {
       senses: senses ?? [],
       message,
     })
-    if (Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) return failForm(400, t(locale, 'error.fields'))
+    if (!ivd || Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) return failForm(400, t(locale, 'error.fields'))
     if (!revision || !generation) return failForm(400, t(locale, 'error.fields'))
     const updated = await platform.env.DB.prepare(
-      `UPDATE entries SET script = ?, ids = ?, description = ?, radical = ?, encoded_as = ?, strokes = ?, comparisons = ?, revision = revision + 1
+      `UPDATE entries SET script = ?, ids = ?, description = ?, radical = ?, encoded_as = ?, strokes = ?, ivd_status = ?, ivd_sequence = ?, comparisons = ?, revision = revision + 1
        WHERE id = ? AND ${publicEntryPredicate} AND revision = ? AND edit_generation = ? RETURNING id`
     ).bind(values.script, values.ids || null, values.description || null, values.radical || null, values.encodedAs || null, values.strokes,
-      JSON.stringify(comparisons.rows), id, revision, generation).first<{ id: number }>()
+      ivd.status, ivd.sequence, JSON.stringify(comparisons.rows), id, revision, generation).first<{ id: number }>()
     if (!updated) {
       const visible = await platform.env.DB.prepare(`SELECT id FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first()
       if (!visible) error(404)

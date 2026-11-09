@@ -32,6 +32,8 @@
     radical: string | null
     encoded_as: string | null
     strokes: number | null
+    ivd_status: 'registered' | 'none' | null
+    ivd_sequence: string | null
     comparisons: Comparison[]
   }
   type FormState = {
@@ -44,6 +46,8 @@
     senses?: Sense[]
     revision?: unknown
     generation?: unknown
+    ivd_status?: string
+    ivd_sequence?: string
   }
   let { data, form }: {
     data: {
@@ -168,6 +172,22 @@
             </div>
           </fieldset>
         {/if}
+      </div>
+      <div class="field-grid">
+        <div class="field">
+          <label class="field-label" for="ivd_status">{t(data.locale, 'field.ivd')}</label>
+          <select id="ivd_status" name="ivd_status" value={form?.ivd_status ?? entry.ivd_status ?? ''} aria-invalid={!!characterError('ivd_sequence')} aria-describedby={characterError('ivd_sequence') ? 'ivd-help ivd_sequence-error' : 'ivd-help'}>
+            <option value="">{t(data.locale, 'field.ivdUnstated')}</option>
+            <option value="registered">{t(data.locale, 'field.ivdRegistered')}</option>
+            <option value="none">{t(data.locale, 'field.ivdNone')}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label" for="ivd_sequence">{t(data.locale, 'field.ivdSequence')}</label>
+          <input id="ivd_sequence" name="ivd_sequence" maxlength="80" value={form?.ivd_sequence ?? entry.ivd_sequence ?? ''} aria-invalid={!!characterError('ivd_sequence')} aria-describedby={characterError('ivd_sequence') ? 'ivd-help ivd_sequence-error' : 'ivd-help'} />
+          <p class="field-help" id="ivd-help">{t(data.locale, 'field.ivdHint')}</p>
+          {#if characterError('ivd_sequence')}<p class="field-error" id="ivd_sequence-error">{characterError('ivd_sequence')}</p>{/if}
+        </div>
       </div>
       <div class="field">
         <label class="field-label" for="description">{t(data.locale, 'field.description')}</label>

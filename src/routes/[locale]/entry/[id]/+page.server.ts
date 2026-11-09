@@ -22,6 +22,8 @@ type Entry = {
   radical: string | null
   encoded_as: string | null
   strokes: number | null
+  ivd_status: 'registered' | 'none' | null
+  ivd_sequence: string | null
   created_at: string
   comparisons: string
 }
@@ -30,7 +32,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   if (!platform) error(500, 'Database unavailable')
   if (!/^[1-9]\d*$/.test(params.id) || !Number.isSafeInteger(Number(params.id))) error(404)
   const row = await platform.env.DB.prepare(
-    `SELECT id, script, ids, description, radical, encoded_as, strokes, created_at, comparisons
+    `SELECT id, script, ids, description, radical, encoded_as, strokes, ivd_status, ivd_sequence, created_at, comparisons
      FROM entries WHERE id = ? AND ${publicEntryPredicate}`
   ).bind(Number(params.id)).first<Entry>()
   if (!row) error(404)
