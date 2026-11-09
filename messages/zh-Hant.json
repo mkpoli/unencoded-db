@@ -95,6 +95,8 @@
   "field.source": "出處詳情",
   "field.sourceImage": "出處圖片",
   "field.sourceImageHint": "常見的位置與裝置中繼資料會被移除，JPEG圖片方向保留。",
+  "field.strokes": "筆畫數",
+  "field.strokesHint": "由IDS估算，可按需修正。",
   "field.suggestionHint": "選擇一筆紀錄，填入文字體系與IDS。",
   "field.suggestions": "相關紀錄",
   "field.tags": "標籤",

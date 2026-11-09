@@ -12,4 +12,11 @@ declare module 'ids-input/composer' {
 
 declare module 'ids-input' {
   export function isDescription(text: string | null | undefined): boolean
+  export function parse(ids: string): { tree: unknown }
+  export function componentStrokes(tree: unknown, count: (character: string) => number | null | undefined): { components: number; strokes: number | null; filled: boolean }
+}
+
+declare module '*?url' {
+  const url: string
+  export default url
 }
