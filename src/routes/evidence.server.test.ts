@@ -4,6 +4,7 @@ import { MAX_IMAGE_BYTES } from '../lib/server/images'
 import { actions, load as newForm } from './[locale]/new/+page.server'
 import { actions as batchActions } from './[locale]/batch/+page.server'
 import { load as list } from './[locale]/+page.server'
+import { actions as entryActions } from './[locale]/entry/[id]/+page.server'
 import { load as detail } from './[locale]/entry/[id]/+page.server'
 
 function testCookies() {
@@ -95,6 +96,23 @@ describe('evidence routes', () => {
       await expect(actions.default!(comparisonEvent(rows, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/2' })
       const second = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '2' } } as any) as any
       expect(second.comparisons).toEqual(rows)
+    } finally { db.close() }
+  })
+
+  test('stores a crop on an evidence image', async () => {
+    const db = createTestDatabase()
+    try {
+      db.exec("INSERT INTO entries (script, place, created_at, visible) VALUES ('Han', 'Book', '2026', 1)")
+      db.exec("INSERT INTO evidence (entry_id, place, created_at) VALUES (1, 'Book', '2026')")
+      const form = new FormData()
+      form.set('evidence', '1'); form.set('x', '10'); form.set('y', '20'); form.set('w', '30'); form.set('h', '40')
+      const event = {
+        request: new Request('https://example.test/en/entry/1', { method: 'POST', body: form }),
+        url: new URL('https://example.test/en/entry/1'), cookies: testCookies().cookies,
+        platform: { env: { DB: d1Binding(db) } }, params: { locale: 'en', id: '1' },
+      } as any
+      await expect(entryActions.crop!(event)).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      expect(db.query('SELECT x, y, w, h FROM crops').get()).toEqual({ x: 10, y: 20, w: 30, h: 40 })
     } finally { db.close() }
   })
 

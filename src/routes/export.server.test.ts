@@ -92,8 +92,9 @@ describe('JSON export', () => {
       db.query(`INSERT INTO evidence (entry_id, place, created_at) VALUES (?, ?, ?)`).run(id, 'Third place', '2026-01-03T00:00:00.000Z')
       const { body } = await exportJson(db)
       expect(body.records[0].description).toBe('Description Han')
-      expect(body.records[0].evidence).toHaveLength(2)
-      expect(body.records[0].evidence.find((row: { place: string }) => row.place === 'Second place')).toMatchObject({ title: 'Second title', date_precision: 'month' })
+      const evidence = body.records[0]!.evidence as { place: string }[]
+      expect(evidence).toHaveLength(2)
+      expect(evidence.find(row => row.place === 'Second place')).toMatchObject({ title: 'Second title', date_precision: 'month' })
     } finally { db.close() }
   })
 
