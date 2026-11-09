@@ -21,6 +21,7 @@ function dbSetup() {
   applyMigration(db, '0009_revision_redaction.sql')
   applyMigration(db, '0022_character_metadata.sql')
   applyMigration(db, '0025_strokes.sql')
+  applyMigration(db, '0027_ivd.sql')
   return db
 }
 function binding(db: Database) {

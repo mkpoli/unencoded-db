@@ -135,6 +135,9 @@ describe('localized pages', () => {
     expect(body).toMatch(/<span class="script-tag han" title="Han">Han<\/span>/)
     expect(body).toMatch(/<span class="script-tag" title="Tangut">Tangut<\/span>/)
     expect(body).toContain('href="/en?script=Tangut&amp;before=1"')
+    expect(body).toContain('href="/en?script=Tangut&amp;ivd=registered"')
+    expect(body).toContain('href="/en?script=Tangut&amp;ivd=none"')
+    expect(body).toContain('Not registered')
   })
 
   test('every locale has its approved name and corrected tagline', async () => {
@@ -235,6 +238,22 @@ describe('localized pages', () => {
     expect(body).toContain('기록 수정')
     expect(body).toContain('수정 이력')
     expect(body).not.toContain('https://example.org/source')
+  })
+
+  test('entry page shows IVD membership apart from the encoding', async () => {
+    const base = { id: 9, script: 'Han', ids: null, description: null, radical: null, encoded_as: 'U+4E00', strokes: null, place: 'Book', title: null, author: null, publisher: null, year: null, page: null, note: null, created_at: '2026-11-08T05:00:00.000Z', has_image: 0 }
+    const registered = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-ivd', {
+      data: { locale: 'en', entry: { ...base, ivd_status: 'registered', ivd_sequence: 'U+4E00 U+E0100' }, comparisons: [] },
+    })
+    expect(registered.body).toContain('Encoded as')
+    expect(registered.body).toContain('U+4E00')
+    expect(registered.body).toContain('>IVD<')
+    expect(registered.body).toContain('U+4E00 U+E0100')
+    const absent = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-ivd-none', {
+      data: { locale: 'ja', entry: { ...base, ivd_status: 'none', ivd_sequence: null }, comparisons: [] },
+    })
+    expect(absent.body).toContain('未登録')
+    expect(absent.body).not.toContain('U+4E00 U+E0100')
   })
 
   test('entry page keeps evidence below the character card and links a URL source', async () => {

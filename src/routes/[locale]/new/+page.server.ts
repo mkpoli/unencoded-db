@@ -10,6 +10,7 @@ import { listCollections, saveCollections, selectedCollections } from '$lib/serv
 import { publicEntryPredicate } from '$lib/server/visibility'
 import { listTags, parseTags, saveTags } from '$lib/server/tags'
 import { parseSenses, saveSenses } from '$lib/server/senses'
+import { readIvd } from '$lib/server/ivd'
 import type { Actions, PageServerLoad } from './$types'
 
 function imageError(locale: Locale, error: ImageError): string {
@@ -27,7 +28,7 @@ async function findEntryByImageKey(db: D1Database, key: string): Promise<{ id: n
   }
 }
 type FieldName = typeof fields[number]
-type FormErrors = Partial<Record<FieldName | 'image' | 'form' | 'url', string>>
+type FormErrors = Partial<Record<FieldName | 'image' | 'form' | 'url' | 'ivd_sequence', string>>
 
 function fieldValues(form: FormData): Record<FieldName, string> {
   return Object.fromEntries(fields.map(name => {
@@ -62,6 +63,10 @@ export const actions: Actions = {
     const row = readEvidence(form)
     const radical = String(form.get('radical') ?? '').normalize('NFC').trim().slice(0, 20) || null
     const encoded = String(form.get('encoded_as') ?? '').normalize('NFC').trim().slice(0, 80) || null
+    const ivdStatus = typeof form.get('ivd_status') === 'string' ? form.get('ivd_status') as string : ''
+    const ivdSequence = typeof form.get('ivd_sequence') === 'string' ? form.get('ivd_sequence') as string : ''
+    const ivd = readIvd(form.get('ivd_status'), form.get('ivd_sequence'))
+    if (!ivd) errors.ivd_sequence = t(locale, 'error.ivd')
     const link = String(form.get('url') ?? '').normalize('NFC').trim().slice(0, 1000) || null
     const rawStrokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
     const strokes = Number.isInteger(rawStrokes) && rawStrokes >= 0 && rawStrokes < 200 ? rawStrokes : null
@@ -70,10 +75,11 @@ export const actions: Actions = {
     const collections = selectedCollections(form)
     const tags = parseTags(String(form.get('tags') ?? ''))
     const senses = parseSenses(form)
-    if (!senses) return fail(400, { errors, values: { ...values, genres, collections, tags: tags.join(', ') }, comparisons })
-    const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: { ...values, radical, encoded_as: encoded, strokes, genres, collections, tags: tags.join(', ') }, comparisons })
+    const submitted = { ...values, radical, encoded_as: encoded, strokes, ivd_status: ivdStatus, ivd_sequence: ivdSequence, genres, collections, tags: tags.join(', ') }
+    if (!senses) return fail(400, { errors, values: submitted, comparisons })
+    const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: submitted, comparisons })
     if (link && !/^https?:\/\//i.test(link)) errors.url = t(locale, 'error.length')
-    if (!row || (source.error && source.error !== 'missing') || Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) return failForm(400, errors)
+    if (!ivd || !row || (source.error && source.error !== 'missing') || Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) return failForm(400, errors)
     const image = source.error === 'missing' ? null : source.image
     const cookie = cookieOptions(url)
     if (!cookie) error(403, 'Secure connection required')
@@ -111,7 +117,7 @@ export const actions: Actions = {
         cookies.get(cookie.name),
         comparisons.rows,
         imageMeta ?? undefined,
-        { radical, encoded_as: encoded, strokes },
+        { radical, encoded_as: encoded, strokes, ivd_status: ivd.status, ivd_sequence: ivd.sequence },
       )
     } catch (caught) {
       // A transport error can arrive before or after the insert commits. Recover

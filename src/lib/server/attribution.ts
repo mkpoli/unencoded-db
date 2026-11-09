@@ -27,10 +27,10 @@ export type SourceImageMeta = { key: string; type: string; size: number }
 /** A save that failed without committing anything, so the stored image is safe to delete. */
 export class DefinitiveSaveFailure extends Error {}
 
-export async function saveEvidence(db: D1Database, row: Evidence, token: string | undefined, comparisons: Comparison[] = [], image?: SourceImageMeta, meta?: { radical: string | null; encoded_as: string | null; strokes: number | null }) {
-  const columns = [...fields, ...(meta ? ['radical', 'encoded_as', 'strokes'] : []), ...(image ? ['image_key', 'image_type', 'image_size'] : [])]
+export async function saveEvidence(db: D1Database, row: Evidence, token: string | undefined, comparisons: Comparison[] = [], image?: SourceImageMeta, meta?: { radical: string | null; encoded_as: string | null; strokes: number | null; ivd_status: string | null; ivd_sequence: string | null }) {
+  const columns = [...fields, ...(meta ? ['radical', 'encoded_as', 'strokes', 'ivd_status', 'ivd_sequence'] : []), ...(image ? ['image_key', 'image_type', 'image_size'] : [])]
   const values: (string | number | null)[] = fields.map(name => row[name])
-  if (meta) values.push(meta.radical, meta.encoded_as, meta.strokes)
+  if (meta) values.push(meta.radical, meta.encoded_as, meta.strokes, meta.ivd_status, meta.ivd_sequence)
   if (image) values.push(image.key, image.type, image.size)
   const comparisonJson = JSON.stringify(comparisons)
   const columnList = columns.join(', ')
