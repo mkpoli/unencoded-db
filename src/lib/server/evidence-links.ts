@@ -49,11 +49,38 @@ export async function listEvidence(db: D1Database, entryId: number): Promise<Sto
 }
 
 export async function addEvidence(db: D1Database, entryId: number, fields: EvidenceFields, image: SourceImageMeta | null, creatorId: string | null) {
+  const now = new Date().toISOString()
   const date = parseDate(fields.year)
-  return db.prepare(`INSERT INTO evidence (entry_id, place, title, author, publisher, year, page, note, date_year, date_month, date_day, date_precision, image_key, image_type, image_size, created_at, creator_id)
+  const row = await db.prepare(`INSERT INTO evidence (entry_id, place, title, author, publisher, year, page, note, date_year, date_month, date_day, date_precision, image_key, image_type, image_size, created_at, creator_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`)
-    .bind(entryId, ...evidenceFields.map(name => fields[name]), date.date_year, date.date_month, date.date_day, date.date_precision, image?.key ?? null, image?.type ?? null, image?.size ?? null, new Date().toISOString(), creatorId)
+    .bind(entryId, ...evidenceFields.map(name => fields[name]), date.date_year, date.date_month, date.date_day, date.date_precision, image?.key ?? null, image?.type ?? null, image?.size ?? null, now, creatorId)
     .first<{ id: number }>()
+  if (!row) throw new Error('Could not save evidence')
+  const source = await sourceId(db, fields, now)
+  await db.prepare('INSERT OR IGNORE INTO evidence_sources (evidence_id, source_id) VALUES (?, ?)').bind(row.id, source).run()
+  if (image) {
+    const media = await mediaId(db, image, now)
+    await db.prepare('INSERT OR IGNORE INTO evidence_media (evidence_id, media_id) VALUES (?, ?)').bind(row.id, media).run()
+  }
+  return row
+}
+
+async function sourceId(db: D1Database, fields: EvidenceFields, now: string) {
+  const existing = await db.prepare('SELECT id FROM sources WHERE kind = ? AND title IS ? AND author IS ? AND publisher IS ? AND year IS ? AND place IS ? LIMIT 1')
+    .bind('other', fields.title, fields.author, fields.publisher, fields.year, fields.place).first<{ id: number }>()
+  if (existing) return existing.id
+  const created = await db.prepare('INSERT INTO sources (kind, title, author, publisher, year, place, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id')
+    .bind('other', fields.title, fields.author, fields.publisher, fields.year, fields.place, now).first<{ id: number }>()
+  if (!created) throw new Error('Could not save source')
+  return created.id
+}
+
+async function mediaId(db: D1Database, image: SourceImageMeta, now: string) {
+  const existing = await db.prepare('SELECT id FROM media WHERE key = ? LIMIT 1').bind(image.key).first<{ id: number }>()
+  if (existing) return existing.id
+  const created = await db.prepare('INSERT INTO media (key, type, size, created_at) VALUES (?, ?, ?, ?) RETURNING id').bind(image.key, image.type, image.size, now).first<{ id: number }>()
+  if (!created) throw new Error('Could not save media')
+  return created.id
 }
 
 export type Crop = { id: number; evidence_id: number; x: number; y: number; w: number; h: number }
