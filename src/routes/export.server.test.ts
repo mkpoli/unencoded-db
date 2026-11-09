@@ -15,6 +15,7 @@ function insert(db: Database, script: string, visible = 1, note: string | null =
 type ExportedEvidence = {
   id: number
   place: string
+  url: string | null
   title: string | null
   author: string | null
   publisher: string | null
@@ -77,7 +78,7 @@ describe('JSON export', () => {
         created_at: '2026-01-01T00:00:00.000Z',
         date_precision: 'year',
         comparisons: [],
-        evidence: [{ id: 0, place: 'Example collection', title: 'Title', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'First', date_precision: 'year', has_image: 0 }],
+        evidence: [{ id: 0, place: 'Example collection', title: 'Title', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'First', date_precision: 'year', has_image: 0, url: null }],
       })
       expect(JSON.stringify(body)).not.toContain('Secret')
     } finally { db.close() }
