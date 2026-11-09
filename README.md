@@ -206,14 +206,18 @@ A validation failure returns the form with its errors; an upload over the reques
 
 ## JSON export
 
-`GET /export.json` returns visible records in ascending id order with `version: 1`. Read `next` and request `?after=<next>` until it is null. Pages default to 100 records; `limit` accepts 1 to 200. Hidden records are excluded and responses are not cached.
+`GET /export.json` returns visible records in ascending id order with `version: 2`. Read `next` and request `?after=<next>` until it is null. Pages default to 100 records; `limit` accepts 1 to 200. Hidden records are excluded and responses are not cached.
 
 ```sh
 curl 'https://example.org/export.json?limit=200'
 curl 'https://example.org/export.json?limit=200&after=200'
 ```
 
-Each record contains its id, script, IDS, description, place, title, author, publisher, year, page, note and creation time. Source images and related-character comparisons are not included.
+Each record contains its id, script, IDS, description, creation time, comparisons and an `evidence` array. Evidence carries the source fields, date precision and whether an image exists.
+
+## Deployment
+
+Pushes to `main` run `.github/workflows/deploy.yml`. Add repository secrets `CLOUDFLARE_API_TOKEN` (Workers Scripts, D1 and R2 edit) and `CLOUDFLARE_ACCOUNT_ID`. The workflow runs tests, the type check, the build, D1 migrations and `wrangler deploy`.
 
 ## Continuous integration
 
