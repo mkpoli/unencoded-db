@@ -94,6 +94,8 @@
   "field.sourceImageHint": "Common location and device metadata is removed; JPEG orientation is kept.",
   "field.suggestionHint": "Choose a record to fill its script and IDS.",
   "field.suggestions": "Related records",
+  "field.tags": "Tags",
+  "field.tagsHint": "Comma-separated labels, such as a Hakka word.",
   "field.title": "Title",
   "field.year": "Date or year",
   "footer.thirdParty": "Third-party notices (English)",

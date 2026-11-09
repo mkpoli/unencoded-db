@@ -487,6 +487,16 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
+  test('stores free-form character tags', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const e = event({ ...record, tags: '客話, 木' }, d1Binding(db), images)
+      await expect(actions.default!(e)).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT tag FROM character_tags ORDER BY tag').all()).toEqual([{ tag: '客話' }, { tag: '木' }])
+    } finally { db.close() }
+  })
+
   test('sets the bearer only after a successful atomic creation', async () => {
     const db = createTestDatabase()
     const images = fakeImages()

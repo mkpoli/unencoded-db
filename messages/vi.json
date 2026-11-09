@@ -94,6 +94,8 @@
   "field.sourceImageHint": "Siêu dữ liệu vị trí và thiết bị thông thường được xóa; hướng ảnh JPEG được giữ nguyên.",
   "field.suggestionHint": "Chọn một mục từ để điền hệ chữ và IDS.",
   "field.suggestions": "Mục từ liên quan",
+  "field.tags": "Thẻ",
+  "field.tagsHint": "Nhãn ngắn, cách nhau bằng dấu phẩy, ví dụ từ tiếng Hakka.",
   "field.title": "Nhan đề",
   "field.year": "Ngày hoặc năm",
   "footer.thirdParty": "Thông báo bên thứ ba (tiếng Anh)",

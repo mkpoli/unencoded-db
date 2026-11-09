@@ -16,7 +16,7 @@
     values?: Values
     comparisons?: { rows: Comparison[]; errors: boolean[]; tooMany: boolean }
   }
-  let { form, data }: { form?: Form; data: { locale: Locale; suggestions?: Suggestion[]; genres?: Genre[]; collections?: Collection[] } } = $props()
+  let { form, data }: { form?: Form; data: { locale: Locale; suggestions?: Suggestion[]; genres?: Genre[]; collections?: Collection[]; tags?: string[] } } = $props()
   let rateLimitFailure = $state<429 | 503 | null>(null)
   const imageError = $derived(form?.errors?.image ?? '')
   let comparisons = $state<Comparison[]>(untrack(() => form?.comparisons?.rows ?? []))
@@ -144,6 +144,12 @@
             <label class="field-label" for="encoded_as">{t(data.locale, 'field.encodedAs')}</label>
             <input id="encoded_as" name="encoded_as" maxlength="80" value={form?.values?.encoded_as ?? ''} />
           </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="tags">{t(data.locale, 'field.tags')}</label>
+          <input id="tags" name="tags" maxlength="400" list="tag-suggestions" value={form?.values?.tags ?? ''} aria-describedby="tags-help" />
+          <datalist id="tag-suggestions">{#each data.tags ?? [] as tag}<option value={tag}></option>{/each}</datalist>
+          <p class="field-help" id="tags-help">{t(data.locale, 'field.tagsHint')}</p>
         </div>
         {#if data.genres?.length}
           <fieldset class="field genre-field">

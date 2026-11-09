@@ -94,6 +94,8 @@
   "field.sourceImageHint": "位置情報や端末情報などの一般的なメタデータは削除されますが、JPEGの向きは保持されます。",
   "field.suggestionHint": "記録を選ぶと文字体系とIDSが入ります。",
   "field.suggestions": "関連する記録",
+  "field.tags": "タグ",
+  "field.tagsHint": "客語など、短いラベルをカンマ区切りで。",
   "field.title": "書名・題名",
   "field.year": "日付または年",
   "footer.thirdParty": "第三者ライセンス（英語）",

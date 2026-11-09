@@ -94,6 +94,8 @@
   "field.sourceImageHint": "常见的位置和设备元数据会被移除，JPEG图片方向保留。",
   "field.suggestionHint": "选择一条记录，填入文字体系和IDS。",
   "field.suggestions": "相关记录",
+  "field.tags": "标签",
+  "field.tagsHint": "用逗号分隔的短标签，例如客语词。",
   "field.title": "书名或标题",
   "field.year": "日期或年份",
   "footer.thirdParty": "第三方声明（英文）",

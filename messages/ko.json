@@ -94,6 +94,8 @@
   "field.sourceImageHint": "위치 및 기기 메타데이터는 제거되지만 JPEG 이미지 방향은 유지됩니다.",
   "field.suggestionHint": "기록을 선택하면 문자 체계와 IDS가 채워집니다.",
   "field.suggestions": "관련 기록",
+  "field.tags": "태그",
+  "field.tagsHint": "하카어 같은 짧은 라벨을 쉼표로 구분하세요.",
   "field.title": "제목",
   "field.year": "날짜 또는 연도",
   "footer.thirdParty": "제3자 고지(영어)",

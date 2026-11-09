@@ -10,7 +10,7 @@
   type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
   type Evidence = { id: number; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; has_image: number; created_at: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
-  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; isModerator: boolean; reported: boolean } } = $props()
+  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons)
   let evidence = $derived(data.evidence)
@@ -18,6 +18,7 @@
   let crops = $derived(data.crops ?? [])
   let collections = $derived(data.collections ?? [])
   let relations = $derived(data.relations ?? [])
+  let tags = $derived(data.tags ?? [])
 </script>
 
 <svelte:head><title>{t(data.locale, 'entry.record', { id: entry.id })} · {t(data.locale, 'app.name')}</title></svelte:head>
@@ -32,6 +33,9 @@
     {/if}
     {#if collections.length}
       <p class="genre-list">{#each collections as collection (collection.slug)}<a class="genre-chip" href={localizedHref(data.locale, `/collection/${collection.slug}`)}>{collection.label}</a>{/each}</p>
+    {/if}
+    {#if tags.length}
+      <p class="genre-list">{#each tags as tag}<a class="genre-chip" href={localizedHref(data.locale, `/tag/${encodeURIComponent(tag)}`)}>{tag}</a>{/each}</p>
     {/if}
   </header>
   {#if data.reported}<p class="notice" role="status">{t(data.locale, 'report.received')}</p>{/if}

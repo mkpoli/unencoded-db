@@ -3,6 +3,7 @@ import { MAX_COMPARISONS, type Comparison } from '$lib/server/related'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import { addCrop, addEvidence, listCrops, listEvidence, readEvidenceFields } from '$lib/server/evidence-links'
 import { genresForEntry } from '$lib/server/genres'
+import { tagsForEntry } from '$lib/server/tags'
 import { collectionsForEntry } from '$lib/server/collections'
 import { addRelation, listRelations } from '$lib/server/relation-graph'
 import { createImageKey, putSourceImage, readSourceImage } from '$lib/server/images'
@@ -44,7 +45,8 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   const genres = await genresForEntry(platform.env.DB, Number(params.id))
   const collections = await collectionsForEntry(platform.env.DB, Number(params.id))
   const relations = await listRelations(platform.env.DB, Number(params.id))
-  return { entry, comparisons, evidence, crops, genres, collections, relations, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
+  const tags = await tagsForEntry(platform.env.DB, Number(params.id))
+  return { entry, comparisons, evidence, crops, genres, collections, relations, tags, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
 }
 
 export const actions = {

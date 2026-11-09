@@ -8,6 +8,7 @@ import { addEvidence } from '$lib/server/evidence-links'
 import { listGenres, saveGenres, selectedGenres } from '$lib/server/genres'
 import { listCollections, saveCollections, selectedCollections } from '$lib/server/collections'
 import { publicEntryPredicate } from '$lib/server/visibility'
+import { listTags, parseTags, saveTags } from '$lib/server/tags'
 import type { Actions, PageServerLoad } from './$types'
 
 function imageError(locale: Locale, error: ImageError): string {
@@ -37,11 +38,11 @@ function fieldValues(form: FormData): Record<FieldName, string> {
 }
 
 export const load: PageServerLoad = async ({ platform }) => {
-  if (!platform) return { suggestions: [], genres: [], collections: [] }
+  if (!platform) return { suggestions: [], genres: [], collections: [], tags: [] }
   const { results } = await platform.env.DB.prepare(
     `SELECT ids, script FROM entries WHERE ${publicEntryPredicate} AND ids IS NOT NULL ORDER BY id DESC LIMIT 100`
   ).bind().all<{ ids: string; script: string }>()
-  return { suggestions: results, genres: await listGenres(platform.env.DB), collections: await listCollections(platform.env.DB) }
+  return { suggestions: results, genres: await listGenres(platform.env.DB), collections: await listCollections(platform.env.DB), tags: await listTags(platform.env.DB) }
 }
 
 export const actions: Actions = {
@@ -65,7 +66,8 @@ export const actions: Actions = {
     const comparisons = readComparisons(form)
     const genres = selectedGenres(form)
     const collections = selectedCollections(form)
-    const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: { ...values, genres, collections }, comparisons })
+    const tags = parseTags(String(form.get('tags') ?? ''))
+    const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: { ...values, genres, collections, tags: tags.join(', ') }, comparisons })
     if (!row || source.error || Object.keys(errors).length || comparisons.tooMany || comparisons.errors.some(Boolean)) return failForm(400, errors)
     if (!source.image) return failForm(400, { image: t(locale, 'error.imageMissing') })
     const image = source.image
@@ -102,6 +104,7 @@ export const actions: Actions = {
     const first = await addEvidence(platform.env.DB, result.id, { place: row.place, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, { key, type: image.type, size: image.size }, null)
     await saveGenres(platform.env.DB, result.id, genres)
     await saveCollections(platform.env.DB, result.id, collections, first?.id ?? null)
+    await saveTags(platform.env.DB, result.id, tags)
     if (result.token) cookies.set(cookie.name, result.token, { ...sessionCookieSettings, secure: cookie.secure })
     redirect(303, localizedHref(locale, `/entry/${result.id}`))
   },
