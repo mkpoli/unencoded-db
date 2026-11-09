@@ -37,12 +37,7 @@ function positive(value: unknown) {
 }
 
 function imageError(locale: Locale, error: ImageError): string {
-  switch (error) {
-    case 'missing': return t(locale, 'error.imageMissing')
-    case 'empty': return t(locale, 'error.imageEmpty')
-    case 'oversize': return t(locale, 'error.imageOversize')
-    default: return t(locale, 'error.imageUnsupported')
-  }
+  return t(locale, error === 'oversize' ? 'error.imageOversize' : 'error.imageUnsupported')
 }
 
 function text(form: FormData, name: string) {
@@ -168,8 +163,11 @@ export const actions: Actions = {
     const form = await request.formData()
     const evidenceId = positive(form.get('evidence'))
     if (!evidenceId) error(404)
-    const row = await platform.env.DB.prepare('SELECT id, image_key, image_type, image_size FROM evidence WHERE id = ? AND entry_id = ?')
-      .bind(evidenceId, id).first<{ id: number; image_key: string | null; image_type: string | null; image_size: number | null }>()
+    const row = await platform.env.DB.prepare(
+      `SELECT ev.id, ev.image_key, ev.image_type, ev.image_size FROM evidence ev
+       JOIN entries en ON en.id = ev.entry_id AND ${publicEntryPredicate}
+       WHERE ev.id = ? AND ev.entry_id = ?`
+    ).bind(evidenceId, id).first<{ id: number; image_key: string | null; image_type: string | null; image_size: number | null }>()
     if (!row) error(404)
     const raw = Object.fromEntries(evidenceFields.map(name => [name, text(form, name)])) as Record<string, string>
     const errors: Record<string, string> = {}
@@ -202,6 +200,9 @@ export const actions: Actions = {
     if (image === undefined) image = removeImage ? null : undefined
     if (!revision || !generation) return failForm(400, t(locale, 'error.fields'))
     if (Object.keys(errors).length || !fields) return failForm(400, t(locale, 'error.fields'))
+    const current = await platform.env.DB.prepare(`SELECT revision, edit_generation FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first<{ revision: number; edit_generation: number }>()
+    if (!current) error(404)
+    if (current.revision !== revision || current.edit_generation !== generation) return failForm(409, t(locale, 'edit.conflict'))
     const primary = await primaryEvidenceId(platform.env.DB, id)
     if (evidenceId === primary) {
       const imageKey = image === undefined ? row.image_key : image?.key ?? null
@@ -213,10 +214,18 @@ export const actions: Actions = {
          WHERE id = ? AND ${publicEntryPredicate} AND revision = ? AND edit_generation = ? RETURNING id`
       ).bind(fields.place, fields.title, fields.author, fields.publisher, fields.year, fields.page, fields.note,
         imageKey, imageType, imageSize, id, revision, generation).first<{ id: number }>()
-      if (!synced) return failForm(409, t(locale, 'edit.conflict'))
+      if (!synced) {
+        const visible = await platform.env.DB.prepare(`SELECT id FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first()
+        if (!visible) error(404)
+        return failForm(409, t(locale, 'edit.conflict'))
+      }
     }
-    const updated = await updateEvidence(platform.env.DB, id, evidenceId, fields, image)
-    if (!updated) return failForm(404, t(locale, 'error.notFound'))
+    const updated = await updateEvidence(platform.env.DB, id, evidenceId, fields, image, evidenceId === primary ? undefined : { revision, generation })
+    if (!updated) {
+      const visible = await platform.env.DB.prepare(`SELECT id FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first()
+      if (!visible) error(404)
+      return failForm(409, t(locale, 'edit.conflict'))
+    }
     if (image !== undefined && row.image_key && row.image_key !== image?.key) await discardImage(platform.env.DB, platform.env.IMAGES, row.image_key)
     redirect(303, `${localizedHref(locale, `/entry/${id}/edit`)}#evidence-${evidenceId}`)
   },
@@ -261,10 +270,12 @@ export const actions: Actions = {
     const person = token && /^[0-9a-f]{64}$/.test(token)
       ? await platform.env.DB.prepare(`SELECT person_id FROM contributor_sessions WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`).bind(await hashToken(token)).first<{ person_id: string }>()
       : null
-    const added = await addEvidence(platform.env.DB, id, fields, image, person?.person_id ?? null)
-    if (image) {
-      await platform.env.DB.prepare('UPDATE entries SET image_key = ?, image_type = ?, image_size = ? WHERE id = ? AND image_key IS NULL')
-        .bind(image.key, image.type, image.size, id).run()
+    let added: { id: number }
+    try {
+      added = await addEvidence(platform.env.DB, id, fields, image, person?.person_id ?? null)
+    } catch {
+      if (image) await deleteSourceImage(platform.env.IMAGES, image.key)
+      return fail(500, { action: 'addEvidence', values, errors: {}, message: t(locale, 'error.save') })
     }
     redirect(303, `${localizedHref(locale, `/entry/${id}/edit`)}#evidence-${added.id}`)
   },

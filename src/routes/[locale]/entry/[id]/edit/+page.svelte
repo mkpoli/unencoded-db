@@ -72,7 +72,7 @@
   const selectedGenres = $derived(form?.action === 'character' && Array.isArray(form.values?.genres) ? form.values.genres as string[] : (data.genres ?? []).map(genre => genre.slug))
   const selectedCollections = $derived(form?.action === 'character' && Array.isArray(form.values?.collections) ? form.values.collections as string[] : (data.collections ?? []).map(collection => collection.slug))
   let senses = $state<Sense[]>(untrack(() => form?.action === 'character' && Array.isArray(form.senses) ? form.senses.map(sense => ({ gloss: sense.gloss, reading: sense.reading })) : (data.senses ?? [])))
-  let comparisons = $state<Comparison[]>(untrack(() => form?.action === 'character' ? form.comparisons?.rows ?? [] : data.entry.comparisons))
+  let comparisons = $state<Comparison[]>(untrack(() => form?.action === 'character' ? form.comparisons?.rows ?? [] : (data.entry.comparisons ?? [])))
   let comparisonErrors = $state<boolean[]>(untrack(() => form?.action === 'character' ? form.comparisons?.errors ?? [] : []))
 
   function addSense() {

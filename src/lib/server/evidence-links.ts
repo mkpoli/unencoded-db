@@ -76,7 +76,14 @@ export async function primaryEvidenceId(db: D1Database, entryId: number): Promis
  * Change one evidence record. `image` is `undefined` to keep the current image,
  * `null` to remove it, or a new image to replace it.
  */
-export async function updateEvidence(db: D1Database, entryId: number, evidenceId: number, fields: EvidenceFields, image: SourceImageMeta | null | undefined) {
+export async function updateEvidence(
+  db: D1Database,
+  entryId: number,
+  evidenceId: number,
+  fields: EvidenceFields,
+  image: SourceImageMeta | null | undefined,
+  guard?: { revision: number; generation: number },
+) {
   const now = new Date().toISOString()
   const date = parseDate(fields.year)
   const columns = [...evidenceFields, 'date_year', 'date_month', 'date_day', 'date_precision']
@@ -85,14 +92,19 @@ export async function updateEvidence(db: D1Database, entryId: number, evidenceId
     columns.push('image_key', 'image_type', 'image_size')
     values.push(image?.key ?? null, image?.type ?? null, image?.size ?? null)
   }
-  const row = await db.prepare(`UPDATE evidence SET ${columns.map(column => `${column} = ?`).join(', ')} WHERE id = ? AND entry_id = ? RETURNING id`)
-    .bind(...values, evidenceId, entryId).first<{ id: number }>()
+  const guarded = guard
+    ? ' AND EXISTS (SELECT 1 FROM entries en WHERE en.id = ? AND en.visible = 1 AND en.revision = ? AND en.edit_generation = ?)'
+    : ''
+  const bindings = guard ? [evidenceId, entryId, entryId, guard.revision, guard.generation] : [evidenceId, entryId]
+  const row = await db.prepare(`UPDATE evidence SET ${columns.map(column => `${column} = ?`).join(', ')} WHERE id = ? AND entry_id = ?${guarded} RETURNING id`)
+    .bind(...values, ...bindings).first<{ id: number }>()
   if (!row) return null
   await db.prepare('DELETE FROM evidence_sources WHERE evidence_id = ?').bind(evidenceId).run()
   const source = await sourceId(db, fields, now)
   await db.prepare('INSERT OR IGNORE INTO evidence_sources (evidence_id, source_id) VALUES (?, ?)').bind(evidenceId, source).run()
   if (image !== undefined) {
     await db.prepare('DELETE FROM evidence_media WHERE evidence_id = ?').bind(evidenceId).run()
+    await db.prepare('DELETE FROM crops WHERE evidence_id = ?').bind(evidenceId).run()
     if (image) {
       const media = await mediaId(db, image, now)
       await db.prepare('INSERT OR IGNORE INTO evidence_media (evidence_id, media_id) VALUES (?, ?)').bind(evidenceId, media).run()
