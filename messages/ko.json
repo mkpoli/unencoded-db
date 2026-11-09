@@ -89,6 +89,9 @@
   "field.replaceImage": "바꾸기",
   "field.rightsHint": "공유할 권리가 있는 이미지만 업로드해 주세요.",
   "field.script": "문자 체계",
+  "field.senseGloss": "뜻",
+  "field.senseReading": "읽기",
+  "field.senses": "뜻",
   "field.source": "출처 상세 정보",
   "field.sourceImage": "출처 이미지",
   "field.sourceImageHint": "위치 및 기기 메타데이터는 제거되지만 JPEG 이미지 방향은 유지됩니다.",
@@ -160,5 +163,7 @@
   "reports.intro": "{email}(으)로 로그인했습니다. 신고는 익명입니다. 신고를 하나 기각해도 기록은 공개된 상태로 남으며, 기록을 숨기면 미처리 신고가 모두 해결됩니다.",
   "reports.older": "이전 신고",
   "reports.record": "신고 {id}",
-  "reports.title": "미처리 신고"
+  "reports.title": "미처리 신고",
+  "sense.add": "뜻 추가",
+  "sense.remove": "삭제"
 }

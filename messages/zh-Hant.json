@@ -89,6 +89,9 @@
   "field.replaceImage": "更換",
   "field.rightsHint": "請只上傳你有權分享的圖片。",
   "field.script": "文字體系",
+  "field.senseGloss": "釋義",
+  "field.senseReading": "讀音",
+  "field.senses": "義項",
   "field.source": "出處詳情",
   "field.sourceImage": "出處圖片",
   "field.sourceImageHint": "常見的位置與裝置中繼資料會被移除，JPEG圖片方向保留。",
@@ -160,5 +163,7 @@
   "reports.intro": "目前登入：{email}。檢舉匿名。駁回一則檢舉後記錄仍會公開展示；隱藏記錄會解決該記錄的所有待處理檢舉。",
   "reports.older": "較早的檢舉",
   "reports.record": "檢舉{id}",
-  "reports.title": "待處理檢舉"
+  "reports.title": "待處理檢舉",
+  "sense.add": "新增義項",
+  "sense.remove": "刪除"
 }

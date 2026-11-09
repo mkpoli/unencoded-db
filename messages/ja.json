@@ -89,6 +89,9 @@
   "field.replaceImage": "交換",
   "field.rightsHint": "共有する権利のある画像だけをアップロードしてください。",
   "field.script": "文字体系",
+  "field.senseGloss": "意味",
+  "field.senseReading": "読み",
+  "field.senses": "意味",
   "field.source": "出典の詳細",
   "field.sourceImage": "出典画像",
   "field.sourceImageHint": "位置情報や端末情報などの一般的なメタデータは削除されますが、JPEGの向きは保持されます。",
@@ -160,5 +163,7 @@
   "reports.intro": "{email}でサインイン中です。通報は匿名です。通報を1件却下しても記録は公開のまま残り、記録を非表示にすると未対応の通報がすべて解決します。",
   "reports.older": "以前の通報",
   "reports.record": "通報{id}",
-  "reports.title": "未対応の通報"
+  "reports.title": "未対応の通報",
+  "sense.add": "意味を追加",
+  "sense.remove": "削除"
 }

@@ -89,6 +89,9 @@
   "field.replaceImage": "Replace",
   "field.rightsHint": "Upload only an image you have the right to share.",
   "field.script": "Script",
+  "field.senseGloss": "Meaning",
+  "field.senseReading": "Reading",
+  "field.senses": "Meanings",
   "field.source": "Source details",
   "field.sourceImage": "Source image",
   "field.sourceImageHint": "Common location and device metadata is removed; JPEG orientation is kept.",
@@ -160,5 +163,7 @@
   "reports.intro": "Signed in as {email}. Reports are anonymous. Dismiss a report to leave the record visible; hiding the record resolves all of its open reports.",
   "reports.older": "Older reports",
   "reports.record": "Report {id}",
-  "reports.title": "Open reports"
+  "reports.title": "Open reports",
+  "sense.add": "Add meaning",
+  "sense.remove": "Remove"
 }

@@ -89,6 +89,9 @@
   "field.replaceImage": "更换",
   "field.rightsHint": "请只上传你有权分享的图片。",
   "field.script": "文字体系",
+  "field.senseGloss": "释义",
+  "field.senseReading": "读音",
+  "field.senses": "义项",
   "field.source": "出处详情",
   "field.sourceImage": "出处图片",
   "field.sourceImageHint": "常见的位置和设备元数据会被移除，JPEG图片方向保留。",
@@ -160,5 +163,7 @@
   "reports.intro": "当前登录：{email}。举报匿名。驳回一条举报后记录仍会公开展示；隐藏记录会解决该记录的所有待处理举报。",
   "reports.older": "更早的举报",
   "reports.record": "举报{id}",
-  "reports.title": "待处理举报"
+  "reports.title": "待处理举报",
+  "sense.add": "添加义项",
+  "sense.remove": "删除"
 }

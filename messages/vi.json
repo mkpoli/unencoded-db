@@ -89,6 +89,9 @@
   "field.replaceImage": "Thay thế",
   "field.rightsHint": "Chỉ tải lên hình ảnh bạn có quyền chia sẻ.",
   "field.script": "Hệ chữ",
+  "field.senseGloss": "Nghĩa",
+  "field.senseReading": "Cách đọc",
+  "field.senses": "Nghĩa",
   "field.source": "Thông tin nguồn",
   "field.sourceImage": "Ảnh nguồn",
   "field.sourceImageHint": "Siêu dữ liệu vị trí và thiết bị thông thường được xóa; hướng ảnh JPEG được giữ nguyên.",
@@ -160,5 +163,7 @@
   "reports.intro": "Đã đăng nhập với {email}. Báo cáo ẩn danh. Bỏ qua một báo cáo vẫn giữ mục từ công khai; ẩn mục từ sẽ giải quyết mọi báo cáo chưa xử lý.",
   "reports.older": "Báo cáo cũ hơn",
   "reports.record": "Báo cáo {id}",
-  "reports.title": "Báo cáo chưa xử lý"
+  "reports.title": "Báo cáo chưa xử lý",
+  "sense.add": "Thêm nghĩa",
+  "sense.remove": "Xóa"
 }

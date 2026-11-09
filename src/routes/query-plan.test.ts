@@ -169,7 +169,7 @@ describe('public query plans', () => {
     try {
       const { binding, plans } = capture(db, true)
       await detail({ platform: { env: { DB: binding } }, params: { locale: 'en', id: '1' } } as any)
-      expect(plans).toHaveLength(7)
+      expect(plans).toHaveLength(8)
       assertPlan(plans[0], /SEARCH entries USING INTEGER PRIMARY KEY \(rowid=\?\)/i)
       assertPlan(plans[1], /SEARCH evidence USING INDEX evidence_entry_date \(entry_id=\?\)/i)
       expect(plans[2].some(line => /SEARCH c USING INDEX crops_evidence \(evidence_id=\?\)/i.test(line))).toBe(true)
@@ -177,6 +177,7 @@ describe('public query plans', () => {
       expect(plans[4].some(line => /SEARCH ec USING .*entry_collections.*\(entry_id=\?\)/i.test(line))).toBe(true)
       expect(plans[5].some(line => /SEARCH r USING INDEX relations_from \(from_entry=\?\)/i.test(line))).toBe(true)
       expect(plans[6].some(line => /SEARCH character_tags USING .*\(entry_id=\?\)/i.test(line))).toBe(true)
+      expect(plans[7].some(line => /SEARCH senses USING INDEX senses_entry \(entry_id=\?\)/i.test(line))).toBe(true)
     } finally { db.close() }
   })
 
