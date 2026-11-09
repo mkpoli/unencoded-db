@@ -516,6 +516,16 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
+  test('stores a submitted stroke count', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const e = event({ ...record, strokes: '12' }, d1Binding(db), images)
+      await expect(actions.default!(e)).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT strokes FROM entries WHERE id = 1').get()).toEqual({ strokes: 12 })
+    } finally { db.close() }
+  })
+
   test('sets the bearer only after a successful atomic creation', async () => {
     const db = createTestDatabase()
     const images = fakeImages()

@@ -1,10 +1,11 @@
 <script lang="ts">
+  import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { localizedHref, t, type Locale } from '$lib/i18n'
   import { isHanScript } from '$lib/script'
 
   type Entry = { id: number; script: string; ids: string | null; place: string }
   type ScriptCount = { script: string; n: number }
-  let { data }: { data: { locale: Locale; entries: Entry[]; next: number | null; scripts: ScriptCount[]; total: number; script: string | null } } = $props()
+  let { data }: { data: { locale: Locale; entries: Entry[]; next: number | null; glyphs?: Record<string, string>; scripts: ScriptCount[]; total: number; script: string | null } } = $props()
 
   const tabHref = (script?: string) => `${localizedHref(data.locale)}${script === undefined ? '' : `?script=${encodeURIComponent(script)}`}`
   const moreHref = $derived(`${localizedHref(data.locale)}?${new URLSearchParams({ ...(data.script === null ? {} : { script: data.script }), before: String(data.next) })}`)
@@ -27,11 +28,13 @@
   {/each}
 </nav>
 {#if data.entries.length}
-  <div class="card-grid">
+  <div class="card-grid gallery">
     {#each data.entries as entry (entry.id)}
-      <a class="entry-card" href={localizedHref(data.locale, `/entry/${entry.id}`)}>
+      {@const glyph = entry.ids ? data.glyphs?.[entry.ids] : undefined}
+      <a class="entry-card gallery-card" href={localizedHref(data.locale, `/entry/${entry.id}`)}>
         <span class="script-tag" class:han={isHanScript(entry.script)} title={entry.script}>{entry.script}</span>
-        <span class="glyph">{entry.ids || entry.script}</span>
+        <span class="glyph"><IdsGlyph ids={entry.ids} text={entry.ids || entry.script} path={glyph} /></span>
+        {#if entry.ids}<span class="visually-hidden">{entry.ids}</span>{/if}
         <span class="place">{entry.place}</span>
         <span class="record">#{entry.id}</span>
       </a>
