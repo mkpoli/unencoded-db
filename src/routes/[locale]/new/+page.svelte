@@ -6,16 +6,17 @@
   import { handleContributionResult } from '$lib/contribution-result'
   import { localizedHref, t, type Locale } from '$lib/i18n'
 
-  type Values = Record<string, string> & { genres?: string[] }
+  type Values = Record<string, string> & { genres?: string[]; collections?: string[] }
   type Comparison = { character: string; relationship: string; differences: string; evidence: string }
   type Suggestion = { ids: string; script: string }
   type Genre = { slug: string; label: string }
+  type Collection = { slug: string; label: string }
   type Form = {
     errors?: Record<string, string>
     values?: Values
     comparisons?: { rows: Comparison[]; errors: boolean[]; tooMany: boolean }
   }
-  let { form, data }: { form?: Form; data: { locale: Locale; suggestions?: Suggestion[]; genres?: Genre[] } } = $props()
+  let { form, data }: { form?: Form; data: { locale: Locale; suggestions?: Suggestion[]; genres?: Genre[]; collections?: Collection[] } } = $props()
   let rateLimitFailure = $state<429 | 503 | null>(null)
   const imageError = $derived(form?.errors?.image ?? '')
   let comparisons = $state<Comparison[]>(untrack(() => form?.comparisons?.rows ?? []))
@@ -140,6 +141,16 @@
             <div class="genre-options">
               {#each data.genres as genre (genre.slug)}
                 <label class="genre-option"><input type="checkbox" name="genre" value={genre.slug} checked={form?.values?.genres?.includes(genre.slug)} /> {genre.label}</label>
+              {/each}
+            </div>
+          </fieldset>
+        {/if}
+        {#if data.collections?.length}
+          <fieldset class="field genre-field">
+            <legend class="field-label">{t(data.locale, 'field.collection')}</legend>
+            <div class="genre-options">
+              {#each data.collections as collection (collection.slug)}
+                <label class="genre-option"><input type="checkbox" name="collection" value={collection.slug} checked={form?.values?.collections?.includes(collection.slug)} /> {collection.label}</label>
               {/each}
             </div>
           </fieldset>

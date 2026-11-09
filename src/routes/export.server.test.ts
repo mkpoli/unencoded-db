@@ -12,24 +12,17 @@ function insert(db: Database, script: string, visible = 1, note: string | null =
     .run(script, null, `Description ${script}`, 'Example collection', 'Title', 'Author', 'Publisher', '1900', '12', note, '2026-01-01T00:00:00.000Z', visible).lastInsertRowid as number
 }
 
-type ExportedEvidence = {
-  id: number
-  place: string
-  title: string | null
-  author: string | null
-  publisher: string | null
-  year: string | null
-  page: string | null
-  note: string | null
-  date_precision: string
-  has_image: number
+type ExportEvidence = { place: string; [key: string]: unknown }
+type ExportBody = {
+  version?: number
+  records: ({ id: number; evidence: ExportEvidence[] } & Record<string, unknown>)[]
+  next: number | null
+  error?: string
 }
-
-type ExportedRecord = { id: number; description: string; evidence?: ExportedEvidence[] } & Record<string, unknown>
 
 async function exportJson(db: Database, query = '') {
   const response = await GET({ platform: { env: { DB: d1Binding(db) } }, url: new URL(`https://example.test/export.json${query}`) } as any)
-  return { response, body: await response.json() as { version?: number; records: ExportedRecord[]; next: number | null; error?: string } }
+  return { response, body: await response.json() as ExportBody }
 }
 
 describe('JSON export', () => {
@@ -76,8 +69,8 @@ describe('JSON export', () => {
       db.query(`INSERT INTO evidence (entry_id, place, created_at) VALUES (?, ?, ?)`).run(id, 'Third place', '2026-01-03T00:00:00.000Z')
       const { body } = await exportJson(db)
       expect(body.records[0].description).toBe('Description Han')
-      expect(body.records[0].evidence!).toHaveLength(2)
-      expect(body.records[0].evidence!.find((row: { place: string }) => row.place === 'Second place')).toMatchObject({ title: 'Second title', date_precision: 'month' })
+      expect(body.records[0].evidence).toHaveLength(2)
+      expect(body.records[0].evidence.find((row: { place: string }) => row.place === 'Second place')).toMatchObject({ title: 'Second title', date_precision: 'month' })
     } finally { db.close() }
   })
 

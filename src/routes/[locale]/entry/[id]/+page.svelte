@@ -4,13 +4,15 @@
 
   type Comparison = { character: string; relationship: string; differences: string; evidence: string }
   type Genre = { slug: string; label: string }
+  type Collection = { slug: string; label: string }
   type Evidence = { id: number; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; has_image: number; created_at: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
-  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; genres: Genre[]; isModerator: boolean; reported: boolean } } = $props()
+  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; genres: Genre[]; collections: Collection[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons)
   let evidence = $derived(data.evidence)
   let genres = $derived(data.genres ?? [])
+  let collections = $derived(data.collections ?? [])
 </script>
 
 <svelte:head><title>{t(data.locale, 'entry.record', { id: entry.id })} · {t(data.locale, 'app.name')}</title></svelte:head>
@@ -22,6 +24,9 @@
     <p><a href={localizedHref(data.locale, `/entry/${entry.id}/edit`)}>{t(data.locale, 'entry.revise')}</a> · <a href={localizedHref(data.locale, `/entry/${entry.id}/history`)}>{t(data.locale, 'entry.history')}</a></p>
     {#if genres.length}
       <p class="genre-list">{#each genres as genre (genre.slug)}<a class="genre-chip" href={localizedHref(data.locale, `/genre/${genre.slug}`)}>{genre.label}</a>{/each}</p>
+    {/if}
+    {#if collections.length}
+      <p class="genre-list">{#each collections as collection (collection.slug)}<a class="genre-chip" href={localizedHref(data.locale, `/collection/${collection.slug}`)}>{collection.label}</a>{/each}</p>
     {/if}
   </header>
   {#if data.reported}<p class="notice" role="status">{t(data.locale, 'report.received')}</p>{/if}
