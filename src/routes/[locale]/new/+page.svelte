@@ -183,6 +183,20 @@
           </div>
         </div>
         <div class="field">
+          <label class="field-label" for="ivd_status">{t(data.locale, 'field.ivd')}</label>
+          <select id="ivd_status" name="ivd_status" value={form?.values?.ivd_status ?? ''} aria-invalid={!!form?.errors?.ivd_sequence} aria-describedby={form?.errors?.ivd_sequence ? 'ivd-help ivd_sequence-error' : 'ivd-help'}>
+            <option value="">{t(data.locale, 'field.ivdUnstated')}</option>
+            <option value="registered">{t(data.locale, 'field.ivdRegistered')}</option>
+            <option value="none">{t(data.locale, 'field.ivdNone')}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label" for="ivd_sequence">{t(data.locale, 'field.ivdSequence')}</label>
+          <input id="ivd_sequence" name="ivd_sequence" maxlength="80" value={form?.values?.ivd_sequence ?? ''} aria-invalid={!!form?.errors?.ivd_sequence} aria-describedby={form?.errors?.ivd_sequence ? 'ivd-help ivd_sequence-error' : 'ivd-help'} />
+          <p class="field-help" id="ivd-help">{t(data.locale, 'field.ivdHint')}</p>
+          {#if form?.errors?.ivd_sequence}<p class="field-error" id="ivd_sequence-error">{form.errors.ivd_sequence}</p>{/if}
+        </div>
+        <div class="field">
           <label class="field-label" for="tags">{t(data.locale, 'field.tags')}</label>
           <input id="tags" name="tags" maxlength="400" list="tag-suggestions" value={form?.values?.tags ?? ''} aria-describedby="tags-help" />
           <datalist id="tag-suggestions">{#each data.tags ?? [] as tag}<option value={tag}></option>{/each}</datalist>

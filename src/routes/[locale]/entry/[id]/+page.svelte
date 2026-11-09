@@ -11,7 +11,7 @@
   type Sense = { id: number; gloss: string; reading: string | null }
   type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
   type Evidence = { id: number; place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; source_id: number | null; has_image: number; created_at: string }
-  type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; strokes: number | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
+  type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; strokes: number | null; ivd_status: 'registered' | 'none' | null; ivd_sequence: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
   let { data }: { data: { locale: Locale; entry: Entry; glyph: string | null; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons)
@@ -70,6 +70,8 @@
         {#if entry.description}<div class="entry-row"><dt>{t(data.locale, 'field.description')}</dt><dd>{entry.description}</dd></div>{/if}
         {#if entry.radical}<div class="entry-row"><dt>{t(data.locale, 'field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
         {#if entry.encoded_as}<div class="entry-row"><dt>{t(data.locale, 'field.encodedAs')}</dt><dd>{entry.encoded_as}</dd></div>{/if}
+        {#if entry.ivd_status === 'registered' && entry.ivd_sequence}<div class="entry-row"><dt>{t(data.locale, 'field.ivd')}</dt><dd>{entry.ivd_sequence}</dd></div>
+        {:else if entry.ivd_status === 'none'}<div class="entry-row"><dt>{t(data.locale, 'field.ivd')}</dt><dd>{t(data.locale, 'field.ivdNone')}</dd></div>{/if}
         {#if entry.strokes != null}<div class="entry-row"><dt>{t(data.locale, 'field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
         <div class="entry-row"><dt>{t(data.locale, 'entry.added')}</dt><dd>{formatDate(data.locale, entry.created_at)}</dd></div>
       </dl>

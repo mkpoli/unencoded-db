@@ -42,6 +42,8 @@ type ExportedRecord = {
   date_precision: string
   comparisons: { relationship: string; script: string; character: string }[]
   evidence: ExportedEvidence[]
+  ivd_status: 'registered' | 'none' | null
+  ivd_sequence: string | null
 }
 
 async function exportJson(db: Database, query = '') {
@@ -76,6 +78,8 @@ describe('JSON export', () => {
         page: '12',
         note: 'First',
         created_at: '2026-01-01T00:00:00.000Z',
+        ivd_status: null,
+        ivd_sequence: null,
         date_precision: 'year',
         comparisons: [],
         evidence: [{ id: 0, place: 'Example collection', title: 'Title', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'First', date_precision: 'year', has_image: 0, url: null }],
@@ -125,6 +129,23 @@ describe('JSON export', () => {
       const maximum = await exportJson(db, '?limit=200&after=100')
       expect(maximum.body.records).toHaveLength(101)
       expect(maximum.body.next).toBeNull()
+    } finally { db.close() }
+  })
+
+  test('exports IVD membership apart from Unicode encoding', async () => {
+    const db = database()
+    try {
+      const registered = insert(db, 'Han')
+      const absent = insert(db, 'Tangut')
+      db.query("UPDATE entries SET encoded_as = 'U+4E00', ivd_status = 'registered', ivd_sequence = 'U+4E00 U+E0100' WHERE id = ?").run(registered)
+      db.query("UPDATE entries SET encoded_as = 'U+4E01', ivd_status = 'none' WHERE id = ?").run(absent)
+      const { body } = await exportJson(db)
+      const first = body.records.find(record => record.id === registered)
+      const second = body.records.find(record => record.id === absent)
+      expect(first).toMatchObject({ ivd_status: 'registered', ivd_sequence: 'U+4E00 U+E0100' })
+      expect(second).toMatchObject({ ivd_status: 'none', ivd_sequence: null })
+      expect(first).not.toHaveProperty('encoded_as')
+      expect(JSON.stringify(body)).not.toContain('U+4E01')
     } finally { db.close() }
   })
 

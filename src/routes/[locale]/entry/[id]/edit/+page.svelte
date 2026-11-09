@@ -3,13 +3,15 @@
   import ScriptSelect from '$lib/components/ScriptSelect.svelte'
 
   type FieldName = 'script' | 'ids' | 'description' | 'radical' | 'encoded_as' | 'strokes' | 'place' | 'title' | 'author' | 'publisher' | 'year' | 'page' | 'note'
-  type Entry = { id: number; revision: number; edit_generation: number } & Record<FieldName, string | null>
+  type Entry = { id: number; revision: number; edit_generation: number; ivd_status: string | null; ivd_sequence: string | null } & Record<FieldName, string | null>
   type FormState = {
     message?: string
-    errors?: Partial<Record<FieldName, string>>
+    errors?: Partial<Record<FieldName | 'ivd_sequence', string>>
     values?: Record<FieldName, string>
     revision?: unknown
     generation?: unknown
+    ivd_status?: string
+    ivd_sequence?: string
   }
   type EditField = { name: FieldName; label: string; max: number; required?: boolean; multiline?: boolean }
 
@@ -33,11 +35,13 @@
     { name: 'ids', label: 'field.ids', max: 200 },
     { name: 'radical', label: 'field.radical', max: 20 },
     { name: 'encoded_as', label: 'field.encodedAs', max: 80 },
-    { name: 'strokes', label: 'field.strokes', max: 3 },
-    { name: 'description', label: 'field.description', max: 5000, multiline: true }
+    { name: 'strokes', label: 'field.strokes', max: 3 }
   ]
+  const descriptionField: EditField = { name: 'description', label: 'field.description', max: 5000, multiline: true }
 
-  const order: FieldName[] = ['place', 'title', 'author', 'publisher', 'year', 'page', 'note', 'script', 'ids', 'radical', 'encoded_as', 'strokes', 'description']
+  const order: (FieldName | 'ivd_sequence')[] = ['place', 'title', 'author', 'publisher', 'year', 'page', 'note', 'script', 'ids', 'radical', 'encoded_as', 'ivd_sequence', 'strokes', 'description']
+  const ivdStatus = $derived(form?.ivd_status ?? data.entry.ivd_status ?? '')
+  const ivdSequence = $derived(form?.ivd_sequence ?? data.entry.ivd_sequence ?? '')
   const value = (name: FieldName) => form?.values?.[name] ?? data.entry[name] ?? ''
 
   // Move focus to what blocked the write: the first invalid field, or the notice.
@@ -85,6 +89,21 @@
     <section class="form-section" aria-labelledby="character-heading">
       <h2 class="section-label" id="character-heading">{t(data.locale, 'form.character')}</h2>
       {#each characterFields as field}{@render control(field)}{/each}
+      <div class="field">
+        <label class="field-label" for="ivd_status">{t(data.locale, 'field.ivd')}</label>
+        <select id="ivd_status" name="ivd_status" value={ivdStatus} aria-invalid={!!form?.errors?.ivd_sequence} aria-describedby={form?.errors?.ivd_sequence ? 'ivd-help ivd_sequence-error' : 'ivd-help'}>
+          <option value="">{t(data.locale, 'field.ivdUnstated')}</option>
+          <option value="registered">{t(data.locale, 'field.ivdRegistered')}</option>
+          <option value="none">{t(data.locale, 'field.ivdNone')}</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label" for="ivd_sequence">{t(data.locale, 'field.ivdSequence')}</label>
+        <input id="ivd_sequence" name="ivd_sequence" maxlength="80" value={ivdSequence} aria-invalid={!!form?.errors?.ivd_sequence} aria-describedby={form?.errors?.ivd_sequence ? 'ivd-help ivd_sequence-error' : 'ivd-help'} />
+        <p class="field-help" id="ivd-help">{t(data.locale, 'field.ivdHint')}</p>
+        {#if form?.errors?.ivd_sequence}<p class="field-error" id="ivd_sequence-error">{form.errors.ivd_sequence}</p>{/if}
+      </div>
+      {@render control(descriptionField)}
     </section>
     <div class="form-actions">
       <button class="primary" type="submit">{t(data.locale, 'edit.save')} <span aria-hidden="true">→</span></button>

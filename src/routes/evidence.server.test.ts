@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { PNG_BYTES, createTestDatabase, d1Binding, fakeImages, imageFile } from '../test-support'
 import { MAX_IMAGE_BYTES } from '../lib/server/images'
 import { actions, load as newForm } from './[locale]/new/+page.server'
+import { actions as editActions } from './[locale]/entry/[id]/edit/+page.server'
 import { actions as batchActions } from './[locale]/batch/+page.server'
 import { load as list } from './[locale]/+page.server'
 import { actions as entryActions } from './[locale]/entry/[id]/+page.server'
@@ -509,6 +510,79 @@ describe('evidence routes', () => {
       await expect(actions.default!(event({ ...record, place: 'Another page' }, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
       expect((db.query('SELECT count(*) AS n FROM entries').get() as { n: number }).n).toBe(1)
       expect((db.query('SELECT count(*) AS n FROM evidence').get() as { n: number }).n).toBe(2)
+    } finally { db.close() }
+  })
+
+  test('stores IVD membership apart from the Unicode encoding', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      await expect(actions.default!(event({ ...record, encoded_as: 'U+4E00', ivd_status: 'registered', ivd_sequence: '4E00 E0100' }, DB, images))).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT encoded_as, ivd_status, ivd_sequence FROM entries WHERE id = 1').get()).toEqual({ encoded_as: 'U+4E00', ivd_status: 'registered', ivd_sequence: 'U+4E00 U+E0100' })
+      const shown = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as { entry: { encoded_as: string; ivd_status: string; ivd_sequence: string } }
+      expect(shown.entry).toMatchObject({ encoded_as: 'U+4E00', ivd_status: 'registered', ivd_sequence: 'U+4E00 U+E0100' })
+
+      await expect(actions.default!(event({ ...record, ids: '⿱日木', ivd_status: 'none' }, DB, images))).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT ivd_status, ivd_sequence FROM entries WHERE id = 2').get()).toEqual({ ivd_status: 'none', ivd_sequence: null })
+    } finally { db.close() }
+  })
+
+  test('rejects an IVD choice that does not match its sequence', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      for (const values of [
+        { ivd_status: 'registered', ivd_sequence: '' },
+        { ivd_status: 'registered', ivd_sequence: 'U+4E00 U+FE00' },
+        { ivd_status: 'none', ivd_sequence: 'U+4E00 U+E0100' },
+        { ivd_status: '', ivd_sequence: 'U+4E00 U+E0100' },
+      ]) {
+        const result = await actions.default!(event({ ...record, ...values }, DB, images)) as { status: number; data: { errors: { ivd_sequence: string } } }
+        expect(result.status).toBe(400)
+        expect(result.data.errors.ivd_sequence).toContain('U+4E00 U+E0100')
+      }
+      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
+    } finally { db.close() }
+  })
+
+  test('filters the browse page by IVD status', async () => {
+    const db = createTestDatabase()
+    try {
+      const insert = db.query("INSERT INTO entries (script, place, created_at, visible, ivd_status, ivd_sequence) VALUES (?, 'book', '2026', 1, ?, ?)")
+      insert.run('Han', 'registered', 'U+4E00 U+E0100')
+      insert.run('Han', 'none', null)
+      insert.run('Tangut', null, null)
+      const DB = d1Binding(db)
+      const listAt = (query: string) => list({ platform: { env: { DB } }, url: new URL(`https://example.test/en${query}`) } as any) as Promise<{ entries: { id: number }[]; ivd: string | null; script: string | null }>
+      expect((await listAt('?ivd=registered')).entries.map(entry => entry.id)).toEqual([1])
+      expect((await listAt('?ivd=none')).entries.map(entry => entry.id)).toEqual([2])
+      const both = await listAt('?ivd=registered&script=Han')
+      expect(both.entries.map(entry => entry.id)).toEqual([1])
+      expect(both).toMatchObject({ ivd: 'registered', script: 'Han' })
+      expect((await listAt('')).entries).toHaveLength(3)
+      await expect(listAt('?ivd=unknown')).rejects.toMatchObject({ status: 404 })
+    } finally { db.close() }
+  })
+
+  test('an edit can record, clear, or refuse IVD membership', async () => {
+    const db = createTestDatabase()
+    try {
+      db.query("INSERT INTO entries (script, place, encoded_as, created_at) VALUES ('Han', 'Book', 'U+4E00', '2026')").run()
+      const DB = d1Binding(db)
+      const post = (values: Record<string, string>) => {
+        const form = new FormData()
+        for (const [key, value] of Object.entries({ revision: '1', edit_generation: '1', script: 'Han', place: 'Book', encoded_as: 'U+4E00', ...values })) form.set(key, value)
+        return editActions.default!({ params: { locale: 'en', id: '1' }, platform: { env: { DB } }, request: new Request('https://example.test/en/entry/1/edit', { method: 'POST', body: form }) } as any)
+      }
+      await expect(post({ ivd_status: 'registered', ivd_sequence: '一\u{E0100}' })).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT encoded_as, ivd_status, ivd_sequence, revision FROM entries WHERE id = 1').get()).toEqual({ encoded_as: 'U+4E00', ivd_status: 'registered', ivd_sequence: 'U+4E00 U+E0100', revision: 2 })
+      const invalid = await post({ revision: '2', ivd_status: 'registered', ivd_sequence: 'nope' }) as { status: number }
+      expect(invalid.status).toBe(400)
+      expect(db.query('SELECT ivd_sequence, revision FROM entries WHERE id = 1').get()).toEqual({ ivd_sequence: 'U+4E00 U+E0100', revision: 2 })
+      await expect(post({ revision: '2', ivd_status: 'none', ivd_sequence: '' })).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT encoded_as, ivd_status, ivd_sequence FROM entries WHERE id = 1').get()).toEqual({ encoded_as: 'U+4E00', ivd_status: 'none', ivd_sequence: null })
     } finally { db.close() }
   })
 
