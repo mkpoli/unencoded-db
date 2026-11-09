@@ -144,6 +144,8 @@ describe('localized pages', () => {
     expect(head).toContain('新增字 · 珍字集覽')
     expect(body).toContain('<h1>新增字</h1>')
     expect(body).toContain('出處圖片')
+    expect(body).toContain('或提供連結')
+    expect(body).not.toMatch(/id="image"[^>]*required/)
     expect(body).toContain('常見的位置與裝置中繼資料會被移除，JPEG圖片方向保留。')
     expect(body).toContain('JPEG、PNG 或 WebP · 8 MiB')
     expect(body).toContain('瀏覽')

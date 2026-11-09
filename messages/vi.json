@@ -1,5 +1,5 @@
 {
-  "add.intro": "Tải lên ảnh chụp, bản quét hoặc ảnh chụp màn hình chữ hoặc glyph. Nội dung đóng góp được công khai và người đóng góp ẩn danh.",
+  "add.intro": "Tải lên ảnh chụp, bản quét hoặc ảnh chụp màn hình chữ hoặc glyph, hoặc dán một liên kết. Nội dung đóng góp được công khai và người đóng góp ẩn danh.",
   "add.title": "Thêm chữ",
   "app.name": "Tuyển tập chữ quý",
   "app.tagline": "Wiki cộng đồng thu thập bằng chứng về chữ và glyph",
@@ -39,8 +39,6 @@
   "error.comparisonRow": "Nhập chữ và quan hệ, rồi kiểm tra độ dài từng mục.",
   "error.fields": "Hãy kiểm tra các mục bên dưới.",
   "error.home": "Quay lại danh mục",
-  "error.imageEmpty": "Tệp ảnh trống.",
-  "error.imageMissing": "Chọn ảnh nguồn: tệp JPEG, PNG hoặc WebP, tối đa 8 MiB.",
   "error.imageOversize": "Ảnh vượt quá 8 MiB.",
   "error.imageUnsupported": "Ảnh phải là tệp JPEG, PNG hoặc WebP hợp lệ.",
   "error.length": "Kiểm tra độ dài của mục này.",
