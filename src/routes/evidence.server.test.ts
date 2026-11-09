@@ -99,6 +99,27 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
+  test('adds a relation with evidence and the reverse edge', async () => {
+    const db = createTestDatabase()
+    try {
+      db.exec("INSERT INTO entries (script, place, created_at, visible) VALUES ('Han', 'Book', '2026', 1)")
+      db.exec("INSERT INTO entries (script, place, created_at, visible) VALUES ('Tangut', 'Book', '2026', 1)")
+      db.exec("INSERT INTO evidence (entry_id, place, created_at) VALUES (1, 'Book', '2026')")
+      const form = new FormData()
+      form.set('target', 'Tangut'); form.set('kind', 'sound'); form.set('evidence', '1'); form.set('difference', 'Reading')
+      const event = {
+        request: new Request('https://example.test/en/entry/1', { method: 'POST', body: form }),
+        url: new URL('https://example.test/en/entry/1'), cookies: testCookies().cookies,
+        platform: { env: { DB: d1Binding(db) } }, params: { locale: 'en', id: '1' },
+      } as any
+      await expect(entryActions.relation!(event)).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT from_entry, to_entry, to_character, kind FROM relations ORDER BY id').all()).toEqual([
+        { from_entry: 1, to_entry: 2, to_character: 'Tangut', kind: 'sound' },
+        { from_entry: 2, to_entry: 1, to_character: 'Han', kind: 'sound' },
+      ])
+    } finally { db.close() }
+  })
+
   test('stores a crop on an evidence image', async () => {
     const db = createTestDatabase()
     try {

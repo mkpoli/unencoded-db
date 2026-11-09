@@ -7,15 +7,17 @@
   type Genre = { slug: string; label: string }
   type Crop = { id: number; evidence_id: number; x: number; y: number; w: number; h: number }
   type Collection = { slug: string; label: string }
+  type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
   type Evidence = { id: number; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; has_image: number; created_at: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; created_at: string; has_image: number }
-  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; isModerator: boolean; reported: boolean } } = $props()
+  let { data }: { data: { locale: Locale; entry: Entry; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons)
   let evidence = $derived(data.evidence)
   let genres = $derived(data.genres ?? [])
   let crops = $derived(data.crops ?? [])
   let collections = $derived(data.collections ?? [])
+  let relations = $derived(data.relations ?? [])
 </script>
 
 <svelte:head><title>{t(data.locale, 'entry.record', { id: entry.id })} · {t(data.locale, 'app.name')}</title></svelte:head>
@@ -56,7 +58,7 @@
     <h2 class="section-label" id="evidence-heading">{t(data.locale, 'entry.sightings')}</h2>
     <p class="field-help">{t(data.locale, 'entry.addSightingHint')}</p>
     {#each evidence as item (item.id)}
-      <article class="evidence-card">
+      <article class="evidence-card" id={`evidence-${item.id}`}>
         {#if item.has_image}
           <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} alt={item.place || t(data.locale, 'field.sourceImage')} loading="lazy" />
         {/if}
@@ -127,6 +129,36 @@
       </div>
     </section>
   {/if}
+  <section class="related-section" aria-labelledby="relations-heading">
+    <h2 class="section-label" id="relations-heading">{t(data.locale, 'relation.title')}</h2>
+    <p class="field-help">{t(data.locale, 'relation.intro')}</p>
+    {#if relations.length}
+      <div class="related-list">
+        {#each relations as relation (relation.id)}
+          <article class="related-card">
+            <h3>{relation.to_character}</h3>
+            <dl class="entry-meta">
+              <div class="entry-row"><dt>{t(data.locale, 'relation.kind')}</dt><dd>{relationshipLabel(data.locale, relation.kind)}</dd></div>
+              <div class="entry-row"><dt>{t(data.locale, 'relation.evidence')}</dt><dd><a class="text-link" href={`#evidence-${relation.evidence_id}`}>{relation.place}{#if relation.year} · {relation.year}{/if}</a></dd></div>
+              {#if relation.difference}<div class="entry-row"><dt>{t(data.locale, 'relation.difference')}</dt><dd>{relation.difference}</dd></div>{/if}
+            </dl>
+          </article>
+        {/each}
+      </div>
+    {:else}
+      <p class="field-help">{t(data.locale, 'relation.empty')}</p>
+    {/if}
+    <details class="details">
+      <summary>{t(data.locale, 'relation.add')}</summary>
+      <form class="details-body" method="POST" action="?/relation">
+        <div class="field"><label class="field-label" for="relation-target">{t(data.locale, 'relation.target')}</label><input id="relation-target" name="target" required maxlength="80" /></div>
+        <div class="field"><label class="field-label" for="relation-kind">{t(data.locale, 'relation.kind')}</label><select id="relation-kind" name="kind">{#each ['sound','meaning','glyph','usage','variant','not_variant','similar','uncertain'] as kind}<option value={kind}>{relationshipLabel(data.locale, kind)}</option>{/each}</select></div>
+        <div class="field"><label class="field-label" for="relation-evidence">{t(data.locale, 'relation.evidence')}</label><select id="relation-evidence" name="evidence" required>{#each evidence as item}<option value={item.id}>{item.place}{#if item.year} · {item.year}{/if}</option>{/each}</select></div>
+        <div class="field"><label class="field-label" for="relation-difference">{t(data.locale, 'relation.difference')}</label><textarea id="relation-difference" name="difference" maxlength="5000"></textarea></div>
+        <button class="secondary" type="submit">{t(data.locale, 'relation.save')}</button>
+      </form>
+    </details>
+  </section>
   <details class="details">
     <summary>{t(data.locale, 'report.summary')}</summary>
     <form class="details-body" method="POST" action={localizedHref(data.locale, `/entry/${entry.id}/report`)}>
