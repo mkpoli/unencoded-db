@@ -2,9 +2,11 @@
   import { enhance } from '$app/forms'
   import { untrack } from 'svelte'
   import FileField from '$lib/components/FileField.svelte'
+  import ScriptSelect from '$lib/components/ScriptSelect.svelte'
   import { newComparison, relationshipLabel, removeComparison } from '$lib/comparison-rows'
   import { handleContributionResult } from '$lib/contribution-result'
   import { localizedHref, t, type Locale } from '$lib/i18n'
+  import { DEFAULT_SCRIPT } from '$lib/script'
   import partsUrl from 'ids-input/data/han-parts.json.gz?url'
   import { estimateStrokes } from '$lib/strokes'
 
@@ -24,7 +26,7 @@
   let comparisons = $state<Comparison[]>(untrack(() => form?.comparisons?.rows ?? []))
   let comparisonErrors = $state<boolean[]>(untrack(() => form?.comparisons?.errors ?? []))
   // A failed submission seeds the fields once; after that the reader's edits own them.
-  let script = $state(untrack(() => form?.values?.script ?? 'Han'))
+  let script = $state(untrack(() => form?.values?.script ?? DEFAULT_SCRIPT))
   let ids = $state(untrack(() => form?.values?.ids ?? ''))
   let senses = $state([{ gloss: '', reading: '' }])
   let strokes = $state(String(untrack(() => form?.values?.strokes ?? '')))
@@ -152,7 +154,7 @@
       <h2 class="section-label" id="character-heading">{t(data.locale, 'form.character')}</h2>
       <div class="field">
         <label class="field-label" for="script">{t(data.locale, 'field.script')}</label>
-        <input id="script" name="script" required maxlength="80" bind:value={script} aria-invalid={!!form?.errors?.script} aria-describedby={form?.errors?.script ? 'script-error' : undefined} />
+        <ScriptSelect bind:value={script} invalid={!!form?.errors?.script} describedBy={form?.errors?.script ? 'script-error' : undefined} />
         {#if form?.errors?.script}<p class="field-error" id="script-error">{form.errors.script}</p>{/if}
       </div>
       <div class="field">
