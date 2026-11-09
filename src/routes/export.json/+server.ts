@@ -1,6 +1,7 @@
 import { error, json } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
 import { publicEntryPredicate } from '$lib/server/visibility'
+import { parseDate } from '$lib/server/evidence-links'
 
 const DEFAULT_LIMIT = 100
 const MAX_LIMIT = 200
@@ -18,6 +19,7 @@ type ExportRecord = {
   page: string | null
   note: string | null
   created_at: string
+  date_precision: string
 }
 
 function readInteger(value: string | null, fallback: number, min: number, max: number): number | null {
@@ -38,7 +40,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
               FROM entries INDEXED BY entries_visible_id WHERE ${publicEntryPredicate} AND id > ? ORDER BY id ASC LIMIT ?`)
     .bind(after, limit + 1)
     .all<ExportRecord>()
-  const records = results.slice(0, limit)
+  const records = results.slice(0, limit).map(record => ({ ...record, date_precision: parseDate(record.year).date_precision }))
   const next = results.length > limit ? records[records.length - 1]!.id : null
   return json({ version: 1, records, next }, { headers: { 'cache-control': 'no-store' } })
 }

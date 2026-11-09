@@ -44,6 +44,7 @@ describe('JSON export', () => {
         page: '12',
         note: 'First',
         created_at: '2026-01-01T00:00:00.000Z',
+        date_precision: 'year',
       })
       expect(JSON.stringify(body)).not.toContain('Secret')
     } finally { db.close() }
