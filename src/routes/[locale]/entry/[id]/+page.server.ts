@@ -3,6 +3,7 @@ import { MAX_COMPARISONS, type Comparison } from '$lib/server/related'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import { addEvidence, listEvidence, readEvidenceFields } from '$lib/server/evidence-links'
 import { genresForEntry } from '$lib/server/genres'
+import { collectionsForEntry } from '$lib/server/collections'
 import { createImageKey, putSourceImage, readSourceImage } from '$lib/server/images'
 import { cookieOptions, hashToken } from '$lib/server/attribution'
 import { localizedHref, type Locale } from '$lib/i18n'
@@ -39,7 +40,8 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   if (!Array.isArray(comparisons) || comparisons.length > MAX_COMPARISONS) error(500, 'Invalid related characters')
   const evidence = await listEvidence(platform.env.DB, Number(params.id))
   const genres = await genresForEntry(platform.env.DB, Number(params.id))
-  return { entry, comparisons, evidence, genres, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
+  const collections = await collectionsForEntry(platform.env.DB, Number(params.id))
+  return { entry, comparisons, evidence, genres, collections, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
 }
 
 export const actions = {
