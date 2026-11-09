@@ -28,7 +28,7 @@ async function findEntryByImageKey(db: D1Database, key: string): Promise<{ id: n
   }
 }
 type FieldName = typeof fields[number]
-type FormErrors = Partial<Record<FieldName | 'image' | 'form' | 'url' | 'ivd_sequence' | 'comparison', string>>
+type FormErrors = Partial<Record<FieldName | 'image' | 'form' | 'url' | 'provider' | 'provider_url' | 'ivd_sequence' | 'comparison', string>>
 
 function fieldValues(form: FormData): Record<FieldName, string> {
   return Object.fromEntries(fields.map(name => {
@@ -53,21 +53,38 @@ export const actions: Actions = {
     const form = await request.formData()
     const values = fieldValues(form)
     const errors: FormErrors = {}
+    const rawProvider = String(form.get('provider') ?? '').normalize('NFC').trim()
+    const rawProviderUrl = String(form.get('provider_url') ?? '').normalize('NFC').trim()
+    const rawLink = String(form.get('url') ?? '').normalize('NFC').trim()
+    if (rawProvider.length > 300) errors.provider = t(locale, 'error.length')
+    if (rawProviderUrl.length > 1000 || (rawProviderUrl && !/^https?:\/\//i.test(rawProviderUrl))) errors.provider_url = t(locale, 'error.length')
+    if (rawLink.length > 1000 || (rawLink && !/^https?:\/\//i.test(rawLink))) errors.url = t(locale, 'error.length')
+    const provider = rawProvider.slice(0, 300) || null
+    const providerUrl = rawProviderUrl.slice(0, 1000) || null
+    const link = rawLink.slice(0, 1000) || null
+    const hasProviderLink = Boolean(provider && (providerUrl || link) && !errors.provider && !errors.provider_url && !errors.url)
     for (const name of invalidFields(form)) {
+      if (name === 'place' && hasProviderLink && !values.place.trim()) continue
       errors[name] = name === 'script' ? t(locale, 'error.script')
         : name === 'place' ? t(locale, 'error.placeSeen')
         : t(locale, 'error.length')
     }
     const source = await readSourceImage(form)
     if (source.error && source.error !== 'missing') errors.image = imageError(locale, source.error)
-    const row = readEvidence(form)
+    let row = readEvidence(form)
+    if (!row && hasProviderLink && !values.place.trim()) {
+      const fallback = new FormData()
+      for (const [k, v] of form.entries()) fallback.append(k, v)
+      fallback.set('place', '_')
+      const parsed = readEvidence(fallback)
+      if (parsed) row = { ...parsed, place: '' }
+    }
     const radical = String(form.get('radical') ?? '').normalize('NFC').trim().slice(0, 20) || null
     const encoded = String(form.get('encoded_as') ?? '').normalize('NFC').trim().slice(0, 80) || null
     const ivdStatus = typeof form.get('ivd_status') === 'string' ? form.get('ivd_status') as string : ''
     const ivdSequence = typeof form.get('ivd_sequence') === 'string' ? form.get('ivd_sequence') as string : ''
     const ivd = readIvd(form.get('ivd_status'), form.get('ivd_sequence'))
     if (!ivd) errors.ivd_sequence = t(locale, 'error.ivd')
-    const link = String(form.get('url') ?? '').normalize('NFC').trim().slice(0, 1000) || null
     const rawStrokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
     const strokes = Number.isInteger(rawStrokes) && rawStrokes >= 0 && rawStrokes < 200 ? rawStrokes : null
     const comparisons = readComparisons(form)
@@ -76,7 +93,7 @@ export const actions: Actions = {
     const collections = selectedCollections(form)
     const tags = parseTags(String(form.get('tags') ?? ''))
     const senses = parseSenses(form)
-    const submitted = { ...values, radical, encoded_as: encoded, strokes, ivd_status: ivdStatus, ivd_sequence: ivdSequence, genres, collections, tags: tags.join(', ') }
+    const submitted = { ...values, provider: rawProvider, provider_url: rawProviderUrl, radical, encoded_as: encoded, strokes, ivd_status: ivdStatus, ivd_sequence: ivdSequence, genres, collections, tags: tags.join(', ') }
     if (!senses) return fail(400, { errors, values: submitted, comparisons })
     const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: submitted, comparisons })
     if (link && !/^https?:\/\//i.test(link)) errors.url = t(locale, 'error.length')
@@ -106,7 +123,7 @@ export const actions: Actions = {
       }
     }
     if (duplicate) {
-      await addEvidence(platform.env.DB, duplicate.id, { place: row.place, url: link, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, imageMeta, null)
+      await addEvidence(platform.env.DB, duplicate.id, { place: row.place, url: link, provider, provider_url: providerUrl, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, imageMeta, null)
       redirect(303, localizedHref(locale, `/entry/${duplicate.id}`))
     }
 
@@ -130,7 +147,7 @@ export const actions: Actions = {
       return failForm(500, { form: t(locale, 'error.save') })
     }
 
-    const first = await addEvidence(platform.env.DB, result.id, { place: row.place, url: link, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, imageMeta, null)
+    const first = await addEvidence(platform.env.DB, result.id, { place: row.place, url: link, provider, provider_url: providerUrl, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, imageMeta, null)
     await saveGenres(platform.env.DB, result.id, genres)
     await saveCollections(platform.env.DB, result.id, collections, first?.id ?? null)
     await saveTags(platform.env.DB, result.id, tags)

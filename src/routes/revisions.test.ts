@@ -32,6 +32,7 @@ function dbSetup() {
   applyMigration(db, '0027_ivd.sql')
   applyMigration(db, '0028_genre_taxonomy.sql')
   applyMigration(db, '0029_genre_groups.sql')
+  applyMigration(db, '0030_evidence_provider.sql')
   return db
 }
 function binding(db: Database) {

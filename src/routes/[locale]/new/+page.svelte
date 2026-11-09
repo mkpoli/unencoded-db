@@ -141,7 +141,7 @@
       </div>
       <div class="field">
         <label class="field-label" for="place">{t(data.locale, 'field.place')}</label>
-        <input id="place" name="place" required maxlength="500" value={form?.values?.place ?? ''} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} />
+        <input id="place" name="place" maxlength="500" value={form?.values?.place ?? ''} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} />
         {#if form?.errors?.place}<p class="field-error" id="place-error">{form.errors.place}</p>{/if}
       </div>
         <div class="field">
@@ -177,6 +177,18 @@
             {#if form?.errors?.page}<p class="field-error" id="page-error">{form.errors.page}</p>{/if}
           </div>
         </div>
+      <div class="field-grid">
+        <div class="field">
+          <label class="field-label" for="provider">{t(data.locale, 'field.provider')}</label>
+          <input id="provider" name="provider" maxlength="300" value={form?.values?.provider ?? ''} aria-invalid={!!form?.errors?.provider} aria-describedby={form?.errors?.provider ? 'provider-error' : undefined} />
+          {#if form?.errors?.provider}<p class="field-error" id="provider-error">{form.errors.provider}</p>{/if}
+        </div>
+        <div class="field">
+          <label class="field-label" for="provider_url">{t(data.locale, 'field.providerUrl')}</label>
+          <input id="provider_url" name="provider_url" type="url" maxlength="1000" placeholder="https://" value={form?.values?.provider_url ?? ''} aria-invalid={!!form?.errors?.provider_url} aria-describedby={form?.errors?.provider_url ? 'provider-url-error' : undefined} />
+          {#if form?.errors?.provider_url}<p class="field-error" id="provider-url-error">{form.errors.provider_url}</p>{/if}
+        </div>
+      </div>
     </section>
     <section class="form-section" aria-labelledby="character-heading">
       <h2 class="section-label" id="character-heading">{t(data.locale, 'form.character')}</h2>
