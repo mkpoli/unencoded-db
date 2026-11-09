@@ -39,6 +39,10 @@
         <span class="record">#{entry.id}</span>
       </a>
     {/each}
+    <a class="add-card" href={localizedHref(data.locale, '/new')}>
+      <span class="add-mark" aria-hidden="true">+</span>
+      <span class="add-label">{t(data.locale, 'browse.addOne')}</span>
+    </a>
   </div>
   {#if data.next}
     <div class="more-row">
