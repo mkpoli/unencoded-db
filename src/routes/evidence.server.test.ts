@@ -7,6 +7,7 @@ import { actions as batchActions } from './[locale]/batch/+page.server'
 import { load as list } from './[locale]/+page.server'
 import { actions as entryActions } from './[locale]/entry/[id]/+page.server'
 import { load as detail } from './[locale]/entry/[id]/+page.server'
+import { load as genrePage } from './[locale]/genre/[slug]/+page.server'
 
 function testCookies() {
   const jar = new Map<string, string>()
@@ -685,6 +686,51 @@ describe('evidence routes', () => {
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
       expect(result.evidence[0].url).toBe('https://example.org/source')
       expect(images.puts).toHaveLength(0)
+    } finally { db.close() }
+  })
+
+  test('offers the expanded twenty-category taxonomy and merges medicine', async () => {
+    const db = createTestDatabase()
+    try {
+      const data = await newForm({ platform: { env: { DB: d1Binding(db) } } } as any) as any
+      expect(data.genres).toHaveLength(20)
+      const labels = data.genres.map((genre: { label: string }) => genre.label)
+      for (const named of ['吳語', '閩東語', '樂譜', '醫藥', '化學', '度量衡', '道教', '切身', '音譯']) {
+        expect(labels).toContain(named)
+      }
+      expect(labels).not.toContain('醫學')
+      expect(data.genres.find((genre: { slug: string }) => genre.slug === 'medicine')).toEqual({ slug: 'medicine', label: '醫藥' })
+    } finally { db.close() }
+  })
+
+  test('stores selected genres and lists each category on the genre browse pages', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      const e = event(record, DB, images)
+      const form = await e.request.formData()
+      form.append('genre', 'wu')
+      form.append('genre', 'medicine')
+      form.append('genre', 'taoism')
+      e.request = new Request(e.url.href, { method: 'POST', body: form })
+      await expect(actions.default!(e)).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+
+      const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(result.genres).toEqual([
+        { slug: 'medicine', label: '醫藥' },
+        { slug: 'wu', label: '吳語' },
+        { slug: 'taoism', label: '道教' },
+      ])
+
+      for (const genre of (await newForm({ platform: { env: { DB } } } as any) as any).genres as { slug: string; label: string }[]) {
+        const browsed = await genrePage({ platform: { env: { DB } }, params: { locale: 'en', slug: genre.slug } } as any) as any
+        expect(browsed.genre).toEqual(genre)
+        expect(browsed.genres).toHaveLength(20)
+        expect(browsed.entries.map((row: { id: number }) => row.id)).toEqual(
+          ['medicine', 'wu', 'taoism'].includes(genre.slug) ? [1] : []
+        )
+      }
     } finally { db.close() }
   })
 })
