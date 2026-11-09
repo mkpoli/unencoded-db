@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { PNG_BYTES, createTestDatabase, d1Binding, fakeImages, imageFile } from '../test-support'
 import { MAX_IMAGE_BYTES } from '../lib/server/images'
 import { actions, load as newForm } from './[locale]/new/+page.server'
+import { actions as batchActions } from './[locale]/batch/+page.server'
 import { load as list } from './[locale]/+page.server'
 import { load as detail } from './[locale]/entry/[id]/+page.server'
 
@@ -56,6 +57,32 @@ function comparisonEvent(rows: Record<string, string>[], DB: unknown, images: Re
 const comparison = { character: '漢', relationship: 'not_variant', differences: 'Different component', evidence: 'Source page 4' }
 
 describe('evidence routes', () => {
+  test('batch creates one character per row from one source', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const form = new FormData()
+      form.set('place', 'Book')
+      form.set('image', imageFile(PNG_BYTES))
+      form.append('script', 'Han')
+      form.append('script', 'Tangut')
+      form.append('ids', '⿰木木')
+      form.append('ids', '⿱日木')
+      const { jar, cookies } = testCookies()
+      const event = {
+        request: new Request('https://example.test/en/batch', { method: 'POST', body: form }),
+        url: new URL('https://example.test/en/batch'),
+        cookies,
+        platform: { env: { DB: d1Binding(db), IMAGES: images.bucket } },
+        params: { locale: 'en' },
+      } as any
+      await expect(batchActions.default!(event)).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      expect((db.query('SELECT count(*) AS n FROM entries').get() as { n: number }).n).toBe(2)
+      expect((db.query('SELECT count(*) AS n FROM evidence').get() as { n: number }).n).toBe(2)
+      expect(jar.size).toBe(1)
+    } finally { db.close() }
+  })
+
   test('persists multiple comparisons and displays their explanations', async () => {
     const db = createTestDatabase()
     const images = fakeImages()

@@ -70,6 +70,7 @@ describe('public query plans', () => {
       '[locale]/moderate/[id]/hide/+server.ts',
       '[locale]/moderate/[id]/restore/+server.ts',
       '[locale]/moderate/reports/+page.server.ts',
+      '[locale]/batch/+page.server.ts',
       '[locale]/new/+page.server.ts',
       'auth/callback/+server.ts',
       'auth/prepare/+server.ts',
