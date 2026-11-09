@@ -6,6 +6,7 @@ import { localeFromPathname, localizedHref, pathAfterLocale, t, type Locale } fr
 import type { Handle, RequestEvent } from '@sveltejs/kit'
 
 const NEW_ROUTE = '/[locale]/new'
+const BATCH_ROUTE = '/[locale]/batch'
 
 function rateLimitKey(event: RequestEvent): string | null {
   const address = event.getClientAddress()
@@ -106,7 +107,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     if (rejection) return rejection
   }
 
-  if (method === 'POST' && event.route?.id === NEW_ROUTE) {
+  if (method === 'POST' && (event.route?.id === NEW_ROUTE || event.route?.id === BATCH_ROUTE)) {
     try {
       const key = rateLimitKey(event)
       const limiter = event.platform?.env.CONTRIBUTION_RATE_LIMIT
