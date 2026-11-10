@@ -79,6 +79,7 @@
   "field.genre": "类属",
   "field.ids": "汉字结构描述（IDS）",
   "field.idsWorkshop": "IDS Workshop",
+  "field.imagePaste": "也可以用Ctrl+V粘贴图片。",
   "field.imagePreview": "所选图片预览",
   "field.ivd": "IVD",
   "field.ivdHint": "写法如U+4E00 U+E0100。",

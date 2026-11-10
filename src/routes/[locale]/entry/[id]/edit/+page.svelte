@@ -271,7 +271,7 @@
             replace={t(data.locale, 'field.replaceImage')}
             remove={t(data.locale, 'field.removeImage')}
             previewAlt={t(data.locale, 'field.imagePreview')}
-            hint={t(data.locale, 'field.fileFormats')}
+            hint={t(data.locale, 'field.fileFormats')} pasteHint={t(data.locale, 'field.imagePaste')}
             hintId={`formats-${item.id}`}
             describedBy={`formats-${item.id} evidence-keep-${item.id}`}
             error={evidenceError(item, 'image') ?? ''}
@@ -321,7 +321,7 @@
           replace={t(data.locale, 'field.replaceImage')}
           remove={t(data.locale, 'field.removeImage')}
           previewAlt={t(data.locale, 'field.imagePreview')}
-          hint={t(data.locale, 'field.fileFormats')}
+          hint={t(data.locale, 'field.fileFormats')} pasteHint={t(data.locale, 'field.imagePaste')}
           hintId="new-formats"
           describedBy="new-formats"
           error={addError('image') ?? ''}

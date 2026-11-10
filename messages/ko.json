@@ -79,6 +79,7 @@
   "field.genre": "분류",
   "field.ids": "표의 문자 구성 설명(IDS)",
   "field.idsWorkshop": "IDS Workshop",
+  "field.imagePaste": "또는 Ctrl+V로 이미지를 붙여넣을 수 있습니다.",
   "field.imagePreview": "선택한 이미지 미리보기",
   "field.ivd": "IVD",
   "field.ivdHint": "U+4E00 U+E0100 형식으로 적습니다.",

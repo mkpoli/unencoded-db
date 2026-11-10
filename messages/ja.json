@@ -79,6 +79,7 @@
   "field.genre": "分類",
   "field.ids": "漢字構成記述（IDS）",
   "field.idsWorkshop": "IDS Workshop",
+  "field.imagePaste": "またはCtrl+Vで画像を貼り付けられます。",
   "field.imagePreview": "選択した画像のプレビュー",
   "field.ivd": "IVD",
   "field.ivdHint": "例: U+4E00 U+E0100",
