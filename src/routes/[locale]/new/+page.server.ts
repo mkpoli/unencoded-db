@@ -69,6 +69,7 @@ export const actions: Actions = {
         : name === 'place' ? t(locale, 'error.placeSeen')
         : t(locale, 'error.length')
     }
+    if (!values.ids.trim()) errors.ids = t(locale, 'error.ids')
     const source = await readSourceImage(form)
     if (source.error && source.error !== 'missing') errors.image = imageError(locale, source.error)
     let row = readEvidence(form)

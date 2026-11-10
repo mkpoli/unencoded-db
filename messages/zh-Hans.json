@@ -1,6 +1,6 @@
 {
   "account.profile": "Glyph Atlas个人资料",
-  "add.intro": "先填写文字体系和结构，再上传文字或字形的照片、扫描件或截图，或提供链接。上传内容将公开，投稿者匿名。",
+  "add.intro": "先填写汉字结构描述，再上传文字或字形的照片、扫描件或截图，或提供链接。上传内容将公开，投稿者匿名。",
   "add.title": "添加字",
   "app.name": "珍字集览",
   "app.tagline": "收集文字与字形证据的社区维基",
@@ -40,6 +40,7 @@
   "error.comparison": "每个方框只填一个字；每种关系最多十个。",
   "error.fields": "请检查以下各项。",
   "error.home": "返回记录列表",
+  "error.ids": "请输入汉字结构描述（IDS）。",
   "error.imageOversize": "图片超过8 MiB。",
   "error.imageUnsupported": "图片必须是有效的JPEG、PNG或WebP文件。",
   "error.ivd": "请按U+4E00 U+E0100的形式填写IVD序列，或选择未注册。",
@@ -77,6 +78,7 @@
   "field.fileFormats": "JPEG、PNG 或 WebP · 8 MiB",
   "field.genre": "类属",
   "field.ids": "汉字结构描述（IDS）",
+  "field.idsWorkshop": "IDS Workshop",
   "field.imagePreview": "所选图片预览",
   "field.ivd": "IVD",
   "field.ivdHint": "写法如U+4E00 U+E0100。",
@@ -106,7 +108,7 @@
   "field.suggestionHint": "选择一条记录，填入文字体系和IDS。",
   "field.suggestions": "相关记录",
   "field.tags": "标签",
-  "field.tagsHint": "用逗号分隔的短标签，例如客语词。",
+  "field.tagsHint": "添加短标签；上方的分类也作为标签。",
   "field.title": "书名或标题",
   "field.url": "链接",
   "field.urlHint": "扫描页、帖子或目录页。",
@@ -177,5 +179,7 @@
   "sense.remove": "删除",
   "source.intro": "从这个出处记录的文字。",
   "source.title": "出处",
-  "source.view": "出处详情"
+  "source.view": "出处详情",
+  "tag.add": "添加标签",
+  "tag.remove": "删除标签 {tag}"
 }

@@ -364,6 +364,21 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
+  test('keeps the IDS required', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const withoutIds: Record<string, string> = { ...record }
+      delete withoutIds.ids
+      for (const values of [{ ...record, ids: '' }, withoutIds]) {
+        const result = await actions.default!(event(values, d1Binding(db), images)) as any
+        expect(result.status).toBe(400)
+        expect(result.data.errors.ids).toContain('ideographic description')
+      }
+      expect(images.puts).toHaveLength(0)
+    } finally { db.close() }
+  })
+
   test('keeps place required', async () => {
     const db = createTestDatabase()
     const images = fakeImages()

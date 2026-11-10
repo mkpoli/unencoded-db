@@ -1,11 +1,11 @@
 {
   "account.profile": "Glyph Atlasのプロフィール",
-  "add.intro": "まず文字体系と構成を入力し、続いて写真・スキャン・スクリーンショット、またはリンクを追加してください。投稿は公開され、投稿者は匿名です。",
+  "add.intro": "まず漢字構成記述を入力し、続いて写真・スキャン・スクリーンショット、またはリンクを追加してください。投稿は公開され、投稿者は匿名です。",
   "add.title": "文字を追加",
   "app.name": "珍字集覧",
   "app.tagline": "文字と字形の証拠を集めるコミュニティウィキ",
   "auth.signIn": "ログイン / 登録",
-  "auth.signOut": "ログアウト",
+  "auth.signOut": "サインアウト",
   "batch.add": "文字を追加",
   "batch.character": "文字 {n}",
   "batch.characters": "文字",
@@ -40,6 +40,7 @@
   "error.comparison": "各欄には1文字だけ入力してください。関係ごとに10欄までです。",
   "error.fields": "次の項目を確認してください。",
   "error.home": "記録一覧に戻る",
+  "error.ids": "漢字構成記述（IDS）を入力してください。",
   "error.imageOversize": "画像が8 MiBを超えています。",
   "error.imageUnsupported": "画像は有効なJPEG、PNG、WebPのいずれかである必要があります。",
   "error.ivd": "U+4E00 U+E0100の形でIVDシーケンスを入力するか、未登録を選んでください。",
@@ -77,6 +78,7 @@
   "field.fileFormats": "JPEG、PNG、WebP · 8 MiB",
   "field.genre": "分類",
   "field.ids": "漢字構成記述（IDS）",
+  "field.idsWorkshop": "IDS Workshop",
   "field.imagePreview": "選択した画像のプレビュー",
   "field.ivd": "IVD",
   "field.ivdHint": "例: U+4E00 U+E0100",
@@ -106,7 +108,7 @@
   "field.suggestionHint": "記録を選ぶと文字体系とIDSが入ります。",
   "field.suggestions": "関連する記録",
   "field.tags": "タグ",
-  "field.tagsHint": "客語など、短いラベルをカンマ区切りで。",
+  "field.tagsHint": "短いラベルを追加します。上の分類もタグとして扱います。",
   "field.title": "書名・題名",
   "field.url": "リンク",
   "field.urlHint": "スキャン、投稿、目録ページなど。",
@@ -177,5 +179,7 @@
   "sense.remove": "削除",
   "source.intro": "この出典から記録された文字。",
   "source.title": "出典",
-  "source.view": "出典の詳細"
+  "source.view": "出典の詳細",
+  "tag.add": "タグを追加",
+  "tag.remove": "タグ「{tag}」を削除"
 }
