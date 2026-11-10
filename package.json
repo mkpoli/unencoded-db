@@ -4,11 +4,12 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "dev": "vite dev",
     "build": "vite build",
+    "preview": "bun run build && wrangler dev --local --infer-origin-from-routes=false",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "svelte-kit sync && bun test src",
-    "db:local": "wrangler d1 migrations apply DB --local",
-    "preview": "bun run build && wrangler dev --local --infer-origin-from-routes=false"
+    "db:local": "wrangler d1 migrations apply DB --local"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260819.1",
@@ -23,7 +24,7 @@
     "wrangler": "^4.158.0"
   },
   "dependencies": {
-    "ids-input": "github:mkpoli/ids-input#d638d219",
+    "ids-input": "github:mkpoli/ids-input#e7b69691",
     "jose": "^6.2.15"
   }
 }

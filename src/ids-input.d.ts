@@ -1,3 +1,16 @@
+declare module 'ids-input' {
+  export function isDescription(text: string | null | undefined): boolean
+}
+
+declare module 'ids-input/adapter' {
+  export function babelStoneAdapter(options: Record<string, string>): unknown
+}
+
+declare module 'ids-input/svelte' {
+  import type { Component } from 'svelte'
+  export const IdsInput: Component<any>
+}
+
 declare module 'ids-input/composer' {
   export type Drawing = { d: string; parts?: unknown[]; slots?: unknown[] }
   export type ComposerSource = {
@@ -8,15 +21,4 @@ declare module 'ids-input/composer' {
   }
   export function createSource(read: (name: string) => Promise<ArrayBuffer | null>, options?: { concurrency?: number }): ComposerSource
   export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'kaisho' }): Promise<Drawing>
-}
-
-declare module 'ids-input' {
-  export function isDescription(text: string | null | undefined): boolean
-  export function parse(ids: string): { tree: unknown }
-  export function componentStrokes(tree: unknown, count: (character: string) => number | null | undefined): { components: number; strokes: number | null; filled: boolean }
-}
-
-declare module '*?url' {
-  const url: string
-  export default url
 }

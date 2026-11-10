@@ -1,26 +1,23 @@
+import type { Person } from '$lib/server/people'
+
 declare global {
   namespace App {
+    interface Locals { person: Person | null; theme: string }
     interface Platform {
+      ctx: ExecutionContext
       env: {
         DB: D1Database
-        IMAGES: R2Bucket
-        ACCESS_TEAM_DOMAIN?: string
-        ACCESS_AUD?: string
-        MODERATOR_EMAILS?: string
-        REPORT_RATE_LIMIT?: RateLimit
-        CONTRIBUTION_RATE_LIMIT?: { limit(options: { key: string }): Promise<{ success: boolean }> }
-        LOCAL_RATE_LIMIT?: string
+        MEDIA: R2Bucket
+        ADDS?: RateLimit
+        EDITS?: RateLimit
         ATLAS_ISSUER?: string
         ATLAS_CLIENT_ID?: string
         ATLAS_CLIENT_SECRET?: string
-        ATLAS_PUBLIC_ORIGIN?: string
+        IP_SALT?: string
+        WRITES_PAUSED?: string
       }
-      cf?: IncomingRequestCfProperties
-      ctx?: ExecutionContext
-    }
-    interface Locals {
-      moderator: string | null
     }
   }
 }
+
 export {}
