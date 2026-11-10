@@ -273,6 +273,44 @@ export const actions: Actions = {
     if (image !== undefined && row.image_key && row.image_key !== image?.key) await discardImage(platform.env.DB, platform.env.IMAGES, row.image_key)
     redirect(303, `${localizedHref(locale, `/entry/${id}/edit`)}#evidence-${evidenceId}`)
   },
+  gallery: async ({ params, platform, request }) => {
+    if (!isLocale(params.locale)) error(404)
+    if (!platform) error(500, 'Database unavailable')
+    const locale = params.locale
+    const id = idOf(params.id)
+    const form = await request.formData()
+    const evidenceId = positive(form.get('evidence'))
+    const revision = positive(form.get('revision'))
+    const generation = positive(form.get('edit_generation'))
+    if (!evidenceId || !revision || !generation) error(400)
+    const row = await platform.env.DB.prepare(
+      `SELECT ev.id, ev.image_key FROM evidence ev JOIN entries en ON en.id = ev.entry_id AND ${publicEntryPredicate} WHERE ev.id = ? AND ev.entry_id = ?`
+    ).bind(evidenceId, id).first<{ id: number; image_key: string | null }>()
+    if (!row) error(404)
+    const current = await platform.env.DB.prepare(`SELECT revision, edit_generation FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first<{ revision: number; edit_generation: number }>()
+    if (!current) error(404)
+    if (current.revision !== revision || current.edit_generation !== generation) return fail(409, { action: 'gallery', evidenceId, message: t(locale, 'edit.conflict') })
+    const { results } = await platform.env.DB.prepare(
+      `SELECT m.id, m.key, m.type, m.size FROM evidence_media em JOIN media m ON m.id = em.media_id WHERE em.evidence_id = ? ORDER BY m.id`
+    ).bind(evidenceId).all<{ id: number; key: string; type: string; size: number }>()
+    const remove = new Set(form.getAll('remove_media').map(value => Number(value)).filter(value => Number.isSafeInteger(value) && value > 0))
+    const remaining = results.filter(image => !remove.has(image.id))
+    const selected = remaining.find(image => image.key === row.image_key) ?? remaining[0] ?? null
+    const primary = await primaryEvidenceId(platform.env.DB, id) === evidenceId
+    const updated = await platform.env.DB.prepare(
+      `UPDATE entries SET revision = revision + 1${primary ? ', image_key = ?, image_type = ?, image_size = ?' : ''}
+       WHERE id = ? AND ${publicEntryPredicate} AND revision = ? AND edit_generation = ? RETURNING id`
+    ).bind(...(primary ? [selected?.key ?? null, selected?.type ?? null, selected?.size ?? null] : []), id, revision, generation).first<{ id: number }>()
+    if (!updated) return fail(409, { action: 'gallery', evidenceId, message: t(locale, 'edit.conflict') })
+    for (const image of results.filter(image => remove.has(image.id))) {
+      await platform.env.DB.prepare('DELETE FROM evidence_media WHERE evidence_id = ? AND media_id = ?').bind(evidenceId, image.id).run()
+    }
+    await platform.env.DB.prepare('UPDATE evidence SET image_key = ?, image_type = ?, image_size = ? WHERE id = ? AND entry_id = ?')
+      .bind(selected?.key ?? null, selected?.type ?? null, selected?.size ?? null, evidenceId, id).run()
+    for (const image of results.filter(image => remove.has(image.id))) await discardImage(platform.env.DB, platform.env.IMAGES, image.key)
+    redirect(303, `${localizedHref(locale, `/entry/${id}/edit`)}#evidence-${evidenceId}`)
+  },
+
   addEvidence: async ({ params, platform, request, cookies, url }) => {
     if (!isLocale(params.locale)) error(404)
     if (!platform) error(500, 'Database unavailable')

@@ -858,3 +858,10 @@
 /* Several pictures for one evidence record. */
 .evidence-gallery { display: grid; gap: 8px; }
 .evidence-gallery img { display: block; width: 100%; max-height: 460px; object-fit: contain; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }
+
+/* Managing one evidence record's gallery. */
+.gallery-field { display: grid; gap: 10px; min-width: 0; padding: 0; border: 0; }
+.gallery-manage { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.gallery-choice { display: grid; gap: 6px; min-width: 0; margin: 0; }
+.gallery-choice img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }
+.gallery-choice .check { display: flex; align-items: center; gap: 6px; min-height: 32px; font-size: var(--text-sm); }

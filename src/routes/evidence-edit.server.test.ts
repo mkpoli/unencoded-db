@@ -86,6 +86,28 @@ describe('evidence editing', () => {
     } finally { db.close() }
   })
 
+  test('promotes the first remaining picture after removing the cover', async () => {
+    const db = setup()
+    const images = fakeImages()
+    try {
+      db.exec("INSERT INTO media (id, key, type, size, created_at) VALUES (10, 'entries/a', 'image/png', 1, '2026'), (11, 'entries/b', 'image/png', 1, '2026'), (12, 'entries/c', 'image/png', 1, '2026')")
+      db.exec("INSERT INTO evidence_media (evidence_id, media_id) VALUES (2, 10), (2, 11), (2, 12)")
+      db.exec("UPDATE evidence SET image_key = 'entries/a', image_type = 'image/png', image_size = 1 WHERE id = 2")
+      const form = new FormData()
+      form.set('evidence', '2'); form.set('revision', '1'); form.set('edit_generation', '1')
+      form.append('remove_media', '10')
+      await expect(actions.gallery!({
+        params: { locale: 'en', id: '1' },
+        platform: { env: { DB: d1Binding(db), IMAGES: images.bucket } },
+        request: new Request('https://example.test/en/entry/1/edit', { method: 'POST', body: form }),
+        url: new URL('https://example.test/en/entry/1/edit'),
+      } as any)).rejects.toMatchObject({ status: 303, location: '/en/entry/1/edit#evidence-2' })
+      expect(db.query('SELECT image_key FROM evidence WHERE id = 2').get()).toEqual({ image_key: 'entries/b' })
+      expect(db.query('SELECT media_id FROM evidence_media WHERE evidence_id = 2 ORDER BY media_id').all()).toEqual([{ media_id: 11 }, { media_id: 12 }])
+      expect(db.query('SELECT revision FROM entries').get()).toEqual({ revision: 2 })
+    } finally { db.close() }
+  })
+
   test('rejects evidence edits for hidden entries', async () => {
     const db = setup()
     const images = fakeImages()

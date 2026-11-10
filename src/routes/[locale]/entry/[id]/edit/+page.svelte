@@ -49,7 +49,7 @@
     comparisons: Comparison[]
   }
   type FormState = {
-    action?: 'character' | 'evidence' | 'addEvidence'
+    action?: 'character' | 'evidence' | 'addEvidence' | 'gallery'
     evidenceId?: number
     message?: string
     errors?: Record<string, string>
@@ -340,6 +340,29 @@
         <EvidenceTypes locale={data.locale} value={evidenceTypes(item)} />
         <div class="form-actions"><button class="secondary" type="submit">{t(data.locale, 'evidence.save')}</button></div>
       </form>
+      {#if media.some(image => image.evidence_id === item.id)}
+        <form class="form-panel gallery-form" method="POST" action="?/gallery">
+          <input type="hidden" name="evidence" value={item.id} />
+          <input type="hidden" name="revision" value={entry.revision} />
+          <input type="hidden" name="edit_generation" value={entry.edit_generation} />
+          {#if form?.action === 'gallery' && form.evidenceId === item.id && form.message}
+            <p class="notice error" role="alert">{form.message}</p>
+          {/if}
+          <fieldset class="gallery-field">
+            <legend class="field-label">{t(data.locale, 'gallery.title')}</legend>
+            <p class="field-help">{t(data.locale, 'gallery.hint')}</p>
+            <div class="gallery-manage">
+              {#each media.filter(image => image.evidence_id === item.id) as image (image.id)}
+                <figure class="gallery-choice">
+                  <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image/${image.id}`)} alt="" />
+                  <label class="check"><input type="checkbox" name="remove_media" value={image.id} /> {t(data.locale, 'field.removeImage')}</label>
+                </figure>
+              {/each}
+            </div>
+            <div class="form-actions"><button class="secondary" type="submit">{t(data.locale, 'gallery.save')}</button></div>
+          </fieldset>
+        </form>
+      {/if}
     {/each}
 
     <form class="form-panel evidence-form" method="POST" action="?/addEvidence" enctype="multipart/form-data" novalidate>
