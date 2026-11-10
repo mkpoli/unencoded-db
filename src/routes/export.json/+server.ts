@@ -1,5 +1,6 @@
 import { error, json } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
+import { primaryIds, splitIds } from '$lib/ids'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import { parseDate } from '$lib/server/evidence-links'
 import type { Comparison } from '$lib/comparison-rows'
@@ -80,7 +81,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
     }
   }
 
-  const records = page.map(({ comparisons: stored, ...record }) => {
+  const records = page.map(({ comparisons: stored, ids, ...record }) => {
     const rows = evidence.get(record.id) ?? [{
       id: 0, place: record.place, url: null, provider: null, provider_url: null, title: record.title, author: record.author, publisher: record.publisher,
       year: record.year, page: record.page, note: record.note,
@@ -88,6 +89,8 @@ export const GET: RequestHandler = async ({ platform, url }) => {
     }]
     return {
       ...record,
+      ids: primaryIds(ids),
+      ids_all: splitIds(ids),
       date_precision: rows[0].date_precision,
       comparisons: comparisons(stored),
       evidence: rows,

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { primaryIds } from '$lib/ids'
   import { localizedHref, t, type Locale } from '$lib/i18n'
   type Source = { id: number; kind: string; title: string | null; author: string | null; publisher: string | null; year: string | null; place: string | null }
   type Row = { entry_id: number; script: string; ids: string | null; description: string | null; evidence_id: number; place: string; title: string | null; year: string | null; page: string | null; note: string | null; has_image: number }
@@ -25,7 +26,7 @@
     <div class="entry-list">
       {#each data.rows as row (row.evidence_id)}
         <a class="entry-card" href={localizedHref(data.locale, `/entry/${row.entry_id}`)}>
-          <span class="glyph">{row.ids || row.script}</span>
+          <span class="glyph">{primaryIds(row.ids) || row.script}</span>
           {#if row.description}<span class="description">{row.description}</span>{/if}
           <span class="place">{row.place}{#if row.year} · {row.year}{/if}{#if row.page} · {t(data.locale, 'field.page')} {row.page}{/if}</span>
           <span class="record">#{row.entry_id}</span>

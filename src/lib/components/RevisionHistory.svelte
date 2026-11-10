@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { splitIds } from '$lib/ids'
   import type { RevisionSnapshot } from '$lib/revision'
   import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
 
@@ -14,7 +15,7 @@
         <span class="revision-heading">
           {#if showEntry}
             <a class="revision-entry" href={localizedHref(locale, `/entry/${revision.entry_id}`)} onclick={stop}>
-              {#if revision.tombstone || !revision.ids}{t(locale, 'entry.record', { id: revision.entry_id })}{:else}{revision.ids}{/if}
+              {#if revision.tombstone || !revision.ids}{t(locale, 'entry.record', { id: revision.entry_id })}{:else}{splitIds(revision.ids).join(' · ')}{/if}
             </a>
           {/if}
           <span class="revision-number">{t(locale, 'history.revision', { n: revision.revision })}</span>
@@ -26,7 +27,7 @@
       {:else}
         <dl class="entry-meta">
           <div class="entry-row"><dt>{t(locale, 'field.script')}</dt><dd>{revision.script}</dd></div>
-          {#if revision.ids}<div class="entry-row"><dt>{t(locale, 'field.ids')}</dt><dd>{revision.ids}</dd></div>{/if}
+          {#if revision.ids}<div class="entry-row"><dt>{t(locale, 'field.ids')}</dt><dd>{splitIds(revision.ids).join(' · ')}</dd></div>{/if}
           {#if revision.description}<div class="entry-row"><dt>{t(locale, 'field.description')}</dt><dd>{revision.description}</dd></div>{/if}
           <div class="entry-row"><dt>{t(locale, 'field.place')}</dt><dd>{revision.place}</dd></div>
           {#if revision.title}<div class="entry-row"><dt>{t(locale, 'field.title')}</dt><dd>{revision.title}</dd></div>{/if}

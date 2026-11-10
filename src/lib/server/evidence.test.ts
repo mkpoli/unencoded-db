@@ -23,6 +23,12 @@ describe('evidence', () => {
     expect(readEvidence(form({ script: 'Han', place: 'x'.repeat(501) }))).toBeNull()
     expect(readEvidence(form({ script: 'x'.repeat(81), place: 'book' }))).toBeNull()
   })
+  test('accepts several descriptions in one field within the record limits', () => {
+    expect(readEvidence(form({ script: 'Han', place: 'book', ids: '⿰木木, ⿱木木' }))?.ids).toBe('⿰木木, ⿱木木')
+    const tooMany = Array.from({ length: 21 }, (_, i) => '⿰木' + '木'.repeat(i)).join(', ')
+    expect(readEvidence(form({ script: 'Han', place: 'book', ids: tooMany }))).toBeNull()
+    expect(readEvidence(form({ script: 'Han', place: 'book', ids: '⿰' + '木'.repeat(200) }))).toBeNull()
+  })
   test('names every failing field in one pass', () => {
     expect(invalidFields(form({ place: 'book' }))).toEqual(['script'])
     expect(invalidFields(form({ script: 'Han', place: 'book', title: 'x'.repeat(301), note: 'note' }))).toEqual(['title'])

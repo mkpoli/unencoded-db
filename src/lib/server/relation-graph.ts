@@ -1,3 +1,5 @@
+import { primaryIds } from '$lib/ids'
+
 export const RELATION_KINDS = ['sound', 'meaning', 'glyph', 'usage', 'variant', 'not_variant', 'similar', 'uncertain'] as const
 export type RelationKind = typeof RELATION_KINDS[number]
 
@@ -26,13 +28,13 @@ export async function addRelation(db: D1Database, from: number, toCharacter: str
   if (!evidence) return null
   const current = await db.prepare('SELECT script, ids FROM entries WHERE id = ?').bind(from).first<{ script: string; ids: string | null }>()
   if (!current) return null
-  const target = await db.prepare('SELECT id FROM entries WHERE visible = 1 AND (script = ? OR ids = ?) LIMIT 1').bind(toCharacter, toCharacter).first<{ id: number }>()
+  const target = await db.prepare('SELECT id FROM entries e WHERE e.visible = 1 AND (e.script = ? OR EXISTS (SELECT 1 FROM entry_ids x WHERE x.ids = ? AND x.entry_id = e.id)) LIMIT 1').bind(toCharacter, toCharacter).first<{ id: number }>()
   const pair = crypto.randomUUID(), now = new Date().toISOString()
   await db.prepare('INSERT INTO relations (pair_id, from_entry, to_entry, to_character, kind, evidence_id, difference, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(pair, from, target?.id ?? null, toCharacter, kind, evidenceId, difference, now).run()
   if (target) {
     await db.prepare('INSERT INTO relations (pair_id, from_entry, to_entry, to_character, kind, evidence_id, difference, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(pair, target.id, from, current.ids || current.script, kind, evidenceId, difference, now).run()
+      .bind(pair, target.id, from, primaryIds(current.ids) || current.script, kind, evidenceId, difference, now).run()
   }
   return pair
 }

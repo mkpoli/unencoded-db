@@ -1,5 +1,6 @@
 <script lang="ts">
   import { groupGenres } from '$lib/genres'
+  import { primaryIds } from '$lib/ids'
   import { localizedHref, t, type Locale } from '$lib/i18n'
   let { data }: { data: { locale: Locale; genre: { slug: string; label: string }; genres?: { slug: string; label: string; parent: string | null }[]; entries: { id: number; script: string; ids: string | null; description: string | null }[] } } = $props()
   const { standalone, groups } = $derived(groupGenres(data.genres))
@@ -31,7 +32,7 @@
     <div class="entry-list">
       {#each data.entries as entry (entry.id)}
         <a class="entry-card" href={localizedHref(data.locale, `/entry/${entry.id}`)}>
-          <span class="glyph">{entry.ids || entry.script}</span>
+          <span class="glyph">{primaryIds(entry.ids) || entry.script}</span>
           {#if entry.description}<span class="description">{entry.description}</span>{/if}
           <span class="record">#{entry.id}</span>
         </a>

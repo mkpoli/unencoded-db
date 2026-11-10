@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit'
 import { SCRIPT_MAX } from '$lib/script'
-import { cleanIds } from '$lib/ids'
+import { cleanIds, primaryIds } from '$lib/ids'
 import { glyphPaths, warmGlyphs } from '$lib/server/glyphs'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import type { PageServerLoad } from './$types'
@@ -25,12 +25,13 @@ export const load: PageServerLoad = async ({ platform, url }) => {
   const filter = filters.length ? ` AND ${filters.join(' AND ')}` : ''
   const page = await platform.env.DB.prepare(`SELECT id, script, ids, encoded_as, equivalent_to, (SELECT count(*) FROM evidence ev WHERE ev.entry_id = entries.id) AS evidence, (SELECT min(ev.date_year) FROM evidence ev WHERE ev.entry_id = entries.id AND ev.date_year IS NOT NULL) AS first_year, (SELECT g.label FROM entry_genres eg JOIN genres g ON g.slug = eg.genre WHERE eg.entry_id = entries.id ORDER BY eg.genre LIMIT 1) AS category FROM entries WHERE ${publicEntryPredicate}${filter} AND id < ? ORDER BY id DESC LIMIT 21`).bind(...filterBinds, id).all<ListedEntry>()
   const entries = page.results.slice(0, 20)
-  const sequences = entries.map(entry => entry.ids).filter((id): id is string => Boolean(id))
+  const sequences = entries.map(entry => primaryIds(entry.ids)).filter((id): id is string => Boolean(id))
   const paths = await glyphPaths(platform.env.IMAGES, sequences)
   const glyphs: Record<string, string> = {}
   for (const entry of entries) {
-    const path = entry.ids ? paths[cleanIds(entry.ids)] : null
-    if (entry.ids && path) glyphs[entry.ids] = path
+    const sequence = primaryIds(entry.ids)
+    const path = sequence ? paths[cleanIds(sequence)] : null
+    if (sequence && path) glyphs[sequence] = path
   }
   const missing = [...new Set(sequences.map(cleanIds).filter(id => !paths[id]))]
   if (missing.length) platform.ctx?.waitUntil(warmGlyphs(platform.env.IMAGES, missing))
