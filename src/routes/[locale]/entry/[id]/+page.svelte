@@ -1,6 +1,8 @@
 <script lang="ts">
   import { groupedComparisons, relationshipLabel, type Comparison } from '$lib/comparison-rows'
   import CropField from '$lib/components/CropField.svelte'
+  import FileField from '$lib/components/FileField.svelte'
+  import { cleanLinkInput } from '$lib/link-input'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
   import { encodingSetLabel, type Encoding } from '$lib/encodings'
@@ -10,12 +12,14 @@
   type Collection = { slug: string; label: string }
   type Sense = { id: number; gloss: string; reading: string | null }
   type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
+  type EvidenceMedia = { id: number; evidence_id: number }
   type Evidence = { id: number; place: string; url: string | null; provider?: string | null; provider_url?: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; source_id: number | null; has_image: number; created_at: string }
-  type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; strokes: number | null; ivd_status: 'registered' | 'none' | null; ivd_sequence: string | null; created_at: string }
-  let { data }: { data: { locale: Locale; entry: Entry; glyph: string | null; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; encodings: Encoding[]; isModerator: boolean; reported: boolean } } = $props()
+  type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; equivalent_to: string | null; strokes: number | null; ivd_status: 'registered' | 'none' | null; ivd_sequence: string | null; created_at: string }
+  let { data }: { data: { locale: Locale; entry: Entry; glyph: string | null; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; encodings: Encoding[]; media: EvidenceMedia[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons ?? [])
   let evidence = $derived(data.evidence ?? [])
+  let media = $derived(data.media ?? [])
   let genres = $derived(data.genres ?? [])
   let crops = $derived(data.crops ?? [])
   let collections = $derived(data.collections ?? [])
@@ -70,6 +74,7 @@
         {#if entry.description}<div class="entry-row"><dt>{t(data.locale, 'field.description')}</dt><dd>{entry.description}</dd></div>{/if}
         {#if entry.radical}<div class="entry-row"><dt>{t(data.locale, 'field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
         {#each data.encodings ?? [] as encoding (encoding.charset + '\u0000' + encoding.code)}<div class="entry-row"><dt>{encodingSetLabel(encoding.charset)}</dt><dd>{encoding.code}</dd></div>{/each}
+        {#if entry.equivalent_to}<div class="entry-row"><dt>{t(data.locale, 'field.equivalentTo')}</dt><dd>{entry.equivalent_to}</dd></div>{/if}
         {#if entry.ivd_status === 'registered' && entry.ivd_sequence}<div class="entry-row"><dt>{t(data.locale, 'field.ivd')}</dt><dd>{entry.ivd_sequence}</dd></div>
         {:else if entry.ivd_status === 'none'}<div class="entry-row"><dt>{t(data.locale, 'field.ivd')}</dt><dd>{t(data.locale, 'field.ivdNone')}</dd></div>{/if}
         {#if entry.strokes != null}<div class="entry-row"><dt>{t(data.locale, 'field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
@@ -84,7 +89,13 @@
     </div>
     {#each evidence as item (item.id)}
       <article class="evidence-card" id={`evidence-${item.id}`}>
-        {#if item.has_image}
+        {#if media.some(image => image.evidence_id === item.id)}
+          <div class="evidence-gallery">
+            {#each media.filter(image => image.evidence_id === item.id) as image (image.id)}
+              <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image/${image.id}`)} alt={item.place || item.provider || t(data.locale, 'field.sourceImage')} loading="lazy" />
+            {/each}
+          </div>
+        {:else if item.has_image}
           <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} alt={item.place || item.provider || t(data.locale, 'field.sourceImage')} loading="lazy" />
         {/if}
         {#if item.place}
@@ -146,14 +157,32 @@
     <details class="details">
       <summary>{t(data.locale, 'entry.addSighting')}</summary>
       <form class="details-body" method="POST" action="?/evidence" enctype="multipart/form-data">
-        <div class="field"><label class="field-label" for="evidence-image">{t(data.locale, 'field.sourceImage')}</label><input id="evidence-image" name="image" type="file" accept="image/jpeg,image/png,image/webp" /></div>
-        <div class="field"><label class="field-label" for="evidence-url">{t(data.locale, 'field.url')}</label><input id="evidence-url" name="url" type="url" maxlength="1000" placeholder="https://" aria-describedby="evidence-url-help" /><p class="field-help" id="evidence-url-help">{t(data.locale, 'field.urlHint')}</p></div>
+        <div class="field">
+          <label class="field-label" for="evidence-image">{t(data.locale, 'field.sourceImage')}</label>
+          <FileField
+            id="evidence-image"
+            name="image"
+            optional
+            label={t(data.locale, 'field.sourceImage')}
+            choose={t(data.locale, 'field.chooseImage')}
+            browse={t(data.locale, 'field.browseImage')}
+            replace={t(data.locale, 'field.replaceImage')}
+            remove={t(data.locale, 'field.removeImage')}
+            previewAlt={t(data.locale, 'field.imagePreview')}
+            hint={t(data.locale, 'field.fileFormats')} pasteHint={t(data.locale, 'field.imagePaste')}
+            hintId="evidence-formats"
+            describedBy="evidence-formats evidence-image-help evidence-image-rights"
+          />
+          <p class="field-help" id="evidence-image-help">{t(data.locale, 'field.sourceImageHint')}</p>
+          <p class="field-help" id="evidence-image-rights">{t(data.locale, 'field.rightsHint')}</p>
+        </div>
+        <div class="field"><label class="field-label" for="evidence-url">{t(data.locale, 'field.url')}</label><input id="evidence-url" name="url" type="url" maxlength="1000" placeholder="https://" use:cleanLinkInput aria-describedby="evidence-url-help" /><p class="field-help" id="evidence-url-help">{t(data.locale, 'field.urlHint')}</p></div>
         <div class="field"><label class="field-label" for="evidence-place">{t(data.locale, 'field.place')}</label><input id="evidence-place" name="place" maxlength="500" /></div>
-        <div class="grid-2">
+        <div class="field-grid">
           <div class="field"><label class="field-label" for="evidence-provider">{t(data.locale, 'field.provider')}</label><input id="evidence-provider" name="provider" maxlength="300" /></div>
           <div class="field"><label class="field-label" for="evidence-provider-url">{t(data.locale, 'field.providerUrl')}</label><input id="evidence-provider-url" name="provider_url" type="url" maxlength="1000" placeholder="https://" /></div>
         </div>
-        <div class="grid-2">
+        <div class="field-grid">
           <div class="field"><label class="field-label" for="evidence-title">{t(data.locale, 'field.title')}</label><input id="evidence-title" name="title" maxlength="300" /></div>
           <div class="field"><label class="field-label" for="evidence-author">{t(data.locale, 'field.author')}</label><input id="evidence-author" name="author" maxlength="300" /></div>
           <div class="field"><label class="field-label" for="evidence-publisher">{t(data.locale, 'field.publisher')}</label><input id="evidence-publisher" name="publisher" maxlength="300" /></div>

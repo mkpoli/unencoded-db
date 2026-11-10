@@ -253,3 +253,19 @@ export async function deleteSourceImage(bucket: R2Bucket, key: string): Promise<
     // The orphan is untracked; there is no cleanup job yet.
   }
 }
+
+/** Validate every file in a multi-image field. Empty slots are ignored. */
+export async function readSourceImages(form: FormData, name = 'extra_image'): Promise<{ images: SourceImage[] } | { error: ImageError }> {
+  const files = form.getAll(name)
+  const images: SourceImage[] = []
+  for (const value of files) {
+    if (value instanceof File && value.size === 0) continue
+    if (typeof value === 'string' && value === '') continue
+    const single = new FormData()
+    single.set(name, value)
+    const result = await readSourceImage(single, name)
+    if (result.error) return { error: result.error }
+    images.push(result.image)
+  }
+  return { images }
+}

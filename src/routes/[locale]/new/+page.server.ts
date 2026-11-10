@@ -1,10 +1,11 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import { fields, invalidFields, readEvidence } from '$lib/server/evidence'
 import { DefinitiveSaveFailure, cookieOptions, saveEvidence, sessionCookieSettings } from '$lib/server/attribution'
-import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, type ImageError } from '$lib/server/images'
+import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, readSourceImages, type ImageError, type SourceImage } from '$lib/server/images'
 import { isLocale, localizedHref, t, type Locale } from '$lib/i18n'
 import { readComparisons } from '$lib/server/related'
-import { addEvidence } from '$lib/server/evidence-links'
+import { readEquivalentTo } from '$lib/equivalent'
+import { addEvidence, addEvidenceMedia } from '$lib/server/evidence-links'
 import { listGenres, saveGenres, selectedGenres } from '$lib/server/genres'
 import { listCollections, saveCollections, selectedCollections } from '$lib/server/collections'
 import { publicEntryPredicate } from '$lib/server/visibility'
@@ -30,13 +31,27 @@ async function findEntryByImageKey(db: D1Database, key: string): Promise<{ id: n
   }
 }
 type FieldName = typeof fields[number]
-type FormErrors = Partial<Record<FieldName | 'image' | 'form' | 'url' | 'provider' | 'provider_url' | 'ivd_sequence' | 'comparison' | 'encodings', string>>
+type FormErrors = Partial<Record<FieldName | 'image' | 'form' | 'url' | 'provider' | 'provider_url' | 'ivd_sequence' | 'comparison' | 'encodings' | 'equivalent_to', string>>
 
 function fieldValues(form: FormData): Record<FieldName, string> {
   return Object.fromEntries(fields.map(name => {
     const value = form.get(name)
     return [name, typeof value === 'string' ? value : '']
   })) as Record<FieldName, string>
+}
+
+async function storeExtras(bucket: R2Bucket, images: SourceImage[]): Promise<{ key: string; type: string; size: number }[]> {
+  const out: { key: string; type: string; size: number }[] = []
+  for (const image of images) {
+    const key = createImageKey()
+    try {
+      await putSourceImage(bucket, key, image)
+      out.push({ key, type: image.type, size: image.size })
+    } catch {
+      // An extra picture is optional; keep the record when one object fails.
+    }
+  }
+  return out
 }
 
 export const load: PageServerLoad = async ({ platform }) => {
@@ -74,6 +89,11 @@ export const actions: Actions = {
     if (!values.ids.trim()) errors.ids = t(locale, 'error.ids')
     const source = await readSourceImage(form)
     if (source.error && source.error !== 'missing') errors.image = imageError(locale, source.error)
+    const extraSource = await readSourceImages(form)
+    if ('error' in extraSource) errors.image = imageError(locale, extraSource.error)
+    const extras: SourceImage[] = 'images' in extraSource ? extraSource.images : []
+    let primary: SourceImage | null = source.image ?? null
+    if (!primary && extras.length) primary = extras.shift() ?? null
     let row = readEvidence(form)
     if (!row && hasProviderLink && !values.place.trim()) {
       const fallback = new FormData()
@@ -86,6 +106,8 @@ export const actions: Actions = {
     const encodings = parseEncodings(form)
     if (!encodings) errors.encodings = t(locale, 'error.encodings')
     const encoded = primaryEncoding(encodings ?? [])
+    const equivalent = readEquivalentTo(form.get('equivalent_to'))
+    if (!equivalent.valid) errors.equivalent_to = t(locale, 'error.equivalentTo')
     const ivdStatus = typeof form.get('ivd_status') === 'string' ? form.get('ivd_status') as string : ''
     const ivdSequence = typeof form.get('ivd_sequence') === 'string' ? form.get('ivd_sequence') as string : ''
     const ivd = readIvd(form.get('ivd_status'), form.get('ivd_sequence'))
@@ -98,12 +120,12 @@ export const actions: Actions = {
     const collections = selectedCollections(form)
     const tags = parseTags(String(form.get('tags') ?? ''))
     const senses = parseSenses(form)
-    const submitted = { ...values, provider: rawProvider, provider_url: rawProviderUrl, radical, encoded_as: encoded, strokes, ivd_status: ivdStatus, ivd_sequence: ivdSequence, genres, collections, tags: tags.join(', '), encodings: encodings ?? [] }
+    const submitted = { ...values, provider: rawProvider, provider_url: rawProviderUrl, radical, encoded_as: encoded, strokes, ivd_status: ivdStatus, ivd_sequence: ivdSequence, equivalent_to: equivalent.value ?? '', genres, collections, tags: tags.join(', '), encodings: encodings ?? [] }
     if (!senses) return fail(400, { errors, values: submitted, comparisons })
     const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: submitted, comparisons })
     if (link && !/^https?:\/\//i.test(link)) errors.url = t(locale, 'error.length')
     if (!ivd || !row || !encodings || (source.error && source.error !== 'missing') || Object.keys(errors).length) return failForm(400, errors)
-    const image = source.error === 'missing' ? null : source.image
+    const image = primary
     const cookie = cookieOptions(url)
     if (!cookie) error(403, 'Secure connection required')
 
@@ -128,7 +150,8 @@ export const actions: Actions = {
       }
     }
     if (duplicate) {
-      await addEvidence(platform.env.DB, duplicate.id, { place: row.place, url: link, provider, provider_url: providerUrl, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, imageMeta, null)
+      const added = await addEvidence(platform.env.DB, duplicate.id, { place: row.place, url: link, provider, provider_url: providerUrl, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, imageMeta, null)
+      await addEvidenceMedia(platform.env.DB, added.id, await storeExtras(platform.env.IMAGES, extras))
       await addEncodings(platform.env.DB, duplicate.id, encodings)
       redirect(303, localizedHref(locale, `/entry/${duplicate.id}`))
     }
@@ -141,7 +164,7 @@ export const actions: Actions = {
         cookies.get(cookie.name),
         comparisons.rows,
         imageMeta ?? undefined,
-        { radical, encoded_as: encoded, strokes, ivd_status: ivd.status, ivd_sequence: ivd.sequence },
+        { radical, encoded_as: encoded, strokes, ivd_status: ivd.status, ivd_sequence: ivd.sequence, equivalent_to: equivalent.valid ? equivalent.value : null },
       )
     } catch (caught) {
       // A transport error can arrive before or after the insert commits. Recover
@@ -154,6 +177,7 @@ export const actions: Actions = {
     }
 
     const first = await addEvidence(platform.env.DB, result.id, { place: row.place, url: link, provider, provider_url: providerUrl, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, imageMeta, null)
+    await addEvidenceMedia(platform.env.DB, first.id, await storeExtras(platform.env.IMAGES, extras))
     await saveGenres(platform.env.DB, result.id, genres)
     await saveCollections(platform.env.DB, result.id, collections, first?.id ?? null)
     await saveTags(platform.env.DB, result.id, tags)

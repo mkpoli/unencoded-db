@@ -4,11 +4,13 @@
   import ComparisonGrid from '$lib/components/ComparisonGrid.svelte'
   import EncodingFields from '$lib/components/EncodingFields.svelte'
   import FileField from '$lib/components/FileField.svelte'
+  import ExtraImagesField from '$lib/components/ExtraImagesField.svelte'
   import IdsDrawing from '$lib/components/IdsDrawing.svelte'
   import { cleanLinkInput } from '$lib/link-input'
   import type { PostInfo } from '$lib/source-url'
   import type { Comparison } from '$lib/comparison-rows'
   import { handleContributionResult } from '$lib/contribution-result'
+  import { groupGenres } from '$lib/genres'
   import { localizedHref, t, type Locale } from '$lib/i18n'
   import { DEFAULT_SCRIPT } from '$lib/script'
   import type { Encoding } from '$lib/encodings'
@@ -26,6 +28,7 @@
     comparisons?: { rows: Comparison[] }
   }
   let { form, data }: { form?: Form; data: { locale: Locale; suggestions?: Suggestion[]; genres?: Genre[]; collections?: Collection[]; tags?: string[] } } = $props()
+  const { standalone, groups } = $derived(groupGenres(data.genres))
   let rateLimitFailure = $state<429 | 503 | null>(null)
   const imageError = $derived(form?.errors?.image ?? '')
   // A failed submission seeds the fields once; after that the reader's edits own them.
@@ -92,7 +95,7 @@
     }).catch(() => {})
   })
   // A validation notice belongs to the section that holds the failing field.
-  const errorOrder = ['ids', 'description', 'encodings', 'image', 'url', 'place', 'note', 'title', 'author', 'publisher', 'year', 'page', 'provider', 'provider_url'] as const
+  const errorOrder = ['ids', 'equivalent_to', 'description', 'encodings', 'image', 'url', 'place', 'note', 'title', 'author', 'publisher', 'year', 'page', 'provider', 'provider_url'] as const
   const operators = new Set([...'⿰⿱⿲⿳⿴⿵⿶⿷⿸⿹⿺⿻'])
   const suggestions = $derived(related(data.suggestions ?? [], ids))
 
@@ -187,10 +190,16 @@
           </div>
         {/if}
       </div>
+      <div class="field">
+        <label class="field-label" for="equivalent_to">{t(data.locale, 'field.equivalentTo')}</label>
+        <input id="equivalent_to" class="one-char" name="equivalent_to" maxlength="80" value={form?.values?.equivalent_to ?? ''} autocomplete="off" spellcheck="false" aria-invalid={!!form?.errors?.equivalent_to} aria-describedby={form?.errors?.equivalent_to ? 'equivalent-to-help equivalent-to-error' : 'equivalent-to-help'} />
+        <p class="field-help" id="equivalent-to-help">{t(data.locale, 'field.equivalentToHint')}</p>
+        {#if form?.errors?.equivalent_to}<p class="field-error" id="equivalent-to-error">{form.errors.equivalent_to}</p>{/if}
+      </div>
       <fieldset class="field tags-field">
         <legend class="field-label">{t(data.locale, 'field.tags')}</legend>
         <div class="genre-options">
-          {#each data.genres ?? [] as genre (genre.slug)}
+          {#each standalone as genre (genre.slug)}
             <label class="genre-option">
               <input type="checkbox" name="genre" value={genre.slug} checked={form?.values?.genres?.includes(genre.slug)} />
               <span class="genre-box" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 6.4 4.6 9 10.2 2.8" /></svg></span>{genre.label}
@@ -209,6 +218,22 @@
             </span>
           {/each}
         </div>
+        {#each groups as group (group.parent.slug)}
+          <div class="genre-group">
+            <label class="genre-option genre-option-parent">
+              <input type="checkbox" name="genre" value={group.parent.slug} checked={form?.values?.genres?.includes(group.parent.slug)} />
+              <span class="genre-box" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 6.4 4.6 9 10.2 2.8" /></svg></span>{group.parent.label}
+            </label>
+            <div class="genre-options">
+              {#each group.children as genre (genre.slug)}
+                <label class="genre-option">
+                  <input type="checkbox" name="genre" value={genre.slug} checked={form?.values?.genres?.includes(genre.slug)} />
+                  <span class="genre-box" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 6.4 4.6 9 10.2 2.8" /></svg></span>{genre.label}
+                </label>
+              {/each}
+            </div>
+          </div>
+        {/each}
         <div class="tag-add">
           <input id="tag" bind:value={tagDraft} list="tag-suggestions" maxlength="80" onkeydown={tagKeydown} onblur={addTag} aria-label={t(data.locale, 'tag.add')} />
           <datalist id="tag-suggestions">{#each data.tags ?? [] as tag}<option value={tag}></option>{/each}</datalist>
@@ -256,6 +281,12 @@
           fetchingLabel={t(data.locale, 'field.linkImageWorking')}
           fetchFailedLabel={t(data.locale, 'field.linkImageFailed')}
           onpost={fillFromPost}
+        />
+        <ExtraImagesField
+          label={t(data.locale, 'field.extraImages')}
+          choose={t(data.locale, 'field.chooseImage')}
+          remove={t(data.locale, 'field.removeImage')}
+          hint={t(data.locale, 'field.extraImagesHint')}
         />
         <p class="field-help" id="image-help">{t(data.locale, 'field.sourceImageHint')}</p>
         <p class="field-help" id="image-rights">{t(data.locale, 'field.rightsHint')}</p>

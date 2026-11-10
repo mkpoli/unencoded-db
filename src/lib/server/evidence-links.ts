@@ -78,6 +78,23 @@ export async function addEvidence(db: D1Database, entryId: number, input: Eviden
   return row
 }
 
+export type EvidenceMedia = { id: number; evidence_id: number }
+
+/** Every stored picture for an entry's evidence, oldest first. */
+export async function listEvidenceMedia(db: D1Database, entryId: number): Promise<EvidenceMedia[]> {
+  const { results } = await db.prepare(`SELECT m.id, em.evidence_id FROM evidence_media em JOIN media m ON m.id = em.media_id JOIN evidence ev ON ev.id = em.evidence_id WHERE ev.entry_id = ? ORDER BY em.evidence_id, m.id`).bind(entryId).all<EvidenceMedia>()
+  return results
+}
+
+/** Add pictures to an existing evidence record as gallery images. */
+export async function addEvidenceMedia(db: D1Database, evidenceId: number, images: { key: string; type: string; size: number }[]) {
+  const now = new Date().toISOString()
+  for (const image of images) {
+    const media = await mediaId(db, image, now)
+    await db.prepare('INSERT OR IGNORE INTO evidence_media (evidence_id, media_id) VALUES (?, ?)').bind(evidenceId, media).run()
+  }
+}
+
 /** The evidence record a new entry was created from; it mirrors the entry's source columns. */
 export async function primaryEvidenceId(db: D1Database, entryId: number): Promise<number | null> {
   const row = await db.prepare('SELECT id FROM evidence WHERE entry_id = ? ORDER BY id LIMIT 1').bind(entryId).first<{ id: number }>()
@@ -97,6 +114,9 @@ export async function updateEvidence(
   guard?: { revision: number; generation: number },
 ) {
   const now = new Date().toISOString()
+  const oldImage = image !== undefined
+    ? await db.prepare('SELECT image_key FROM evidence WHERE id = ? AND entry_id = ?').bind(evidenceId, entryId).first<{ image_key: string | null }>()
+    : null
   const date = parseDate(fields.year)
   const columns = [...evidenceFields, 'date_year', 'date_month', 'date_day', 'date_precision']
   const values: (string | number | null)[] = [...evidenceFields.map(name => fields[name]), date.date_year, date.date_month, date.date_day, date.date_precision]
@@ -115,7 +135,10 @@ export async function updateEvidence(
   const source = await sourceId(db, fields, now)
   await db.prepare('INSERT OR IGNORE INTO evidence_sources (evidence_id, source_id) VALUES (?, ?)').bind(evidenceId, source).run()
   if (image !== undefined) {
-    await db.prepare('DELETE FROM evidence_media WHERE evidence_id = ?').bind(evidenceId).run()
+    // Replace only the cover's own media row; extra pictures stay in the gallery.
+    if (oldImage?.image_key) {
+      await db.prepare('DELETE FROM evidence_media WHERE evidence_id = ? AND media_id IN (SELECT id FROM media WHERE key = ?)').bind(evidenceId, oldImage.image_key).run()
+    }
     await db.prepare('DELETE FROM crops WHERE evidence_id = ?').bind(evidenceId).run()
     if (image) {
       const media = await mediaId(db, image, now)

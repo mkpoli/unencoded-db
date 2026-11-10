@@ -522,6 +522,25 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
+  test('stores the existing character a variant is equivalent to', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      await expect(actions.default!(event({ ...record, equivalent_to: '漢' }, DB, images))).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT equivalent_to FROM entries WHERE id = 1').get()).toEqual({ equivalent_to: '漢' })
+      const shown = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as { entry: { equivalent_to: string } }
+      expect(shown.entry).toMatchObject({ equivalent_to: '漢' })
+      const listing = await list({ platform: { env: { DB } }, url: new URL('https://example.test/en') } as any) as { entries: { equivalent_to: string }[] }
+      expect(listing.entries[0]).toMatchObject({ equivalent_to: '漢' })
+
+      const invalid = await actions.default!(event({ ...record, ids: '⿱日木', equivalent_to: '漢字' }, DB, images)) as { status: number; data: { errors: { equivalent_to: string } } }
+      expect(invalid.status).toBe(400)
+      expect(invalid.data.errors.equivalent_to).toContain('one character')
+      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 1 })
+    } finally { db.close() }
+  })
+
   test('stores free-form character tags', async () => {
     const db = createTestDatabase()
     const images = fakeImages()
@@ -529,6 +548,29 @@ describe('evidence routes', () => {
       const e = event({ ...record, tags: '客話, 木' }, d1Binding(db), images)
       await expect(actions.default!(e)).rejects.toMatchObject({ status: 303 })
       expect(db.query('SELECT tag FROM character_tags ORDER BY tag').all()).toEqual([{ tag: '客話' }, { tag: '木' }])
+    } finally { db.close() }
+  })
+
+  test('stores extra pictures on one evidence record', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const form = new FormData()
+      for (const [key, value] of Object.entries(record)) form.set(key, value)
+      form.set('image', imageFile(PNG_BYTES))
+      form.append('extra_image', imageFile(PNG_BYTES, 'second.png'))
+      form.append('extra_image', imageFile(PNG_BYTES, 'third.png'))
+      const e = {
+        request: new Request('https://example.test/en/new', { method: 'POST', body: form }),
+        url: new URL('https://example.test/en/new'),
+        cookies: testCookies().cookies,
+        platform: { env: { DB: d1Binding(db), IMAGES: images.bucket } },
+        params: { locale: 'en' },
+      } as any
+      await expect(actions.default!(e)).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT count(*) AS n FROM evidence').get()).toEqual({ n: 1 })
+      expect(db.query('SELECT count(*) AS n FROM evidence_media').get()).toEqual({ n: 3 })
+      expect(images.puts).toHaveLength(3)
     } finally { db.close() }
   })
 
@@ -773,13 +815,13 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
-  test('offers the grouped category taxonomy and splits kokuji by origin', async () => {
+  test('offers the grouped category taxonomy with dialect and reform groups', async () => {
     const db = createTestDatabase()
     try {
       const data = await newForm({ platform: { env: { DB: d1Binding(db) } } } as any) as any
-      expect(data.genres).toHaveLength(22)
+      expect(data.genres).toHaveLength(29)
       const labels = data.genres.map((genre: { label: string }) => genre.label)
-      for (const named of ['方言字', '日本國字', '朝鮮國字', '吳語', '閩東語', '樂譜', '醫藥', '化學', '度量衡', '道教', '切身', '音譯']) {
+      for (const named of ['方言字', '日本國字', '朝鮮國字', '吳語', '閩東語', '樂譜', '醫藥', '化學', '度量衡', '道教', '切身', '音譯', '略字・簡化字', '日本新字體', '日本擴張新字體', '大陸簡體字', '大陸二簡字', '韓國略字', '日本俗略字']) {
         expect(labels).toContain(named)
       }
       expect(labels).not.toContain('醫學')
@@ -787,6 +829,9 @@ describe('evidence routes', () => {
       expect(data.genres.find((genre: { slug: string }) => genre.slug === 'medicine')).toEqual({ slug: 'medicine', label: '醫藥', parent: null })
       expect(data.genres.find((genre: { slug: string }) => genre.slug === 'kokuji')).toEqual({ slug: 'kokuji', label: '日本國字', parent: 'dialect' })
       expect(data.genres.find((genre: { slug: string }) => genre.slug === 'dialect')).toEqual({ slug: 'dialect', label: '方言字', parent: null })
+      expect(data.genres.find((genre: { slug: string }) => genre.slug === 'abbreviation')).toEqual({ slug: 'abbreviation', label: '略字・簡化字', parent: null })
+      expect(data.genres.find((genre: { slug: string }) => genre.slug === 'shinjitai')).toEqual({ slug: 'shinjitai', label: '日本新字體', parent: 'abbreviation' })
+      expect(data.genres.find((genre: { slug: string }) => genre.slug === 'simplified-cn-2')).toEqual({ slug: 'simplified-cn-2', label: '大陸二簡字', parent: 'abbreviation' })
     } finally { db.close() }
   })
 
@@ -813,7 +858,7 @@ describe('evidence routes', () => {
       for (const genre of (await newForm({ platform: { env: { DB } } } as any) as any).genres as { slug: string; label: string }[]) {
         const browsed = await genrePage({ platform: { env: { DB } }, params: { locale: 'en', slug: genre.slug } } as any) as any
         expect(browsed.genre).toEqual(genre)
-        expect(browsed.genres).toHaveLength(22)
+        expect(browsed.genres).toHaveLength(29)
         expect(browsed.entries.map((row: { id: number }) => row.id)).toEqual(
           ['medicine', 'wu', 'taoism', 'dialect'].includes(genre.slug) ? [1] : []
         )

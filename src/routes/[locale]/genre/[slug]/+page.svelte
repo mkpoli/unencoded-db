@@ -1,9 +1,8 @@
 <script lang="ts">
+  import { groupGenres } from '$lib/genres'
   import { localizedHref, t, type Locale } from '$lib/i18n'
   let { data }: { data: { locale: Locale; genre: { slug: string; label: string }; genres?: { slug: string; label: string; parent: string | null }[]; entries: { id: number; script: string; ids: string | null; description: string | null }[] } } = $props()
-  const topGenres = $derived((data.genres ?? []).filter(genre => !genre.parent && genre.slug !== 'dialect'))
-  const dialect = $derived((data.genres ?? []).find(genre => genre.slug === 'dialect'))
-  const dialectGenres = $derived((data.genres ?? []).filter(genre => genre.parent === 'dialect'))
+  const { standalone, groups } = $derived(groupGenres(data.genres))
 </script>
 
 <svelte:head><title>{data.genre.label} · {t(data.locale, 'app.name')}</title></svelte:head>
@@ -14,18 +13,18 @@
     <h1>{data.genre.label}</h1>
     {#if data.genres?.length}
       <p class="genre-list">
-        {#each topGenres as item (item.slug)}
+        {#each standalone as item (item.slug)}
           <a class="genre-chip" aria-current={item.slug === data.genre.slug ? 'page' : undefined} href={localizedHref(data.locale, `/genre/${item.slug}`)}>{item.label}</a>
         {/each}
       </p>
-      {#if dialect && dialectGenres.length}
+      {#each groups as group (group.parent.slug)}
         <p class="genre-list genre-list-group">
-          <a class="genre-chip" aria-current={dialect.slug === data.genre.slug ? 'page' : undefined} href={localizedHref(data.locale, `/genre/${dialect.slug}`)}>{dialect.label}</a>
-          {#each dialectGenres as item (item.slug)}
+          <a class="genre-chip" aria-current={group.parent.slug === data.genre.slug ? 'page' : undefined} href={localizedHref(data.locale, `/genre/${group.parent.slug}`)}>{group.parent.label}</a>
+          {#each group.children as item (item.slug)}
             <a class="genre-chip" aria-current={item.slug === data.genre.slug ? 'page' : undefined} href={localizedHref(data.locale, `/genre/${item.slug}`)}>{item.label}</a>
           {/each}
         </p>
-      {/if}
+      {/each}
     {/if}
   </header>
   {#if data.entries.length}

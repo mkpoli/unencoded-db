@@ -20,6 +20,7 @@ const idsDrawing = resolve('src/lib/components/IdsDrawing.svelte')
 const scriptSelect = resolve('src/lib/components/ScriptSelect.svelte')
 const comparisonGrid = resolve('src/lib/components/ComparisonGrid.svelte')
 const encodingFields = resolve('src/lib/components/EncodingFields.svelte')
+const extraImagesField = resolve('src/lib/components/ExtraImagesField.svelte')
 const appForms = resolve(tmp, 'app-forms.js')
 writeFileSync(appForms, 'export function enhance() { return {} }\n')
 const components = new Map<string, Promise<any>>()
@@ -30,6 +31,7 @@ let idsDrawingModule: Promise<string> | null = null
 let scriptSelectModule: Promise<string> | null = null
 let comparisonGridModule: Promise<string> | null = null
 let encodingFieldsModule: Promise<string> | null = null
+let extraImagesFieldModule: Promise<string> | null = null
 
 function loadFileField(): Promise<string> {
   if (!fileFieldModule) {
@@ -124,6 +126,19 @@ function loadScriptSelect(): Promise<string> {
   return scriptSelectModule
 }
 
+function loadExtraImagesField(): Promise<string> {
+  if (!extraImagesFieldModule) {
+    extraImagesFieldModule = (async () => {
+      const preprocessed = await preprocess(readFileSync(extraImagesField, 'utf8'), vitePreprocess({ script: true }), { filename: extraImagesField })
+      const { js } = compile(preprocessed.code, { filename: extraImagesField, generate: 'server' })
+      const target = resolve(tmp, 'extra-images-field.js')
+      writeFileSync(target, js.code)
+      return target
+    })()
+  }
+  return extraImagesFieldModule
+}
+
 async function load(path: string, name: string) {
   let pending = components.get(name)
   if (!pending) {
@@ -138,7 +153,8 @@ async function load(path: string, name: string) {
       const select = await loadScriptSelect()
       const grid = await loadComparisonGrid()
       const encoding = await loadEncodingFields()
-      const code = js.code.replaceAll('"$lib/components/ComparisonGrid.svelte"', `"${grid}"`).replaceAll("'$lib/components/ComparisonGrid.svelte'", `'${grid}'`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/CropField.svelte'", `'${crop}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$lib/components/IdsDrawing.svelte"', `"${drawing}"`).replaceAll("'$lib/components/IdsDrawing.svelte'", `'${drawing}'`).replaceAll('"$lib/components/EncodingFields.svelte"', `"${encoding}"`).replaceAll("'$lib/components/EncodingFields.svelte'", `'${encoding}'`).replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`).replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`).replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/encodings'", `'${encodings}'`).replaceAll('"$lib/encodings"', `"${encodings}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
+      const extra = await loadExtraImagesField()
+      const code = js.code.replaceAll('"$lib/components/ComparisonGrid.svelte"', `"${grid}"`).replaceAll("'$lib/components/ComparisonGrid.svelte'", `'${grid}'`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/CropField.svelte'", `'${crop}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$lib/components/IdsDrawing.svelte"', `"${drawing}"`).replaceAll("'$lib/components/IdsDrawing.svelte'", `'${drawing}'`).replaceAll('"$lib/components/ExtraImagesField.svelte"', `"${extra}"`).replaceAll("'$lib/components/ExtraImagesField.svelte'", `'${extra}'`).replaceAll('"$lib/components/EncodingFields.svelte"', `"${encoding}"`).replaceAll("'$lib/components/EncodingFields.svelte'", `'${encoding}'`).replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`).replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`).replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/encodings'", `'${encodings}'`).replaceAll('"$lib/encodings"', `"${encodings}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
@@ -187,7 +203,7 @@ describe('localized pages', () => {
 
   test('populated home ends the gallery with an add row', async () => {
     const { body } = await page('src/routes/[locale]/+page.svelte', 'home-add-row', {
-      data: { locale: 'zh-Hant', entries: [{ id: 7, script: 'Han', ids: '⿰木木', place: '本書' }], next: 42, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
+      data: { locale: 'zh-Hant', entries: [{ id: 7, script: 'Han', ids: '⿰木木', place: '本書', equivalent_to: '漢' }], next: 42, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
     })
     // The add row is the gallery's last child; entry cards hold no divs, so the first closing div ends the grid.
     const start = body.indexOf('class="card-grid gallery"')
@@ -196,6 +212,9 @@ describe('localized pages', () => {
     expect(grid).toContain('href="/zh-Hant/entry/7"')
     expect(grid).toContain('class="add-card"')
     expect(grid).toContain('href="/zh-Hant/new"')
+    expect(grid).toContain('class="equivalent"')
+    expect(grid).toContain('= 漢')
+    expect(grid).toContain('對應字：漢')
     expect(grid).toContain('新增字')
     expect(grid.indexOf('class="add-card"')).toBeGreaterThan(grid.indexOf('href="/zh-Hant/entry/7"'))
   })
@@ -244,11 +263,11 @@ describe('localized pages', () => {
     const { head, body } = await page('src/routes/[locale]/new/+page.svelte', 'new', {
       data: {
         locale: 'zh-Hant',
-        genres: [{ slug: 'music', label: '音樂', parent: null }, { slug: 'dialect', label: '方言字', parent: null }],
+        genres: [{ slug: 'music', label: '音樂', parent: null }, { slug: 'dialect', label: '方言字', parent: null }, { slug: 'abbreviation', label: '略字・簡化字', parent: null }, { slug: 'shinjitai', label: '日本新字體', parent: 'abbreviation' }],
         collections: [{ slug: 'extension-e', label: 'Extension E' }],
         tags: ['客語'],
       },
-      form: { errors: { image: '圖片必須是有效的JPEG、PNG或WebP檔案。' }, values: { script: 'Han' } },
+      form: { errors: { image: '圖片必須是有效的JPEG、PNG或WebP檔案。' }, values: { script: 'Han', equivalent_to: '漢' } },
     })
     expect(head).toContain('新增字 · 珍字集覽')
     expect(body).toContain('<h1>新增字</h1>')
@@ -285,12 +304,20 @@ describe('localized pages', () => {
     expect(body).toContain('class="required-mark" aria-hidden="true">*</span>')
     expect(body).toContain('https://ids.mkpo.li/')
     expect(body).toContain('IDS Workshop')
+    expect(body).toContain('name="equivalent_to"')
+    expect(body).toContain('value="漢"')
+    expect(body).toContain('對應字')
+    expect(body).toContain('此字對應的既有文字。')
     expect(body).toContain('name="tags"')
     expect(body).toContain('name="encoding_charset"')
     expect(body).toContain('name="encoding_code"')
+    expect(body).toContain('name="extra_image"')
     expect(body).toContain('U+2D6DD')
     expect(body).toContain('name="genre" value="music"')
     expect(body).toContain('name="genre" value="dialect"')
+    expect(body).toContain('class="genre-group"')
+    expect(body).toContain('name="genre" value="abbreviation"')
+    expect(body).toContain('name="genre" value="shinjitai"')
     expect(body).toContain('name="collection" value="extension-e"')
     expect(body).toContain('name="url"')
     expect(body).toContain('連結')
@@ -345,6 +372,20 @@ describe('localized pages', () => {
     expect(body).toContain('수정 이력')
     expect(body).not.toContain('src="/ko/entry/9/image"')
     expect(body).not.toContain('https://example.org/source')
+  })
+
+  test('entry page shows the character it normalizes to', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-equivalent', {
+      data: {
+        locale: 'en',
+        entry: { id: 9, script: 'Han', ids: '⿰木木', description: null, radical: null, encoded_as: null, equivalent_to: '漢', strokes: null, ivd_status: null, ivd_sequence: null, created_at: '2026-11-08T05:00:00.000Z' },
+        glyph: null,
+        comparisons: [],
+        evidence: [],
+      },
+    })
+    expect(body).toContain('Equivalent character')
+    expect(body).toContain('<dd>漢</dd>')
   })
 
   test('entry page shows IVD membership apart from the encoding', async () => {
@@ -456,7 +497,7 @@ describe('localized pages', () => {
     const { head, body } = await page('src/routes/[locale]/entry/[id]/edit/+page.svelte', 'edit', {
       data: {
         locale: 'ja',
-        entry: { id: 9, revision: 2, edit_generation: 5, script: 'Han', ids: '⿰木木', description: '説明', radical: null, encoded_as: null, strokes: null, comparisons: [] },
+        entry: { id: 9, revision: 2, edit_generation: 5, script: 'Han', ids: '⿰木木', description: '説明', radical: null, encoded_as: null, equivalent_to: '漢', strokes: null, comparisons: [] },
         evidence: [{ id: 4, place: '本書', url: 'https://example.org/scan', title: '題名', author: '著者', publisher: '出版者', year: '1900', page: '8', note: 'メモ', has_image: 1, source_id: null }],
         senses: [{ id: 1, gloss: '意味', reading: 'いみ' }],
         tags: ['客家'],
@@ -489,6 +530,8 @@ describe('localized pages', () => {
     expect(body).toContain('<select id="script" name="script"')
     expect(body).toContain('name="url"')
     expect(body).toContain('value="https://example.org/scan"')
+    expect(body).toContain('name="equivalent_to"')
+    expect(body).toContain('value="漢"')
     expect(body).toContain('name="description"')
     expect(body).toContain('name="sense_gloss"')
     expect(body).toContain('name="evidence"')
@@ -655,7 +698,7 @@ describe('localized pages', () => {
       data: {
         locale: 'zh-Hant',
         genre: { slug: 'wu', label: '吳語' },
-        genres: [{ slug: 'music', label: '樂譜' }, { slug: 'medicine', label: '醫藥' }, { slug: 'wu', label: '吳語' }],
+        genres: [{ slug: 'music', label: '樂譜' }, { slug: 'medicine', label: '醫藥' }, { slug: 'wu', label: '吳語' }, { slug: 'abbreviation', label: '略字・簡化字' }, { slug: 'shinjitai', label: '日本新字體', parent: 'abbreviation' }],
         entries: [{ id: 5, script: 'Han', ids: '⿰口儂', description: '吳語代詞' }],
       },
     })
@@ -663,6 +706,9 @@ describe('localized pages', () => {
     expect(body).toContain('<h1>吳語</h1>')
     expect(body).toContain('href="/zh-Hant/genre/medicine"')
     expect(body).toContain('醫藥')
+    expect(body).toContain('class="genre-list genre-list-group"')
+    expect(body).toContain('href="/zh-Hant/genre/abbreviation"')
+    expect(body).toContain('href="/zh-Hant/genre/shinjitai"')
     expect(body).toContain('aria-current="page" href="/zh-Hant/genre/wu"')
     expect(body).toContain('href="/zh-Hant/entry/5"')
     expect(body).toContain('⿰口儂')
