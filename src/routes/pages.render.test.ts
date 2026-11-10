@@ -225,7 +225,7 @@ describe('localized pages', () => {
     const { head, body } = await page('src/routes/[locale]/new/+page.svelte', 'new', {
       data: {
         locale: 'zh-Hant',
-        genres: [{ slug: 'music', label: '音樂', parent: null }, { slug: 'dialect', label: '方言字', parent: null }],
+        genres: [{ slug: 'music', label: '音樂', parent: null }, { slug: 'dialect', label: '方言字', parent: null }, { slug: 'abbreviation', label: '略字・簡化字', parent: null }, { slug: 'shinjitai', label: '日本新字體', parent: 'abbreviation' }],
         collections: [{ slug: 'extension-e', label: 'Extension E' }],
         tags: ['客語'],
       },
@@ -270,6 +270,9 @@ describe('localized pages', () => {
     expect(body).toContain('U+2D6DD')
     expect(body).toContain('name="genre" value="music"')
     expect(body).toContain('name="genre" value="dialect"')
+    expect(body).toContain('class="genre-group"')
+    expect(body).toContain('name="genre" value="abbreviation"')
+    expect(body).toContain('name="genre" value="shinjitai"')
     expect(body).toContain('name="collection" value="extension-e"')
     expect(body).toContain('name="url"')
     expect(body).toContain('連結')
@@ -634,7 +637,7 @@ describe('localized pages', () => {
       data: {
         locale: 'zh-Hant',
         genre: { slug: 'wu', label: '吳語' },
-        genres: [{ slug: 'music', label: '樂譜' }, { slug: 'medicine', label: '醫藥' }, { slug: 'wu', label: '吳語' }],
+        genres: [{ slug: 'music', label: '樂譜' }, { slug: 'medicine', label: '醫藥' }, { slug: 'wu', label: '吳語' }, { slug: 'abbreviation', label: '略字・簡化字' }, { slug: 'shinjitai', label: '日本新字體', parent: 'abbreviation' }],
         entries: [{ id: 5, script: 'Han', ids: '⿰口儂', description: '吳語代詞' }],
       },
     })
@@ -642,6 +645,9 @@ describe('localized pages', () => {
     expect(body).toContain('<h1>吳語</h1>')
     expect(body).toContain('href="/zh-Hant/genre/medicine"')
     expect(body).toContain('醫藥')
+    expect(body).toContain('class="genre-list genre-list-group"')
+    expect(body).toContain('href="/zh-Hant/genre/abbreviation"')
+    expect(body).toContain('href="/zh-Hant/genre/shinjitai"')
     expect(body).toContain('aria-current="page" href="/zh-Hant/genre/wu"')
     expect(body).toContain('href="/zh-Hant/entry/5"')
     expect(body).toContain('⿰口儂')
