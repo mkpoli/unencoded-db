@@ -43,6 +43,7 @@
     // A pause in typing asks once; a newer description aborts the one before.
     const timer = setTimeout(() => {
       ask(text, { signal: controller.signal }).then(drawn => {
+        if (controller.signal.aborted) return
         drawing = drawn
         waiting = false
       }, error => {
