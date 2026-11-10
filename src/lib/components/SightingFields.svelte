@@ -6,7 +6,7 @@
 
   let { values = {}, requirePlace = true }: { values?: Partial<SightingFields>; requirePlace?: boolean } = $props()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
-  const filled = $derived(Boolean(values.title || values.author || values.publisher || values.year || values.page || values.context || values.style || values.types || values.note))
+  const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.original_date || values.page || values.context || values.style || values.types || values.note))
 </script>
 
 <div class="field">
@@ -38,10 +38,9 @@
     <div class="field"><label for="title">{t('field.title')}</label><input id="title" class="input" name="title" value={values.title ?? ''} /></div>
     <div class="field"><label for="author">{t('field.author')}</label><input id="author" class="input" name="author" value={values.author ?? ''} /></div>
     <div class="field"><label for="publisher">{t('field.publisher')}</label><input id="publisher" class="input" name="publisher" value={values.publisher ?? ''} /></div>
-    <div class="grid-2">
-      <div class="field"><label for="year">{t('field.year')}</label><input id="year" class="input" name="year" value={values.year ?? ''} /></div>
-      <div class="field"><label for="page">{t('field.page')}</label><input id="page" class="input" name="page" value={values.page ?? ''} /></div>
-    </div>
+    <div class="field"><label for="page">{t('field.page')}</label><input id="page" class="input" name="page" value={values.page ?? ''} /></div>
+    <div class="field"><label for="report_date">{t('field.reportDate')}</label><input id="report_date" class="input" name="report_date" value={values.report_date ?? ''} /><p class="hint">{t('field.reportDateHint')}</p></div>
+    <div class="field"><label for="original_date">{t('field.originalDate')}</label><input id="original_date" class="input" name="original_date" value={values.original_date ?? ''} /><p class="hint">{t('field.originalDateHint')}</p></div>
     <div class="field"><label for="context">{t('field.context')}</label>
       <select id="context" class="input" name="context" value={values.context ?? ''}><option value="">{t('field.unset')}</option>{#each CONTEXTS as item}<option value={item}>{t(`context.${item}`)}</option>{/each}</select></div>
     <div class="field"><label for="style">{t('field.style')}</label>

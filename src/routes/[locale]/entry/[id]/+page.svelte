@@ -21,7 +21,8 @@
     { key: 'author', label: 'field.author' },
     { key: 'title', label: 'field.title' },
     { key: 'publisher', label: 'field.publisher' },
-    { key: 'year', label: 'field.year' },
+    { key: 'report_date', label: 'field.reportDate' },
+    { key: 'original_date', label: 'field.originalDate' },
     { key: 'page', label: 'field.page' },
   ] as const
   const label = (key: `${string}.${string}`, fallback: string) => { const text = t(key); return text === key ? fallback : text }

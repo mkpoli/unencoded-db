@@ -5,7 +5,7 @@ import { openTestDb } from '$lib/server/testdb'
 import { actions, load } from './+page.server'
 
 const fields: EntryFields = { script: 'han', script_other: null, ids: null, description: null, status: 'unchecked', encoded_as: null, related: null, related_characters: null, reading: null, meaning: null, radical: null, strokes: null }
-const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, year: null, page: null, context: null, style: null, types: null, note: null }
+const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
 
 test('legacy entry snapshots remain visible', async () => {
   const { db } = openTestDb()

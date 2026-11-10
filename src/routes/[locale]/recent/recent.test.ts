@@ -49,7 +49,7 @@ test('recent carries the old version of every readable revision', async () => {
   const { db } = openTestDb()
   const person = await createPerson(db)
   const fields: EntryFields = { script: 'han', script_other: null, ids: '⿰木木', description: null, status: 'unchecked', encoded_as: null, related: null, related_characters: null, reading: null, meaning: null, radical: null, strokes: null }
-  const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, year: null, page: null, context: null, style: null, types: null, note: null }
+  const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
   const id = await createEntry(db, fields, sighting, null, { actor: person.id, ip: null })
   await editEntry(db, id, 1, { ...fields, description: 'Later' }, { actor: person.id, ip: null }, 'Corrected')
   const result = await load(event(db)) as any

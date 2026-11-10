@@ -24,7 +24,7 @@
     </span>
   {/if}
   <span class="meta">
-    {#if tile.firstYear}<time datetime={tile.firstYear} title={t('field.year')}>{tile.firstYear}</time><span aria-hidden="true">·</span>{/if}
+    {#if tile.firstYear}<time datetime={tile.firstYear} title={t(tile.firstYearKind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{tile.firstYear}</time><span aria-hidden="true">·</span>{/if}
     <span class="sightings">{t(tile.sightings === 1 ? 'browse.sighting' : 'browse.sightings', { n: tile.sightings })}</span>
   </span>
 </a>

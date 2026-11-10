@@ -4,7 +4,7 @@ import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
 const fields = (over: Partial<EntryFields> = {}): EntryFields => ({ script: 'han', script_other: null, ids: null, description: null, status: 'unchecked', encoded_as: null, related: null, related_characters: null, reading: null, meaning: null, radical: null, strokes: null, ...over })
-const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, year: null, page: null, context: null, style: null, types: null, note: null, ...over })
+const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null, ...over })
 const image: StoredImage = { image_key: 'a.webp', image_type: 'image/webp', image_w: 100, image_h: 100, thumb_key: 't.webp', box: null }
 
 let db: D1Database, raw: ReturnType<typeof openTestDb>['raw'], who: { actor: string; ip: null }
@@ -105,11 +105,11 @@ describe('adding a record', () => {
   })
 
   test('a tile summarizes its source types and the earliest report year among its sightings', async () => {
-    const id = await createEntry(db, fields(), seen({ year: '1932', types: JSON.stringify(['mention']) }), null, who)
-    await addSighting(db, id, seen({ year: 'c. 1716', types: JSON.stringify(['reading', 'attestation']) }), null, who)
-    await addSighting(db, id, seen({ year: '1897', types: JSON.stringify(['attestation']) }), null, who)
+    const id = await createEntry(db, fields(), seen({ report_date: '1932', types: JSON.stringify(['mention']) }), null, who)
+    await addSighting(db, id, seen({ report_date: 'c. 1716', types: JSON.stringify(['reading', 'attestation']) }), null, who)
+    await addSighting(db, id, seen({ report_date: '1897', types: JSON.stringify(['attestation']) }), null, who)
     const [tile] = (await list(db, {}))!.tiles
-    expect(tile).toMatchObject({ id, types: ['mention', 'attestation', 'reading'], firstYear: '1716', sightings: 3 })
+    expect(tile).toMatchObject({ id, types: ['mention', 'attestation', 'reading'], firstYear: '1716', firstYearKind: 'report', sightings: 3 })
   })
 })
 
@@ -475,6 +475,24 @@ describe('source types', () => {
     expect((await getEntry(db, id))!.sightings[0].types).toBe(JSON.stringify(['reading']))
     const edited = (await history(db, id)).find(row => row.kind === 'sighting_edit')!
     expect(JSON.parse(edited.snapshot).types).toBe(JSON.stringify(['reading']))
+  })
+})
+
+describe('source dates', () => {
+  test('reads the report date apart from the original date', () => {
+    const form = new FormData()
+    form.set('report_date', '2024-05-01')
+    form.set('original_date', '1890')
+    expect(readSightingFields(form)).toMatchObject({ report_date: '2024-05-01', original_date: '1890' })
+  })
+
+  test('keeps both dates, and lists the older work rather than the post that showed it', async () => {
+    const post = await createEntry(db, fields(), seen({ report_date: '2024-05-01', original_date: '1890' }), null, who)
+    const book = await createEntry(db, fields(), seen({ report_date: '1998' }), null, who)
+    expect((await getEntry(db, post))!.sightings[0]).toMatchObject({ report_date: '2024-05-01', original_date: '1890' })
+    const tiles = (await list(db, {}))!.tiles
+    expect(tiles.find(tile => tile.id === post)).toMatchObject({ firstYear: '1890', firstYearKind: 'original' })
+    expect(tiles.find(tile => tile.id === book)).toMatchObject({ firstYear: '1998', firstYearKind: 'report' })
   })
 })
 

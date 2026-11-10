@@ -4,7 +4,7 @@ import { createPerson } from './people'
 import { openTestDb } from './testdb'
 
 const entry: EntryFields = { script: 'han', script_other: null, ids: null, description: null, status: 'unchecked', encoded_as: null, related: null, related_characters: null, reading: null, meaning: null, radical: null, strokes: null }
-const seen = (place: string): SightingFields => ({ place, url: null, title: null, author: null, publisher: null, year: null, page: null, context: null, style: null, types: null, note: null })
+const seen = (place: string): SightingFields => ({ place, url: null, title: null, author: null, publisher: null, report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null })
 const image: StoredImage = { image_key: 'current.webp', image_type: 'image/webp', image_w: 100, image_h: 80, thumb_key: 'thumb.webp', box: '[1,2,10,10]' }
 
 async function fixture() {
