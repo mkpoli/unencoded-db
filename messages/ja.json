@@ -86,6 +86,8 @@
   "field.ivdRegistered": "登録済み",
   "field.ivdSequence": "IVDシーケンス",
   "field.ivdUnstated": "未記入",
+  "field.linkImageFailed": "投稿の画像を追加できませんでした。ファイルを選択してください。",
+  "field.linkImageWorking": "投稿から画像を取得しています",
   "field.moreDetails": "詳細を追加",
   "field.note": "出典についてのメモ",
   "field.page": "ページ",

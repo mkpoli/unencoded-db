@@ -11,6 +11,7 @@ import { publicEntryPredicate } from '$lib/server/visibility'
 import { listTags, parseTags, saveTags } from '$lib/server/tags'
 import { parseSenses, saveSenses } from '$lib/server/senses'
 import { readIvd } from '$lib/server/ivd'
+import { cleanSourceUrl } from '$lib/source-url'
 import type { Actions, PageServerLoad } from './$types'
 
 function imageError(locale: Locale, error: ImageError): string {
@@ -55,7 +56,7 @@ export const actions: Actions = {
     const errors: FormErrors = {}
     const rawProvider = String(form.get('provider') ?? '').normalize('NFC').trim()
     const rawProviderUrl = String(form.get('provider_url') ?? '').normalize('NFC').trim()
-    const rawLink = String(form.get('url') ?? '').normalize('NFC').trim()
+    const rawLink = cleanSourceUrl(String(form.get('url') ?? '').normalize('NFC').trim())
     if (rawProvider.length > 300) errors.provider = t(locale, 'error.length')
     if (rawProviderUrl.length > 1000 || (rawProviderUrl && !/^https?:\/\//i.test(rawProviderUrl))) errors.provider_url = t(locale, 'error.length')
     if (rawLink.length > 1000 || (rawLink && !/^https?:\/\//i.test(rawLink))) errors.url = t(locale, 'error.length')

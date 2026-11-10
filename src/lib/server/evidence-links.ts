@@ -1,4 +1,5 @@
 import type { SourceImageMeta } from './attribution'
+import { cleanSourceUrl } from '$lib/source-url'
 
 export type DatePrecision = 'day' | 'month' | 'year' | 'month-only' | 'text'
 export type DateParts = { date_year: number | null; date_month: number | null; date_day: number | null; date_precision: DatePrecision }
@@ -39,7 +40,8 @@ export function readEvidenceFields(form: FormData): EvidenceFields | null {
     if (text.length > limits[name]) return null
     row[name] = text || null
   }
-  if (row.url && !/^https?:\/\//i.test(row.url)) return null
+  if (row.url) row.url = cleanSourceUrl(row.url)
+  if (row.url && (row.url.length > limits.url || !/^https?:\/\//i.test(row.url))) return null
   if (row.provider_url && !/^https?:\/\//i.test(row.provider_url)) return null
   if (!row.place && !(row.provider && (row.provider_url || row.url))) return null
   row.place ??= ''
