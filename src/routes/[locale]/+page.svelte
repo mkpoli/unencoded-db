@@ -3,7 +3,7 @@
   import { localizedHref, t, type Locale } from '$lib/i18n'
   import { isHanScript } from '$lib/script'
 
-  type Entry = { id: number; script: string; ids: string | null; place: string }
+  type Entry = { id: number; script: string; ids: string | null; place: string; equivalent_to: string | null }
   type ScriptCount = { script: string; n: number }
   type IvdFilter = 'registered' | 'none'
   let { data }: { data: { locale: Locale; entries: Entry[]; next: number | null; glyphs?: Record<string, string>; scripts?: ScriptCount[]; total?: number; script?: string | null; ivd?: IvdFilter | null } } = $props()
@@ -50,6 +50,7 @@
         <span class="script-tag" class:han={isHanScript(entry.script)} title={entry.script}>{entry.script}</span>
         <span class="glyph"><IdsGlyph ids={entry.ids} text={entry.ids || entry.script} path={glyph} /></span>
         {#if entry.ids}<span class="visually-hidden">{entry.ids}</span>{/if}
+        {#if entry.equivalent_to}<span class="equivalent"><span class="visually-hidden">{t(data.locale, 'browse.equivalent', { character: entry.equivalent_to })}</span><span aria-hidden="true">= {entry.equivalent_to}</span></span>{/if}
         <span class="place">{entry.place}</span>
         <span class="record">#{entry.id}</span>
       </a>

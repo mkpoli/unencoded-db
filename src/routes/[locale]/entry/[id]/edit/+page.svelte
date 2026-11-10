@@ -39,6 +39,7 @@
     description: string | null
     radical: string | null
     encoded_as: string | null
+    equivalent_to: string | null
     strokes: number | null
     ivd_status: 'registered' | 'none' | null
     ivd_sequence: string | null
@@ -209,6 +210,12 @@
           <p class="field-help" id="ivd-help">{t(data.locale, 'field.ivdHint')}</p>
           {#if characterError('ivd_sequence')}<p class="field-error" id="ivd_sequence-error">{characterError('ivd_sequence')}</p>{/if}
         </div>
+      </div>
+      <div class="field">
+        <label class="field-label" for="equivalent_to">{t(data.locale, 'field.equivalentTo')}</label>
+        <input id="equivalent_to" class="one-char" name="equivalent_to" maxlength="80" value={current('equivalent_to')} autocomplete="off" spellcheck="false" aria-invalid={!!characterError('equivalent_to')} aria-describedby={characterError('equivalent_to') ? 'equivalent-to-help equivalent-to-error' : 'equivalent-to-help'} />
+        <p class="field-help" id="equivalent-to-help">{t(data.locale, 'field.equivalentToHint')}</p>
+        {#if characterError('equivalent_to')}<p class="field-error" id="equivalent-to-error">{characterError('equivalent_to')}</p>{/if}
       </div>
       <div class="field">
         <label class="field-label" for="description">{t(data.locale, 'field.description')}</label>

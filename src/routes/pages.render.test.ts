@@ -184,7 +184,7 @@ describe('localized pages', () => {
 
   test('populated home ends the gallery with an add row', async () => {
     const { body } = await page('src/routes/[locale]/+page.svelte', 'home-add-row', {
-      data: { locale: 'zh-Hant', entries: [{ id: 7, script: 'Han', ids: '⿰木木', place: '本書' }], next: 42, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
+      data: { locale: 'zh-Hant', entries: [{ id: 7, script: 'Han', ids: '⿰木木', place: '本書', equivalent_to: '漢' }], next: 42, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
     })
     // The add row is the gallery's last child; entry cards hold no divs, so the first closing div ends the grid.
     const start = body.indexOf('class="card-grid gallery"')
@@ -193,6 +193,9 @@ describe('localized pages', () => {
     expect(grid).toContain('href="/zh-Hant/entry/7"')
     expect(grid).toContain('class="add-card"')
     expect(grid).toContain('href="/zh-Hant/new"')
+    expect(grid).toContain('class="equivalent"')
+    expect(grid).toContain('= 漢')
+    expect(grid).toContain('對應字：漢')
     expect(grid).toContain('新增字')
     expect(grid.indexOf('class="add-card"')).toBeGreaterThan(grid.indexOf('href="/zh-Hant/entry/7"'))
   })
@@ -245,7 +248,7 @@ describe('localized pages', () => {
         collections: [{ slug: 'extension-e', label: 'Extension E' }],
         tags: ['客語'],
       },
-      form: { errors: { image: '圖片必須是有效的JPEG、PNG或WebP檔案。' }, values: { script: 'Han' } },
+      form: { errors: { image: '圖片必須是有效的JPEG、PNG或WebP檔案。' }, values: { script: 'Han', equivalent_to: '漢' } },
     })
     expect(head).toContain('新增字 · 珍字集覽')
     expect(body).toContain('<h1>新增字</h1>')
@@ -280,6 +283,10 @@ describe('localized pages', () => {
     expect(body).toContain('class="required-mark" aria-hidden="true">*</span>')
     expect(body).toContain('https://ids.mkpo.li/')
     expect(body).toContain('IDS Workshop')
+    expect(body).toContain('name="equivalent_to"')
+    expect(body).toContain('value="漢"')
+    expect(body).toContain('對應字')
+    expect(body).toContain('此字對應的既有文字。')
     expect(body).toContain('name="tags"')
     expect(body).toContain('name="encoding_charset"')
     expect(body).toContain('name="encoding_code"')
@@ -344,6 +351,20 @@ describe('localized pages', () => {
     expect(body).toContain('수정 이력')
     expect(body).not.toContain('src="/ko/entry/9/image"')
     expect(body).not.toContain('https://example.org/source')
+  })
+
+  test('entry page shows the character it normalizes to', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-equivalent', {
+      data: {
+        locale: 'en',
+        entry: { id: 9, script: 'Han', ids: '⿰木木', description: null, radical: null, encoded_as: null, equivalent_to: '漢', strokes: null, ivd_status: null, ivd_sequence: null, created_at: '2026-11-08T05:00:00.000Z' },
+        glyph: null,
+        comparisons: [],
+        evidence: [],
+      },
+    })
+    expect(body).toContain('Equivalent character')
+    expect(body).toContain('<dd>漢</dd>')
   })
 
   test('entry page shows IVD membership apart from the encoding', async () => {
@@ -455,7 +476,7 @@ describe('localized pages', () => {
     const { head, body } = await page('src/routes/[locale]/entry/[id]/edit/+page.svelte', 'edit', {
       data: {
         locale: 'ja',
-        entry: { id: 9, revision: 2, edit_generation: 5, script: 'Han', ids: '⿰木木', description: '説明', radical: null, encoded_as: null, strokes: null, comparisons: [] },
+        entry: { id: 9, revision: 2, edit_generation: 5, script: 'Han', ids: '⿰木木', description: '説明', radical: null, encoded_as: null, equivalent_to: '漢', strokes: null, comparisons: [] },
         evidence: [{ id: 4, place: '本書', url: 'https://example.org/scan', title: '題名', author: '著者', publisher: '出版者', year: '1900', page: '8', note: 'メモ', has_image: 1, source_id: null }],
         senses: [{ id: 1, gloss: '意味', reading: 'いみ' }],
         tags: ['客家'],
@@ -488,6 +509,8 @@ describe('localized pages', () => {
     expect(body).toContain('<select id="script" name="script"')
     expect(body).toContain('name="url"')
     expect(body).toContain('value="https://example.org/scan"')
+    expect(body).toContain('name="equivalent_to"')
+    expect(body).toContain('value="漢"')
     expect(body).toContain('name="description"')
     expect(body).toContain('name="sense_gloss"')
     expect(body).toContain('name="evidence"')
