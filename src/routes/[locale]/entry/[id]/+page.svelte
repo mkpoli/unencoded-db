@@ -1,6 +1,8 @@
 <script lang="ts">
   import { groupedComparisons, relationshipLabel, type Comparison } from '$lib/comparison-rows'
   import CropField from '$lib/components/CropField.svelte'
+  import FileField from '$lib/components/FileField.svelte'
+  import { cleanLinkInput } from '$lib/link-input'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
   import { encodingSetLabel, type Encoding } from '$lib/encodings'
@@ -146,14 +148,32 @@
     <details class="details">
       <summary>{t(data.locale, 'entry.addSighting')}</summary>
       <form class="details-body" method="POST" action="?/evidence" enctype="multipart/form-data">
-        <div class="field"><label class="field-label" for="evidence-image">{t(data.locale, 'field.sourceImage')}</label><input id="evidence-image" name="image" type="file" accept="image/jpeg,image/png,image/webp" /></div>
-        <div class="field"><label class="field-label" for="evidence-url">{t(data.locale, 'field.url')}</label><input id="evidence-url" name="url" type="url" maxlength="1000" placeholder="https://" aria-describedby="evidence-url-help" /><p class="field-help" id="evidence-url-help">{t(data.locale, 'field.urlHint')}</p></div>
+        <div class="field">
+          <label class="field-label" for="evidence-image">{t(data.locale, 'field.sourceImage')}</label>
+          <FileField
+            id="evidence-image"
+            name="image"
+            optional
+            label={t(data.locale, 'field.sourceImage')}
+            choose={t(data.locale, 'field.chooseImage')}
+            browse={t(data.locale, 'field.browseImage')}
+            replace={t(data.locale, 'field.replaceImage')}
+            remove={t(data.locale, 'field.removeImage')}
+            previewAlt={t(data.locale, 'field.imagePreview')}
+            hint={t(data.locale, 'field.fileFormats')} pasteHint={t(data.locale, 'field.imagePaste')}
+            hintId="evidence-formats"
+            describedBy="evidence-formats evidence-image-help evidence-image-rights"
+          />
+          <p class="field-help" id="evidence-image-help">{t(data.locale, 'field.sourceImageHint')}</p>
+          <p class="field-help" id="evidence-image-rights">{t(data.locale, 'field.rightsHint')}</p>
+        </div>
+        <div class="field"><label class="field-label" for="evidence-url">{t(data.locale, 'field.url')}</label><input id="evidence-url" name="url" type="url" maxlength="1000" placeholder="https://" use:cleanLinkInput aria-describedby="evidence-url-help" /><p class="field-help" id="evidence-url-help">{t(data.locale, 'field.urlHint')}</p></div>
         <div class="field"><label class="field-label" for="evidence-place">{t(data.locale, 'field.place')}</label><input id="evidence-place" name="place" maxlength="500" /></div>
-        <div class="grid-2">
+        <div class="field-grid">
           <div class="field"><label class="field-label" for="evidence-provider">{t(data.locale, 'field.provider')}</label><input id="evidence-provider" name="provider" maxlength="300" /></div>
           <div class="field"><label class="field-label" for="evidence-provider-url">{t(data.locale, 'field.providerUrl')}</label><input id="evidence-provider-url" name="provider_url" type="url" maxlength="1000" placeholder="https://" /></div>
         </div>
-        <div class="grid-2">
+        <div class="field-grid">
           <div class="field"><label class="field-label" for="evidence-title">{t(data.locale, 'field.title')}</label><input id="evidence-title" name="title" maxlength="300" /></div>
           <div class="field"><label class="field-label" for="evidence-author">{t(data.locale, 'field.author')}</label><input id="evidence-author" name="author" maxlength="300" /></div>
           <div class="field"><label class="field-label" for="evidence-publisher">{t(data.locale, 'field.publisher')}</label><input id="evidence-publisher" name="publisher" maxlength="300" /></div>
