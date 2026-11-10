@@ -79,6 +79,7 @@
   "field.genre": "Category",
   "field.ids": "Ideographic description (IDS)",
   "field.idsWorkshop": "IDS Workshop",
+  "field.imagePaste": "Or paste an image with Ctrl+V.",
   "field.imagePreview": "Selected image preview",
   "field.ivd": "IVD",
   "field.ivdHint": "For example, U+4E00 U+E0100.",

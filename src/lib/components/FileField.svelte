@@ -21,6 +21,7 @@
     fetchingLabel = '',
     fetchFailedLabel = '',
     onpost,
+    pasteHint = '',
   }: {
     id?: string
     name?: string
@@ -42,9 +43,11 @@
     fetchFailedLabel?: string
     /** Receives the post's citation fields, or null when the link is not a readable post. */
     onpost?: (info: PostInfo | null) => void
+    pasteHint?: string
   } = $props()
 
   let input: HTMLInputElement
+  let root: HTMLElement
   let file = $state<File | null>(null)
   let preview = $state<string | null>(null)
   let dragging = $state(false)
@@ -151,6 +154,18 @@
     }
   }
 
+  function onpaste(event: ClipboardEvent) {
+    const file = [...(event.clipboardData?.files ?? [])].find(item => item.type.startsWith('image/'))
+    if (!file || !input) return
+    const form = root?.closest('form')
+    const target = event.target
+    const inThisForm = Boolean(form && target instanceof Node && form.contains(target))
+    const onlyField = document.querySelectorAll('[data-file-field]').length === 1
+    if (!inThisForm && !onlyField) return
+    event.preventDefault()
+    chooseFile(file)
+  }
+
   function size(bytes: number) {
     return bytes >= 1024 * 1024
       ? `${(bytes / 1024 / 1024).toFixed(1)} MiB`
@@ -158,7 +173,9 @@
   }
 </script>
 
-<div class="file-control">
+<svelte:window onpaste={onpaste} />
+
+<div class="file-control" bind:this={root} data-file-field>
 <div class="file-field" class:invalid={!!error} class:dragging>
   <input
     {id}
@@ -209,6 +226,7 @@
     </label>
   {/if}
 </div>
+{#if !file && pasteHint}<p class="field-help file-hint">{pasteHint}</p>{/if}
 <p class="field-help file-hint" id={hintId}>{hint}</p>
 {#if fetching && fetchingLabel}
   <p class="field-help" role="status">{fetchingLabel}</p>

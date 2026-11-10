@@ -18,7 +18,7 @@
       <h2 class="section-label">{t(data.locale, 'batch.source')}</h2>
       <div class="field">
         <label class="field-label" for="image">{t(data.locale, 'field.sourceImage')}</label>
-        <FileField id="image" name="image" label={t(data.locale, 'field.sourceImage')} choose={t(data.locale, 'field.chooseImage')} browse={t(data.locale, 'field.browseImage')} replace={t(data.locale, 'field.replaceImage')} remove={t(data.locale, 'field.removeImage')} previewAlt={t(data.locale, 'field.imagePreview')} hint={t(data.locale, 'field.fileFormats')} describedBy="file-formats" />
+        <FileField id="image" name="image" label={t(data.locale, 'field.sourceImage')} choose={t(data.locale, 'field.chooseImage')} browse={t(data.locale, 'field.browseImage')} replace={t(data.locale, 'field.replaceImage')} remove={t(data.locale, 'field.removeImage')} previewAlt={t(data.locale, 'field.imagePreview')} hint={t(data.locale, 'field.fileFormats')} pasteHint={t(data.locale, 'field.imagePaste')} describedBy="file-formats" />
       </div>
       <div class="field"><label class="field-label" for="place">{t(data.locale, 'field.place')}</label><input id="place" name="place" required maxlength="500" /></div>
       <details class="details"><summary>{t(data.locale, 'field.moreDetails')}</summary><div class="details-body">

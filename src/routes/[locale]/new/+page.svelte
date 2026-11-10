@@ -244,7 +244,7 @@
           replace={t(data.locale, 'field.replaceImage')}
           remove={t(data.locale, 'field.removeImage')}
           previewAlt={t(data.locale, 'field.imagePreview')}
-          hint={t(data.locale, 'field.fileFormats')}
+          hint={t(data.locale, 'field.fileFormats')} pasteHint={t(data.locale, 'field.imagePaste')}
           describedBy={imageError ? 'file-formats image-help image-rights image-error' : 'file-formats image-help image-rights'}
           error={imageError}
           sourceUrl={url}
