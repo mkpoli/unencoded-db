@@ -169,7 +169,7 @@ const page = (path: string, name: string, props: Record<string, unknown>) => loa
 describe('localized pages', () => {
   test('home renders the Japanese title, tagline and locale-prefixed links', async () => {
     const { head, body } = await page('src/routes/[locale]/+page.svelte', 'home', {
-      data: { locale: 'ja', entries: [{ id: 7, script: 'Han', ids: '⿰木木', place: '本書' }], next: 42, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
+      data: { locale: 'ja', entries: [{ id: 7, script: 'Han', ids: '⿰木木', evidence: 2, first_year: 1897, category: '音譯' }], next: 42, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
     })
     expect(head).toContain('珍字集覧')
     expect(body).toContain('文字と字形の証拠を集めるコミュニティウィキ')
@@ -179,11 +179,14 @@ describe('localized pages', () => {
     expect(body).toContain('href="/export.json"')
     expect(body).toContain('JSONで書き出す')
     expect(body).toContain('もっと見る')
+    expect(body).toContain('音譯')
+    expect(body).toContain('出典2件')
+    expect(body).toContain('1897')
   })
 
   test('home draws a cached description and keeps its IDS for assistive tech', async () => {
     const { body } = await page('src/routes/[locale]/+page.svelte', 'home-glyph', {
-      data: { locale: 'en', entries: [{ id: 7, script: 'Han', ids: '⿰木木', place: 'Book' }], glyphs: { '⿰木木': 'M0 0' }, next: null, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
+      data: { locale: 'en', entries: [{ id: 7, script: 'Han', ids: '⿰木木', evidence: 0, first_year: null, category: null }], glyphs: { '⿰木木': 'M0 0' }, next: null, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
     })
     expect(body).toContain('<svg viewBox="0 0 1000 1000"')
     expect(body).toContain('d="M0 0"')
@@ -203,7 +206,7 @@ describe('localized pages', () => {
 
   test('populated home ends the gallery with an add row', async () => {
     const { body } = await page('src/routes/[locale]/+page.svelte', 'home-add-row', {
-      data: { locale: 'zh-Hant', entries: [{ id: 7, script: 'Han', ids: '⿰木木', place: '本書', equivalent_to: '漢' }], next: 42, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
+      data: { locale: 'zh-Hant', entries: [{ id: 7, script: 'Han', ids: '⿰木木', place: '本書', equivalent_to: '漢', evidence: 2, first_year: 1897, category: '音譯' }], next: 42, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },
     })
     // The add row is the gallery's last child; entry cards hold no divs, so the first closing div ends the grid.
     const start = body.indexOf('class="card-grid gallery"')
@@ -224,8 +227,8 @@ describe('localized pages', () => {
       data: {
         locale: 'en',
         entries: [
-          { id: 3, script: 'Tangut', ids: '⿰𘠀𘠁', place: 'Book' },
-          { id: 2, script: 'Han', ids: '⿰木木', place: 'Book' },
+          { id: 3, script: 'Tangut', ids: '⿰𘠀𘠁', evidence: 1, first_year: null, category: null },
+          { id: 2, script: 'Han', ids: '⿰木木', evidence: 1, first_year: 1900, category: '樂譜' },
         ],
         next: 1,
         scripts: [{ script: 'Han', n: 1 }, { script: 'Tangut', n: 1 }],

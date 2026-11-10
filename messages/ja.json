@@ -23,6 +23,8 @@
   "browse.equivalent": "対応する文字: {character}",
   "browse.export": "JSONで書き出す",
   "browse.more": "もっと見る",
+  "browse.source": "出典{n}件",
+  "browse.sources": "出典{n}件",
   "crop.add": "切り抜きを追加",
   "crop.hint": "文字の周りをドラッグして囲みます。",
   "crop.label": "切り抜き {n}",

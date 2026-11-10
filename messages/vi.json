@@ -23,6 +23,8 @@
   "browse.equivalent": "Ký tự tương đương: {character}",
   "browse.export": "Xuất JSON",
   "browse.more": "Xem thêm",
+  "browse.source": "{n} nguồn",
+  "browse.sources": "{n} nguồn",
   "crop.add": "Thêm vùng cắt",
   "crop.hint": "Kéo một khung quanh chữ.",
   "crop.label": "Vùng cắt {n}",
