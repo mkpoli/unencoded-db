@@ -1,6 +1,6 @@
 {
   "account.profile": "Glyph Atlas 프로필",
-  "add.intro": "먼저 문자 체계와 구조를 입력한 뒤 문자나 글리프의 사진, 스캔, 스크린샷 또는 링크를 올려 주세요. 기여 내용은 공개되며 기여자는 익명입니다.",
+  "add.intro": "먼저 표의 문자 구성 설명을 입력한 뒤 문자나 글리프의 사진, 스캔, 스크린샷 또는 링크를 올려 주세요. 기여 내용은 공개되며 기여자는 익명입니다.",
   "add.title": "문자 추가",
   "app.name": "진자집람",
   "app.tagline": "문자와 글리프의 증거를 모으는 커뮤니티 위키",
@@ -40,6 +40,7 @@
   "error.comparison": "상자마다 한 글자만 넣으세요. 관계마다 열 칸까지입니다.",
   "error.fields": "아래 항목을 확인해 주세요.",
   "error.home": "기록으로 돌아가기",
+  "error.ids": "표의 문자 구성 설명(IDS)을 입력하세요.",
   "error.imageOversize": "이미지가 8 MiB를 초과합니다.",
   "error.imageUnsupported": "이미지는 유효한 JPEG, PNG, WebP 파일이어야 합니다.",
   "error.ivd": "U+4E00 U+E0100 형식의 IVD 서열을 입력하거나 미등록을 선택하세요.",
@@ -77,6 +78,7 @@
   "field.fileFormats": "JPEG, PNG, WebP · 8 MiB",
   "field.genre": "분류",
   "field.ids": "표의 문자 구성 설명(IDS)",
+  "field.idsWorkshop": "IDS Workshop",
   "field.imagePreview": "선택한 이미지 미리보기",
   "field.ivd": "IVD",
   "field.ivdHint": "U+4E00 U+E0100 형식으로 적습니다.",
@@ -106,7 +108,7 @@
   "field.suggestionHint": "기록을 선택하면 문자 체계와 IDS가 채워집니다.",
   "field.suggestions": "관련 기록",
   "field.tags": "태그",
-  "field.tagsHint": "하카어 같은 짧은 라벨을 쉼표로 구분하세요.",
+  "field.tagsHint": "짧은 라벨을 추가하세요. 위의 분류도 태그로 취급합니다.",
   "field.title": "제목",
   "field.url": "링크",
   "field.urlHint": "스캔, 게시물 또는 목록 페이지.",
@@ -177,5 +179,7 @@
   "sense.remove": "삭제",
   "source.intro": "이 출처에서 기록된 문자.",
   "source.title": "출처",
-  "source.view": "출처 상세"
+  "source.view": "출처 상세",
+  "tag.add": "태그 추가",
+  "tag.remove": "태그 {tag} 삭제"
 }

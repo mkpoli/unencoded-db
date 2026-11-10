@@ -40,6 +40,7 @@
   "error.comparison": "Put one character in each box; ten boxes per relationship.",
   "error.fields": "Check the fields below.",
   "error.home": "Back to the records",
+  "error.ids": "Enter an ideographic description (IDS).",
   "error.imageOversize": "The image is larger than 8 MiB.",
   "error.imageUnsupported": "The image must be a valid JPEG, PNG or WebP file.",
   "error.ivd": "Enter an IVD sequence such as U+4E00 U+E0100, or choose not registered.",
@@ -77,6 +78,7 @@
   "field.fileFormats": "JPEG, PNG or WebP · 8 MiB",
   "field.genre": "Category",
   "field.ids": "Ideographic description (IDS)",
+  "field.idsWorkshop": "IDS Workshop",
   "field.imagePreview": "Selected image preview",
   "field.ivd": "IVD",
   "field.ivdHint": "For example, U+4E00 U+E0100.",
@@ -106,7 +108,7 @@
   "field.suggestionHint": "Choose a record to fill its script and IDS.",
   "field.suggestions": "Related records",
   "field.tags": "Tags",
-  "field.tagsHint": "Comma-separated labels, such as a Hakka word.",
+  "field.tagsHint": "Add a short label; categories above are tags too.",
   "field.title": "Title",
   "field.url": "Link",
   "field.urlHint": "A scan, a post, or a catalogue page.",
@@ -177,5 +179,7 @@
   "sense.remove": "Remove",
   "source.intro": "Characters recorded from this source.",
   "source.title": "Source",
-  "source.view": "Source details"
+  "source.view": "Source details",
+  "tag.add": "Add tag",
+  "tag.remove": "Remove tag {tag}"
 }

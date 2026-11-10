@@ -206,7 +206,12 @@ describe('localized pages', () => {
 
   test('new record form renders the localized source image fields and errors', async () => {
     const { head, body } = await page('src/routes/[locale]/new/+page.svelte', 'new', {
-      data: { locale: 'zh-Hant' },
+      data: {
+        locale: 'zh-Hant',
+        genres: [{ slug: 'music', label: '音樂', parent: null }, { slug: 'dialect', label: '方言字', parent: null }],
+        collections: [{ slug: 'extension-e', label: 'Extension E' }],
+        tags: ['客語'],
+      },
       form: { errors: { image: '圖片必須是有效的JPEG、PNG或WebP檔案。' }, values: { script: 'Han' } },
     })
     expect(head).toContain('新增字 · 珍字集覽')
@@ -233,9 +238,17 @@ describe('localized pages', () => {
     expect(body).toContain('name="image"')
     expect(body).toContain('type="file"')
     expect(body).toContain('accept="image/jpeg,image/png,image/webp"')
-    expect(body).toContain('<select id="script" name="script"')
-    expect(body).toMatch(/<option value="Han" selected="">Han<\/option>/)
-    expect(body).toContain('<option value="Chữ Nôm">Chữ Nôm</option>')
+    expect(body).toContain('<input type="hidden" name="script" value="Han"/>')
+    expect(body).not.toContain('<select id="script"')
+    expect(body).toContain('name="ids"')
+    expect(body).toContain('required="" aria-required="true"')
+    expect(body).toContain('class="required-mark" aria-hidden="true">*</span>')
+    expect(body).toContain('https://ids.mkpo.li/')
+    expect(body).toContain('IDS Workshop')
+    expect(body).toContain('name="tags"')
+    expect(body).toContain('name="genre" value="music"')
+    expect(body).toContain('name="genre" value="dialect"')
+    expect(body).toContain('name="collection" value="extension-e"')
     expect(body).toContain('name="url"')
     expect(body).toContain('連結')
     expect(body).toContain('相關文字')

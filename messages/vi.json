@@ -1,6 +1,6 @@
 {
   "account.profile": "Hồ sơ Glyph Atlas",
-  "add.intro": "Trước tiên hãy nhập hệ chữ và cấu trúc, sau đó tải lên ảnh chụp, bản quét hoặc ảnh chụp màn hình chữ hoặc glyph, hoặc dán một liên kết. Nội dung đóng góp được công khai và người đóng góp ẩn danh.",
+  "add.intro": "Trước tiên hãy nhập mô tả cấu trúc chữ, sau đó tải lên ảnh chụp, bản quét hoặc ảnh chụp màn hình chữ hoặc glyph, hoặc dán một liên kết. Nội dung đóng góp được công khai và người đóng góp ẩn danh.",
   "add.title": "Thêm chữ",
   "app.name": "Tuyển tập chữ quý",
   "app.tagline": "Wiki cộng đồng thu thập bằng chứng về chữ và glyph",
@@ -40,6 +40,7 @@
   "error.comparison": "Mỗi ô chỉ một chữ; tối đa mười ô cho mỗi quan hệ.",
   "error.fields": "Hãy kiểm tra các mục bên dưới.",
   "error.home": "Quay lại danh mục",
+  "error.ids": "Nhập mô tả cấu trúc chữ (IDS).",
   "error.imageOversize": "Ảnh vượt quá 8 MiB.",
   "error.imageUnsupported": "Ảnh phải là tệp JPEG, PNG hoặc WebP hợp lệ.",
   "error.ivd": "Nhập chuỗi IVD, ví dụ U+4E00 U+E0100, hoặc chọn chưa đăng ký.",
@@ -77,6 +78,7 @@
   "field.fileFormats": "JPEG, PNG hoặc WebP · 8 MiB",
   "field.genre": "Phân loại",
   "field.ids": "Mô tả cấu trúc chữ (IDS)",
+  "field.idsWorkshop": "IDS Workshop",
   "field.imagePreview": "Xem trước ảnh đã chọn",
   "field.ivd": "IVD",
   "field.ivdHint": "Dạng U+4E00 U+E0100.",
@@ -106,7 +108,7 @@
   "field.suggestionHint": "Chọn một mục từ để điền hệ chữ và IDS.",
   "field.suggestions": "Mục từ liên quan",
   "field.tags": "Thẻ",
-  "field.tagsHint": "Nhãn ngắn, cách nhau bằng dấu phẩy, ví dụ từ tiếng Hakka.",
+  "field.tagsHint": "Thêm nhãn ngắn; các phân loại ở trên cũng là thẻ.",
   "field.title": "Nhan đề",
   "field.url": "Liên kết",
   "field.urlHint": "Bản quét, bài đăng hoặc trang mục lục.",
@@ -177,5 +179,7 @@
   "sense.remove": "Xóa",
   "source.intro": "Các chữ được ghi nhận từ nguồn này.",
   "source.title": "Nguồn",
-  "source.view": "Chi tiết nguồn"
+  "source.view": "Chi tiết nguồn",
+  "tag.add": "Thêm thẻ",
+  "tag.remove": "Xóa thẻ {tag}"
 }
