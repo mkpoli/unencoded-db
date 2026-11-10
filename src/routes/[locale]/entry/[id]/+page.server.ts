@@ -49,7 +49,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   const senses = await listSenses(platform.env.DB, Number(params.id))
   const sequence = entry.ids ? cleanIds(entry.ids) : null
   const paths = await glyphPaths(platform.env.IMAGES, sequence ? [sequence] : [])
-  const glyph = sequence ? paths[sequence] ?? null : null
+  const glyph = sequence && Object.prototype.hasOwnProperty.call(paths, sequence) ? paths[sequence] : null
   if (sequence && !glyph) platform.ctx?.waitUntil(warmGlyphs(platform.env.IMAGES, [sequence]))
   return { entry, glyph, comparisons, evidence, crops, genres, collections, relations, tags, senses, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
 }
