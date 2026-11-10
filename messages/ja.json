@@ -33,7 +33,6 @@
   "edit.intro": "変更は公開され、匿名で記録されます。以前の版も残ります。",
   "edit.save": "修正を保存",
   "entry.addSighting": "証拠を追加",
-  "entry.addSightingHint": "出典が増えると、証拠がより確かになります。",
   "entry.added": "追加日",
   "entry.history": "編集履歴",
   "entry.record": "文字{id}",

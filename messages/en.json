@@ -33,7 +33,6 @@
   "edit.intro": "Changes are public and anonymous. Earlier versions stay visible.",
   "edit.save": "Save revision",
   "entry.addSighting": "Add evidence",
-  "entry.addSightingHint": "Each added source strengthens the evidence.",
   "entry.added": "Added",
   "entry.history": "Revision history",
   "entry.record": "Character {id}",
