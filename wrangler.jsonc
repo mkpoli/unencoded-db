@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "unencoded-db",
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "compatibility_date": "2026-10-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": { "binding": "ASSETS", "directory": ".svelte-kit/cloudflare" },
+  "observability": { "enabled": true },
+  // An origin of its own, so a visitor's upload never shares one with Glyph Atlas's session cookie.
+  "routes": [{ "pattern": "gaiji.glyphatlas.org", "custom_domain": true }],
+  // ATLAS_CLIENT_ID and ATLAS_CLIENT_SECRET are the row for this site in Glyph Atlas's `oauthClient`
+  // table; until both are set, the site offers no sign-in and everyone writes under an anonymous name.
+  // IP_SALT is the key of the address hash kept with each write for moderation.
+  // WRITES_PAUSED, while "1", makes every write answer 503 and leaves reads alone.
+  "vars": { "ATLAS_ISSUER": "https://glyphatlas.org/api/auth" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "unencoded-db",
+      // Replace with the id `wrangler d1 create unencoded-db` prints.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "unencoded-db" }],
+  // An open upload needs a ceiling: each address gets this many writes a minute.
+  "ratelimits": [
+    { "name": "ADDS", "namespace_id": "5101", "simple": { "limit": 10, "period": 60 } },
+    { "name": "EDITS", "namespace_id": "5102", "simple": { "limit": 30, "period": 60 } }
+  ]
+}
