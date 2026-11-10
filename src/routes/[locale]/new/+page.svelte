@@ -164,7 +164,7 @@
               {#each topGenres as genre (genre.slug)}
                 <label class="genre-option">
                   <input type="checkbox" name="genre" value={genre.slug} checked={form?.values?.genres?.includes(genre.slug)} />
-                  <span class="genre-tick" aria-hidden="true">✓</span>{genre.label}
+                  <span class="genre-box" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 6.4 4.6 9 10.2 2.8" /></svg></span>{genre.label}
                 </label>
               {/each}
             </div>
@@ -172,13 +172,13 @@
               <div class="genre-group">
                 <label class="genre-option genre-option-parent">
                   <input type="checkbox" name="genre" value={dialect.slug} checked={form?.values?.genres?.includes(dialect.slug)} />
-                  <span class="genre-tick" aria-hidden="true">✓</span>{dialect.label}
+                  <span class="genre-box" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 6.4 4.6 9 10.2 2.8" /></svg></span>{dialect.label}
                 </label>
                 <div class="genre-options">
                   {#each dialectGenres as genre (genre.slug)}
                     <label class="genre-option">
                       <input type="checkbox" name="genre" value={genre.slug} checked={form?.values?.genres?.includes(genre.slug)} />
-                      <span class="genre-tick" aria-hidden="true">✓</span>{genre.label}
+                      <span class="genre-box" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 6.4 4.6 9 10.2 2.8" /></svg></span>{genre.label}
                     </label>
                   {/each}
                 </div>
@@ -193,7 +193,7 @@
               {#each data.collections as collection (collection.slug)}
                 <label class="genre-option">
                   <input type="checkbox" name="collection" value={collection.slug} checked={form?.values?.collections?.includes(collection.slug)} />
-                  <span class="genre-tick" aria-hidden="true">✓</span>{collection.label}
+                  <span class="genre-box" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 6.4 4.6 9 10.2 2.8" /></svg></span>{collection.label}
                 </label>
               {/each}
             </div>
