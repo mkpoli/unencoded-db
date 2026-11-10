@@ -10,9 +10,16 @@ test('keeps every submitted value for a form returned with errors', () => {
   expect(splitIds(readIds(form)!)).toHaveLength(20)
 })
 
-test('reads descriptions separated by tabs and newlines', () => {
+test('reads descriptions separated by commas or whitespace', () => {
   const form = new FormData()
-  form.set('ids', '⿰木木\t⿱木木\n⿰水木')
-  expect(readIds(form)).toBe('⿰木木 ⿱木木 ⿰水木')
+  form.set('ids', '⿰木木, ⿱木木，⿰水木\t⿰火火')
+  expect(readIds(form)).toBe('⿰木木 ⿱木木 ⿰水木 ⿰火火')
   expect(idsInvalid(form)).toBe(false)
+})
+
+test('keeps the comma-separated field unchanged when the form is returned with errors', () => {
+  const field = Array.from({ length: 21 }, (_, i) => '⿰木' + '木'.repeat(i)).join(', ')
+  const form = new FormData()
+  form.set('ids', field)
+  expect(rawIds(form)).toEqual([field])
 })

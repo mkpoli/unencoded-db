@@ -400,10 +400,6 @@
 .ids-row .one-zh::-webkit-inner-spin-button,
 .ids-row .one-zh::-webkit-outer-spin-button { margin: 0; appearance: none; }
 .ids-row .one-zh[type="number"] { appearance: textfield; }
-.ids-more-row { display: flex; align-items: center; gap: 8px; }
-.ids-more-row input { flex: 1 1 auto; min-width: 0; }
-.ids-add { justify-self: start; }
-.ids-remove { flex: none; width: 42px; min-width: 42px; padding: 0; font-size: 18px; line-height: 1; }
 .one-char { width: 4.25em; padding-inline: 4px; text-align: center; }
 .tags-field { display: grid; gap: 10px; min-width: 0; padding: 0; border: 0; }
 .tag-add { display: flex; gap: 8px; }

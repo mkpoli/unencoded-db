@@ -128,7 +128,7 @@ export const actions: Actions = {
     const generation = positive(form.get('edit_generation'))
     const submitted: FormValues = {
       script: values.script,
-      ids: rawIds(form).join(' '),
+      ids: rawIds(form).join(', '),
       description: values.description,
       radical: values.radical,
       equivalent_to: values.equivalentTo.value ?? '',

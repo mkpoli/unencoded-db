@@ -19,7 +19,6 @@ const fileField = resolve('src/lib/components/FileField.svelte')
 const cropField = resolve('src/lib/components/CropField.svelte')
 const idsGlyph = resolve('src/lib/components/IdsGlyph.svelte')
 const idsDrawing = resolve('src/lib/components/IdsDrawing.svelte')
-const idsMore = resolve('src/lib/components/IdsMore.svelte')
 const scriptSelect = resolve('src/lib/components/ScriptSelect.svelte')
 const comparisonGrid = resolve('src/lib/components/ComparisonGrid.svelte')
 const encodingFields = resolve('src/lib/components/EncodingFields.svelte')
@@ -32,7 +31,6 @@ let fileFieldModule: Promise<string> | null = null
 let cropFieldModule: Promise<string> | null = null
 let idsGlyphModule: Promise<string> | null = null
 let idsDrawingModule: Promise<string> | null = null
-let idsMoreModule: Promise<string> | null = null
 let scriptSelectModule: Promise<string> | null = null
 let comparisonGridModule: Promise<string> | null = null
 let encodingFieldsModule: Promise<string> | null = null
@@ -131,20 +129,6 @@ function loadIdsDrawing(): Promise<string> {
   return idsDrawingModule
 }
 
-function loadIdsMore(): Promise<string> {
-  if (!idsMoreModule) {
-    idsMoreModule = (async () => {
-      const preprocessed = await preprocess(readFileSync(idsMore, 'utf8'), vitePreprocess({ script: true }), { filename: idsMore })
-      const { js } = compile(preprocessed.code, { filename: idsMore, generate: 'server' })
-      const target = resolve(tmp, 'idsmore.js')
-      const code = js.code.replaceAll("'$lib/ids'", `'${ids}'`).replaceAll('"$lib/ids"', `"${ids}"`).replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`)
-      writeFileSync(target, code)
-      return target
-    })()
-  }
-  return idsMoreModule
-}
-
 function loadScriptSelect(): Promise<string> {
   if (!scriptSelectModule) {
     scriptSelectModule = (async () => {
@@ -183,7 +167,6 @@ async function load(path: string, name: string) {
       const crop = await loadCropField()
       const glyph = await loadIdsGlyph()
       const drawing = await loadIdsDrawing()
-      const more = await loadIdsMore()
       const select = await loadScriptSelect()
       const grid = await loadComparisonGrid()
       const encoding = await loadEncodingFields()
@@ -202,8 +185,6 @@ async function load(path: string, name: string) {
         .replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`)
         .replaceAll('"$lib/components/IdsDrawing.svelte"', `"${drawing}"`)
         .replaceAll("'$lib/components/IdsDrawing.svelte'", `'${drawing}'`)
-        .replaceAll('"$lib/components/IdsMore.svelte"', `"${more}"`)
-        .replaceAll("'$lib/components/IdsMore.svelte'", `'${more}'`)
         .replaceAll('"$lib/components/ExtraImagesField.svelte"', `"${extra}"`)
         .replaceAll("'$lib/components/ExtraImagesField.svelte'", `'${extra}'`)
         .replaceAll('"$lib/components/EncodingFields.svelte"', `"${encoding}"`)
@@ -423,15 +404,35 @@ describe('localized pages', () => {
     expect(body).toContain('suggestion-list')
   })
 
-  test('new record form keeps each description in its own field', async () => {
+  test('new record form keeps every description in one comma-separated field', async () => {
     const { body } = await page('src/routes/[locale]/new/+page.svelte', 'new-several-ids', {
       data: { locale: 'en' },
-      form: { values: { ids: '⿰木木 ⿱木木', script: 'Han' } },
+      form: { values: { ids: '⿰木木, ⿱木木', script: 'Han' } },
     })
-    expect(body.match(/name="ids"/g)).toHaveLength(2)
-    expect(body).toContain('value="⿰木木"')
-    expect(body).toContain('value="⿱木木"')
-    expect(body).toContain('Add another description')
+    expect(body.match(/name="ids"/g)).toHaveLength(1)
+    expect(body).toContain('value="⿰木木, ⿱木木"')
+    expect(body).toContain('Separate descriptions with commas. The first one draws the glyph.')
+    expect(body).not.toContain('Add another description')
+  })
+
+  test('edit form shows every description in one comma-separated field', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/edit/+page.svelte', 'edit-several-ids', {
+      data: {
+        locale: 'en',
+        entry: { id: 9, revision: 2, edit_generation: 5, script: 'Han', ids: '⿰木木 ⿱木木', description: null, radical: null, encoded_as: null, equivalent_to: null, strokes: null, ivd_status: null, ivd_sequence: null, comparisons: [] },
+        evidence: [],
+        senses: [],
+        tags: [],
+        genres: [],
+        collections: [],
+        allGenres: [],
+        allCollections: [],
+        allTags: [],
+        encodings: [],
+      },
+    })
+    expect(body.match(/name="ids"/g)).toHaveLength(1)
+    expect(body).toContain('value="⿰木木, ⿱木木"')
   })
 
   test('entry page lists every description of the character', async () => {

@@ -6,7 +6,6 @@
   import EvidenceTypes from '$lib/components/EvidenceTypes.svelte'
   import FileField from '$lib/components/FileField.svelte'
   import ExtraImagesField from '$lib/components/ExtraImagesField.svelte'
-  import IdsMore from '$lib/components/IdsMore.svelte'
   import IdsDrawing from '$lib/components/IdsDrawing.svelte'
   import { cleanLinkInput } from '$lib/link-input'
   import type { PostInfo } from '$lib/source-url'
@@ -16,7 +15,7 @@
   import { localizedHref, t, type Locale } from '$lib/i18n'
   import { DEFAULT_SCRIPT } from '$lib/script'
   import type { Encoding } from '$lib/encodings'
-  import { primaryIds, splitIds, workshopUrl } from '$lib/ids'
+  import { formatIds, IDS_FIELD_MAX, splitIds, workshopUrl } from '$lib/ids'
   import partsUrl from 'ids-input/data/han-parts.json.gz?url'
   import { estimateStrokes } from '$lib/strokes'
 
@@ -34,10 +33,8 @@
   let rateLimitFailure = $state<429 | 503 | null>(null)
   const imageError = $derived(form?.errors?.image ?? '')
   // A failed submission seeds the fields once; after that the reader's edits own them.
-  let ids = $state<string[]>(untrack(() => {
-    const submitted = splitIds(form?.values?.ids)
-    return submitted.length ? submitted : ['']
-  }))
+  let ids = $state(untrack(() => String(form?.values?.ids ?? '')))
+  const sequences = $derived(splitIds(ids))
   let senses = $state([{ gloss: '', reading: '' }])
   let strokes = $state(String(untrack(() => form?.values?.strokes ?? '')))
   let tags = $state<string[]>(untrack(() => splitTags(form?.values?.tags)))
@@ -90,7 +87,7 @@
     return strokeCounts
   }
   $effect(() => {
-    const value = ids[0] ?? ''
+    const value = sequences[0] ?? ''
     const generation = ++strokeGeneration
     if (!value) return
     loadStrokeCounts().then(counts => {
@@ -102,7 +99,7 @@
   // A validation notice belongs to the section that holds the failing field.
   const errorOrder = ['ids', 'equivalent_to', 'description', 'encodings', 'image', 'url', 'place', 'note', 'title', 'author', 'publisher', 'year', 'page', 'provider', 'provider_url'] as const
   const operators = new Set([...'⿰⿱⿲⿳⿴⿵⿶⿷⿸⿹⿺⿻'])
-  const suggestions = $derived(related(data.suggestions ?? [], ids[0] ?? ''))
+  const suggestions = $derived(related(data.suggestions ?? [], sequences[0] ?? ''))
 
   function related(entries: Suggestion[], value: string): Suggestion[] {
     const characters = [...value].filter(character => !operators.has(character) && !/\s/.test(character))
@@ -120,8 +117,7 @@
   }
 
   function useSuggestion(suggestion: Suggestion) {
-    const list = splitIds(suggestion.ids)
-    ids = list.length ? list : ['']
+    ids = formatIds(suggestion.ids)
     requestAnimationFrame(() => document.getElementById('ids')?.focus())
   }
 
@@ -165,11 +161,11 @@
       <div class="field">
         <div class="field-head">
           <label class="field-label" for="ids">{t(data.locale, 'field.ids')} <span class="required-mark" aria-hidden="true">*</span></label>
-          <a class="text-link" href={workshopUrl(primaryIds(ids.join(' ')) ?? '')} target="_blank" rel="noopener noreferrer">{t(data.locale, 'field.idsWorkshop')} ↗</a>
+          <a class="text-link" href={workshopUrl(sequences[0] ?? '')} target="_blank" rel="noopener noreferrer">{t(data.locale, 'field.idsWorkshop')} ↗</a>
         </div>
         <div class="ids-row">
-          <div class="ids-preview"><IdsDrawing ids={ids[0] ?? ''} /></div>
-          <input id="ids" name="ids" maxlength="200" bind:value={ids[0]} required aria-required="true" autocomplete="off" spellcheck="false" aria-invalid={!!form?.errors?.ids} aria-describedby={form?.errors?.ids ? 'ids-error' : suggestions.length ? 'ids-help' : undefined} />
+          <div class="ids-preview"><IdsDrawing ids={sequences[0] ?? ''} /></div>
+          <input id="ids" name="ids" maxlength={IDS_FIELD_MAX} bind:value={ids} required aria-required="true" autocomplete="off" spellcheck="false" aria-invalid={!!form?.errors?.ids} aria-describedby={`ids-hint${form?.errors?.ids ? ' ids-error' : ''}${suggestions.length ? ' ids-suggestions-help' : ''}`} />
           <div class="field ids-strokes">
             <label class="field-label" for="strokes">{t(data.locale, 'field.strokes')}</label>
             <input id="strokes" name="strokes" class="one-zh" type="number" min="0" max="199" bind:value={strokes} title={t(data.locale, 'field.strokesHint')} aria-describedby="strokes-help" />
@@ -180,16 +176,16 @@
             <input id="radical" class="one-zh" name="radical" maxlength="1" value={form?.values?.radical ?? ''} autocomplete="off" />
           </div>
         </div>
-        <IdsMore bind:values={ids} locale={data.locale} />
+        <p class="field-help" id="ids-hint">{t(data.locale, 'field.idsHint')}</p>
         {#if form?.errors?.ids}<p class="field-error" id="ids-error">{form.errors.ids}</p>{/if}
         {#if suggestions.length}
           <div class="suggestions">
             <p class="field-help suggestions-title">{t(data.locale, 'field.suggestions')}</p>
-            <p class="field-help" id="ids-help" aria-live="polite">{t(data.locale, 'field.suggestionHint')}</p>
+            <p class="field-help" id="ids-suggestions-help" aria-live="polite">{t(data.locale, 'field.suggestionHint')}</p>
             <div class="suggestion-list">
               {#each suggestions as suggestion}
                 <button class="suggestion" type="button" onclick={() => useSuggestion(suggestion)}>
-                  <span class="suggestion-ids">{suggestion.ids}</span>
+                  <span class="suggestion-ids">{formatIds(suggestion.ids)}</span>
                   <span class="suggestion-script">{suggestion.script}</span>
                 </button>
               {/each}
