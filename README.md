@@ -77,7 +77,7 @@ bun run build
 
 ## Character drawings
 
-The homepage draws each record's IDS with [han-compose](https://github.com/mkpoli/han-compose), from the composer export Glyph Atlas publishes at `https://glyphatlas.org/atlas/composer/`. The export's files and the drawn paths are cached in the `IMAGES` bucket under `composer/` and `glyphs/`. A missing drawing is warmed after the response, and `/api/glyph?ids=…` answers one the page did not have. Only descriptions on visible records are drawn.
+The homepage draws each record's IDS with [han-compose](https://github.com/mkpoli/han-compose), from the composer export Glyph Atlas publishes at `https://glyphatlas.org/atlas/composer/`. The export's files and the drawn paths are cached in the `IMAGES` bucket under `composer/` and `glyphs/`. A missing drawing is warmed after the response, and `/api/glyph?ids=…` answers one the page did not have. That route draws only descriptions on visible records. The add form previews a description in the browser as it is typed, from the same export.
 
 ## Contribution rate limit
 

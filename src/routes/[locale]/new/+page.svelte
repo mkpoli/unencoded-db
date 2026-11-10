@@ -5,6 +5,7 @@
   import EncodingFields from '$lib/components/EncodingFields.svelte'
   import FileField from '$lib/components/FileField.svelte'
   import ExtraImagesField from '$lib/components/ExtraImagesField.svelte'
+  import IdsDrawing from '$lib/components/IdsDrawing.svelte'
   import { cleanLinkInput } from '$lib/link-input'
   import type { PostInfo } from '$lib/source-url'
   import type { Comparison } from '$lib/comparison-rows'
@@ -161,13 +162,14 @@
           <a class="text-link" href={workshopUrl(cleanIds(ids))} target="_blank" rel="noopener noreferrer">{t(data.locale, 'field.idsWorkshop')} ↗</a>
         </div>
         <div class="ids-row">
+          <div class="ids-preview"><IdsDrawing {ids} /></div>
           <input id="ids" name="ids" maxlength="200" bind:value={ids} required aria-required="true" autocomplete="off" spellcheck="false" aria-invalid={!!form?.errors?.ids} aria-describedby={form?.errors?.ids ? 'ids-error' : suggestions.length ? 'ids-help' : undefined} />
-          <div class="field">
+          <div class="field ids-strokes">
             <label class="field-label" for="strokes">{t(data.locale, 'field.strokes')}</label>
             <input id="strokes" name="strokes" class="one-zh" type="number" min="0" max="199" bind:value={strokes} title={t(data.locale, 'field.strokesHint')} aria-describedby="strokes-help" />
             <span class="visually-hidden" id="strokes-help">{t(data.locale, 'field.strokesHint')}</span>
           </div>
-          <div class="field">
+          <div class="field ids-radical">
             <label class="field-label" for="radical">{t(data.locale, 'field.radical')}</label>
             <input id="radical" class="one-zh" name="radical" maxlength="1" value={form?.values?.radical ?? ''} autocomplete="off" />
           </div>
