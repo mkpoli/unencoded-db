@@ -9,6 +9,7 @@ import { listGenres, saveGenres, selectedGenres } from '$lib/server/genres'
 import { listCollections, saveCollections, selectedCollections } from '$lib/server/collections'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import { listTags, parseTags, saveTags } from '$lib/server/tags'
+import { addEncodings, parseEncodings, primaryEncoding, saveEncodings } from '$lib/server/encodings'
 import { parseSenses, saveSenses } from '$lib/server/senses'
 import { readIvd } from '$lib/server/ivd'
 import { cleanSourceUrl } from '$lib/source-url'
@@ -29,7 +30,7 @@ async function findEntryByImageKey(db: D1Database, key: string): Promise<{ id: n
   }
 }
 type FieldName = typeof fields[number]
-type FormErrors = Partial<Record<FieldName | 'image' | 'form' | 'url' | 'provider' | 'provider_url' | 'ivd_sequence' | 'comparison', string>>
+type FormErrors = Partial<Record<FieldName | 'image' | 'form' | 'url' | 'provider' | 'provider_url' | 'ivd_sequence' | 'comparison' | 'encodings', string>>
 
 function fieldValues(form: FormData): Record<FieldName, string> {
   return Object.fromEntries(fields.map(name => {
@@ -82,7 +83,9 @@ export const actions: Actions = {
       if (parsed) row = { ...parsed, place: '' }
     }
     const radical = String(form.get('radical') ?? '').normalize('NFC').trim().slice(0, 20) || null
-    const encoded = String(form.get('encoded_as') ?? '').normalize('NFC').trim().slice(0, 80) || null
+    const encodings = parseEncodings(form)
+    if (!encodings) errors.encodings = t(locale, 'error.encodings')
+    const encoded = primaryEncoding(encodings ?? [])
     const ivdStatus = typeof form.get('ivd_status') === 'string' ? form.get('ivd_status') as string : ''
     const ivdSequence = typeof form.get('ivd_sequence') === 'string' ? form.get('ivd_sequence') as string : ''
     const ivd = readIvd(form.get('ivd_status'), form.get('ivd_sequence'))
@@ -95,11 +98,11 @@ export const actions: Actions = {
     const collections = selectedCollections(form)
     const tags = parseTags(String(form.get('tags') ?? ''))
     const senses = parseSenses(form)
-    const submitted = { ...values, provider: rawProvider, provider_url: rawProviderUrl, radical, encoded_as: encoded, strokes, ivd_status: ivdStatus, ivd_sequence: ivdSequence, genres, collections, tags: tags.join(', ') }
+    const submitted = { ...values, provider: rawProvider, provider_url: rawProviderUrl, radical, encoded_as: encoded, strokes, ivd_status: ivdStatus, ivd_sequence: ivdSequence, genres, collections, tags: tags.join(', '), encodings: encodings ?? [] }
     if (!senses) return fail(400, { errors, values: submitted, comparisons })
     const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: submitted, comparisons })
     if (link && !/^https?:\/\//i.test(link)) errors.url = t(locale, 'error.length')
-    if (!ivd || !row || (source.error && source.error !== 'missing') || Object.keys(errors).length) return failForm(400, errors)
+    if (!ivd || !row || !encodings || (source.error && source.error !== 'missing') || Object.keys(errors).length) return failForm(400, errors)
     const image = source.error === 'missing' ? null : source.image
     const cookie = cookieOptions(url)
     if (!cookie) error(403, 'Secure connection required')
@@ -126,6 +129,7 @@ export const actions: Actions = {
     }
     if (duplicate) {
       await addEvidence(platform.env.DB, duplicate.id, { place: row.place, url: link, provider, provider_url: providerUrl, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, imageMeta, null)
+      await addEncodings(platform.env.DB, duplicate.id, encodings)
       redirect(303, localizedHref(locale, `/entry/${duplicate.id}`))
     }
 
@@ -153,6 +157,7 @@ export const actions: Actions = {
     await saveGenres(platform.env.DB, result.id, genres)
     await saveCollections(platform.env.DB, result.id, collections, first?.id ?? null)
     await saveTags(platform.env.DB, result.id, tags)
+    await saveEncodings(platform.env.DB, result.id, encodings)
     await saveSenses(platform.env.DB, result.id, senses, first?.id ?? null)
     if (result.token) cookies.set(cookie.name, result.token, { ...sessionCookieSettings, secure: cookie.secure })
     redirect(303, localizedHref(locale, `/entry/${result.id}`))

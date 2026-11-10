@@ -532,6 +532,56 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
+  test('stores several character encodings for one character', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const form = new FormData()
+      for (const [key, value] of Object.entries(record)) form.set(key, value)
+      form.set('image', imageFile(PNG_BYTES))
+      form.append('encoding_charset', 'unicode')
+      form.append('encoding_code', 'U+2D6DD')
+      form.append('encoding_charset', 'cns11643')
+      form.append('encoding_code', '1-4421')
+      const e = {
+        request: new Request('https://example.test/en/new', { method: 'POST', body: form }),
+        url: new URL('https://example.test/en/new'),
+        cookies: testCookies().cookies,
+        platform: { env: { DB: d1Binding(db), IMAGES: images.bucket } },
+        params: { locale: 'en' },
+      } as any
+      await expect(actions.default!(e)).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT charset, code FROM entry_encodings ORDER BY rowid').all()).toEqual([
+        { charset: 'unicode', code: 'U+2D6DD' },
+        { charset: 'cns11643', code: '1-4421' },
+      ])
+      expect(db.query('SELECT encoded_as FROM entries WHERE id = 1').get()).toEqual({ encoded_as: 'U+2D6DD' })
+    } finally { db.close() }
+  })
+
+  test('rejects an encoding without a character set', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const form = new FormData()
+      for (const [key, value] of Object.entries(record)) form.set(key, value)
+      form.set('image', imageFile(PNG_BYTES))
+      form.append('encoding_charset', 'other')
+      form.append('encoding_code', 'A1')
+      const e = {
+        request: new Request('https://example.test/en/new', { method: 'POST', body: form }),
+        url: new URL('https://example.test/en/new'),
+        cookies: testCookies().cookies,
+        platform: { env: { DB: d1Binding(db), IMAGES: images.bucket } },
+        params: { locale: 'en' },
+      } as any
+      const result = await actions.default!(e) as any
+      expect(result.status).toBe(400)
+      expect(result.data.errors.encodings).toContain('character set')
+      expect((db.query('SELECT count(*) AS n FROM entries').get() as { n: number }).n).toBe(0)
+    } finally { db.close() }
+  })
+
   test('stores multiple senses for one character', async () => {
     const db = createTestDatabase()
     const images = fakeImages()

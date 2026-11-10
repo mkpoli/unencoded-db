@@ -112,3 +112,18 @@ describe('date precision migration', () => {
     } finally { db.close() }
   })
 })
+
+describe('character encoding migration', () => {
+  test('moves the single encoded_as value into one Unicode row', () => {
+    const db = createTestDatabase('0031_atlas_profile.sql')
+    try {
+      db.exec("INSERT INTO entries (id, script, place, encoded_as, created_at) VALUES (1, 'Han', 'Book', ' U+2D6DD ', '2026')")
+      db.exec("INSERT INTO entries (id, script, place, encoded_as, created_at) VALUES (2, 'Han', 'Book', NULL, '2026')")
+      applyMigration(db, '0032_entry_encodings.sql')
+      expect(db.query('SELECT entry_id, charset, code FROM entry_encodings ORDER BY entry_id').all()).toEqual([
+        { entry_id: 1, charset: 'unicode', code: 'U+2D6DD' },
+      ])
+      expect(db.query('SELECT count(*) AS n FROM entry_encodings').get()).toEqual({ n: 1 })
+    } finally { db.close() }
+  })
+})

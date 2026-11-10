@@ -4,9 +4,11 @@
   import { cleanLinkInput } from '$lib/link-input'
   import type { PostInfo } from '$lib/source-url'
   import ComparisonGrid from '$lib/components/ComparisonGrid.svelte'
+  import EncodingFields from '$lib/components/EncodingFields.svelte'
   import ScriptSelect from '$lib/components/ScriptSelect.svelte'
   import { localizedHref, t, type Locale } from '$lib/i18n'
   import type { Comparison } from '$lib/comparison-rows'
+  import type { Encoding } from '$lib/encodings'
 
   type Sense = { id?: number; gloss: string; reading: string | null }
   type Genre = { slug: string; label: string }
@@ -45,7 +47,7 @@
     evidenceId?: number
     message?: string
     errors?: Record<string, string>
-    values?: Record<string, string | string[]>
+    values?: Record<string, string | string[] | Encoding[]>
     comparisons?: { rows: Comparison[] }
     senses?: Sense[]
     revision?: unknown
@@ -65,6 +67,7 @@
       allGenres: Genre[]
       allCollections: Collection[]
       allTags: string[]
+      encodings: Encoding[]
     }
     form?: FormState
   } = $props()
@@ -154,11 +157,12 @@
             <label class="field-label" for="radical">{t(data.locale, 'field.radical')}</label>
             <input id="radical" name="radical" maxlength="20" value={current('radical')} />
           </div>
-          <div class="field">
-            <label class="field-label" for="encoded_as">{t(data.locale, 'field.encodedAs')}</label>
-            <input id="encoded_as" name="encoded_as" maxlength="80" value={current('encoded_as')} />
-          </div>
         </div>
+        <EncodingFields
+          locale={data.locale}
+          values={form?.action === 'character' && Array.isArray(form.values?.encodings) ? form.values.encodings as Encoding[] : data.encodings}
+          error={characterError('encodings')}
+        />
         <div class="field">
           <label class="field-label" for="tags">{t(data.locale, 'field.tags')}</label>
           <input id="tags" name="tags" maxlength="400" list="tag-suggestions" value={form?.action === 'character' ? String(form.values?.tags ?? '') : tags.join(', ')} aria-describedby="tags-help" />
