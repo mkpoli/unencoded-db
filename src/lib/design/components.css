@@ -198,19 +198,18 @@
 .entry-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); margin-top: auto; padding-top: var(--space-2); }
 .entry-actions form { display: flex; }
 .more-row { display: flex; justify-content: center; margin-top: 22px; }
+/* Empty, as the design system's `ga-empty`: one mark, one sentence, one action,
+   on the page rather than inside a card. */
 .empty-state {
   display: grid;
   place-items: center;
-  gap: 12px;
-  padding: 56px 24px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+  gap: 14px;
+  padding: 64px 24px;
   text-align: center;
 }
-.empty-mark { color: var(--accent); font-size: 38px; line-height: 1; }
-.empty-state p { color: var(--muted); font-size: 14px; max-width: 40ch; }
-.empty-state .primary { margin-top: 6px; }
+.empty-mark { color: var(--accent); font-size: 40px; line-height: 1; }
+.empty-state p { color: var(--muted); font-size: var(--text-base); max-width: 40ch; }
+.empty-state .primary { margin-top: 8px; }
 
 /* One record. The character card holds the drawing and the record it identifies; evidence follows. */
 .entry-page { max-width: 860px; margin: 0 auto; }
