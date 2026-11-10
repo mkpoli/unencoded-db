@@ -2,6 +2,7 @@
   import { enhance } from '$app/forms'
   import { untrack } from 'svelte'
   import ComparisonGrid from '$lib/components/ComparisonGrid.svelte'
+  import CompositionField from '$lib/components/CompositionField.svelte'
   import EncodingFields from '$lib/components/EncodingFields.svelte'
   import EvidenceTypes from '$lib/components/EvidenceTypes.svelte'
   import FileField from '$lib/components/FileField.svelte'
@@ -193,6 +194,7 @@
           </div>
         {/if}
       </div>
+      <CompositionField ids={ids} value={String(form?.values?.composition ?? '')} locale={data.locale} />
       <div class="field">
         <label class="field-label" for="equivalent_to">{t(data.locale, 'field.equivalentTo')}</label>
         <input id="equivalent_to" class="one-char" name="equivalent_to" maxlength="80" value={form?.values?.equivalent_to ?? ''} autocomplete="off" spellcheck="false" aria-invalid={!!form?.errors?.equivalent_to} aria-describedby={form?.errors?.equivalent_to ? 'equivalent-to-help equivalent-to-error' : 'equivalent-to-help'} />

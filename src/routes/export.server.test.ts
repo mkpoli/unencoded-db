@@ -34,6 +34,7 @@ type ExportedRecord = {
   script: string
   ids: string | null
   ids_all: string[]
+  composition: { ids: string; parts: string[]; roles: string[]; formation: string } | null
   description: string
   place: string
   title: string | null
@@ -87,10 +88,25 @@ describe('JSON export', () => {
         ivd_sequence: null,
         date_precision: 'year',
         comparisons: [],
+        composition: null,
         evidence: [{ id: 0, place: 'Example collection', title: 'Title', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'First', date_precision: 'year', has_image: 0, url: null, provider: null, provider_url: null, types: [] }],
       })
       expect(JSON.stringify(body)).not.toContain('Secret')
     } finally { db.close() }
+  })
+
+  test('exports the formation chosen for the first description', async () => {
+    const db = database()
+    const id = insert(db, 'Han')
+    db.query('UPDATE entries SET ids = ?, composition = ?, revision = revision + 1 WHERE id = ?')
+      .run('⿰青鳥', '{"ids":"⿰青鳥","roles":["phonetic","semantic"]}', id)
+    const { body } = await exportJson(db)
+    expect(body.records[0]!.composition).toEqual({
+      ids: '⿰青鳥',
+      parts: ['青', '鳥'],
+      roles: ['phonetic', 'semantic'],
+      formation: 'phonoSemantic',
+    })
   })
 
   test('exports the first description as ids and every description as ids_all', async () => {

@@ -6,6 +6,7 @@
   import { cleanLinkInput } from '$lib/link-input'
   import type { PostInfo } from '$lib/source-url'
   import ComparisonGrid from '$lib/components/ComparisonGrid.svelte'
+  import CompositionField from '$lib/components/CompositionField.svelte'
   import EncodingFields from '$lib/components/EncodingFields.svelte'
   import ScriptSelect from '$lib/components/ScriptSelect.svelte'
   import { formatIds, IDS_FIELD_MAX } from '$lib/ids'
@@ -45,6 +46,7 @@
     encoded_as: string | null
     equivalent_to: string | null
     strokes: number | null
+    composition: string | null
     ivd_status: 'registered' | 'none' | null
     ivd_sequence: string | null
     comparisons: Comparison[]
@@ -81,6 +83,7 @@
   } = $props()
 
   const entry = $derived(data.entry)
+  const compositionValue = $derived(form?.action === 'character' ? String(form.values?.composition ?? '') : data.entry.composition ?? '')
   const evidence = $derived(data.evidence ?? [])
   const tags = $derived(data.tags ?? [])
   const media = $derived(data.media ?? [])
@@ -94,7 +97,7 @@
   let senses = $state<Sense[]>(untrack(() => form?.action === 'character' && Array.isArray(form.senses) ? form.senses.map(sense => ({ gloss: sense.gloss, reading: sense.reading })) : (data.senses ?? [])))
   let comparisons = $state<Comparison[]>(untrack(() => form?.action === 'character' ? form.comparisons?.rows ?? [] : (data.entry.comparisons ?? [])))
   let ids = $state(untrack(() => {
-    const raw = form?.action === 'character' ? String(form.values?.ids ?? '') : data.entry.ids
+    const raw = form?.action === 'character' ? String(form.values?.ids ?? '') : data.entry.ids ?? ''
     return form?.action === 'character' ? raw : formatIds(raw)
   }))
 
@@ -165,6 +168,7 @@
         <input id="ids" name="ids" maxlength={IDS_FIELD_MAX} bind:value={ids} aria-invalid={!!characterError('ids')} aria-describedby={characterError('ids') ? 'ids-hint ids-error' : 'ids-hint'} />
         <p class="field-help" id="ids-hint">{t(data.locale, 'field.idsHint')}</p>
         {#if characterError('ids')}<p class="field-error" id="ids-error">{characterError('ids')}</p>{/if}
+        <CompositionField ids={ids} value={compositionValue} locale={data.locale} />
         <div class="field-grid">
           <div class="field">
             <label class="field-label" for="strokes">{t(data.locale, 'field.strokes')}</label>

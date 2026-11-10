@@ -13,6 +13,7 @@ import { createImageKey, putSourceImage, readSourceImage } from '$lib/server/ima
 import { cookieOptions, hashToken } from '$lib/server/attribution'
 import { glyphPaths, warmGlyphs } from '$lib/server/glyphs'
 import { primaryIds } from '$lib/ids'
+import { analyze, parseComposition } from '$lib/composition'
 import { localizedHref, type Locale } from '$lib/i18n'
 import { readEvidenceTypes } from '$lib/evidence-types'
 import type { PageServerLoad } from './$types'
@@ -26,6 +27,7 @@ type Entry = {
   encoded_as: string | null
   equivalent_to: string | null
   strokes: number | null
+  composition: string | null
   ivd_status: 'registered' | 'none' | null
   ivd_sequence: string | null
   created_at: string
@@ -36,7 +38,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   if (!platform) error(500, 'Database unavailable')
   if (!/^[1-9]\d*$/.test(params.id) || !Number.isSafeInteger(Number(params.id))) error(404)
   const row = await platform.env.DB.prepare(
-    `SELECT id, script, ids, description, radical, encoded_as, equivalent_to, strokes, ivd_status, ivd_sequence, created_at, comparisons
+    `SELECT id, script, ids, description, radical, encoded_as, equivalent_to, strokes, composition, ivd_status, ivd_sequence, created_at, comparisons
      FROM entries WHERE id = ? AND ${publicEntryPredicate}`
   ).bind(Number(params.id)).first<Entry>()
   if (!row) error(404)
@@ -54,10 +56,11 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   const storedEncodings = await listEncodings(platform.env.DB, Number(params.id))
   const encodings = storedEncodings.length ? storedEncodings : entry.encoded_as ? [{ charset: 'unicode', code: entry.encoded_as }] : []
   const sequence = primaryIds(entry.ids)
+  const composition = analyze(sequence, parseComposition(entry.composition))
   const paths = await glyphPaths(platform.env.IMAGES, sequence ? [sequence] : [])
   const glyph = sequence && Object.prototype.hasOwnProperty.call(paths, sequence) ? paths[sequence] : null
   if (sequence && !glyph) platform.ctx?.waitUntil(warmGlyphs(platform.env.IMAGES, [sequence]))
-  return { entry, glyph, comparisons, evidence, media, crops, genres, collections, relations, tags, senses, encodings, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
+  return { entry, glyph, composition, comparisons, evidence, media, crops, genres, collections, relations, tags, senses, encodings, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
 }
 
 export const actions = {

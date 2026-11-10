@@ -16,6 +16,7 @@ import { readIvd } from '$lib/server/ivd'
 import { cleanSourceUrl } from '$lib/source-url'
 import { readEvidenceTypes } from '$lib/evidence-types'
 import { idsInvalid, rawIds, readIds } from '$lib/server/ids'
+import { readComposition } from '$lib/server/composition'
 import { splitIds } from '$lib/ids'
 import type { Actions, PageServerLoad } from './$types'
 
@@ -73,6 +74,7 @@ export const actions: Actions = {
     const form = await request.formData()
     const values = fieldValues(form)
     const ids = readIds(form)
+    const composition = readComposition(form, ids)
     values.ids = rawIds(form).join(', ')
     const types = readEvidenceTypes(form)
     const errors: FormErrors = {}
@@ -128,7 +130,7 @@ export const actions: Actions = {
     const collections = selectedCollections(form)
     const tags = parseTags(String(form.get('tags') ?? ''))
     const senses = parseSenses(form)
-    const submitted = { ...values, provider: rawProvider, provider_url: rawProviderUrl, radical, encoded_as: encoded, strokes, ivd_status: ivdStatus, ivd_sequence: ivdSequence, equivalent_to: equivalent.value ?? '', genres, collections, tags: tags.join(', '), encodings: encodings ?? [], types }
+    const submitted = { ...values, provider: rawProvider, provider_url: rawProviderUrl, radical, encoded_as: encoded, strokes, ivd_status: ivdStatus, ivd_sequence: ivdSequence, equivalent_to: equivalent.value ?? '', genres, collections, tags: tags.join(', '), encodings: encodings ?? [], types, composition: composition ?? '' }
     if (!senses) return fail(400, { errors, values: submitted, comparisons })
     const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: submitted, comparisons })
     if (link && !/^https?:\/\//i.test(link)) errors.url = t(locale, 'error.length')
@@ -172,7 +174,7 @@ export const actions: Actions = {
         cookies.get(cookie.name),
         comparisons.rows,
         imageMeta ?? undefined,
-        { radical, encoded_as: encoded, strokes, ivd_status: ivd.status, ivd_sequence: ivd.sequence, equivalent_to: equivalent.valid ? equivalent.value : null },
+        { radical, encoded_as: encoded, strokes, ivd_status: ivd.status, ivd_sequence: ivd.sequence, equivalent_to: equivalent.valid ? equivalent.value : null, composition },
       )
     } catch (caught) {
       // A transport error can arrive before or after the insert commits. Recover

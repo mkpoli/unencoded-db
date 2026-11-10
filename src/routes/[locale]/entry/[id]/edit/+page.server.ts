@@ -2,6 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit'
 import { SCRIPT_MAX } from '$lib/script'
 import { readIvd } from '$lib/server/ivd'
 import { idsInvalid, rawIds, readIds } from '$lib/server/ids'
+import { readComposition } from '$lib/server/composition'
 import { addEvidence, addEvidenceMedia, evidenceFields, listEvidence, listEvidenceMedia, primaryEvidenceId, readEvidenceFields, updateEvidence } from '$lib/server/evidence-links'
 import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, readSourceImages, type ImageError } from '$lib/server/images'
 import { readComparisons } from '$lib/server/related'
@@ -30,6 +31,7 @@ type EntryRow = {
   encoded_as: string | null
   equivalent_to: string | null
   strokes: number | null
+  composition: string | null
   ivd_status: 'registered' | 'none' | null
   ivd_sequence: string | null
   comparisons: string
@@ -76,7 +78,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
   if (!platform) error(500, 'Database unavailable')
   const id = idOf(params.id)
   const row = await platform.env.DB.prepare(
-    `SELECT id, revision, edit_generation, script, ids, description, radical, encoded_as, equivalent_to, strokes, ivd_status, ivd_sequence, comparisons
+    `SELECT id, revision, edit_generation, script, ids, description, radical, encoded_as, equivalent_to, strokes, composition, ivd_status, ivd_sequence, comparisons
      FROM entries WHERE id = ? AND ${publicEntryPredicate}`
   ).bind(id).first<EntryRow>()
   if (!row) error(404)
@@ -126,6 +128,7 @@ export const actions: Actions = {
     const encodings = parseEncodings(form)
     const revision = positive(form.get('revision'))
     const generation = positive(form.get('edit_generation'))
+    const composition = readComposition(form, values.ids || null)
     const submitted: FormValues = {
       script: values.script,
       ids: rawIds(form).join(', '),
@@ -139,6 +142,7 @@ export const actions: Actions = {
       tags: tags.join(', '),
       genres,
       collections,
+      composition: composition ?? '',
     }
     const errors: Record<string, string> = {}
     if (!values.script || values.script.length > SCRIPT_MAX) errors.script = t(locale, 'error.script')
@@ -163,9 +167,9 @@ export const actions: Actions = {
     if (!ivd || !encodings || Object.keys(errors).length) return failForm(400, t(locale, 'error.fields'))
     if (!revision || !generation) return failForm(400, t(locale, 'error.fields'))
     const updated = await platform.env.DB.prepare(
-      `UPDATE entries SET script = ?, ids = ?, description = ?, radical = ?, encoded_as = ?, equivalent_to = ?, strokes = ?, ivd_status = ?, ivd_sequence = ?, comparisons = ?, revision = revision + 1
+      `UPDATE entries SET script = ?, ids = ?, description = ?, radical = ?, encoded_as = ?, equivalent_to = ?, strokes = ?, composition = ?, ivd_status = ?, ivd_sequence = ?, comparisons = ?, revision = revision + 1
        WHERE id = ? AND ${publicEntryPredicate} AND revision = ? AND edit_generation = ? RETURNING id`
-    ).bind(values.script, values.ids || null, values.description || null, values.radical || null, primaryEncoding(encodings), values.equivalentTo.valid ? values.equivalentTo.value : null, values.strokes,
+    ).bind(values.script, values.ids || null, values.description || null, values.radical || null, primaryEncoding(encodings), values.equivalentTo.valid ? values.equivalentTo.value : null, values.strokes, composition,
       ivd.status, ivd.sequence, JSON.stringify(comparisons.rows), id, revision, generation).first<{ id: number }>()
     if (!updated) {
       const visible = await platform.env.DB.prepare(`SELECT id FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first()

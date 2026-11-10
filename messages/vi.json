@@ -220,5 +220,16 @@
   "source.title": "Nguồn",
   "source.view": "Chi tiết nguồn",
   "tag.add": "Thêm thẻ",
-  "tag.remove": "Xóa thẻ {tag}"
+  "tag.remove": "Xóa thẻ {tag}",
+  "field.formation": "Cách cấu tạo",
+  "field.formationHint": "Đánh dấu các bộ phận của mô tả đầu tiên để xác định cách cấu tạo.",
+  "formation.phonoSemantic": "Hình thanh",
+  "formation.ideographic": "Hội ý",
+  "formation.indicative": "Chỉ sự",
+  "formation.sign": "Chữ ký hiệu",
+  "formation.single": "Độc thể",
+  "formation.unknown": "Chưa xác định",
+  "role.semantic": "Hình phù",
+  "role.phonetic": "Thanh phù",
+  "role.symbol": "Ký hiệu"
 }
