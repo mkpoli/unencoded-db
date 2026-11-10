@@ -164,26 +164,26 @@
 .add-card:hover { border-style: solid; border-color: var(--accent); background: var(--accent-hover); color: var(--accent); }
 .add-card .add-mark { font-size: 20px; font-weight: 300; line-height: 1; }
 
-/* Script filter tabs above the collection. */
-.script-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 22px; }
+/* Filter tabs, as the design system's `ga-tabs`: a borderless row where the
+   current choice carries a surface, not a capsule outline. */
+.script-tabs { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 18px; }
 .script-tab {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   min-width: 0;
   max-width: 100%;
-  min-height: 32px;
-  padding: 3px 11px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
+  min-height: 40px;
+  padding: 8px 15px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
   color: var(--muted);
   font-size: var(--text-sm);
   text-decoration: none;
 }
-.script-tab:not([aria-current="page"]):hover { border-color: var(--accent); color: var(--accent); }
+.script-tab:not([aria-current="page"]):hover { background: var(--surface-subtle); color: var(--ink); }
 .script-tab[aria-current="page"] {
-  border-color: var(--line-strong);
   background: var(--surface-selected);
   color: var(--ink);
   font-weight: 550;
