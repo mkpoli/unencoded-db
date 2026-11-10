@@ -17,6 +17,7 @@ const idsGlyph = resolve('src/lib/components/IdsGlyph.svelte')
 const scriptSelect = resolve('src/lib/components/ScriptSelect.svelte')
 const comparisonGrid = resolve('src/lib/components/ComparisonGrid.svelte')
 const encodingFields = resolve('src/lib/components/EncodingFields.svelte')
+const extraImagesField = resolve('src/lib/components/ExtraImagesField.svelte')
 const appForms = resolve(tmp, 'app-forms.js')
 writeFileSync(appForms, 'export function enhance() { return {} }\n')
 const components = new Map<string, Promise<any>>()
@@ -26,6 +27,7 @@ let idsGlyphModule: Promise<string> | null = null
 let scriptSelectModule: Promise<string> | null = null
 let comparisonGridModule: Promise<string> | null = null
 let encodingFieldsModule: Promise<string> | null = null
+let extraImagesFieldModule: Promise<string> | null = null
 
 function loadFileField(): Promise<string> {
   if (!fileFieldModule) {
@@ -106,6 +108,19 @@ function loadScriptSelect(): Promise<string> {
   return scriptSelectModule
 }
 
+function loadExtraImagesField(): Promise<string> {
+  if (!extraImagesFieldModule) {
+    extraImagesFieldModule = (async () => {
+      const preprocessed = await preprocess(readFileSync(extraImagesField, 'utf8'), vitePreprocess({ script: true }), { filename: extraImagesField })
+      const { js } = compile(preprocessed.code, { filename: extraImagesField, generate: 'server' })
+      const target = resolve(tmp, 'extra-images-field.js')
+      writeFileSync(target, js.code)
+      return target
+    })()
+  }
+  return extraImagesFieldModule
+}
+
 async function load(path: string, name: string) {
   let pending = components.get(name)
   if (!pending) {
@@ -119,7 +134,8 @@ async function load(path: string, name: string) {
       const select = await loadScriptSelect()
       const grid = await loadComparisonGrid()
       const encoding = await loadEncodingFields()
-      const code = js.code.replaceAll('"$lib/components/ComparisonGrid.svelte"', `"${grid}"`).replaceAll("'$lib/components/ComparisonGrid.svelte'", `'${grid}'`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/CropField.svelte'", `'${crop}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$lib/components/EncodingFields.svelte"', `"${encoding}"`).replaceAll("'$lib/components/EncodingFields.svelte'", `'${encoding}'`).replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`).replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`).replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/encodings'", `'${encodings}'`).replaceAll('"$lib/encodings"', `"${encodings}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
+      const extra = await loadExtraImagesField()
+      const code = js.code.replaceAll('"$lib/components/ComparisonGrid.svelte"', `"${grid}"`).replaceAll("'$lib/components/ComparisonGrid.svelte'", `'${grid}'`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/CropField.svelte'", `'${crop}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$lib/components/ExtraImagesField.svelte"', `"${extra}"`).replaceAll("'$lib/components/ExtraImagesField.svelte'", `'${extra}'`).replaceAll('"$lib/components/EncodingFields.svelte"', `"${encoding}"`).replaceAll("'$lib/components/EncodingFields.svelte'", `'${encoding}'`).replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`).replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`).replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/encodings'", `'${encodings}'`).replaceAll('"$lib/encodings"', `"${encodings}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
@@ -267,6 +283,7 @@ describe('localized pages', () => {
     expect(body).toContain('name="tags"')
     expect(body).toContain('name="encoding_charset"')
     expect(body).toContain('name="encoding_code"')
+    expect(body).toContain('name="extra_image"')
     expect(body).toContain('U+2D6DD')
     expect(body).toContain('name="genre" value="music"')
     expect(body).toContain('name="genre" value="dialect"')

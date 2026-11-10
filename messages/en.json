@@ -82,6 +82,8 @@
   "field.encodingOther": "Other character set",
   "field.encodingRemove": "Remove encoding",
   "field.encodings": "Encodings",
+  "field.extraImages": "More pictures",
+  "field.extraImagesHint": "Add more photos or scans of the same source.",
   "field.fileFormats": "JPEG, PNG or WebP · 16 MiB",
   "field.genre": "Category",
   "field.ids": "Ideographic description (IDS)",

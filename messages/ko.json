@@ -82,6 +82,8 @@
   "field.encodingOther": "기타 문자 집합",
   "field.encodingRemove": "부호화 삭제",
   "field.encodings": "부호화",
+  "field.extraImages": "추가 이미지",
+  "field.extraImagesHint": "같은 출처의 사진이나 스캔을 더 추가할 수 있습니다.",
   "field.fileFormats": "JPEG, PNG, WebP · 16 MiB",
   "field.genre": "분류",
   "field.ids": "표의 문자 구성 설명(IDS)",

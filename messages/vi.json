@@ -82,6 +82,8 @@
   "field.encodingOther": "Bộ ký tự khác",
   "field.encodingRemove": "Xóa mã hóa",
   "field.encodings": "Mã hóa",
+  "field.extraImages": "Ảnh bổ sung",
+  "field.extraImagesHint": "Thêm ảnh hoặc bản quét khác của cùng nguồn.",
   "field.fileFormats": "JPEG, PNG hoặc WebP · 16 MiB",
   "field.genre": "Phân loại",
   "field.ids": "Mô tả cấu trúc chữ (IDS)",

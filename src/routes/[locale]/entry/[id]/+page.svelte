@@ -10,12 +10,14 @@
   type Collection = { slug: string; label: string }
   type Sense = { id: number; gloss: string; reading: string | null }
   type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
+  type EvidenceMedia = { id: number; evidence_id: number }
   type Evidence = { id: number; place: string; url: string | null; provider?: string | null; provider_url?: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; source_id: number | null; has_image: number; created_at: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; strokes: number | null; ivd_status: 'registered' | 'none' | null; ivd_sequence: string | null; created_at: string }
-  let { data }: { data: { locale: Locale; entry: Entry; glyph: string | null; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; encodings: Encoding[]; isModerator: boolean; reported: boolean } } = $props()
+  let { data }: { data: { locale: Locale; entry: Entry; glyph: string | null; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; encodings: Encoding[]; media: EvidenceMedia[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
   let comparisons = $derived(data.comparisons ?? [])
   let evidence = $derived(data.evidence ?? [])
+  let media = $derived(data.media ?? [])
   let genres = $derived(data.genres ?? [])
   let crops = $derived(data.crops ?? [])
   let collections = $derived(data.collections ?? [])
@@ -84,7 +86,13 @@
     </div>
     {#each evidence as item (item.id)}
       <article class="evidence-card" id={`evidence-${item.id}`}>
-        {#if item.has_image}
+        {#if media.some(image => image.evidence_id === item.id)}
+          <div class="evidence-gallery">
+            {#each media.filter(image => image.evidence_id === item.id) as image (image.id)}
+              <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image/${image.id}`)} alt={item.place || item.provider || t(data.locale, 'field.sourceImage')} loading="lazy" />
+            {/each}
+          </div>
+        {:else if item.has_image}
           <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} alt={item.place || item.provider || t(data.locale, 'field.sourceImage')} loading="lazy" />
         {/if}
         {#if item.place}

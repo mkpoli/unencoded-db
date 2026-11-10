@@ -2,7 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit'
 import type { Comparison } from '$lib/comparison-rows'
 import { MAX_COMPARISONS } from '$lib/server/related'
 import { publicEntryPredicate } from '$lib/server/visibility'
-import { addCrop, addEvidence, listCrops, listEvidence, readEvidenceFields } from '$lib/server/evidence-links'
+import { addCrop, addEvidence, listCrops, listEvidence, listEvidenceMedia, readEvidenceFields } from '$lib/server/evidence-links'
 import { genresForEntry } from '$lib/server/genres'
 import { tagsForEntry } from '$lib/server/tags'
 import { listSenses } from '$lib/server/senses'
@@ -42,6 +42,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   const comparisons = JSON.parse(stored) as Comparison[]
   if (!Array.isArray(comparisons) || comparisons.length > MAX_COMPARISONS) error(500, 'Invalid related characters')
   const evidence = await listEvidence(platform.env.DB, Number(params.id))
+  const media = await listEvidenceMedia(platform.env.DB, Number(params.id))
   const crops = await listCrops(platform.env.DB, Number(params.id))
   const genres = await genresForEntry(platform.env.DB, Number(params.id))
   const collections = await collectionsForEntry(platform.env.DB, Number(params.id))
@@ -54,7 +55,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   const paths = await glyphPaths(platform.env.IMAGES, sequence ? [sequence] : [])
   const glyph = sequence && Object.prototype.hasOwnProperty.call(paths, sequence) ? paths[sequence] : null
   if (sequence && !glyph) platform.ctx?.waitUntil(warmGlyphs(platform.env.IMAGES, [sequence]))
-  return { entry, glyph, comparisons, evidence, crops, genres, collections, relations, tags, senses, encodings, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
+  return { entry, glyph, comparisons, evidence, media, crops, genres, collections, relations, tags, senses, encodings, isModerator: Boolean(locals?.moderator), reported: url?.searchParams.get('reported') === '1' }
 }
 
 export const actions = {
