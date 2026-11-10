@@ -394,7 +394,7 @@ describe('evidence routes', () => {
     try {
       const withoutIds: Record<string, string> = { ...record }
       delete withoutIds.ids
-      for (const values of [{ ...record, ids: '' }, withoutIds]) {
+      for (const values of [{ ...record, ids: '' }, { ...record, ids: ', ' }, withoutIds]) {
         const result = await actions.default!(event(values, d1Binding(db), images)) as any
         expect(result.status).toBe(400)
         expect(result.data.errors.ids).toContain('ideographic description')
@@ -665,7 +665,7 @@ describe('evidence routes', () => {
     const images = fakeImages()
     try {
       const DB = d1Binding(db)
-      await expect(actions.default!(event({ ...record, ids: '⿰木木 ⿱木木' }, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      await expect(actions.default!(event({ ...record, ids: '⿰木木, ⿱木木' }, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
       expect(db.query('SELECT ids FROM entries').get()).toEqual({ ids: '⿰木木 ⿱木木' })
       expect(db.query('SELECT ids FROM entry_ids ORDER BY ids').all()).toEqual([{ ids: '⿰木木' }, { ids: '⿱木木' }])
       const shown = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as { entry: { ids: string } }

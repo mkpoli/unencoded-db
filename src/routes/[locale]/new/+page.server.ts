@@ -93,7 +93,7 @@ export const actions: Actions = {
         : t(locale, 'error.length')
     }
     if (idsInvalid(form)) errors.ids = t(locale, 'error.length')
-    else if (!values.ids.trim()) errors.ids = t(locale, 'error.ids')
+    else if (!ids) errors.ids = t(locale, 'error.ids')
     const source = await readSourceImage(form)
     if (source.error && source.error !== 'missing') errors.image = imageError(locale, source.error)
     const extraSource = await readSourceImages(form)
