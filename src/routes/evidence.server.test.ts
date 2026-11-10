@@ -522,6 +522,25 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
+  test('stores the existing character a variant is equivalent to', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      await expect(actions.default!(event({ ...record, equivalent_to: '漢' }, DB, images))).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT equivalent_to FROM entries WHERE id = 1').get()).toEqual({ equivalent_to: '漢' })
+      const shown = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as { entry: { equivalent_to: string } }
+      expect(shown.entry).toMatchObject({ equivalent_to: '漢' })
+      const listing = await list({ platform: { env: { DB } }, url: new URL('https://example.test/en') } as any) as { entries: { equivalent_to: string }[] }
+      expect(listing.entries[0]).toMatchObject({ equivalent_to: '漢' })
+
+      const invalid = await actions.default!(event({ ...record, ids: '⿱日木', equivalent_to: '漢字' }, DB, images)) as { status: number; data: { errors: { equivalent_to: string } } }
+      expect(invalid.status).toBe(400)
+      expect(invalid.data.errors.equivalent_to).toContain('one character')
+      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 1 })
+    } finally { db.close() }
+  })
+
   test('stores free-form character tags', async () => {
     const db = createTestDatabase()
     const images = fakeImages()

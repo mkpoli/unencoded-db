@@ -35,6 +35,7 @@ function dbSetup() {
   applyMigration(db, '0030_evidence_provider.sql')
   applyMigration(db, '0031_atlas_profile.sql')
   applyMigration(db, '0032_entry_encodings.sql')
+  applyMigration(db, '0034_equivalent_character.sql')
   return db
 }
 function binding(db: Database) {
@@ -223,20 +224,22 @@ describe('revisions', () => {
   test('edits report every invalid field and keep the submitted text', async () => {
     const db = dbSetup()
     try {
-      const values = { revision: '1', edit_generation: '1', script: 'Han', ids: 'i'.repeat(201), description: 'd'.repeat(5001), radical: 'r'.repeat(21), encoded_as: 'e'.repeat(81), tags: 'kept' }
-      const invalid = await actions.character!(event(db, values)) as any
+      const values = { revision: '1', edit_generation: '1', script: 'Han', ids: 'i'.repeat(201), description: 'd'.repeat(5001), radical: 'r'.repeat(21), equivalent_to: '漢字', tags: 'kept' }
+      const invalid = await actions.character!(event(db, { ...values, encoding_charset: 'x'.repeat(81), encoding_code: 'U+4E00' })) as any
       expect(invalid.status).toBe(400)
       expect(invalid.data.errors.ids).toContain('length')
       expect(invalid.data.errors.description).toContain('length')
       expect(invalid.data.errors.radical).toContain('length')
       expect(invalid.data.errors.encodings).toContain('character set')
+      expect(invalid.data.errors.equivalent_to).toContain('one character')
       expect(invalid.data.values.tags).toBe('kept')
       expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 1 })
-      const missingScript = await actions.character!(event(db, { ...values, ids: '', description: '', radical: '', encoded_as: '', script: '' })) as any
+      const missingScript = await actions.character!(event(db, { ...values, ids: '', description: '', radical: '', script: '' })) as any
       expect(missingScript.status).toBe(400)
       expect(missingScript.data.errors.script).toContain('script')
-      await expect(actions.character!(event(db, { ...values, script: 'Han', ids: '', description: '', radical: '', encoded_as: '', tags: '新, 客家', sense_gloss: '意味', sense_reading: 'いみ', comparison_variant: '漢' }))).rejects.toMatchObject({ status: 303 })
+      await expect(actions.character!(event(db, { ...values, script: 'Han', ids: '', description: '', radical: '', equivalent_to: '漢', tags: '新, 客家', sense_gloss: '意味', sense_reading: 'いみ', comparison_variant: '漢' }))).rejects.toMatchObject({ status: 303 })
       expect(db.query('SELECT ids, description FROM entry_revisions WHERE revision = 2').get()).toEqual({ ids: null, description: null })
+      expect(db.query('SELECT equivalent_to FROM entries').get()).toEqual({ equivalent_to: '漢' })
       expect(db.query('SELECT tag FROM character_tags ORDER BY tag').all()).toEqual([{ tag: '客家' }, { tag: '新' }])
       expect(db.query('SELECT gloss, reading FROM senses').get()).toEqual({ gloss: '意味', reading: 'いみ' })
       expect(JSON.parse((db.query('SELECT comparisons FROM entries').get() as any).comparisons)).toHaveLength(1)

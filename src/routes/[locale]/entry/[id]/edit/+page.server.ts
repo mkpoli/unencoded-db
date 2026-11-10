@@ -4,6 +4,7 @@ import { readIvd } from '$lib/server/ivd'
 import { addEvidence, addEvidenceMedia, evidenceFields, listEvidence, listEvidenceMedia, primaryEvidenceId, readEvidenceFields, updateEvidence } from '$lib/server/evidence-links'
 import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, readSourceImages, type ImageError } from '$lib/server/images'
 import { readComparisons } from '$lib/server/related'
+import { readEquivalentTo } from '$lib/equivalent'
 import type { Comparison } from '$lib/comparison-rows'
 import { listGenres, genresForEntry, selectedGenres, saveGenres } from '$lib/server/genres'
 import { listCollections, collectionsForEntry, selectedCollections, saveCollections } from '$lib/server/collections'
@@ -25,6 +26,7 @@ type EntryRow = {
   description: string | null
   radical: string | null
   encoded_as: string | null
+  equivalent_to: string | null
   strokes: number | null
   ivd_status: 'registered' | 'none' | null
   ivd_sequence: string | null
@@ -61,9 +63,10 @@ function readCharacter(form: FormData) {
   const ids = text(form, 'ids')
   const description = text(form, 'description')
   const radical = text(form, 'radical')
+  const equivalentTo = readEquivalentTo(form.get('equivalent_to'))
   const rawStrokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
   const strokes = Number.isInteger(rawStrokes) && rawStrokes >= 0 && rawStrokes < 200 ? rawStrokes : null
-  return { script, ids, description, radical, strokes }
+  return { script, ids, description, radical, equivalentTo, strokes }
 }
 
 export const load: PageServerLoad = async ({ params, platform }) => {
@@ -71,7 +74,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
   if (!platform) error(500, 'Database unavailable')
   const id = idOf(params.id)
   const row = await platform.env.DB.prepare(
-    `SELECT id, revision, edit_generation, script, ids, description, radical, encoded_as, strokes, ivd_status, ivd_sequence, comparisons
+    `SELECT id, revision, edit_generation, script, ids, description, radical, encoded_as, equivalent_to, strokes, ivd_status, ivd_sequence, comparisons
      FROM entries WHERE id = ? AND ${publicEntryPredicate}`
   ).bind(id).first<EntryRow>()
   if (!row) error(404)
@@ -126,6 +129,7 @@ export const actions: Actions = {
       ids: values.ids,
       description: values.description,
       radical: values.radical,
+      equivalent_to: values.equivalentTo.value ?? '',
       strokes: values.strokes === null ? '' : String(values.strokes),
       encodings: encodings ?? [],
       ivd_status: ivdStatus,
@@ -140,6 +144,7 @@ export const actions: Actions = {
     if (values.description.length > 5000) errors.description = t(locale, 'error.length')
     if (values.radical.length > 20) errors.radical = t(locale, 'error.length')
     if (!encodings) errors.encodings = t(locale, 'error.encodings')
+    if (!values.equivalentTo.valid) errors.equivalent_to = t(locale, 'error.equivalentTo')
     if (senses === null) errors.senses = t(locale, 'error.length')
     if (!ivd) errors.ivd_sequence = t(locale, 'error.ivd')
     if (comparisons.invalid) errors.comparison = t(locale, 'error.comparison')
@@ -156,9 +161,9 @@ export const actions: Actions = {
     if (!ivd || !encodings || Object.keys(errors).length) return failForm(400, t(locale, 'error.fields'))
     if (!revision || !generation) return failForm(400, t(locale, 'error.fields'))
     const updated = await platform.env.DB.prepare(
-      `UPDATE entries SET script = ?, ids = ?, description = ?, radical = ?, encoded_as = ?, strokes = ?, ivd_status = ?, ivd_sequence = ?, comparisons = ?, revision = revision + 1
+      `UPDATE entries SET script = ?, ids = ?, description = ?, radical = ?, encoded_as = ?, equivalent_to = ?, strokes = ?, ivd_status = ?, ivd_sequence = ?, comparisons = ?, revision = revision + 1
        WHERE id = ? AND ${publicEntryPredicate} AND revision = ? AND edit_generation = ? RETURNING id`
-    ).bind(values.script, values.ids || null, values.description || null, values.radical || null, primaryEncoding(encodings), values.strokes,
+    ).bind(values.script, values.ids || null, values.description || null, values.radical || null, primaryEncoding(encodings), values.equivalentTo.valid ? values.equivalentTo.value : null, values.strokes,
       ivd.status, ivd.sequence, JSON.stringify(comparisons.rows), id, revision, generation).first<{ id: number }>()
     if (!updated) {
       const visible = await platform.env.DB.prepare(`SELECT id FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first()
