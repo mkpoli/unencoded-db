@@ -5,7 +5,7 @@ import { glyphPaths, warmGlyphs } from '$lib/server/glyphs'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import type { PageServerLoad } from './$types'
 
-type ListedEntry = { id: number; script: string; ids: string | null; place: string }
+type ListedEntry = { id: number; script: string; ids: string | null; evidence: number; first_year: number | null; category: string | null }
 type ScriptCount = { script: string; n: number }
 
 export const load: PageServerLoad = async ({ platform, url }) => {
@@ -24,7 +24,7 @@ export const load: PageServerLoad = async ({ platform, url }) => {
   if (script !== null) { filters.push('script = ?'); filterBinds.push(script) }
   const filter = filters.length ? ` AND ${filters.join(' AND ')}` : ''
   const [page, counted] = await Promise.all([
-    platform.env.DB.prepare(`SELECT id, script, ids, place FROM entries WHERE ${publicEntryPredicate}${filter} AND id < ? ORDER BY id DESC LIMIT 21`).bind(...filterBinds, id).all<ListedEntry>(),
+    platform.env.DB.prepare(`SELECT id, script, ids, (SELECT count(*) FROM evidence ev WHERE ev.entry_id = entries.id) AS evidence, (SELECT min(ev.date_year) FROM evidence ev WHERE ev.entry_id = entries.id AND ev.date_year IS NOT NULL) AS first_year, (SELECT g.label FROM entry_genres eg JOIN genres g ON g.slug = eg.genre WHERE eg.entry_id = entries.id ORDER BY eg.genre LIMIT 1) AS category FROM entries WHERE ${publicEntryPredicate}${filter} AND id < ? ORDER BY id DESC LIMIT 21`).bind(...filterBinds, id).all<ListedEntry>(),
     platform.env.DB.prepare('SELECT script, n FROM script_counts').bind().all<ScriptCount>(),
   ])
   const total = counted.results.reduce((sum, row) => sum + row.n, 0)

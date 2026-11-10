@@ -22,6 +22,8 @@
   "browse.emptyScript": "這個文字體系還沒有記錄。",
   "browse.export": "匯出為JSON",
   "browse.more": "更多",
+  "browse.source": "{n}個出處",
+  "browse.sources": "{n}個出處",
   "crop.add": "新增裁剪",
   "crop.hint": "拖動框選文字。",
   "crop.label": "裁剪 {n}",

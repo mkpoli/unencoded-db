@@ -22,6 +22,8 @@
   "browse.emptyScript": "이 문자 체계의 기록이 없습니다.",
   "browse.export": "JSON으로 내보내기",
   "browse.more": "더 보기",
+  "browse.source": "출처 {n}건",
+  "browse.sources": "출처 {n}건",
   "crop.add": "자르기 추가",
   "crop.hint": "문자 주위를 드래그해 상자를 그리세요.",
   "crop.label": "자르기 {n}",

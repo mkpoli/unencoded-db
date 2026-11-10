@@ -22,6 +22,8 @@
   "browse.emptyScript": "No records in this script.",
   "browse.export": "Export as JSON",
   "browse.more": "More",
+  "browse.source": "{n} source",
+  "browse.sources": "{n} sources",
   "crop.add": "Add crop",
   "crop.hint": "Drag a box around the character.",
   "crop.label": "Crop {n}",

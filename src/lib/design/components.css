@@ -99,7 +99,9 @@
   font-weight: 500;
   overflow-wrap: anywhere;
 }
-.entry-card .place { color: var(--muted); font-size: var(--text-sm); }
+.entry-card .summary { display: flex; gap: 5px; min-width: 0; color: var(--muted); font-size: var(--text-sm); }
+.entry-card .summary > span { white-space: nowrap; }
+.entry-card .category { align-self: flex-start; max-width: 100%; padding: 1px 8px; border-radius: 999px; background: var(--surface-sunken); color: var(--muted); font-size: var(--text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .entry-card .record {
   margin-top: 8px;
   color: var(--muted);

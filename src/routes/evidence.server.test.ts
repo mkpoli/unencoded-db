@@ -231,7 +231,7 @@ describe('evidence routes', () => {
       expect('url' in row).toBe(false)
 
       const listing = await list({ platform: { env: { DB } }, url: new URL('https://example.test/en') } as any) as any
-      expect(listing.entries[0]).toMatchObject({ id: 1, ids: record.ids, place: record.place })
+      expect(listing.entries[0]).toMatchObject({ id: 1, ids: record.ids, evidence: 1, first_year: 1900, category: null })
 
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
       expect(result.entry).toMatchObject({ id: 1, script: record.script, ids: record.ids })
@@ -252,7 +252,7 @@ describe('evidence routes', () => {
       const DB = d1Binding(db)
       const listing = await list({ platform: { env: { DB } }, url: new URL('https://example.test/en') } as any) as any
       expect(listing.entries).toHaveLength(1)
-      expect(listing.entries[0]).toMatchObject({ id: 1, place: 'Book' })
+      expect(listing.entries[0]).toMatchObject({ id: 1, evidence: 1, first_year: null, category: null })
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
       expect(result.entry).toMatchObject({ id: 1, script: 'Han', ids: '⿰木木' })
       expect(result.entry.title).toBeUndefined()
