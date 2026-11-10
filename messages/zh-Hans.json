@@ -86,6 +86,8 @@
   "field.ivdRegistered": "已注册",
   "field.ivdSequence": "IVD序列",
   "field.ivdUnstated": "未填写",
+  "field.linkImageFailed": "无法添加帖子中的图片。请改为选择文件。",
+  "field.linkImageWorking": "正在从帖子中获取图片",
   "field.moreDetails": "更多信息",
   "field.note": "出处备注",
   "field.page": "页码",

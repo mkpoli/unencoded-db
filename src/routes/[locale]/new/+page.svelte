@@ -3,6 +3,8 @@
   import { untrack } from 'svelte'
   import ComparisonGrid from '$lib/components/ComparisonGrid.svelte'
   import FileField from '$lib/components/FileField.svelte'
+  import { cleanLinkInput } from '$lib/link-input'
+  import type { PostInfo } from '$lib/source-url'
   import type { Comparison } from '$lib/comparison-rows'
   import { handleContributionResult } from '$lib/contribution-result'
   import { localizedHref, t, type Locale } from '$lib/i18n'
@@ -29,6 +31,26 @@
   let strokes = $state(String(untrack(() => form?.values?.strokes ?? '')))
   let tags = $state<string[]>(untrack(() => splitTags(form?.values?.tags)))
   let tagDraft = $state('')
+  let url = $state(untrack(() => form?.values?.url ?? ''))
+  let place = $state(untrack(() => form?.values?.place ?? ''))
+  let title = $state(untrack(() => form?.values?.title ?? ''))
+  let provider = $state(untrack(() => form?.values?.provider ?? ''))
+  let providerUrl = $state(untrack(() => form?.values?.provider_url ?? ''))
+  let posted: PostInfo | null = null
+
+  // Fill the citation fields from the post unless the reader has changed them since the last link.
+  function fillFromPost(info: PostInfo | null) {
+    const previous = posted
+    const keep = (current: string, name: keyof PostInfo) => {
+      const before = previous?.[name]
+      return !current || (before !== null && before !== undefined && current === before) ? String(info?.[name] ?? '') : current
+    }
+    place = keep(place, 'place')
+    title = keep(title, 'title')
+    provider = keep(provider, 'provider')
+    providerUrl = keep(providerUrl, 'providerUrl')
+    posted = info
+  }
 
   function splitTags(value: string | undefined): string[] {
     return [...new Set((value ?? '').split(',').map(tag => tag.normalize('NFC').trim()).filter(tag => tag.length > 0 && tag.length <= 40))].slice(0, 20)
@@ -225,6 +247,10 @@
           hint={t(data.locale, 'field.fileFormats')}
           describedBy={imageError ? 'file-formats image-help image-rights image-error' : 'file-formats image-help image-rights'}
           error={imageError}
+          sourceUrl={url}
+          fetchingLabel={t(data.locale, 'field.linkImageWorking')}
+          fetchFailedLabel={t(data.locale, 'field.linkImageFailed')}
+          onpost={fillFromPost}
         />
         <p class="field-help" id="image-help">{t(data.locale, 'field.sourceImageHint')}</p>
         <p class="field-help" id="image-rights">{t(data.locale, 'field.rightsHint')}</p>
@@ -232,13 +258,13 @@
       </div>
       <div class="field">
         <label class="field-label" for="url">{t(data.locale, 'field.url')}</label>
-        <input id="url" name="url" type="url" maxlength="1000" placeholder="https://" value={form?.values?.url ?? ''} aria-invalid={!!form?.errors?.url} aria-describedby="url-help" />
+        <input id="url" name="url" type="url" maxlength="1000" placeholder="https://" bind:value={url} use:cleanLinkInput aria-invalid={!!form?.errors?.url} aria-describedby="url-help" />
         <p class="field-help" id="url-help">{t(data.locale, 'field.urlHint')}</p>
         {#if form?.errors?.url}<p class="field-error">{form.errors.url}</p>{/if}
       </div>
       <div class="field">
         <label class="field-label" for="place">{t(data.locale, 'field.place')}</label>
-        <input id="place" name="place" maxlength="500" value={form?.values?.place ?? ''} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} />
+        <input id="place" name="place" maxlength="500" bind:value={place} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} />
         {#if form?.errors?.place}<p class="field-error" id="place-error">{form.errors.place}</p>{/if}
       </div>
       <div class="field">
@@ -248,7 +274,7 @@
       </div>
       <div class="field">
         <label class="field-label" for="title">{t(data.locale, 'field.title')}</label>
-        <input id="title" name="title" maxlength="300" value={form?.values?.title ?? ''} aria-invalid={!!form?.errors?.title} aria-describedby={form?.errors?.title ? 'title-error' : undefined} />
+        <input id="title" name="title" maxlength="300" bind:value={title} aria-invalid={!!form?.errors?.title} aria-describedby={form?.errors?.title ? 'title-error' : undefined} />
         {#if form?.errors?.title}<p class="field-error" id="title-error">{form.errors.title}</p>{/if}
       </div>
       <div class="field">
@@ -277,12 +303,12 @@
       <div class="field-grid">
         <div class="field">
           <label class="field-label" for="provider">{t(data.locale, 'field.provider')}</label>
-          <input id="provider" name="provider" maxlength="300" value={form?.values?.provider ?? ''} aria-invalid={!!form?.errors?.provider} aria-describedby={form?.errors?.provider ? 'provider-error' : undefined} />
+          <input id="provider" name="provider" maxlength="300" bind:value={provider} aria-invalid={!!form?.errors?.provider} aria-describedby={form?.errors?.provider ? 'provider-error' : undefined} />
           {#if form?.errors?.provider}<p class="field-error" id="provider-error">{form.errors.provider}</p>{/if}
         </div>
         <div class="field">
           <label class="field-label" for="provider_url">{t(data.locale, 'field.providerUrl')}</label>
-          <input id="provider_url" name="provider_url" type="url" maxlength="1000" placeholder="https://" value={form?.values?.provider_url ?? ''} aria-invalid={!!form?.errors?.provider_url} aria-describedby={form?.errors?.provider_url ? 'provider-url-error' : undefined} />
+          <input id="provider_url" name="provider_url" type="url" maxlength="1000" placeholder="https://" bind:value={providerUrl} aria-invalid={!!form?.errors?.provider_url} aria-describedby={form?.errors?.provider_url ? 'provider-url-error' : undefined} />
           {#if form?.errors?.provider_url}<p class="field-error" id="provider-url-error">{form.errors.provider_url}</p>{/if}
         </div>
       </div>

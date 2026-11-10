@@ -86,6 +86,8 @@
   "field.ivdRegistered": "已註冊",
   "field.ivdSequence": "IVD序列",
   "field.ivdUnstated": "未填寫",
+  "field.linkImageFailed": "無法加入貼文中的圖片。請改為選擇檔案。",
+  "field.linkImageWorking": "正在從貼文中取得圖片",
   "field.moreDetails": "更多資訊",
   "field.note": "出處備註",
   "field.page": "頁碼",

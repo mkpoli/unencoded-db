@@ -699,6 +699,18 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
+  test('stores an X post link without its share tracking', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      const link = 'https://x.com/mkpoli/status/2119010548327334386?a=d47PdKKaof_S9ZTqrxU&s=20'
+      await expect(actions.default!(event({ ...record, url: link }, DB, images))).rejects.toMatchObject({ status: 303 })
+      const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(result.evidence[0].url).toBe('https://x.com/mkpoli/status/2119010548327334386')
+    } finally { db.close() }
+  })
+
   test('accepts a link when the picture input is left empty', async () => {
     const db = createTestDatabase()
     const images = fakeImages()

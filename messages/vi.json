@@ -86,6 +86,8 @@
   "field.ivdRegistered": "Đã đăng ký",
   "field.ivdSequence": "Chuỗi IVD",
   "field.ivdUnstated": "Chưa ghi",
+  "field.linkImageFailed": "Không thể thêm ảnh từ bài đăng. Hãy chọn tệp thay thế.",
+  "field.linkImageWorking": "Đang lấy ảnh từ bài đăng",
   "field.moreDetails": "Thông tin thêm",
   "field.note": "Ghi chú về nguồn",
   "field.page": "Trang",

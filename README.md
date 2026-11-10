@@ -72,6 +72,7 @@ bun run build
 - `POST /{locale}/new` accepts up to 8 MiB plus form framing. Other POST routes keep the 128 KiB limit.
 - Evidence image responses use the stored content type, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, so hiding takes effect on the next request. Missing, hidden and invalid-locale images also return an uncached 404.
 - Images are stripped of common metadata on upload: JPEG EXIF, XMP, IPTC and comments before the image scan, PNG text, tIME and EXIF chunks, and WebP EXIF/XMP chunks. JPEG EXIF orientation is kept; ICC colour profiles and pixel content are stored as uploaded. Image metadata is not preserved for attribution, so record credit in the bibliographic fields.
+- An X or Twitter post link drops its `a` and `s` share-tracking parameters. Pasting one into a new evidence form fetches the post through the FxTwitter API (`https://api.fxtwitter.com`), fills the place as `X`, the provider as the author's `@handle` with their profile link, and the title with the post text, and attaches the first photo to the image field. Photos are taken only from `pbs.twimg.com`; the reader can replace any filled field before saving.
 
 ## Character drawings
 

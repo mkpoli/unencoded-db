@@ -86,6 +86,8 @@
   "field.ivdRegistered": "Registered",
   "field.ivdSequence": "IVD sequence",
   "field.ivdUnstated": "Unstated",
+  "field.linkImageFailed": "The post's picture could not be added. Choose a file instead.",
+  "field.linkImageWorking": "Getting the picture from the post",
   "field.moreDetails": "More details",
   "field.note": "Note on this source",
   "field.page": "Page",
