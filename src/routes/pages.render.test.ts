@@ -237,7 +237,7 @@ describe('localized pages', () => {
     expect(body).toContain('或提供連結')
     expect(body).not.toMatch(/id="image"[^>]*required/)
     expect(body).toContain('常見的位置與裝置中繼資料會被移除，JPEG圖片方向保留。')
-    expect(body).toContain('JPEG、PNG 或 WebP · 8 MiB')
+    expect(body).toContain('JPEG、PNG 或 WebP · 16 MiB')
     expect(body).toContain('也可以用Ctrl+V貼上圖片。')
     expect(body).toContain('data-file-field')
     expect(body).toContain('瀏覽')

@@ -1,4 +1,6 @@
-export const MAX_IMAGE_BYTES = 8 * 1024 * 1024
+import { MAX_IMAGE_BYTES } from '$lib/limits'
+
+export { MAX_IMAGE_BYTES }
 
 export type ImageType = 'image/jpeg' | 'image/png' | 'image/webp'
 
