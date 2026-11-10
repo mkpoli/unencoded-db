@@ -8,13 +8,13 @@ import { referenceComplete } from '$lib/readiness'
 import { parseRelatedCharacters, RELATION_KINDS, type RelatedDraft } from '$lib/related'
 
 export type EntryFields = { script: string; script_other: string | null; ids: string | null; description: string | null; status: string; encoded_as: string | null; related: string | null; related_characters: string | null; reading: string | null; meaning: string | null; radical: string | null; strokes: number | null }
-export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null }
+export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }
 export type Entry = EntryFields & { id: number; rev: number; cover_key: string | null; cover_place: string | null; sightings: number; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
 export type Sighting = SightingFields & Partial<StoredImage> & { id: number; entry_id: number; first_entry: number; rev: number; hidden_at: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
 
 export const ENTRY_FIELDS = ['script', 'script_other', 'ids', 'description', 'status', 'encoded_as', 'related', 'related_characters', 'reading', 'meaning', 'radical', 'strokes'] as const
-export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'year', 'page', 'context', 'style', 'types', 'note'] as const
+export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'original_date', 'page', 'context', 'style', 'types', 'note'] as const
 const IMAGE_FIELDS = ['image_key', 'image_type', 'image_w', 'image_h', 'thumb_key', 'box'] as const
 
 const text = (form: FormData, name: string, max: number) => {
@@ -83,7 +83,8 @@ export function readSightingFields(form: FormData): SightingFields {
     title: text(form, 'title', 300),
     author: text(form, 'author', 300),
     publisher: text(form, 'publisher', 300),
-    year: text(form, 'year', 40),
+    report_date: text(form, 'report_date', 40),
+    original_date: text(form, 'original_date', 40),
     page: text(form, 'page', 80),
     context: oneOf(text(form, 'context', 20), CONTEXTS),
     style: oneOf(text(form, 'style', 20), STYLES),
@@ -461,33 +462,37 @@ export function listStatement(db: D1Database, { script, filter, query, before, l
     .bind(...(exact ? [exact] : words.map(word => `w:${word}`)), tag, before ?? Number.MAX_SAFE_INTEGER, (exact || words.length ? SEARCH_WINDOW : limit) + 1)
 }
 
-export type Tile = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings'> & { types: SightingType[]; firstYear: string | null }
+export type YearKind = 'report' | 'original'
+export type Tile = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings'> & { types: SightingType[]; firstYear: string | null; firstYearKind: YearKind | null }
 
-// The earliest publication year a sighting records. Years are free text, so the first four- or three-digit
-// run is read as the year and the rest is left alone.
+// A date is free text, so the first four- or three-digit run is read as the year and the rest is left alone.
 function firstYear(value: string | null) {
   const match = value?.match(/\d{3,4}/)
   return match ? { text: match[0], n: Number(match[0]) } : null
 }
 
-// What the tiles show about the evidence: which source types the record has and the earliest year among them.
+// What the tiles show about the evidence: which source types the record has and the earliest year among
+// them. An older work in a recent post dates the sighting, not the post.
 async function summaries(db: D1Database, ids: number[]) {
-  const out = new Map<number, { types: SightingType[]; firstYear: string | null }>()
+  const out = new Map<number, { types: SightingType[]; firstYear: string | null; firstYearKind: YearKind | null }>()
   if (!ids.length) return out
-  const { results } = await db.prepare(`SELECT entry_id, types, year FROM sightings WHERE entry_id IN (${ids.map(() => '?').join(', ')}) AND hidden_at IS NULL`).bind(...ids).all<{ entry_id: number; types: string | null; year: string | null }>()
+  const { results } = await db.prepare(`SELECT entry_id, types, report_date, original_date FROM sightings WHERE entry_id IN (${ids.map(() => '?').join(', ')}) AND hidden_at IS NULL`).bind(...ids).all<{ entry_id: number; types: string | null; report_date: string | null; original_date: string | null }>()
   const types = new Map<number, Set<SightingType>>()
   const years = new Map<number, number>()
   for (const row of results) {
     const chosen = types.get(row.entry_id) ?? new Set<SightingType>()
     for (const type of parseSightingTypes(row.types)) chosen.add(type)
     types.set(row.entry_id, chosen)
-    const year = firstYear(row.year)
+    const report = firstYear(row.report_date), original = firstYear(row.original_date)
+    const year = original && (!report || original.n <= report.n)
+      ? { ...original, kind: 'original' as const }
+      : report ? { ...report, kind: 'report' as const } : null
     if (year && (years.get(row.entry_id) === undefined || year.n < years.get(row.entry_id)!)) {
       years.set(row.entry_id, year.n)
-      out.set(row.entry_id, { types: [], firstYear: year.text })
+      out.set(row.entry_id, { types: [], firstYear: year.text, firstYearKind: year.kind })
     }
   }
-  for (const [id, chosen] of types) out.set(id, { types: SIGHTING_TYPES.filter(type => chosen.has(type)), firstYear: out.get(id)?.firstYear ?? null })
+  for (const [id, chosen] of types) out.set(id, { types: SIGHTING_TYPES.filter(type => chosen.has(type)), firstYear: out.get(id)?.firstYear ?? null, firstYearKind: out.get(id)?.firstYearKind ?? null })
   return out
 }
 
@@ -495,20 +500,20 @@ export async function list(db: D1Database, listing: Listing) {
   const statement = listStatement(db, listing)
   if (!statement) return null
   const limit = listing.limit ?? PAGE
-  const { results } = await statement.all<(Omit<Tile, 'types' | 'firstYear'> & { matches: number })>()
+  const { results } = await statement.all<(Omit<Tile, 'types' | 'firstYear' | 'firstYearKind'> & { matches: number })>()
   const searching = Boolean(exactSearchIds(listing.query ?? '')) || terms(listing.query ?? '').length > 0
   const window = searching ? SEARCH_WINDOW : limit
   const tiles: Tile[] = []
   let consumed = 0
   for (const { matches, ...tile } of results.slice(0, window)) {
     consumed++
-    if (matches) tiles.push({ ...tile, types: [], firstYear: null })
+    if (matches) tiles.push({ ...tile, types: [], firstYear: null, firstYearKind: null })
     if (tiles.length === limit) break
   }
   const found = await summaries(db, tiles.map(tile => tile.id))
   for (const tile of tiles) {
     const summary = found.get(tile.id)
-    if (summary) { tile.types = summary.types; tile.firstYear = summary.firstYear }
+    if (summary) { tile.types = summary.types; tile.firstYear = summary.firstYear; tile.firstYearKind = summary.firstYearKind }
   }
   const next = consumed < results.length ? results[consumed - 1].id : null
   return { tiles, next, partial: searching && next !== null && tiles.length < limit }
