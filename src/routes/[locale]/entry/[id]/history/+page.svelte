@@ -10,7 +10,7 @@
   <a class="text-link back" href={href(`/entry/${data.id}`)}>← {t('history.back')}</a>
   <h1>{t('history.title', { id: data.id })}</h1>
   {#if form?.error}<p role="alert">{t(`error.${form.error}`)}</p>{/if}
-  <HistoryList rows={data.rows} currentRev={data.rev} restore empty={t('recent.empty')} next={data.next} />
+  <HistoryList rows={data.rows} currentRev={data.rev} restore empty={t('history.empty')} next={data.next} />
 </div>
 
 <style>

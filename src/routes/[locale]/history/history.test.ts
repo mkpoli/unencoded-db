@@ -1,15 +1,15 @@
 import { expect, test } from 'bun:test'
-import { createEntry, editEntry, FEED, recentStatement, type EntryFields, type SightingFields } from '$lib/server/entries'
+import { createEntry, editEntry, globalHistoryStatement, HISTORY_PAGE, type EntryFields, type SightingFields } from '$lib/server/entries'
 import { createPerson } from '$lib/server/people'
 import { openTestDb } from '$lib/server/testdb'
 import { load } from './+page.server'
 
 const event = (db: D1Database, before?: string) => ({
-  url: new URL(`http://localhost/en/recent${before === undefined ? '' : `?before=${before}`}`),
+  url: new URL(`http://localhost/en/history${before === undefined ? '' : `?before=${before}`}`),
   platform: { env: { DB: db } },
 }) as any
 
-test('recent hides private and merged targets and advances through bounded empty pages', async () => {
+test('global history hides private and merged targets and advances through bounded empty pages', async () => {
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id,name,created_at) VALUES ('p','Person','2026');
     INSERT INTO entries(id,script,ids,created_by,created_at,updated_at) VALUES
@@ -24,7 +24,7 @@ test('recent hides private and merged targets and advances through bounded empty
   insert.run(1, 1, 'hidden sighting')
   insert.run(1, 2, 'wrong entry sighting')
   insert.run(3, null, 'merged')
-  for (let i = 0; i < FEED * 2 + 5; i++) insert.run(2, null, 'hidden entry')
+  for (let i = 0; i < HISTORY_PAGE * 2 + 5; i++) insert.run(2, null, 'hidden entry')
   insert.run(1, null, 'public new')
 
   const all: any[] = []
@@ -45,7 +45,7 @@ test('recent hides private and merged targets and advances through bounded empty
   await expect(load(event(db, 'abc'))).rejects.toMatchObject({ status: 404 })
 })
 
-test('recent carries the old version of every readable revision', async () => {
+test('global history carries the old version of every readable revision', async () => {
   const { db } = openTestDb()
   const person = await createPerson(db)
   const fields: EntryFields = { script: 'han', script_other: null, ids: '⿰木木', description: null, status: 'unchecked', encoded_as: null, related: null, related_characters: null, reading: null, meaning: null, radical: null, strokes: null }
@@ -59,10 +59,10 @@ test('recent carries the old version of every readable revision', async () => {
   expect(rows.find((row: any) => row.kind === 'sighting').sightingFields).toEqual(sighting)
 })
 
-test('recent uses an ordered revision primary-key range and keyed joins', () => {
+test('global history uses an ordered revision primary-key range and keyed joins', () => {
   const { db, raw } = openTestDb()
   for (const before of [null, 100]) {
-    const statement = recentStatement(db, before) as unknown as { sql: string; values: number[] }
+    const statement = globalHistoryStatement(db, before) as unknown as { sql: string; values: number[] }
     const plan = raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...statement.values) as { detail: string }[]
     const details = plan.map(row => row.detail).join('\n')
     expect(details).toMatch(/SEARCH r USING INTEGER PRIMARY KEY \(rowid<\?\)/)

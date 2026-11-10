@@ -6,7 +6,7 @@
   let { data, children } = $props()
 
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
-  const section = $derived(path.startsWith('/recent') ? 'recent' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
+  const section = $derived(path.startsWith('/history') ? 'history' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
   let menu = $state<HTMLDetailsElement>()
   const remember = (tag: string) => { document.cookie = `${LOCALE_COOKIE}=${tag};path=/;max-age=31536000;samesite=lax`; if (menu) menu.open = false }
   function setTheme(theme: string) {
@@ -27,7 +27,7 @@
   </a>
   <nav class="site-nav" aria-label={t('nav.menu')}>
     <a class:active={section === 'browse'} aria-current={section === 'browse' ? 'page' : undefined} href={href()}>{t('nav.browse')}</a>
-    <a class:active={section === 'recent'} aria-current={section === 'recent' ? 'page' : undefined} href={href('/recent')}>{t('nav.recent')}</a>
+    <a class:active={section === 'history'} aria-current={section === 'history' ? 'page' : undefined} href={href('/history')}>{t('nav.history')}</a>
     <a class:active={section === 'about'} aria-current={section === 'about' ? 'page' : undefined} href={href('/about')}>{t('nav.about')}</a>
     {#if data.person?.moderator}<a href={href('/moderate')}>{t('moderate.title')}</a>{/if}
   </nav>
