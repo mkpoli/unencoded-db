@@ -660,28 +660,51 @@
 }
 
 .genre-field { min-width: 0; padding: 0; border: 0; }
-.genre-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.genre-options { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; border: 0; }
 .genre-option {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   min-height: 40px;
-  padding: 0 14px;
+  padding: 0 10px 0 6px;
   border: 1px solid var(--line-control);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--ink);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   white-space: nowrap;
   cursor: pointer;
 }
-.genre-option:hover { border-color: var(--accent); }
-.genre-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.genre-option:hover { border-color: var(--line-strong); }
+.genre-box {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 20px;
+  block-size: 20px;
+  border: 1px solid var(--line-control);
+  border-radius: 5px;
+  background: var(--surface);
+}
+.genre-box svg { inline-size: 12px; block-size: 12px; opacity: 0; transition: opacity 0.12s ease; }
+.genre-option input {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  opacity: 0;
+  cursor: pointer;
+}
 .genre-option:has(input:focus-visible) { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
-.genre-option:has(input:checked) { border-color: var(--accent); background: var(--accent-tile); color: var(--accent); }
-.genre-tick { width: 1ch; opacity: 0; font-size: var(--text-xs); }
-.genre-option:has(input:checked) .genre-tick { opacity: 1; }
+.genre-option:has(input:checked) { border-color: var(--accent); background: var(--accent-light); }
+.genre-option:has(input:checked) .genre-box { border-color: var(--accent-solid); background: var(--accent-solid); }
+.genre-option:has(input:checked) .genre-box svg { opacity: 1; }
 .genre-group { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .genre-group .genre-option-parent { margin-bottom: 10px; }
 .genre-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
