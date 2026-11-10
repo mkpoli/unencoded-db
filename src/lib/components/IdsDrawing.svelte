@@ -10,6 +10,14 @@
   type Drawing = Parameters<typeof drawingSvg>[0]
   type Preview = (sequence: string, options?: { signal?: AbortSignal }) => Promise<Drawing>
 
+  // One composer per page visit: a reader who leaves the form and comes back reuses its worker
+  // and the export files it has already read.
+  let shared: Promise<Preview> | null = null
+  function load() {
+    shared ??= import('ids-input/composer').then(({ composerPreview }) => composerPreview({ base: `https://glyphatlas.org/atlas/composer/${COMPOSER_VERSION}` }))
+    return shared
+  }
+
   let { ids }: { ids: string } = $props()
   let preview = $state<Preview | null>(null)
   let drawing = $state.raw<Drawing | null>(null)
@@ -21,11 +29,7 @@
 
   onMount(() => {
     let live = true
-    import('ids-input/composer')
-      .then(({ composerPreview }) => {
-        if (live) preview = composerPreview({ base: `https://glyphatlas.org/atlas/composer/${COMPOSER_VERSION}` })
-      })
-      .catch(() => {})
+    load().then(found => { if (live) preview = found }).catch(() => {})
     return () => { live = false }
   })
 
