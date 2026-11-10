@@ -2,7 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit'
 import type { Comparison } from '$lib/comparison-rows'
 import { MAX_COMPARISONS } from '$lib/server/related'
 import { publicEntryPredicate } from '$lib/server/visibility'
-import { addCrop, addEvidence, listCrops, listEvidence, listEvidenceMedia, readEvidenceFields } from '$lib/server/evidence-links'
+import { addCrop, addEvidence, evidenceFields, listCrops, listEvidence, listEvidenceMedia, readEvidenceFields } from '$lib/server/evidence-links'
 import { genresForEntry } from '$lib/server/genres'
 import { tagsForEntry } from '$lib/server/tags'
 import { listSenses } from '$lib/server/senses'
@@ -14,6 +14,7 @@ import { cookieOptions, hashToken } from '$lib/server/attribution'
 import { glyphPaths, warmGlyphs } from '$lib/server/glyphs'
 import { cleanIds } from '$lib/ids'
 import { localizedHref, type Locale } from '$lib/i18n'
+import { readEvidenceTypes } from '$lib/evidence-types'
 import type { PageServerLoad } from './$types'
 
 type Entry = {
@@ -67,7 +68,7 @@ export const actions = {
     const entry = await platform.env.DB.prepare(`SELECT id FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first<{ id: number }>()
     if (!entry) error(404)
     const form = await request.formData()
-    const values = Object.fromEntries(['place', 'url', 'provider', 'provider_url', 'title', 'author', 'publisher', 'year', 'page', 'note'].map(name => [name, typeof form.get(name) === 'string' ? form.get(name) : '']))
+    const values = { ...Object.fromEntries(evidenceFields.map(name => [name, typeof form.get(name) === 'string' ? form.get(name) : ''])), types: readEvidenceTypes(form) }
     const fields = readEvidenceFields(form)
     if (!fields) return fail(400, { error: 'place', values })
     let image = null

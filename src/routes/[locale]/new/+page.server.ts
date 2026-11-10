@@ -122,7 +122,7 @@ export const actions: Actions = {
     const collections = selectedCollections(form)
     const tags = parseTags(String(form.get('tags') ?? ''))
     const senses = parseSenses(form)
-    const submitted = { ...values, provider: rawProvider, provider_url: rawProviderUrl, radical, encoded_as: encoded, strokes, ivd_status: ivdStatus, ivd_sequence: ivdSequence, equivalent_to: equivalent.value ?? '', genres, collections, tags: tags.join(', '), encodings: encodings ?? [] }
+    const submitted = { ...values, provider: rawProvider, provider_url: rawProviderUrl, radical, encoded_as: encoded, strokes, ivd_status: ivdStatus, ivd_sequence: ivdSequence, equivalent_to: equivalent.value ?? '', genres, collections, tags: tags.join(', '), encodings: encodings ?? [], types }
     if (!senses) return fail(400, { errors, values: submitted, comparisons })
     const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: submitted, comparisons })
     if (link && !/^https?:\/\//i.test(link)) errors.url = t(locale, 'error.length')

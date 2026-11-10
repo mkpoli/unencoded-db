@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte'
+  import EvidenceTypes from '$lib/components/EvidenceTypes.svelte'
   import FileField from '$lib/components/FileField.svelte'
   import ExtraImagesField from '$lib/components/ExtraImagesField.svelte'
   import { cleanLinkInput } from '$lib/link-input'
@@ -10,6 +11,7 @@
   import { localizedHref, t, type Locale } from '$lib/i18n'
   import type { Comparison } from '$lib/comparison-rows'
   import type { Encoding } from '$lib/encodings'
+  import type { EvidenceType } from '$lib/evidence-types'
 
   type Sense = { id?: number; gloss: string; reading: string | null }
   type Genre = { slug: string; label: string }
@@ -27,6 +29,7 @@
     year: string | null
     page: string | null
     note: string | null
+    types: EvidenceType[]
     has_image: number
     source_id: number | null
   }
@@ -103,6 +106,10 @@
   }
   const evidenceError = (item: Evidence, name: string) =>
     form?.action === 'evidence' && form.evidenceId === item.id ? form.errors?.[name] : undefined
+  const evidenceTypes = (item: Evidence) => form?.action === 'evidence' && form.evidenceId === item.id
+    ? (Array.isArray(form.values?.types) ? form.values.types as string[] : [])
+    : item.types
+  const addTypes = $derived(form?.action === 'addEvidence' && Array.isArray(form.values?.types) ? form.values.types as string[] : [])
   const addValue = (name: string) => form?.action === 'addEvidence' ? String(form.values?.[name] ?? '') : ''
   const addError = (name: string) => form?.action === 'addEvidence' ? form.errors?.[name] : undefined
   let addUrl = $state(untrack(() => form?.action === 'addEvidence' ? String(form.values?.url ?? '') : ''))
@@ -330,6 +337,7 @@
           <div class="field"><label class="field-label" for={`page-${item.id}`}>{t(data.locale, 'field.page')}</label><input id={`page-${item.id}`} name="page" maxlength="80" value={evidenceValue(item, 'page')} /></div>
         </div>
         <div class="field"><label class="field-label" for={`note-${item.id}`}>{t(data.locale, 'field.note')}</label><textarea id={`note-${item.id}`} name="note" maxlength="5000">{evidenceValue(item, 'note')}</textarea></div>
+        <EvidenceTypes locale={data.locale} value={evidenceTypes(item)} />
         <div class="form-actions"><button class="secondary" type="submit">{t(data.locale, 'evidence.save')}</button></div>
       </form>
     {/each}
@@ -383,6 +391,7 @@
         <div class="field"><label class="field-label" for="new-page">{t(data.locale, 'field.page')}</label><input id="new-page" name="page" maxlength="80" value={addValue('page')} /></div>
       </div>
       <div class="field"><label class="field-label" for="new-note">{t(data.locale, 'field.note')}</label><textarea id="new-note" name="note" maxlength="5000">{addValue('note')}</textarea></div>
+      <EvidenceTypes locale={data.locale} value={addTypes} />
       <div class="form-actions"><button class="secondary" type="submit">{t(data.locale, 'entry.addSighting')}</button></div>
     </form>
   </section>
