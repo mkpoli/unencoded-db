@@ -39,6 +39,7 @@ const migrationOrder = [
   '0033_reform_genres.sql',
   '0034_equivalent_character.sql',
   '0035_evidence_types.sql',
+  '0036_global_history.sql',
 ] as const
 
 export type Migration = typeof migrationOrder[number]
@@ -47,7 +48,7 @@ export function applyMigration(db: Database, name: Migration): void {
   db.exec(readFileSync(new URL(name, migrations), 'utf8'))
 }
 
-export function createTestDatabase(through: Migration = '0035_evidence_types.sql'): Database {
+export function createTestDatabase(through: Migration = '0036_global_history.sql'): Database {
   const db = new Database(':memory:')
   for (const name of migrationOrder) {
     applyMigration(db, name)

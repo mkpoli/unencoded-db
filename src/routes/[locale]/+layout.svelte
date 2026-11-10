@@ -19,6 +19,7 @@
   const path = $derived(page.url.pathname)
   const home = $derived(localizedHref(locale))
   const add = $derived(localizedHref(locale, '/new'))
+  const history = $derived(localizedHref(locale, '/history'))
   const moderate = $derived(localizedHref(locale, '/moderate'))
 
   // The server sets lang in app.html; this keeps it right after client-side navigation.
@@ -30,6 +31,7 @@
     <a class="wordmark" href={home}>{t(locale, 'app.name')}</a>
     <nav class="site-nav" aria-label={t(locale, 'app.name')}>
       <a class="nav-link" href={home} aria-current={path === home || path === `${home}/` ? 'page' : undefined}>{t(locale, 'nav.browse')}</a>
+      <a class="nav-link" href={history} aria-current={path === history ? 'page' : undefined}>{t(locale, 'nav.history')}</a>
       <a class="nav-link" href={add} aria-current={path === add ? 'page' : undefined}>{t(locale, 'nav.add')}</a>
       {#if data.isModerator}
         <a class="nav-link" href={moderate} aria-current={path === moderate || path.startsWith(`${moderate}/`) ? 'page' : undefined}>{t(locale, 'nav.moderation')}</a>

@@ -38,6 +38,7 @@ function dbSetup() {
   applyMigration(db, '0033_reform_genres.sql')
   applyMigration(db, '0034_equivalent_character.sql')
   applyMigration(db, '0035_evidence_types.sql')
+  applyMigration(db, '0036_global_history.sql')
   return db
 }
 function binding(db: Database) {
