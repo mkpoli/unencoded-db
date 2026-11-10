@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
-import { FEED, recentStatement } from '$lib/server/entries'
+import { createEntry, editEntry, FEED, recentStatement, type EntryFields, type SightingFields } from '$lib/server/entries'
+import { createPerson } from '$lib/server/people'
 import { openTestDb } from '$lib/server/testdb'
 import { load } from './+page.server'
 
@@ -42,6 +43,20 @@ test('recent hides private and merged targets and advances through bounded empty
   expect(all.every(row => !('visible' in row))).toBe(true)
   await expect(load(event(db, '0'))).rejects.toMatchObject({ status: 404 })
   await expect(load(event(db, 'abc'))).rejects.toMatchObject({ status: 404 })
+})
+
+test('recent carries the old version of every readable revision', async () => {
+  const { db } = openTestDb()
+  const person = await createPerson(db)
+  const fields: EntryFields = { script: 'han', script_other: null, ids: '⿰木木', description: null, status: 'unchecked', encoded_as: null, related: null, related_characters: null, reading: null, meaning: null, radical: null, strokes: null }
+  const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
+  const id = await createEntry(db, fields, sighting, null, { actor: person.id, ip: null })
+  await editEntry(db, id, 1, { ...fields, description: 'Later' }, { actor: person.id, ip: null }, 'Corrected')
+  const result = await load(event(db)) as any
+  const rows = result.rows.filter((row: any) => row.entry_id === id)
+  expect(rows[0]).toMatchObject({ kind: 'edit', fields: { ...fields, description: 'Later' } })
+  expect(rows[0]).not.toHaveProperty('snapshot')
+  expect(rows.find((row: any) => row.kind === 'sighting').sightingFields).toEqual(sighting)
 })
 
 test('recent uses an ordered revision primary-key range and keyed joins', () => {

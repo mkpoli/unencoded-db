@@ -1,44 +1,10 @@
 import { error, fail, redirect } from '@sveltejs/kit'
-import { editEntry, ENTRY_FIELDS, getEntry, history, restoreSighting, SIGHTING_FIELDS, type EntryFields, type SightingFields } from '$lib/server/entries'
+import { editEntry, getEntry, history, restoreSighting } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { writer } from '$lib/server/people'
-import { CONTEXTS, STYLES, isScript, isStatus, isStoredSightingTypes } from '$lib/scripts'
+import { entrySnapshot, revisionFields, sightingSnapshot } from '$lib/server/revisions'
 import { positiveId } from '../../../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
-
-// Only entry fields are public; snapshots can also contain sighting or internal data.
-function entrySnapshot(raw: string): EntryFields | null {
-  try {
-    const value = JSON.parse(raw)
-    if (!value || typeof value !== 'object' || Array.isArray(value) || !isScript(value.script) || !isStatus(value.status)) return null
-    // Older snapshots predate structured comparisons.
-    if (!('related_characters' in value)) value.related_characters = null
-    for (const field of ENTRY_FIELDS) {
-      if (field === 'strokes') {
-        if (value[field] !== null && (!Number.isInteger(value[field]) || value[field] < 0 || value[field] >= 200)) return null
-      } else if (typeof value[field] !== 'string' && value[field] !== null) return null
-    }
-    return Object.fromEntries(ENTRY_FIELDS.map(field => [field, value[field]])) as EntryFields
-  } catch { return null }
-}
-
-// Image references in old snapshots need not still exist. Only text can be restored.
-function sightingSnapshot(raw: string): SightingFields | null {
-  try {
-    const value = JSON.parse(raw)
-    if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.place !== 'string') return null
-    // Older snapshots predate source types.
-    if (!('types' in value)) value.types = null
-    for (const field of SIGHTING_FIELDS) {
-      if (typeof value[field] !== 'string' && value[field] !== null) return null
-    }
-    if (value.context !== null && !(CONTEXTS as readonly string[]).includes(value.context)) return null
-    if (value.style !== null && !(STYLES as readonly string[]).includes(value.style)) return null
-    if (!isStoredSightingTypes(value.types)) return null
-    if (value.url !== null && !/^https?:\/\//i.test(value.url)) return null
-    return Object.fromEntries(SIGHTING_FIELDS.map(field => [field, value[field]])) as SightingFields
-  } catch { return null }
-}
 
 export const load: PageServerLoad = async (event) => {
   const id = positiveId(event.params.id)
@@ -54,10 +20,9 @@ export const load: PageServerLoad = async (event) => {
   const next = page.length > 500 ? page[499].id : null
   const rows = page.slice(0, 500)
     .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id))
-    .map(({ id, sighting_id, kind, rev, summary, at, by_id, by_name, snapshot }) => ({
-      id, sighting_id, kind, rev, summary, at, by_id, by_name,
-      fields: !sighting_id && ['create', 'edit', 'revert'].includes(kind) ? entrySnapshot(snapshot) : null,
-      sightingFields: sighting_id && ['sighting', 'sighting_edit'].includes(kind) ? sightingSnapshot(snapshot) : null,
+    .map(({ id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, snapshot }) => ({
+      id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name,
+      ...revisionFields({ sighting_id, kind, snapshot }),
       sightingRev: sighting_id ? visibleSightings.get(sighting_id) : null,
     }))
   return { id, rev: found.entry.rev, rows, next }

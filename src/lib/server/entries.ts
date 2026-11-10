@@ -524,7 +524,7 @@ export async function counts(db: D1Database) {
   return Object.fromEntries(results.map(row => [row.tag, row.n])) as Record<string, number>
 }
 
-export type Revision = { id: number; entry_id: number; sighting_id: number | null; kind: string; rev: number; snapshot: string; summary: string | null; at: string; by_id: string; by_name: string; cover_key?: string | null; ids?: string | null }
+export type Revision = { id: number; entry_id: number; sighting_id: number | null; kind: string; rev: number; snapshot: string; summary: string | null; at: string; by_id: string; by_name: string; cover_key?: string | null; ids?: string | null; sighting_rev?: number | null }
 
 export const FEED = 60
 
@@ -535,7 +535,7 @@ export async function history(db: D1Database, entry: number, before?: number | n
 
 export function recentStatement(db: D1Database, before?: number | null) {
   // Range over at most FEED + 1 revisions, even when every target is private.
-  return db.prepare(`SELECT r.id, r.entry_id, r.sighting_id, r.kind, r.rev, r.summary, r.at, '' AS snapshot, ${WHO_COLUMNS}, e.cover_key, e.ids, (e.hidden_at IS NULL AND e.merged_into IS NULL AND (r.sighting_id IS NULL OR (s.id IS NOT NULL AND s.hidden_at IS NULL))) AS visible FROM revisions r CROSS JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id AND s.entry_id = r.entry_id ${WHO('r.actor')} WHERE r.id < ? ORDER BY r.id DESC LIMIT ?`)
+  return db.prepare(`SELECT r.id, r.entry_id, r.sighting_id, r.kind, r.rev, r.snapshot, r.summary, r.at, ${WHO_COLUMNS}, e.cover_key, e.ids, s.rev AS sighting_rev, (e.hidden_at IS NULL AND e.merged_into IS NULL AND (r.sighting_id IS NULL OR (s.id IS NOT NULL AND s.hidden_at IS NULL))) AS visible FROM revisions r CROSS JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id AND s.entry_id = r.entry_id ${WHO('r.actor')} WHERE r.id < ? ORDER BY r.id DESC LIMIT ?`)
     .bind(before ?? Number.MAX_SAFE_INTEGER, FEED + 1)
 }
 
@@ -545,12 +545,19 @@ export async function recent(db: D1Database, before?: number | null) {
   return { rows, next: results.length > FEED ? results[FEED - 1].id : null }
 }
 
+export function personRevisionsStatement(db: D1Database, id: string, before?: number | null) {
+  // The account and the anonymous people merged into it share one list. The subquery keeps the
+  // revision range on the actor index rather than reading the journal from its newest row.
+  return db.prepare(`SELECT r.id, r.entry_id, r.sighting_id, r.kind, r.rev, r.snapshot, r.summary, r.at, ${WHO_COLUMNS}, e.cover_key, e.ids, s.rev AS sighting_rev, (e.hidden_at IS NULL AND e.merged_into IS NULL AND (r.sighting_id IS NULL OR (s.id IS NOT NULL AND s.hidden_at IS NULL))) AS visible FROM revisions r CROSS JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id AND s.entry_id = r.entry_id ${WHO('r.actor')} WHERE r.actor IN (SELECT id FROM people WHERE id = ? OR merged_into = ?) AND r.id < ? ORDER BY r.id DESC LIMIT ?`)
+    .bind(id, id, before ?? Number.MAX_SAFE_INTEGER, FEED + 1)
+}
+
 export async function ofPerson(db: D1Database, id: string, before?: number | null) {
   const person = await db.prepare('SELECT id, name, atlas_sub, created_at, merged_into FROM people WHERE id = ?').bind(id).first<{ id: string; name: string; atlas_sub: string | null; created_at: string; merged_into: string | null }>()
   if (!person) return null
-  const { results } = await db.prepare(`SELECT r.id, r.entry_id, r.sighting_id, r.kind, r.rev, r.summary, r.at, '' AS snapshot, ? AS by_id, ? AS by_name, e.cover_key, e.ids FROM revisions r JOIN entries e ON e.id = r.entry_id WHERE r.actor = ? AND r.id < ? ORDER BY r.id DESC LIMIT ?`)
-    .bind(person.id, person.name, person.id, before ?? Number.MAX_SAFE_INTEGER, FEED + 1).all<Revision>()
-  return { person, rows: results.slice(0, FEED), next: results.length > FEED ? results[FEED - 1].id : null }
+  const { results } = await personRevisionsStatement(db, id, before).all<Revision & { visible: number }>()
+  const rows = results.slice(0, FEED).filter(row => row.visible).map(({ visible, ...row }) => row)
+  return { person, rows, next: results.length > FEED ? results[FEED - 1].id : null }
 }
 
 export const REPORT_PAGE = 100
