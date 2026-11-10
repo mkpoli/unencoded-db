@@ -10,12 +10,14 @@ function setup() {
   return db
 }
 
-function event(db: ReturnType<typeof createTestDatabase>, images: ReturnType<typeof fakeImages>, values: Record<string, string>, image: File | null = null) {
+function event(db: ReturnType<typeof createTestDatabase>, images: ReturnType<typeof fakeImages>, values: Record<string, string>, image: File | null = null, types: string[] = []) {
   const form = new FormData()
   for (const [key, value] of Object.entries(values)) form.set(key, value)
+  for (const type of types) form.append('types', type)
   if (image) form.set('image', image)
   return {
     params: { locale: 'en', id: '1' },
+    cookies: { get: () => undefined },
     platform: { env: { DB: d1Binding(db), IMAGES: images.bucket } },
     request: new Request('https://example.test/en/entry/1/edit', { method: 'POST', body: form }),
     url: new URL('https://example.test/en/entry/1/edit'),
@@ -48,6 +50,25 @@ describe('evidence editing', () => {
       expect(db.query('SELECT place, note, revision FROM entries').get()).toEqual({ place: 'New source', note: 'New note', revision: 2 })
       expect(db.query('SELECT place, note FROM evidence WHERE id = 1').get()).toEqual({ place: 'New source', note: 'New note' })
       expect(db.query('SELECT revision, place, note FROM entry_revisions ORDER BY revision DESC LIMIT 1').get()).toEqual({ revision: 2, place: 'New source', note: 'New note' })
+    } finally { db.close() }
+  })
+
+  test('stores the source types of an evidence record', async () => {
+    const db = setup()
+    const images = fakeImages()
+    try {
+      await expect(actions.evidence!(event(db, images, base, null, ['reading', 'attestation']))).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT types FROM evidence WHERE id = 2').get()).toEqual({ types: '["attestation","reading"]' })
+      expect(db.query('SELECT types FROM evidence WHERE id = 1').get()).toEqual({ types: '[]' })
+    } finally { db.close() }
+  })
+
+  test('adds evidence with source types', async () => {
+    const db = setup()
+    const images = fakeImages()
+    try {
+      await expect(actions.addEvidence!(event(db, images, { place: 'Third place' }, null, ['mention', 'relation']))).rejects.toMatchObject({ status: 303 })
+      expect(db.query("SELECT types FROM evidence WHERE place = 'Third place'").get()).toEqual({ types: '["mention","relation"]' })
     } finally { db.close() }
   })
 

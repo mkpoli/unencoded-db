@@ -35,7 +35,9 @@ function dbSetup() {
   applyMigration(db, '0030_evidence_provider.sql')
   applyMigration(db, '0031_atlas_profile.sql')
   applyMigration(db, '0032_entry_encodings.sql')
+  applyMigration(db, '0033_reform_genres.sql')
   applyMigration(db, '0034_equivalent_character.sql')
+  applyMigration(db, '0035_evidence_types.sql')
   return db
 }
 function binding(db: Database) {
