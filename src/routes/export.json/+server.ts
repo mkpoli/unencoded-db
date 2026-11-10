@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import { parseDate } from '$lib/server/evidence-links'
 import type { Comparison } from '$lib/comparison-rows'
+import { parseEvidenceTypes, type EvidenceType } from '$lib/evidence-types'
 
 const DEFAULT_LIMIT = 100
 const MAX_LIMIT = 200
@@ -39,6 +40,7 @@ type ExportEvidence = {
   note: string | null
   date_precision: string
   has_image: number
+  types: EvidenceType[]
 }
 
 function readInteger(value: string | null, fallback: number, min: number, max: number): number | null {
@@ -69,11 +71,11 @@ export const GET: RequestHandler = async ({ platform, url }) => {
   const page = results.slice(0, limit)
   const evidence = new Map<number, ExportEvidence[]>()
   if (page.length) {
-    const { results: rows } = await platform.env.DB.prepare(`SELECT id, entry_id, place, url, provider, provider_url, title, author, publisher, year, page, note, date_precision, (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image FROM evidence WHERE entry_id IN (${page.map(() => '?').join(', ')}) ORDER BY entry_id, date_year, date_month, date_day, id`).bind(...page.map(record => record.id)).all<ExportEvidence & { entry_id: number }>()
+    const { results: rows } = await platform.env.DB.prepare(`SELECT id, entry_id, place, url, provider, provider_url, title, author, publisher, year, page, note, types, date_precision, (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image FROM evidence WHERE entry_id IN (${page.map(() => '?').join(', ')}) ORDER BY entry_id, date_year, date_month, date_day, id`).bind(...page.map(record => record.id)).all<Omit<ExportEvidence, 'types'> & { entry_id: number; types: string }>()
     for (const row of rows) {
-      const { entry_id, ...item } = row
+      const { entry_id, types, ...item } = row
       const list = evidence.get(entry_id) ?? []
-      list.push(item)
+      list.push({ ...item, types: parseEvidenceTypes(types) })
       evidence.set(entry_id, list)
     }
   }
@@ -82,7 +84,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
     const rows = evidence.get(record.id) ?? [{
       id: 0, place: record.place, url: null, provider: null, provider_url: null, title: record.title, author: record.author, publisher: record.publisher,
       year: record.year, page: record.page, note: record.note,
-      date_precision: parseDate(record.year).date_precision, has_image: 0,
+      date_precision: parseDate(record.year).date_precision, has_image: 0, types: [],
     }]
     return {
       ...record,

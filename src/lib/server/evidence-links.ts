@@ -1,5 +1,6 @@
 import type { SourceImageMeta } from './attribution'
 import { cleanSourceUrl } from '$lib/source-url'
+import { readEvidenceTypes, serializeEvidenceTypes, parseEvidenceTypes, type EvidenceType } from '$lib/evidence-types'
 
 export type DatePrecision = 'day' | 'month' | 'year' | 'month-only' | 'text'
 export type DateParts = { date_year: number | null; date_month: number | null; date_day: number | null; date_precision: DatePrecision }
@@ -27,8 +28,8 @@ function daysInMonth(year: number, month: number) {
 }
 
 export const evidenceFields = ['place', 'url', 'provider', 'provider_url', 'title', 'author', 'publisher', 'year', 'page', 'note'] as const
-export type EvidenceFields = Record<typeof evidenceFields[number], string | null>
-export type EvidenceInput = Omit<EvidenceFields, 'provider' | 'provider_url'> & { provider?: string | null; provider_url?: string | null }
+export type EvidenceFields = Record<typeof evidenceFields[number], string | null> & { types: EvidenceType[] }
+export type EvidenceInput = Omit<EvidenceFields, 'provider' | 'provider_url' | 'types'> & { provider?: string | null; provider_url?: string | null; types?: EvidenceType[] }
 const limits = { place: 500, url: 1000, provider: 300, provider_url: 1000, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
 
 export function readEvidenceFields(form: FormData): EvidenceFields | null {
@@ -45,14 +46,15 @@ export function readEvidenceFields(form: FormData): EvidenceFields | null {
   if (row.provider_url && !/^https?:\/\//i.test(row.provider_url)) return null
   if (!row.place && !(row.provider && (row.provider_url || row.url))) return null
   row.place ??= ''
+  row.types = readEvidenceTypes(form)
   return row
 }
 
 export type StoredEvidence = EvidenceFields & DateParts & { id: number; source_id: number | null; has_image: number; created_at: string }
 
 export async function listEvidence(db: D1Database, entryId: number): Promise<StoredEvidence[]> {
-  const { results } = await db.prepare(`SELECT id, place, url, provider, provider_url, title, author, publisher, year, page, note, date_year, date_month, date_day, date_precision, (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image, created_at, (SELECT es.source_id FROM evidence_sources es WHERE es.evidence_id = evidence.id ORDER BY es.source_id LIMIT 1) AS source_id FROM evidence INDEXED BY evidence_entry_date WHERE entry_id = ? ORDER BY date_year, date_month, date_day, id`).bind(entryId).all<StoredEvidence>()
-  return results
+  const { results } = await db.prepare(`SELECT id, place, url, provider, provider_url, title, author, publisher, year, page, note, types, date_year, date_month, date_day, date_precision, (image_key IS NOT NULL AND image_type IS NOT NULL) AS has_image, created_at, (SELECT es.source_id FROM evidence_sources es WHERE es.evidence_id = evidence.id ORDER BY es.source_id LIMIT 1) AS source_id FROM evidence INDEXED BY evidence_entry_date WHERE entry_id = ? ORDER BY date_year, date_month, date_day, id`).bind(entryId).all<Omit<StoredEvidence, 'types'> & { types: string }>()
+  return results.map(row => ({ ...row, types: parseEvidenceTypes(row.types) }))
 }
 
 export async function addEvidence(db: D1Database, entryId: number, input: EvidenceInput, image: SourceImageMeta | null, creatorId: string | null) {
@@ -61,12 +63,13 @@ export async function addEvidence(db: D1Database, entryId: number, input: Eviden
     place: input.place ?? '',
     provider: input.provider ?? null,
     provider_url: input.provider_url ?? null,
+    types: input.types ?? [],
   }
   const now = new Date().toISOString()
   const date = parseDate(fields.year)
-  const row = await db.prepare(`INSERT INTO evidence (entry_id, place, url, provider, provider_url, title, author, publisher, year, page, note, date_year, date_month, date_day, date_precision, image_key, image_type, image_size, created_at, creator_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`)
-    .bind(entryId, ...evidenceFields.map(name => fields[name]), date.date_year, date.date_month, date.date_day, date.date_precision, image?.key ?? null, image?.type ?? null, image?.size ?? null, now, creatorId)
+  const row = await db.prepare(`INSERT INTO evidence (entry_id, place, url, provider, provider_url, title, author, publisher, year, page, note, types, date_year, date_month, date_day, date_precision, image_key, image_type, image_size, created_at, creator_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`)
+    .bind(entryId, ...evidenceFields.map(name => fields[name]), serializeEvidenceTypes(fields.types), date.date_year, date.date_month, date.date_day, date.date_precision, image?.key ?? null, image?.type ?? null, image?.size ?? null, now, creatorId)
     .first<{ id: number }>()
   if (!row) throw new Error('Could not save evidence')
   const source = await sourceId(db, fields, now)
@@ -118,8 +121,8 @@ export async function updateEvidence(
     ? await db.prepare('SELECT image_key FROM evidence WHERE id = ? AND entry_id = ?').bind(evidenceId, entryId).first<{ image_key: string | null }>()
     : null
   const date = parseDate(fields.year)
-  const columns = [...evidenceFields, 'date_year', 'date_month', 'date_day', 'date_precision']
-  const values: (string | number | null)[] = [...evidenceFields.map(name => fields[name]), date.date_year, date.date_month, date.date_day, date.date_precision]
+  const columns = [...evidenceFields, 'types', 'date_year', 'date_month', 'date_day', 'date_precision']
+  const values: (string | number | null)[] = [...evidenceFields.map(name => fields[name]), serializeEvidenceTypes(fields.types), date.date_year, date.date_month, date.date_day, date.date_precision]
   if (image !== undefined) {
     columns.push('image_key', 'image_type', 'image_size')
     values.push(image?.key ?? null, image?.type ?? null, image?.size ?? null)

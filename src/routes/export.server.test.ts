@@ -26,6 +26,7 @@ type ExportedEvidence = {
   note: string | null
   date_precision: string
   has_image: number
+  types: string[]
 }
 
 type ExportedRecord = {
@@ -84,7 +85,7 @@ describe('JSON export', () => {
         ivd_sequence: null,
         date_precision: 'year',
         comparisons: [],
-        evidence: [{ id: 0, place: 'Example collection', title: 'Title', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'First', date_precision: 'year', has_image: 0, url: null, provider: null, provider_url: null }],
+        evidence: [{ id: 0, place: 'Example collection', title: 'Title', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'First', date_precision: 'year', has_image: 0, url: null, provider: null, provider_url: null, types: [] }],
       })
       expect(JSON.stringify(body)).not.toContain('Secret')
     } finally { db.close() }
@@ -160,6 +161,17 @@ describe('JSON export', () => {
         expect(response.headers.get('cache-control')).toBe('no-store')
         expect(body.error).toBe('Invalid after or limit parameter')
       }
+    } finally { db.close() }
+  })
+
+  test('exports source types as a list', async () => {
+    const db = database()
+    try {
+      const id = insert(db, 'Han')
+      db.query(`INSERT INTO evidence (entry_id, place, types, date_precision, created_at) VALUES (?, ?, ?, ?, ?)`)
+        .run(id, 'Typed source', JSON.stringify(['attestation', 'reading']), 'text', '2026-01-02T00:00:00.000Z')
+      const { body } = await exportJson(db)
+      expect(body.records[0]!.evidence[0]!.types).toEqual(['attestation', 'reading'])
     } finally { db.close() }
   })
 

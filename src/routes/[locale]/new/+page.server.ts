@@ -13,6 +13,7 @@ import { addEncodings, parseEncodings, primaryEncoding, saveEncodings } from '$l
 import { parseSenses, saveSenses } from '$lib/server/senses'
 import { readIvd } from '$lib/server/ivd'
 import { cleanSourceUrl } from '$lib/source-url'
+import { readEvidenceTypes } from '$lib/evidence-types'
 import type { Actions, PageServerLoad } from './$types'
 
 function imageError(locale: Locale, error: ImageError): string {
@@ -68,6 +69,7 @@ export const actions: Actions = {
     const locale = params.locale
     const form = await request.formData()
     const values = fieldValues(form)
+    const types = readEvidenceTypes(form)
     const errors: FormErrors = {}
     const rawProvider = String(form.get('provider') ?? '').normalize('NFC').trim()
     const rawProviderUrl = String(form.get('provider_url') ?? '').normalize('NFC').trim()
@@ -147,7 +149,7 @@ export const actions: Actions = {
       }
     }
     if (duplicate) {
-      const added = await addEvidence(platform.env.DB, duplicate.id, { place: row.place, url: link, provider, provider_url: providerUrl, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, imageMeta, null)
+      const added = await addEvidence(platform.env.DB, duplicate.id, { place: row.place, url: link, provider, provider_url: providerUrl, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note, types }, imageMeta, null)
       await addEvidenceMedia(platform.env.DB, added.id, await storeExtras(platform.env.IMAGES, extras))
       await addEncodings(platform.env.DB, duplicate.id, encodings)
       redirect(303, localizedHref(locale, `/entry/${duplicate.id}`))
@@ -173,7 +175,7 @@ export const actions: Actions = {
       return failForm(500, { form: t(locale, 'error.save') })
     }
 
-    const first = await addEvidence(platform.env.DB, result.id, { place: row.place, url: link, provider, provider_url: providerUrl, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note }, imageMeta, null)
+    const first = await addEvidence(platform.env.DB, result.id, { place: row.place, url: link, provider, provider_url: providerUrl, title: row.title, author: row.author, publisher: row.publisher, year: row.year, page: row.page, note: row.note, types }, imageMeta, null)
     await addEvidenceMedia(platform.env.DB, first.id, await storeExtras(platform.env.IMAGES, extras))
     await saveGenres(platform.env.DB, result.id, genres)
     await saveCollections(platform.env.DB, result.id, collections, first?.id ?? null)
