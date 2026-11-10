@@ -94,7 +94,7 @@
     }).catch(() => {})
   })
   // A validation notice belongs to the section that holds the failing field.
-  const errorOrder = ['ids', 'description', 'encodings', 'image', 'url', 'place', 'note', 'title', 'author', 'publisher', 'year', 'page', 'provider', 'provider_url'] as const
+  const errorOrder = ['ids', 'equivalent_to', 'description', 'encodings', 'image', 'url', 'place', 'note', 'title', 'author', 'publisher', 'year', 'page', 'provider', 'provider_url'] as const
   const operators = new Set([...'⿰⿱⿲⿳⿴⿵⿶⿷⿸⿹⿺⿻'])
   const suggestions = $derived(related(data.suggestions ?? [], ids))
 
@@ -187,6 +187,12 @@
             </div>
           </div>
         {/if}
+      </div>
+      <div class="field">
+        <label class="field-label" for="equivalent_to">{t(data.locale, 'field.equivalentTo')}</label>
+        <input id="equivalent_to" class="one-char" name="equivalent_to" maxlength="80" value={form?.values?.equivalent_to ?? ''} autocomplete="off" spellcheck="false" aria-invalid={!!form?.errors?.equivalent_to} aria-describedby={form?.errors?.equivalent_to ? 'equivalent-to-help equivalent-to-error' : 'equivalent-to-help'} />
+        <p class="field-help" id="equivalent-to-help">{t(data.locale, 'field.equivalentToHint')}</p>
+        {#if form?.errors?.equivalent_to}<p class="field-error" id="equivalent-to-error">{form.errors.equivalent_to}</p>{/if}
       </div>
       <fieldset class="field tags-field">
         <legend class="field-label">{t(data.locale, 'field.tags')}</legend>

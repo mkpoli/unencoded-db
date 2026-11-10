@@ -4,6 +4,7 @@ import { DefinitiveSaveFailure, cookieOptions, saveEvidence, sessionCookieSettin
 import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, readSourceImages, type ImageError, type SourceImage } from '$lib/server/images'
 import { isLocale, localizedHref, t, type Locale } from '$lib/i18n'
 import { readComparisons } from '$lib/server/related'
+import { readEquivalentTo } from '$lib/equivalent'
 import { addEvidence, addEvidenceMedia } from '$lib/server/evidence-links'
 import { listGenres, saveGenres, selectedGenres } from '$lib/server/genres'
 import { listCollections, saveCollections, selectedCollections } from '$lib/server/collections'
@@ -30,7 +31,7 @@ async function findEntryByImageKey(db: D1Database, key: string): Promise<{ id: n
   }
 }
 type FieldName = typeof fields[number]
-type FormErrors = Partial<Record<FieldName | 'image' | 'form' | 'url' | 'provider' | 'provider_url' | 'ivd_sequence' | 'comparison' | 'encodings', string>>
+type FormErrors = Partial<Record<FieldName | 'image' | 'form' | 'url' | 'provider' | 'provider_url' | 'ivd_sequence' | 'comparison' | 'encodings' | 'equivalent_to', string>>
 
 function fieldValues(form: FormData): Record<FieldName, string> {
   return Object.fromEntries(fields.map(name => {
@@ -105,6 +106,8 @@ export const actions: Actions = {
     const encodings = parseEncodings(form)
     if (!encodings) errors.encodings = t(locale, 'error.encodings')
     const encoded = primaryEncoding(encodings ?? [])
+    const equivalent = readEquivalentTo(form.get('equivalent_to'))
+    if (!equivalent.valid) errors.equivalent_to = t(locale, 'error.equivalentTo')
     const ivdStatus = typeof form.get('ivd_status') === 'string' ? form.get('ivd_status') as string : ''
     const ivdSequence = typeof form.get('ivd_sequence') === 'string' ? form.get('ivd_sequence') as string : ''
     const ivd = readIvd(form.get('ivd_status'), form.get('ivd_sequence'))
@@ -117,7 +120,7 @@ export const actions: Actions = {
     const collections = selectedCollections(form)
     const tags = parseTags(String(form.get('tags') ?? ''))
     const senses = parseSenses(form)
-    const submitted = { ...values, provider: rawProvider, provider_url: rawProviderUrl, radical, encoded_as: encoded, strokes, ivd_status: ivdStatus, ivd_sequence: ivdSequence, genres, collections, tags: tags.join(', '), encodings: encodings ?? [] }
+    const submitted = { ...values, provider: rawProvider, provider_url: rawProviderUrl, radical, encoded_as: encoded, strokes, ivd_status: ivdStatus, ivd_sequence: ivdSequence, equivalent_to: equivalent.value ?? '', genres, collections, tags: tags.join(', '), encodings: encodings ?? [] }
     if (!senses) return fail(400, { errors, values: submitted, comparisons })
     const failForm = (status: 400 | 500, errors: FormErrors) => fail(status, { errors, values: submitted, comparisons })
     if (link && !/^https?:\/\//i.test(link)) errors.url = t(locale, 'error.length')
@@ -161,7 +164,7 @@ export const actions: Actions = {
         cookies.get(cookie.name),
         comparisons.rows,
         imageMeta ?? undefined,
-        { radical, encoded_as: encoded, strokes, ivd_status: ivd.status, ivd_sequence: ivd.sequence },
+        { radical, encoded_as: encoded, strokes, ivd_status: ivd.status, ivd_sequence: ivd.sequence, equivalent_to: equivalent.valid ? equivalent.value : null },
       )
     } catch (caught) {
       // A transport error can arrive before or after the insert commits. Recover
