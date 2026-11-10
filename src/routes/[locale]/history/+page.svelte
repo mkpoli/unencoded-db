@@ -5,8 +5,8 @@
   let { data } = $props()
 </script>
 
-<Seo title={t('recent.title')} />
+<Seo title={t('history.globalTitle')} />
 <div class="page narrow stack">
-  <h1>{t('recent.title')}</h1>
-  <HistoryList rows={data.rows} showEntry empty={t('recent.empty')} next={data.next} />
+  <h1>{t('history.globalTitle')}</h1>
+  <HistoryList rows={data.rows} showEntry empty={t('history.empty')} next={data.next} />
 </div>

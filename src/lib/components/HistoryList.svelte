@@ -69,7 +69,7 @@
     {/if}
   {/each}
 </ol>
-{#if next}<div class="revision-more"><a class="button" href={`?before=${next}`}>{t('recent.older')}</a></div>{/if}
+{#if next}<div class="revision-more"><a class="button" href={`?before=${next}`}>{t('history.older')}</a></div>{/if}
 
 <style>
   .revision-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line) }
