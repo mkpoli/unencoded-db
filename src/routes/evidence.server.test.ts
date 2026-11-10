@@ -416,7 +416,7 @@ describe('evidence routes', () => {
       const unsupported = await actions.default!(event(record, DB, images, imageFile(new TextEncoder().encode('<svg/>'), 'x.svg', 'image/svg+xml'), 'zh-Hant')) as any
       expect(unsupported.data.errors.image).toBe('圖片必須是有效的JPEG、PNG或WebP檔案。')
       const oversize = await actions.default!(event(record, DB, images, imageFile(new Uint8Array(MAX_IMAGE_BYTES + 1)), 'ko')) as any
-      expect(oversize.data.errors.image).toBe('이미지가 8 MiB를 초과합니다.')
+      expect(oversize.data.errors.image).toBe('이미지가 16 MiB를 초과합니다.')
       const place = await actions.default!(event({ ...record, place: '' }, DB, images, imageFile(PNG_BYTES), 'vi')) as any
       expect(place.data.errors.place).toBe('Nhập nơi tìm thấy chữ (tối đa 500 ký tự).')
       expect(images.puts).toHaveLength(0)
@@ -529,6 +529,56 @@ describe('evidence routes', () => {
       const e = event({ ...record, tags: '客話, 木' }, d1Binding(db), images)
       await expect(actions.default!(e)).rejects.toMatchObject({ status: 303 })
       expect(db.query('SELECT tag FROM character_tags ORDER BY tag').all()).toEqual([{ tag: '客話' }, { tag: '木' }])
+    } finally { db.close() }
+  })
+
+  test('stores several character encodings for one character', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const form = new FormData()
+      for (const [key, value] of Object.entries(record)) form.set(key, value)
+      form.set('image', imageFile(PNG_BYTES))
+      form.append('encoding_charset', 'unicode')
+      form.append('encoding_code', 'U+2D6DD')
+      form.append('encoding_charset', 'cns11643')
+      form.append('encoding_code', '1-4421')
+      const e = {
+        request: new Request('https://example.test/en/new', { method: 'POST', body: form }),
+        url: new URL('https://example.test/en/new'),
+        cookies: testCookies().cookies,
+        platform: { env: { DB: d1Binding(db), IMAGES: images.bucket } },
+        params: { locale: 'en' },
+      } as any
+      await expect(actions.default!(e)).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT charset, code FROM entry_encodings ORDER BY rowid').all()).toEqual([
+        { charset: 'unicode', code: 'U+2D6DD' },
+        { charset: 'cns11643', code: '1-4421' },
+      ])
+      expect(db.query('SELECT encoded_as FROM entries WHERE id = 1').get()).toEqual({ encoded_as: 'U+2D6DD' })
+    } finally { db.close() }
+  })
+
+  test('rejects an encoding without a character set', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const form = new FormData()
+      for (const [key, value] of Object.entries(record)) form.set(key, value)
+      form.set('image', imageFile(PNG_BYTES))
+      form.append('encoding_charset', 'other')
+      form.append('encoding_code', 'A1')
+      const e = {
+        request: new Request('https://example.test/en/new', { method: 'POST', body: form }),
+        url: new URL('https://example.test/en/new'),
+        cookies: testCookies().cookies,
+        platform: { env: { DB: d1Binding(db), IMAGES: images.bucket } },
+        params: { locale: 'en' },
+      } as any
+      const result = await actions.default!(e) as any
+      expect(result.status).toBe(400)
+      expect(result.data.errors.encodings).toContain('character set')
+      expect((db.query('SELECT count(*) AS n FROM entries').get() as { n: number }).n).toBe(0)
     } finally { db.close() }
   })
 
@@ -696,6 +746,18 @@ describe('evidence routes', () => {
       await expect(actions.default!(event({ ...record, url: 'https://example.org/source' }, DB, images))).rejects.toMatchObject({ status: 303 })
       const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
       expect(result.evidence[0].url).toBe('https://example.org/source')
+    } finally { db.close() }
+  })
+
+  test('stores an X post link without its share tracking', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      const link = 'https://x.com/mkpoli/status/2119010548327334386?a=d47PdKKaof_S9ZTqrxU&s=20'
+      await expect(actions.default!(event({ ...record, url: link }, DB, images))).rejects.toMatchObject({ status: 303 })
+      const result = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as any
+      expect(result.evidence[0].url).toBe('https://x.com/mkpoli/status/2119010548327334386')
     } finally { db.close() }
   })
 

@@ -1,27 +1,22 @@
-import { isLocale } from '$lib/i18n'
 import { MAX_IMAGE_BYTES } from './images'
 
 // Fits the maximum entry text fields with three-byte UTF-8 text
 // percent-encoded, plus form field names and framing.
 export const MAX_WRITE_BODY = 512 * 1024
 
-// An 8 MiB image plus the bounded text fields and multipart framing.
-export const MAX_NEW_BODY = MAX_IMAGE_BYTES + 64 * 1024
+// The largest image plus the text fields and multipart framing.
+export const MAX_IMAGE_BODY = MAX_IMAGE_BYTES + MAX_WRITE_BODY
 
-function isNewPath(pathname: string): boolean {
-  const path = pathname.replace(/\/+$/, '') || '/'
-  const [, rawLocale, page] = path.split('/')
-  let locale: string | undefined
-  try {
-    locale = decodeURIComponent(rawLocale ?? '')
-  } catch {
-    locale = rawLocale
-  }
-  return isLocale(locale) && page === 'new'
-}
+const IMAGE_ROUTES = new Set([
+  '/[locale]/new',
+  '/[locale]/batch',
+  '/[locale]/entry/[id]',
+  '/[locale]/entry/[id]/edit',
+])
 
-export function writeBodyLimit(pathname: string): number {
-  return isNewPath(pathname) ? MAX_NEW_BODY : MAX_WRITE_BODY
+/** The resolved route id decides, so encoded segments cannot miss the image routes. */
+export function writeBodyLimit(routeId: string | null | undefined): number {
+  return routeId && IMAGE_ROUTES.has(routeId) ? MAX_IMAGE_BODY : MAX_WRITE_BODY
 }
 
 /** Read at most the limit before handing the request to a form parser. */

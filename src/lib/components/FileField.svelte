@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
+  import { fetchPost, postId, type PostInfo } from '$lib/source-url'
+
   let {
     id = 'image',
     name = 'image',
@@ -14,6 +17,11 @@
     describedBy,
     error = '',
     optional = false,
+    sourceUrl = '',
+    fetchingLabel = '',
+    fetchFailedLabel = '',
+    onpost,
+    pasteHint = '',
   }: {
     id?: string
     name?: string
@@ -29,21 +37,44 @@
     describedBy?: string
     error?: string
     optional?: boolean
+    /** An evidence link; a post link fills the field with the post's first picture. */
+    sourceUrl?: string
+    fetchingLabel?: string
+    fetchFailedLabel?: string
+    /** Receives the post's citation fields, or null when the link is not a readable post. */
+    onpost?: (info: PostInfo | null) => void
+    pasteHint?: string
   } = $props()
 
   let input: HTMLInputElement
+  let root: HTMLElement
   let file = $state<File | null>(null)
   let preview = $state<string | null>(null)
   let dragging = $state(false)
+  let fromPost = $state(false)
+  let fetching = $state(false)
+  let failed = $state(false)
+  let lookedUp = ''
+  let controller: AbortController | null = null
 
   $effect(() => {
     const url = preview
     return () => { if (url) URL.revokeObjectURL(url) }
   })
 
-  function chooseFile(next: File | null) {
+  function setNative(next: File | null) {
+    if (!input) return
+    const transfer = new DataTransfer()
+    if (next) transfer.items.add(next)
+    input.files = transfer.files
+  }
+
+  function chooseFile(next: File | null, from = false) {
     file = next
+    fromPost = from
+    setNative(next)
     preview = next ? URL.createObjectURL(next) : null
+    failed = false
   }
 
   function onchange() {
@@ -64,6 +95,77 @@
     chooseFile(files[0])
   }
 
+  // A post link fills the field and its citation once the reader stops changing it. A picture they
+  // chose themselves stays; a new link replaces only a picture this field fetched.
+  $effect(() => {
+    const url = sourceUrl
+    if (url === lookedUp) return
+    lookedUp = url
+    controller?.abort()
+    controller = null
+    fetching = false
+    failed = false
+    const id = url ? postId(url) : null
+    if (!id) {
+      onpost?.(null)
+      if (untrack(() => fromPost)) chooseFile(null)
+      return
+    }
+    const timer = setTimeout(() => { void loadPost(id) }, 400)
+    return () => {
+      clearTimeout(timer)
+      controller?.abort()
+    }
+  })
+
+  async function loadPost(id: string) {
+    const local = new AbortController()
+    controller = local
+    fetching = true
+    failed = false
+    try {
+      const found = await fetchPost(id, local.signal)
+      if (local.signal.aborted) return
+      if (!found) {
+        onpost?.(null)
+        if (fromPost) chooseFile(null)
+        if (!file) failed = true
+        return
+      }
+      onpost?.(found.info)
+      if (!found.photo) {
+        if (fromPost) chooseFile(null)
+        if (!file) failed = true
+        return
+      }
+      if (file && !fromPost) return
+      chooseFile(found.photo, true)
+    } catch (error) {
+      if (local.signal.aborted) return
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      onpost?.(null)
+      if (fromPost) chooseFile(null)
+      if (!file) failed = true
+    } finally {
+      if (controller === local) {
+        controller = null
+        fetching = false
+      }
+    }
+  }
+
+  function onpaste(event: ClipboardEvent) {
+    const file = [...(event.clipboardData?.files ?? [])].find(item => item.type.startsWith('image/'))
+    if (!file || !input) return
+    const form = root?.closest('form')
+    const target = event.target
+    const inThisForm = Boolean(form && target instanceof Node && form.contains(target))
+    const onlyField = document.querySelectorAll('[data-file-field]').length === 1
+    if (!inThisForm && !onlyField) return
+    event.preventDefault()
+    chooseFile(file)
+  }
+
   function size(bytes: number) {
     return bytes >= 1024 * 1024
       ? `${(bytes / 1024 / 1024).toFixed(1)} MiB`
@@ -71,7 +173,9 @@
   }
 </script>
 
-<div class="file-control">
+<svelte:window onpaste={onpaste} />
+
+<div class="file-control" bind:this={root} data-file-field>
 <div class="file-field" class:invalid={!!error} class:dragging>
   <input
     {id}
@@ -122,5 +226,11 @@
     </label>
   {/if}
 </div>
+{#if !file && pasteHint}<p class="field-help file-hint">{pasteHint}</p>{/if}
 <p class="field-help file-hint" id={hintId}>{hint}</p>
+{#if fetching && fetchingLabel}
+  <p class="field-help" role="status">{fetchingLabel}</p>
+{:else if failed && fetchFailedLabel}
+  <p class="field-help" role="status">{fetchFailedLabel}</p>
+{/if}
 </div>

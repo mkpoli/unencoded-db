@@ -1,10 +1,14 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import FileField from '$lib/components/FileField.svelte'
+  import { cleanLinkInput } from '$lib/link-input'
+  import type { PostInfo } from '$lib/source-url'
   import ComparisonGrid from '$lib/components/ComparisonGrid.svelte'
+  import EncodingFields from '$lib/components/EncodingFields.svelte'
   import ScriptSelect from '$lib/components/ScriptSelect.svelte'
   import { localizedHref, t, type Locale } from '$lib/i18n'
   import type { Comparison } from '$lib/comparison-rows'
+  import type { Encoding } from '$lib/encodings'
 
   type Sense = { id?: number; gloss: string; reading: string | null }
   type Genre = { slug: string; label: string }
@@ -43,7 +47,7 @@
     evidenceId?: number
     message?: string
     errors?: Record<string, string>
-    values?: Record<string, string | string[]>
+    values?: Record<string, string | string[] | Encoding[]>
     comparisons?: { rows: Comparison[] }
     senses?: Sense[]
     revision?: unknown
@@ -63,6 +67,7 @@
       allGenres: Genre[]
       allCollections: Collection[]
       allTags: string[]
+      encodings: Encoding[]
     }
     form?: FormState
   } = $props()
@@ -95,6 +100,26 @@
     form?.action === 'evidence' && form.evidenceId === item.id ? form.errors?.[name] : undefined
   const addValue = (name: string) => form?.action === 'addEvidence' ? String(form.values?.[name] ?? '') : ''
   const addError = (name: string) => form?.action === 'addEvidence' ? form.errors?.[name] : undefined
+  let addUrl = $state(untrack(() => form?.action === 'addEvidence' ? String(form.values?.url ?? '') : ''))
+  let addPlace = $state(untrack(() => addValue('place')))
+  let addTitle = $state(untrack(() => addValue('title')))
+  let addProvider = $state(untrack(() => addValue('provider')))
+  let addProviderUrl = $state(untrack(() => addValue('provider_url')))
+  let addedPost: PostInfo | null = null
+
+  // Fill the citation fields from the post unless the reader has changed them since the last link.
+  function fillAddFromPost(info: PostInfo | null) {
+    const previous = addedPost
+    const keep = (current: string, name: keyof PostInfo) => {
+      const before = previous?.[name]
+      return !current || (before !== null && before !== undefined && current === before) ? String(info?.[name] ?? '') : current
+    }
+    addPlace = keep(addPlace, 'place')
+    addTitle = keep(addTitle, 'title')
+    addProvider = keep(addProvider, 'provider')
+    addProviderUrl = keep(addProviderUrl, 'providerUrl')
+    addedPost = info
+  }
 </script>
 
 <svelte:head><title>{t(data.locale, 'entry.revise')} · {t(data.locale, 'app.name')}</title></svelte:head>
@@ -132,11 +157,12 @@
             <label class="field-label" for="radical">{t(data.locale, 'field.radical')}</label>
             <input id="radical" name="radical" maxlength="20" value={current('radical')} />
           </div>
-          <div class="field">
-            <label class="field-label" for="encoded_as">{t(data.locale, 'field.encodedAs')}</label>
-            <input id="encoded_as" name="encoded_as" maxlength="80" value={current('encoded_as')} />
-          </div>
         </div>
+        <EncodingFields
+          locale={data.locale}
+          values={form?.action === 'character' && Array.isArray(form.values?.encodings) ? form.values.encodings as Encoding[] : data.encodings}
+          error={characterError('encodings')}
+        />
         <div class="field">
           <label class="field-label" for="tags">{t(data.locale, 'field.tags')}</label>
           <input id="tags" name="tags" maxlength="400" list="tag-suggestions" value={form?.action === 'character' ? String(form.values?.tags ?? '') : tags.join(', ')} aria-describedby="tags-help" />
@@ -249,7 +275,7 @@
             replace={t(data.locale, 'field.replaceImage')}
             remove={t(data.locale, 'field.removeImage')}
             previewAlt={t(data.locale, 'field.imagePreview')}
-            hint={t(data.locale, 'field.fileFormats')}
+            hint={t(data.locale, 'field.fileFormats')} pasteHint={t(data.locale, 'field.imagePaste')}
             hintId={`formats-${item.id}`}
             describedBy={`formats-${item.id} evidence-keep-${item.id}`}
             error={evidenceError(item, 'image') ?? ''}
@@ -258,7 +284,7 @@
         </div>
         <div class="field">
           <label class="field-label" for={`url-${item.id}`}>{t(data.locale, 'field.url')}</label>
-          <input id={`url-${item.id}`} name="url" type="url" maxlength="1000" placeholder="https://" value={evidenceValue(item, 'url')} aria-invalid={!!evidenceError(item, 'url')} aria-describedby={`url-help-${item.id}`} />
+          <input id={`url-${item.id}`} name="url" type="url" maxlength="1000" placeholder="https://" value={evidenceValue(item, 'url')} use:cleanLinkInput aria-invalid={!!evidenceError(item, 'url')} aria-describedby={`url-help-${item.id}`} />
           <p class="field-help" id={`url-help-${item.id}`}>{t(data.locale, 'field.urlHint')}</p>
           {#if evidenceError(item, 'url')}<p class="field-error">{evidenceError(item, 'url')}</p>{/if}
         </div>
@@ -299,29 +325,33 @@
           replace={t(data.locale, 'field.replaceImage')}
           remove={t(data.locale, 'field.removeImage')}
           previewAlt={t(data.locale, 'field.imagePreview')}
-          hint={t(data.locale, 'field.fileFormats')}
+          hint={t(data.locale, 'field.fileFormats')} pasteHint={t(data.locale, 'field.imagePaste')}
           hintId="new-formats"
           describedBy="new-formats"
           error={addError('image') ?? ''}
+          sourceUrl={addUrl}
+          fetchingLabel={t(data.locale, 'field.linkImageWorking')}
+          fetchFailedLabel={t(data.locale, 'field.linkImageFailed')}
+          onpost={fillAddFromPost}
         />
       </div>
       <div class="field">
         <label class="field-label" for="new-url">{t(data.locale, 'field.url')}</label>
-        <input id="new-url" name="url" type="url" maxlength="1000" placeholder="https://" value={addValue('url')} aria-invalid={!!addError('url')} aria-describedby="new-url-help" />
+        <input id="new-url" name="url" type="url" maxlength="1000" placeholder="https://" bind:value={addUrl} use:cleanLinkInput aria-invalid={!!addError('url')} aria-describedby="new-url-help" />
         <p class="field-help" id="new-url-help">{t(data.locale, 'field.urlHint')}</p>
         {#if addError('url')}<p class="field-error">{addError('url')}</p>{/if}
       </div>
       <div class="field">
         <label class="field-label" for="new-place">{t(data.locale, 'field.place')}</label>
-        <input id="new-place" name="place" maxlength="500" value={addValue('place')} aria-invalid={!!addError('place')} />
+        <input id="new-place" name="place" maxlength="500" bind:value={addPlace} aria-invalid={!!addError('place')} />
         {#if addError('place')}<p class="field-error">{addError('place')}</p>{/if}
       </div>
       <div class="field-grid">
-        <div class="field"><label class="field-label" for="new-provider">{t(data.locale, 'field.provider')}</label><input id="new-provider" name="provider" maxlength="300" value={addValue('provider')} /></div>
-        <div class="field"><label class="field-label" for="new-provider-url">{t(data.locale, 'field.providerUrl')}</label><input id="new-provider-url" name="provider_url" type="url" maxlength="1000" placeholder="https://" value={addValue('provider_url')} /></div>
+        <div class="field"><label class="field-label" for="new-provider">{t(data.locale, 'field.provider')}</label><input id="new-provider" name="provider" maxlength="300" bind:value={addProvider} /></div>
+        <div class="field"><label class="field-label" for="new-provider-url">{t(data.locale, 'field.providerUrl')}</label><input id="new-provider-url" name="provider_url" type="url" maxlength="1000" placeholder="https://" bind:value={addProviderUrl} /></div>
       </div>
       <div class="field-grid">
-        <div class="field"><label class="field-label" for="new-title">{t(data.locale, 'field.title')}</label><input id="new-title" name="title" maxlength="300" value={addValue('title')} /></div>
+        <div class="field"><label class="field-label" for="new-title">{t(data.locale, 'field.title')}</label><input id="new-title" name="title" maxlength="300" bind:value={addTitle} /></div>
         <div class="field"><label class="field-label" for="new-author">{t(data.locale, 'field.author')}</label><input id="new-author" name="author" maxlength="300" value={addValue('author')} /></div>
         <div class="field"><label class="field-label" for="new-publisher">{t(data.locale, 'field.publisher')}</label><input id="new-publisher" name="publisher" maxlength="300" value={addValue('publisher')} /></div>
         <div class="field"><label class="field-label" for="new-year">{t(data.locale, 'field.year')}</label><input id="new-year" name="year" maxlength="40" placeholder="1998 / 1998-05 / 1998-05-12 / 05" value={addValue('year')} /></div>

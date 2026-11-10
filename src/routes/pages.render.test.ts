@@ -12,12 +12,14 @@ const script = resolve('src/lib/script.ts')
 const ids = resolve('src/lib/ids.ts')
 const composer = resolve('src/lib/composer.ts')
 const comparisonRows = resolve('src/lib/comparison-rows.ts')
+const encodings = resolve('src/lib/encodings.ts')
 const fileField = resolve('src/lib/components/FileField.svelte')
 const cropField = resolve('src/lib/components/CropField.svelte')
 const idsGlyph = resolve('src/lib/components/IdsGlyph.svelte')
 const idsDrawing = resolve('src/lib/components/IdsDrawing.svelte')
 const scriptSelect = resolve('src/lib/components/ScriptSelect.svelte')
 const comparisonGrid = resolve('src/lib/components/ComparisonGrid.svelte')
+const encodingFields = resolve('src/lib/components/EncodingFields.svelte')
 const appForms = resolve(tmp, 'app-forms.js')
 writeFileSync(appForms, 'export function enhance() { return {} }\n')
 const components = new Map<string, Promise<any>>()
@@ -27,6 +29,7 @@ let idsGlyphModule: Promise<string> | null = null
 let idsDrawingModule: Promise<string> | null = null
 let scriptSelectModule: Promise<string> | null = null
 let comparisonGridModule: Promise<string> | null = null
+let encodingFieldsModule: Promise<string> | null = null
 
 function loadFileField(): Promise<string> {
   if (!fileFieldModule) {
@@ -67,6 +70,19 @@ function loadComparisonGrid(): Promise<string> {
   return comparisonGridModule
 }
 
+function loadEncodingFields(): Promise<string> {
+  if (!encodingFieldsModule) {
+    encodingFieldsModule = (async () => {
+      const preprocessed = await preprocess(readFileSync(encodingFields, 'utf8'), vitePreprocess({ script: true }), { filename: encodingFields })
+      const { js } = compile(preprocessed.code, { filename: encodingFields, generate: 'server' })
+      const target = resolve(tmp, 'encoding-fields.js')
+      writeFileSync(target, js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/encodings'", `'${encodings}'`).replaceAll('"$lib/encodings"', `"${encodings}"`))
+      return target
+    })()
+  }
+  return encodingFieldsModule
+}
+
 function loadIdsGlyph(): Promise<string> {
   if (!idsGlyphModule) {
     idsGlyphModule = (async () => {
@@ -99,7 +115,7 @@ function loadScriptSelect(): Promise<string> {
     scriptSelectModule = (async () => {
       const preprocessed = await preprocess(readFileSync(scriptSelect, 'utf8'), vitePreprocess({ script: true }), { filename: scriptSelect })
       let { js } = compile(preprocessed.code, { filename: scriptSelect, generate: 'server' })
-      const code = js.code.replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`)
+      const code = js.code.replaceAll("'$lib/encodings'", `'${encodings}'`).replaceAll('"$lib/encodings"', `"${encodings}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`)
       const target = resolve(tmp, 'scriptselect.js')
       writeFileSync(target, code)
       return target
@@ -121,7 +137,8 @@ async function load(path: string, name: string) {
       const drawing = await loadIdsDrawing()
       const select = await loadScriptSelect()
       const grid = await loadComparisonGrid()
-      const code = js.code.replaceAll('"$lib/components/ComparisonGrid.svelte"', `"${grid}"`).replaceAll("'$lib/components/ComparisonGrid.svelte'", `'${grid}'`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/CropField.svelte'", `'${crop}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$lib/components/IdsDrawing.svelte"', `"${drawing}"`).replaceAll("'$lib/components/IdsDrawing.svelte'", `'${drawing}'`).replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`).replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`).replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
+      const encoding = await loadEncodingFields()
+      const code = js.code.replaceAll('"$lib/components/ComparisonGrid.svelte"', `"${grid}"`).replaceAll("'$lib/components/ComparisonGrid.svelte'", `'${grid}'`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/CropField.svelte'", `'${crop}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$lib/components/IdsDrawing.svelte"', `"${drawing}"`).replaceAll("'$lib/components/IdsDrawing.svelte'", `'${drawing}'`).replaceAll('"$lib/components/EncodingFields.svelte"', `"${encoding}"`).replaceAll("'$lib/components/EncodingFields.svelte'", `'${encoding}'`).replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`).replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`).replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/encodings'", `'${encodings}'`).replaceAll('"$lib/encodings"', `"${encodings}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
@@ -239,7 +256,9 @@ describe('localized pages', () => {
     expect(body).toContain('或提供連結')
     expect(body).not.toMatch(/id="image"[^>]*required/)
     expect(body).toContain('常見的位置與裝置中繼資料會被移除，JPEG圖片方向保留。')
-    expect(body).toContain('JPEG、PNG 或 WebP · 8 MiB')
+    expect(body).toContain('JPEG、PNG 或 WebP · 16 MiB')
+    expect(body).toContain('也可以用Ctrl+V貼上圖片。')
+    expect(body).toContain('data-file-field')
     expect(body).toContain('瀏覽')
     expect(body).toContain('請只上傳你有權分享的圖片。')
     expect(body).toContain('novalidate')
@@ -267,6 +286,9 @@ describe('localized pages', () => {
     expect(body).toContain('https://ids.mkpo.li/')
     expect(body).toContain('IDS Workshop')
     expect(body).toContain('name="tags"')
+    expect(body).toContain('name="encoding_charset"')
+    expect(body).toContain('name="encoding_code"')
+    expect(body).toContain('U+2D6DD')
     expect(body).toContain('name="genre" value="music"')
     expect(body).toContain('name="genre" value="dialect"')
     expect(body).toContain('name="collection" value="extension-e"')
@@ -328,17 +350,30 @@ describe('localized pages', () => {
   test('entry page shows IVD membership apart from the encoding', async () => {
     const base = { id: 9, script: 'Han', ids: null, description: null, radical: null, encoded_as: 'U+4E00', strokes: null, place: 'Book', title: null, author: null, publisher: null, year: null, page: null, note: null, created_at: '2026-11-08T05:00:00.000Z', has_image: 0 }
     const registered = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-ivd', {
-      data: { locale: 'en', entry: { ...base, ivd_status: 'registered', ivd_sequence: 'U+4E00 U+E0100' }, comparisons: [] },
+      data: { locale: 'en', entry: { ...base, ivd_status: 'registered', ivd_sequence: 'U+4E00 U+E0100' }, comparisons: [], encodings: [{ charset: 'unicode', code: 'U+4E00' }] },
     })
-    expect(registered.body).toContain('Encoded as')
+    expect(registered.body).toContain('<dt>Unicode</dt>')
     expect(registered.body).toContain('U+4E00')
     expect(registered.body).toContain('>IVD<')
     expect(registered.body).toContain('U+4E00 U+E0100')
     const absent = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-ivd-none', {
-      data: { locale: 'ja', entry: { ...base, ivd_status: 'none', ivd_sequence: null }, comparisons: [] },
+      data: { locale: 'ja', entry: { ...base, ivd_status: 'none', ivd_sequence: null }, comparisons: [], encodings: [{ charset: 'unicode', code: 'U+4E00' }] },
     })
     expect(absent.body).toContain('未登録')
     expect(absent.body).not.toContain('U+4E00 U+E0100')
+  })
+
+  test('entry page lists every character encoding', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-encodings', {
+      data: {
+        locale: 'ja',
+        entry: { id: 9, script: 'Han', ids: null, description: null, radical: null, encoded_as: null, strokes: null, ivd_status: null, ivd_sequence: null, created_at: '2026-11-08T05:00:00.000Z' },
+        comparisons: [],
+        encodings: [{ charset: 'unicode', code: 'U+2D6DD' }, { charset: 'cns11643', code: '1-4421' }],
+      },
+    })
+    expect(body).toContain('<dt>Unicode</dt><dd>U+2D6DD</dd>')
+    expect(body).toContain('<dt>CNS 11643</dt><dd>1-4421</dd>')
   })
 
   test('entry page keeps evidence below the character card and links a URL source', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { MAX_IMAGE_BYTES } from './images'
-import { limitWriteBody, MAX_NEW_BODY, MAX_WRITE_BODY, writeBodyLimit } from './body-limit'
+import { limitWriteBody, MAX_IMAGE_BODY, MAX_WRITE_BODY, writeBodyLimit } from './body-limit'
 
 describe('write body limit', () => {
   test('rejects an advertised oversized body', async () => {
@@ -33,24 +33,28 @@ describe('write body limit', () => {
 })
 
 describe('route body limits', () => {
-  test('allows an 8 MiB image on the localized new page only', () => {
-    expect(MAX_NEW_BODY).toBe(MAX_IMAGE_BYTES + 64 * 1024)
-    for (const path of ['/en/new', '/ja/new', '/zh-Hans/new', '/zh-Hant/new', '/ko/new', '/vi/new', '/ja/new/', '/%6a%61/new']) {
-      expect(writeBodyLimit(path), path).toBe(MAX_NEW_BODY)
+  test('allows a 16 MiB image on the routes with an image field', () => {
+    for (const route of [
+      '/[locale]/new', '/[locale]/batch', '/[locale]/entry/[id]', '/[locale]/entry/[id]/edit',
+    ]) {
+      expect(writeBodyLimit(route), route).toBe(MAX_IMAGE_BODY)
     }
-    for (const path of ['/', '/new', '/en', '/ja/entry/1', '/en/entry/1/image', '/ja/not-new', '/newer']) {
-      expect(writeBodyLimit(path), path).toBe(MAX_WRITE_BODY)
+    for (const route of [
+      null, undefined, '/[locale]', '/[locale]/entry/[id]/image', '/[locale]/entry/[id]/report',
+      '/[locale]/entry/[id]/history', '/[locale]/moderate', '[locale]/new',
+    ]) {
+      expect(writeBodyLimit(route), String(route)).toBe(MAX_WRITE_BODY)
     }
   })
   test('accepts a body between the small and image limits with the larger limit', async () => {
     const body = 'x'.repeat(MAX_WRITE_BODY + 1)
     const req = new Request('https://example.test/ja/new', { method: 'POST', body })
-    const result = await limitWriteBody(req, MAX_NEW_BODY)
+    const result = await limitWriteBody(req, MAX_IMAGE_BODY)
     expect(result).not.toBeNull()
     expect((await result!.arrayBuffer()).byteLength).toBe(MAX_WRITE_BODY + 1)
   })
   test('rejects a body over the image limit', async () => {
-    const req = new Request('https://example.test/ja/new', { method: 'POST', body: 'x'.repeat(MAX_NEW_BODY + 1) })
-    expect(await limitWriteBody(req, MAX_NEW_BODY)).toBeNull()
+    const req = new Request('https://example.test/ja/new', { method: 'POST', body: 'x'.repeat(MAX_IMAGE_BODY + 1) })
+    expect(await limitWriteBody(req, MAX_IMAGE_BODY)).toBeNull()
   })
 })

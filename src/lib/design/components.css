@@ -755,6 +755,8 @@
   .field-grid { grid-template-columns: 1fr; }
   .sense-row { grid-template-columns: 1fr 1fr; }
   .sense-row .sense-remove { grid-column: 1 / -1; justify-self: start; }
+  .encoding-row { grid-template-columns: 1fr; }
+  .encoding-remove { justify-self: start; }
   .tag-add { flex-wrap: wrap; }
   .tag-add input { flex: 1 1 160px; }
   .form-actions .primary { width: 100%; }
@@ -833,3 +835,10 @@
   text-decoration: none;
 }
 .genre-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Character encodings: one character set and code per row. */
+.encodings-field { display: grid; gap: 10px; min-width: 0; padding: 0; border: 0; }
+.encoding-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 12px; }
+.encoding-row .field { min-width: 0; }
+.encoding-remove { min-height: 42px; padding: 0 4px; }
+.encoding-add { justify-self: start; }

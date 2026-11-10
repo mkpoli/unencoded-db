@@ -33,6 +33,8 @@ function dbSetup() {
   applyMigration(db, '0028_genre_taxonomy.sql')
   applyMigration(db, '0029_genre_groups.sql')
   applyMigration(db, '0030_evidence_provider.sql')
+  applyMigration(db, '0031_atlas_profile.sql')
+  applyMigration(db, '0032_entry_encodings.sql')
   return db
 }
 function binding(db: Database) {
@@ -227,7 +229,7 @@ describe('revisions', () => {
       expect(invalid.data.errors.ids).toContain('length')
       expect(invalid.data.errors.description).toContain('length')
       expect(invalid.data.errors.radical).toContain('length')
-      expect(invalid.data.errors.encoded_as).toContain('length')
+      expect(invalid.data.errors.encodings).toContain('character set')
       expect(invalid.data.values.tags).toBe('kept')
       expect(db.query('SELECT count(*) AS n FROM entry_revisions').get()).toEqual({ n: 1 })
       const missingScript = await actions.character!(event(db, { ...values, ids: '', description: '', radical: '', encoded_as: '', script: '' })) as any
