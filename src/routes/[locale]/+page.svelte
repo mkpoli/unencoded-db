@@ -35,15 +35,16 @@
     {#each data.entries as entry (entry.id)}
       {@const glyph = entry.ids ? data.glyphs?.[entry.ids] : undefined}
       <a class="entry-card gallery-card" href={localizedHref(data.locale, `/entry/${entry.id}`)}>
-        <span class="glyph"><IdsGlyph ids={entry.ids} text={entry.ids || entry.script} path={glyph} /></span>
+        <span class="plate"><span class="glyph"><IdsGlyph ids={entry.ids} text={entry.ids || entry.script} path={glyph} /></span></span>
         {#if entry.ids}<span class="visually-hidden">{entry.ids}</span>{/if}
-        {#if entry.equivalent_to}<span class="equivalent"><span class="visually-hidden">{t(data.locale, 'browse.equivalent', { character: entry.equivalent_to })}</span><span aria-hidden="true">= {entry.equivalent_to}</span></span>{/if}
-        {#if entry.category}<span class="category">{entry.category}</span>{/if}
+        <span class="badges">
+          {#if entry.equivalent_to}<span class="equivalent"><span class="visually-hidden">{t(data.locale, 'browse.equivalent', { character: entry.equivalent_to })}</span><span aria-hidden="true">= {entry.equivalent_to}</span></span>{/if}
+          {#if entry.category}<span class="category">{entry.category}</span>{/if}
+        </span>
         <span class="summary">
           <span>{entry.evidence === 1 ? t(data.locale, 'browse.source', { n: entry.evidence }) : t(data.locale, 'browse.sources', { n: entry.evidence })}</span>
           {#if entry.first_year}<span aria-hidden="true">·</span><span>{entry.first_year}</span>{/if}
         </span>
-        <span class="record">#{entry.id}</span>
       </a>
     {/each}
     <a class="add-card" href={localizedHref(data.locale, '/new')}>

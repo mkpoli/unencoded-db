@@ -215,6 +215,8 @@ describe('localized pages', () => {
     expect(grid).toContain('href="/zh-Hant/entry/7"')
     expect(grid).toContain('class="add-card"')
     expect(grid).toContain('href="/zh-Hant/new"')
+    expect(grid).toContain('class="plate"')
+    expect(grid).toContain('class="badges"')
     expect(grid).toContain('class="equivalent"')
     expect(grid).toContain('= 漢')
     expect(grid).toContain('對應字：漢')
