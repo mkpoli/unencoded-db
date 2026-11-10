@@ -52,7 +52,7 @@
     }).catch(() => {})
   })
   // A validation notice belongs to the section that holds the failing field.
-  const errorOrder = ['image', 'url', 'place', 'note', 'title', 'author', 'publisher', 'year', 'page', 'script', 'ids', 'description'] as const
+  const errorOrder = ['script', 'ids', 'ivd_sequence', 'description', 'image', 'url', 'place', 'note', 'title', 'author', 'publisher', 'year', 'page', 'provider', 'provider_url'] as const
   const operators = new Set([...'⿰⿱⿲⿳⿴⿵⿶⿷⿸⿹⿺⿻'])
   const suggestions = $derived(related(data.suggestions ?? [], ids))
 
@@ -111,85 +111,6 @@
     rateLimitFailure = null
     return async ({ result, update }) => handleContributionResult(result, status => { rateLimitFailure = status }, update)
   }}>
-    <section class="form-section" aria-labelledby="evidence-heading">
-      <h2 class="section-label" id="evidence-heading">{t(data.locale, 'form.evidence')}</h2>
-      <div class="field">
-        <label class="field-label" for="image">{t(data.locale, 'field.sourceImage')}</label>
-        <FileField
-          id="image"
-          name="image"
-          optional
-          label={t(data.locale, 'field.sourceImage')}
-          choose={t(data.locale, 'field.chooseImage')}
-          browse={t(data.locale, 'field.browseImage')}
-          replace={t(data.locale, 'field.replaceImage')}
-          remove={t(data.locale, 'field.removeImage')}
-          previewAlt={t(data.locale, 'field.imagePreview')}
-          hint={t(data.locale, 'field.fileFormats')}
-          describedBy={imageError ? 'file-formats image-help image-rights image-error' : 'file-formats image-help image-rights'}
-          error={imageError}
-        />
-        <p class="field-help" id="image-help">{t(data.locale, 'field.sourceImageHint')}</p>
-        <p class="field-help" id="image-rights">{t(data.locale, 'field.rightsHint')}</p>
-        {#if imageError}<p class="field-error" id="image-error">{imageError}</p>{/if}
-      </div>
-      <div class="field">
-        <label class="field-label" for="url">{t(data.locale, 'field.url')}</label>
-        <input id="url" name="url" type="url" maxlength="1000" placeholder="https://" value={form?.values?.url ?? ''} aria-invalid={!!form?.errors?.url} aria-describedby="url-help" />
-        <p class="field-help" id="url-help">{t(data.locale, 'field.urlHint')}</p>
-        {#if form?.errors?.url}<p class="field-error">{form.errors.url}</p>{/if}
-      </div>
-      <div class="field">
-        <label class="field-label" for="place">{t(data.locale, 'field.place')}</label>
-        <input id="place" name="place" maxlength="500" value={form?.values?.place ?? ''} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} />
-        {#if form?.errors?.place}<p class="field-error" id="place-error">{form.errors.place}</p>{/if}
-      </div>
-        <div class="field">
-          <label class="field-label" for="note">{t(data.locale, 'field.note')}</label>
-          <textarea id="note" name="note" maxlength="5000" aria-invalid={!!form?.errors?.note} aria-describedby={form?.errors?.note ? 'note-error' : undefined}>{form?.values?.note ?? ''}</textarea>
-          {#if form?.errors?.note}<p class="field-error" id="note-error">{form.errors.note}</p>{/if}
-        </div>
-        <div class="field">
-          <label class="field-label" for="title">{t(data.locale, 'field.title')}</label>
-          <input id="title" name="title" maxlength="300" value={form?.values?.title ?? ''} aria-invalid={!!form?.errors?.title} aria-describedby={form?.errors?.title ? 'title-error' : undefined} />
-          {#if form?.errors?.title}<p class="field-error" id="title-error">{form.errors.title}</p>{/if}
-        </div>
-        <div class="field">
-          <label class="field-label" for="author">{t(data.locale, 'field.author')}</label>
-          <input id="author" name="author" maxlength="300" value={form?.values?.author ?? ''} aria-invalid={!!form?.errors?.author} aria-describedby={form?.errors?.author ? 'author-error' : undefined} />
-          {#if form?.errors?.author}<p class="field-error" id="author-error">{form.errors.author}</p>{/if}
-        </div>
-        <div class="field">
-          <label class="field-label" for="publisher">{t(data.locale, 'field.publisher')}</label>
-          <input id="publisher" name="publisher" maxlength="300" value={form?.values?.publisher ?? ''} aria-invalid={!!form?.errors?.publisher} aria-describedby={form?.errors?.publisher ? 'publisher-error' : undefined} />
-          {#if form?.errors?.publisher}<p class="field-error" id="publisher-error">{form.errors.publisher}</p>{/if}
-        </div>
-        <div class="field-grid">
-          <div class="field">
-            <label class="field-label" for="year">{t(data.locale, 'field.year')}</label>
-            <input id="year" name="year" maxlength="40" placeholder="1998 / 1998-05 / 1998-05-12 / 05" value={form?.values?.year ?? ''} aria-invalid={!!form?.errors?.year} aria-describedby={form?.errors?.year ? 'year-help year-error' : 'year-help'} />
-            <p class="field-help" id="year-help">{t(data.locale, 'field.dateHint')}</p>
-            {#if form?.errors?.year}<p class="field-error" id="year-error">{form.errors.year}</p>{/if}
-          </div>
-          <div class="field">
-            <label class="field-label" for="page">{t(data.locale, 'field.page')}</label>
-            <input id="page" name="page" maxlength="80" value={form?.values?.page ?? ''} aria-invalid={!!form?.errors?.page} aria-describedby={form?.errors?.page ? 'page-error' : undefined} />
-            {#if form?.errors?.page}<p class="field-error" id="page-error">{form.errors.page}</p>{/if}
-          </div>
-        </div>
-      <div class="field-grid">
-        <div class="field">
-          <label class="field-label" for="provider">{t(data.locale, 'field.provider')}</label>
-          <input id="provider" name="provider" maxlength="300" value={form?.values?.provider ?? ''} aria-invalid={!!form?.errors?.provider} aria-describedby={form?.errors?.provider ? 'provider-error' : undefined} />
-          {#if form?.errors?.provider}<p class="field-error" id="provider-error">{form.errors.provider}</p>{/if}
-        </div>
-        <div class="field">
-          <label class="field-label" for="provider_url">{t(data.locale, 'field.providerUrl')}</label>
-          <input id="provider_url" name="provider_url" type="url" maxlength="1000" placeholder="https://" value={form?.values?.provider_url ?? ''} aria-invalid={!!form?.errors?.provider_url} aria-describedby={form?.errors?.provider_url ? 'provider-url-error' : undefined} />
-          {#if form?.errors?.provider_url}<p class="field-error" id="provider-url-error">{form.errors.provider_url}</p>{/if}
-        </div>
-      </div>
-    </section>
     <section class="form-section" aria-labelledby="character-heading">
       <h2 class="section-label" id="character-heading">{t(data.locale, 'form.character')}</h2>
       <div class="field">
@@ -309,6 +230,85 @@
           <textarea id="description" name="description" maxlength="5000" aria-invalid={!!form?.errors?.description} aria-describedby={form?.errors?.description ? 'description-error' : undefined}>{form?.values?.description ?? ''}</textarea>
           {#if form?.errors?.description}<p class="field-error" id="description-error">{form.errors.description}</p>{/if}
         </div>
+    </section>
+    <section class="form-section" aria-labelledby="evidence-heading">
+      <h2 class="section-label" id="evidence-heading">{t(data.locale, 'form.evidence')}</h2>
+      <div class="field">
+        <label class="field-label" for="image">{t(data.locale, 'field.sourceImage')}</label>
+        <FileField
+          id="image"
+          name="image"
+          optional
+          label={t(data.locale, 'field.sourceImage')}
+          choose={t(data.locale, 'field.chooseImage')}
+          browse={t(data.locale, 'field.browseImage')}
+          replace={t(data.locale, 'field.replaceImage')}
+          remove={t(data.locale, 'field.removeImage')}
+          previewAlt={t(data.locale, 'field.imagePreview')}
+          hint={t(data.locale, 'field.fileFormats')}
+          describedBy={imageError ? 'file-formats image-help image-rights image-error' : 'file-formats image-help image-rights'}
+          error={imageError}
+        />
+        <p class="field-help" id="image-help">{t(data.locale, 'field.sourceImageHint')}</p>
+        <p class="field-help" id="image-rights">{t(data.locale, 'field.rightsHint')}</p>
+        {#if imageError}<p class="field-error" id="image-error">{imageError}</p>{/if}
+      </div>
+      <div class="field">
+        <label class="field-label" for="url">{t(data.locale, 'field.url')}</label>
+        <input id="url" name="url" type="url" maxlength="1000" placeholder="https://" value={form?.values?.url ?? ''} aria-invalid={!!form?.errors?.url} aria-describedby="url-help" />
+        <p class="field-help" id="url-help">{t(data.locale, 'field.urlHint')}</p>
+        {#if form?.errors?.url}<p class="field-error">{form.errors.url}</p>{/if}
+      </div>
+      <div class="field">
+        <label class="field-label" for="place">{t(data.locale, 'field.place')}</label>
+        <input id="place" name="place" maxlength="500" value={form?.values?.place ?? ''} aria-invalid={!!form?.errors?.place} aria-describedby={form?.errors?.place ? 'place-error' : undefined} />
+        {#if form?.errors?.place}<p class="field-error" id="place-error">{form.errors.place}</p>{/if}
+      </div>
+      <div class="field">
+        <label class="field-label" for="note">{t(data.locale, 'field.note')}</label>
+        <textarea id="note" name="note" maxlength="5000" aria-invalid={!!form?.errors?.note} aria-describedby={form?.errors?.note ? 'note-error' : undefined}>{form?.values?.note ?? ''}</textarea>
+        {#if form?.errors?.note}<p class="field-error" id="note-error">{form.errors.note}</p>{/if}
+      </div>
+      <div class="field">
+        <label class="field-label" for="title">{t(data.locale, 'field.title')}</label>
+        <input id="title" name="title" maxlength="300" value={form?.values?.title ?? ''} aria-invalid={!!form?.errors?.title} aria-describedby={form?.errors?.title ? 'title-error' : undefined} />
+        {#if form?.errors?.title}<p class="field-error" id="title-error">{form.errors.title}</p>{/if}
+      </div>
+      <div class="field">
+        <label class="field-label" for="author">{t(data.locale, 'field.author')}</label>
+        <input id="author" name="author" maxlength="300" value={form?.values?.author ?? ''} aria-invalid={!!form?.errors?.author} aria-describedby={form?.errors?.author ? 'author-error' : undefined} />
+        {#if form?.errors?.author}<p class="field-error" id="author-error">{form.errors.author}</p>{/if}
+      </div>
+      <div class="field">
+        <label class="field-label" for="publisher">{t(data.locale, 'field.publisher')}</label>
+        <input id="publisher" name="publisher" maxlength="300" value={form?.values?.publisher ?? ''} aria-invalid={!!form?.errors?.publisher} aria-describedby={form?.errors?.publisher ? 'publisher-error' : undefined} />
+        {#if form?.errors?.publisher}<p class="field-error" id="publisher-error">{form.errors.publisher}</p>{/if}
+      </div>
+      <div class="field-grid">
+        <div class="field">
+          <label class="field-label" for="year">{t(data.locale, 'field.year')}</label>
+          <input id="year" name="year" maxlength="40" placeholder="1998 / 1998-05 / 1998-05-12 / 05" value={form?.values?.year ?? ''} aria-invalid={!!form?.errors?.year} aria-describedby={form?.errors?.year ? 'year-help year-error' : 'year-help'} />
+          <p class="field-help" id="year-help">{t(data.locale, 'field.dateHint')}</p>
+          {#if form?.errors?.year}<p class="field-error" id="year-error">{form.errors.year}</p>{/if}
+        </div>
+        <div class="field">
+          <label class="field-label" for="page">{t(data.locale, 'field.page')}</label>
+          <input id="page" name="page" maxlength="80" value={form?.values?.page ?? ''} aria-invalid={!!form?.errors?.page} aria-describedby={form?.errors?.page ? 'page-error' : undefined} />
+          {#if form?.errors?.page}<p class="field-error" id="page-error">{form.errors.page}</p>{/if}
+        </div>
+      </div>
+      <div class="field-grid">
+        <div class="field">
+          <label class="field-label" for="provider">{t(data.locale, 'field.provider')}</label>
+          <input id="provider" name="provider" maxlength="300" value={form?.values?.provider ?? ''} aria-invalid={!!form?.errors?.provider} aria-describedby={form?.errors?.provider ? 'provider-error' : undefined} />
+          {#if form?.errors?.provider}<p class="field-error" id="provider-error">{form.errors.provider}</p>{/if}
+        </div>
+        <div class="field">
+          <label class="field-label" for="provider_url">{t(data.locale, 'field.providerUrl')}</label>
+          <input id="provider_url" name="provider_url" type="url" maxlength="1000" placeholder="https://" value={form?.values?.provider_url ?? ''} aria-invalid={!!form?.errors?.provider_url} aria-describedby={form?.errors?.provider_url ? 'provider-url-error' : undefined} />
+          {#if form?.errors?.provider_url}<p class="field-error" id="provider-url-error">{form.errors.provider_url}</p>{/if}
+        </div>
+      </div>
     </section>
     <p class="field-help">{t(data.locale, 'new.attribution')}</p>
     <section class="form-section" aria-labelledby="related-heading">
