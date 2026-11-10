@@ -4,6 +4,7 @@
 import { compose, createSource } from 'ids-input/composer'
 import { COMPOSER_VERSION } from '$lib/composer'
 import { cleanIds } from '$lib/ids'
+import { hashHex } from './image'
 
 type Bucket = Pick<R2Bucket, 'get' | 'put'>
 type Source = ReturnType<typeof createSource>
@@ -15,14 +16,6 @@ const IMMUTABLE = 'public, max-age=31536000, immutable'
 
 let source: Source | null = null
 const pending = new Map<string, Promise<string | null>>()
-
-function hex(bytes: Uint8Array) {
-  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
-}
-
-async function hash(text: string) {
-  return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))))
-}
 
 // The composer reads the export through this bucket as well: a shard fetched once stays here.
 function sourceFor(bucket: Bucket) {
@@ -42,7 +35,7 @@ function sourceFor(bucket: Bucket) {
 }
 
 async function read(bucket: Bucket, sequence: string) {
-  const stored = await bucket.get(`${DRAWINGS}/${await hash(sequence)}.txt`)
+  const stored = await bucket.get(`${DRAWINGS}/${await hashHex(sequence)}.txt`)
   return stored ? stored.text() : null
 }
 
@@ -56,7 +49,7 @@ export function drawGlyph(bucket: Bucket, sequence: string): Promise<string | nu
       if (stored) return stored
       const drawn = await compose(sourceFor(bucket), ids)
       if (!drawn.d) return null
-      await bucket.put(`${DRAWINGS}/${await hash(ids)}.txt`, drawn.d, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
+      await bucket.put(`${DRAWINGS}/${await hashHex(ids)}.txt`, drawn.d, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
       return drawn.d
     })().catch(() => null).finally(() => pending.delete(ids))
     pending.set(ids, run)

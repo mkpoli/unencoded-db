@@ -1,25 +1,67 @@
-import { error } from '@sveltejs/kit'
-import { fields } from '$lib/server/evidence'
-import { publicEntryPredicate } from '$lib/server/visibility'
-import { isLocale } from '$lib/i18n'
-import type { PageServerLoad } from './$types'
+import { error, fail, redirect } from '@sveltejs/kit'
+import { editEntry, getEntry, history, restoreSighting } from '$lib/server/entries'
+import { env, guardWrite, ipHash } from '$lib/server/guard'
+import { writer } from '$lib/server/people'
+import { entrySnapshot, revisionFields, sightingSnapshot } from '$lib/server/revisions'
+import { positiveId } from '../../../../_submission.server'
+import type { Actions, PageServerLoad } from './$types'
 
-function idOf(id: string) {
-  if (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id))) error(404)
-  return Number(id)
+export const load: PageServerLoad = async (event) => {
+  const id = positiveId(event.params.id)
+  if (!id) error(404)
+  const db = env(event).DB
+  const found = await getEntry(db, id)
+  if (!found || found.entry.hidden_at) error(404)
+  if (found.entry.merged_into) redirect(302, `/${event.params.locale}/entry/${found.entry.merged_into}`)
+  const visibleSightings = new Map(found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => [sighting.id, sighting.rev]))
+  const before = event.url?.searchParams.get('before')
+  if (before !== null && before !== undefined && !positiveId(before)) error(404)
+  const page = await history(db, id, before ? positiveId(before) : null)
+  const next = page.length > 500 ? page[499].id : null
+  const rows = page.slice(0, 500)
+    .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id))
+    .map(({ id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, snapshot }) => ({
+      id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name,
+      ...revisionFields({ sighting_id, kind, snapshot }),
+      sightingRev: sighting_id ? visibleSightings.get(sighting_id) : null,
+    }))
+  return { id, rev: found.entry.rev, rows, next }
 }
 
-export const load: PageServerLoad = async ({ params, platform, url }) => {
-  if (!isLocale(params.locale)) error(404)
-  if (!platform) error(500, 'Database unavailable')
-  const before = url.searchParams.get('before')
-  if (before !== null && (!/^[1-9]\d*$/.test(before) || !Number.isSafeInteger(Number(before)))) error(404)
-  const id = idOf(params.id)
-  const entry = await platform.env.DB.prepare(`SELECT id FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first()
-  if (!entry) error(404)
-  const { results } = await platform.env.DB.prepare(`SELECT r.entry_id, r.revision, r.recorded_at, r.tombstone, ${fields.map(field => `r.${field}`).join(', ')} FROM entry_revisions r JOIN entries e ON e.id = r.entry_id AND e.visible = 1 WHERE r.entry_id = ? AND r.revision < ? ORDER BY r.revision DESC LIMIT 21`).bind(id, before === null ? Number.MAX_SAFE_INTEGER : Number(before)).all<{ entry_id: number; revision: number; tombstone: number; script: string; ids: string | null; description: string | null; place: string; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; recorded_at: string }>()
-  const revisions = results.slice(0, 20).map(row => row.tombstone
-    ? { entry_id: row.entry_id, revision: row.revision, recorded_at: row.recorded_at, tombstone: true as const }
-    : { ...row, tombstone: false as const })
-  return { id, revisions, next: results.length > 20 ? revisions[revisions.length - 1].revision : null }
+export const actions: Actions = {
+  restore: async event => {
+    await guardWrite(event, 'EDITS')
+    const id = positiveId(event.params.id)
+    if (!id) error(404)
+    const db = env(event).DB
+    const found = await getEntry(db, id)
+    if (!found || found.entry.hidden_at || found.entry.merged_into) error(404)
+    const form = await event.request.formData()
+    const baseRev = positiveId(String(form.get('rev') ?? ''))
+    const revisionId = positiveId(String(form.get('revision') ?? ''))
+    if (!revisionId) error(404)
+    if (form.has('sighting')) {
+      const sightingId = positiveId(String(form.get('sighting') ?? ''))
+      const sighting = found.sightings.find(s => s.id === sightingId && !s.hidden_at)
+      if (!sighting) error(404)
+      if (!baseRev || baseRev !== sighting.rev) return fail(409, { error: 'conflict' })
+      const old = await db.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id = ? AND kind IN ('sighting','sighting_edit')")
+        .bind(revisionId, id, sighting.id).first<{ snapshot: string; rev: number }>()
+      const fields = old && sightingSnapshot(old.snapshot)
+      if (!old || !fields) error(404)
+      const person = await writer(event, db)
+      const result = await restoreSighting(db, id, sighting.id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, old.rev)
+      if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })
+      redirect(303, `/${event.params.locale}/entry/${id}/history`)
+    }
+    if (!baseRev || baseRev !== found.entry.rev) return fail(409, { error: 'conflict' })
+    const old = await db.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id IS NULL AND kind IN ('create','edit','revert')")
+      .bind(revisionId, id).first<{ snapshot: string; rev: number }>()
+    const fields = old && entrySnapshot(old.snapshot)
+    if (!old || !fields) error(404)
+    const person = await writer(event, db)
+    const result = await editEntry(db, id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, `r${old.rev}`, 'revert')
+    if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })
+    redirect(303, `/${event.params.locale}/entry/${id}/history`)
+  },
 }

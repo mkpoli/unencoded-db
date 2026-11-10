@@ -1,9 +1,12 @@
 <!doctype html>
-<html lang="%lang%">
-  <head><meta charset="utf-8" /><meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#121215" media="(prefers-color-scheme: dark)" />
+<html lang="%lang%" data-theme="%theme%">
+  <head>
+    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="preload" href="/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />%sveltekit.head%</head>
-  <body data-sveltekit-preload-data="hover"><div style="display: contents">%sveltekit.body%</div></body>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    %sveltekit.head%
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
 </html>

@@ -1,82 +1,46 @@
 <script lang="ts">
-  import IdsGlyph from '$lib/components/IdsGlyph.svelte'
-  import { localizedHref, t, type Locale } from '$lib/i18n'
-  import { isHanScript } from '$lib/script'
-
-  type Entry = { id: number; script: string; ids: string | null; place: string; equivalent_to: string | null }
-  type ScriptCount = { script: string; n: number }
-  type IvdFilter = 'registered' | 'none'
-  let { data }: { data: { locale: Locale; entries: Entry[]; next: number | null; glyphs?: Record<string, string>; scripts?: ScriptCount[]; total?: number; script?: string | null; ivd?: IvdFilter | null } } = $props()
-
-  const listingHref = (overrides: { script?: string | null; ivd?: IvdFilter | null; before?: number | null } = {}) => {
-    const script = 'script' in overrides ? overrides.script : (data.script ?? null)
-    const ivd = 'ivd' in overrides ? overrides.ivd : (data.ivd ?? null)
-    const params = new URLSearchParams()
-    if (script) params.set('script', script)
-    if (ivd) params.set('ivd', ivd)
-    if (overrides.before) params.set('before', String(overrides.before))
-    const text = params.toString()
-    return `${localizedHref(data.locale)}${text ? `?${text}` : ''}`
-  }
-  const moreHref = $derived(listingHref({ before: data.next }))
+  import { page } from '$app/state'
+  import Seo from '$lib/components/Seo.svelte'
+  import Tile from '$lib/components/Tile.svelte'
+  import { cleanIds } from '$lib/ids'
+  import { STATUSES, NEEDS } from '$lib/scripts'
+  import { href, t } from '$lib/t'
+  let { data } = $props()
+  const more = $derived.by(() => {
+    const params = new URLSearchParams(page.url.searchParams)
+    params.set('before', String(data.next))
+    return `?${params}`
+  })
 </script>
 
-<svelte:head><title>{t(data.locale, 'app.name')}</title></svelte:head>
-<div class="page-heading">
-  <h1>{t(data.locale, 'app.name')}</h1>
-  <p>{t(data.locale, 'app.tagline')}</p>
-  <p><a class="quiet-link" href="/export.json">{t(data.locale, 'browse.export')}</a></p>
-</div>
-<nav class="script-tabs" aria-label={t(data.locale, 'field.script')}>
-  <a class="script-tab" aria-current={(data.script ?? null) === null ? 'page' : undefined} href={listingHref({ script: null })}>
-    <span class="script-name">{t(data.locale, 'browse.all')}</span> <span class="script-count">{data.total}</span>
-  </a>
-  {#each data.scripts ?? [] as item (item.script)}
-    <a class="script-tab" aria-current={data.script === item.script ? 'page' : undefined} href={listingHref({ script: item.script })} title={item.script}>
-      <span class="script-name">{item.script}</span> <span class="script-count">{item.n}</span>
-    </a>
-  {/each}
-</nav>
-<nav class="script-tabs" aria-label={t(data.locale, 'field.ivd')}>
-  <a class="script-tab" aria-current={(data.ivd ?? null) === null ? 'page' : undefined} href={listingHref({ ivd: null })}>{t(data.locale, 'browse.all')}</a>
-  <a class="script-tab" aria-current={data.ivd === 'registered' ? 'page' : undefined} href={listingHref({ ivd: 'registered' })}>{t(data.locale, 'field.ivdRegistered')}</a>
-  <a class="script-tab" aria-current={data.ivd === 'none' ? 'page' : undefined} href={listingHref({ ivd: 'none' })}>{t(data.locale, 'field.ivdNone')}</a>
-</nav>
-{#if data.entries.length}
-  <div class="card-grid gallery">
-    {#each data.entries as entry (entry.id)}
-      {@const glyph = entry.ids ? data.glyphs?.[entry.ids] : undefined}
-      <a class="entry-card gallery-card" href={localizedHref(data.locale, `/entry/${entry.id}`)}>
-        <span class="script-tag" class:han={isHanScript(entry.script)} title={entry.script}>{entry.script}</span>
-        <span class="glyph"><IdsGlyph ids={entry.ids} text={entry.ids || entry.script} path={glyph} /></span>
-        {#if entry.ids}<span class="visually-hidden">{entry.ids}</span>{/if}
-        {#if entry.equivalent_to}<span class="equivalent"><span class="visually-hidden">{t(data.locale, 'browse.equivalent', { character: entry.equivalent_to })}</span><span aria-hidden="true">= {entry.equivalent_to}</span></span>{/if}
-        <span class="place">{entry.place}</span>
-        <span class="record">#{entry.id}</span>
-      </a>
-    {/each}
-    <a class="add-card" href={localizedHref(data.locale, '/new')}>
-      <span class="add-mark" aria-hidden="true">+</span>
-      <span class="add-label">{t(data.locale, 'browse.addOne')}</span>
-    </a>
+<Seo />
+<div class="page stack">
+  <div class="heading">
+    <div class="stack intro"><h1>{t('nav.browse')}</h1><p class="muted">{t('browse.intro')}</p></div>
+    <a class="button primary" href={href('/new')}>{t('browse.addOne')}</a>
   </div>
-  {#if data.next}
-    <div class="more-row">
-      <a class="secondary" href={moreHref}>{t(data.locale, 'browse.more')} →</a>
-    </div>
+  <form class="filters" method="GET">
+    <div class="search field"><label for="q">{t('browse.searchLabel')}</label><input class="input" id="q" name="q" value={data.query ?? ''} placeholder={t('browse.search')} aria-describedby="search-hint" /></div>
+    <div class="field"><label for="filter">{t('browse.filter')}</label><select class="input" id="filter" name="filter" value={data.filter ?? ''}><option value="">{t('browse.anyStatus')}</option><optgroup label={t('field.status')}>{#each STATUSES as status}<option value={status}>{t(`status.${status}`)} ({data.counts?.[`f:${status}`] ?? 0})</option>{/each}</optgroup><optgroup label={t('browse.needs')}>{#each NEEDS as need}<option value={need}>{t(`needs.${need}`)} ({data.counts?.[`n:${need}`] ?? 0})</option>{/each}</optgroup></select></div>
+    <button class="button" type="submit">{t('browse.filter')}</button>
+  </form>
+  <p class="hint" id="search-hint">{t('browse.idsHint')}</p>
+  {#if data.searchError}
+    <p class="muted" role="alert">{t(`browse.${data.searchError}`)}</p>
+  {:else if data.tiles.length}
+    <div class="tiles">{#each data.tiles as tile (tile.id)}<Tile {tile} glyph={data.glyphs?.[cleanIds(tile.ids ?? '')]} />{/each}</div>
+  {:else if !data.partial}
+    <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.filter ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
   {/if}
-{:else}
-  <div class="empty-state">
-    <span class="empty-mark" aria-hidden="true">字</span>
-    {#if (data.ivd ?? null) !== null}
-      <p>{t(data.locale, 'browse.emptyIvd')}</p>
-      <a class="secondary" href={listingHref({ ivd: null })}>{t(data.locale, 'browse.all')}</a>
-    {:else if (data.script ?? null) === null}
-      <p>{t(data.locale, 'browse.emptyAll')}</p>
-      <a class="primary" href={localizedHref(data.locale, '/new')}>{t(data.locale, 'browse.addOne')} <span aria-hidden="true">→</span></a>
-    {:else}
-      <p>{t(data.locale, 'browse.emptyScript')}</p>
-      <a class="secondary" href={listingHref({ script: null })}>{t(data.locale, 'browse.all')}</a>
-    {/if}
-  </div>
-{/if}
+  {#if data.partial}<p class="muted">{t('browse.searchContinues')}</p>{/if}
+  {#if data.next}<div><a class="button" href={more}>{t(data.partial ? 'browse.continueSearch' : 'browse.more')}</a></div>{/if}
+</div>
+<style>
+  .heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:start; gap:20px }
+  .intro { gap:8px; max-width:720px }
+  .filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:16px; border:1px solid var(--line); border-radius:9px; background:var(--surface) }
+  .filters .field { flex:1 1 180px } .filters .search { flex:2 1 260px }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:22px 16px }
+  .empty { padding:48px 16px; text-align:center; color:var(--muted) } .empty a { display:inline-block; margin-top:12px; color:var(--ink) }
+  @media(max-width:500px) { .tiles { grid-template-columns:repeat(2,minmax(0,1fr)) } }
+</style>

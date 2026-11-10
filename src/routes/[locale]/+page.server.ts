@@ -1,46 +1,31 @@
 import { error } from '@sveltejs/kit'
-import { isHanScript, SCRIPT_MAX } from '$lib/script'
-import { cleanIds } from '$lib/ids'
+import { counts, exactSearchIds, list, listTag, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, terms } from '$lib/server/entries'
+import { env } from '$lib/server/guard'
 import { glyphPaths, warmGlyphs } from '$lib/server/glyphs'
-import { publicEntryPredicate } from '$lib/server/visibility'
+import { cleanIds } from '$lib/ids'
+import { positiveId } from '../_submission.server'
 import type { PageServerLoad } from './$types'
 
-type ListedEntry = { id: number; script: string; ids: string | null; place: string; equivalent_to: string | null }
-type ScriptCount = { script: string; n: number }
-
-export const load: PageServerLoad = async ({ platform, url }) => {
-  if (!platform) error(500, 'Database unavailable')
-  const before = url.searchParams.get('before')
-  const id = before && /^[1-9]\d*$/.test(before) && Number.isSafeInteger(Number(before)) ? Number(before) : Number.MAX_SAFE_INTEGER
-  const requested = url.searchParams.get('script')
-  const script = requested === null ? null : requested.normalize('NFC').trim()
-  if (script !== null && (!script || script.length > SCRIPT_MAX)) error(404)
-  const requestedIvd = url.searchParams.get('ivd')
-  const ivd = requestedIvd === null ? null : requestedIvd
-  if (ivd !== null && ivd !== 'registered' && ivd !== 'none') error(404)
-  const filters: string[] = []
-  const filterBinds: string[] = []
-  if (ivd !== null) { filters.push('ivd_status = ?'); filterBinds.push(ivd) }
-  if (script !== null) { filters.push('script = ?'); filterBinds.push(script) }
-  const filter = filters.length ? ` AND ${filters.join(' AND ')}` : ''
-  const [page, counted] = await Promise.all([
-    platform.env.DB.prepare(`SELECT id, script, ids, place, equivalent_to FROM entries WHERE ${publicEntryPredicate}${filter} AND id < ? ORDER BY id DESC LIMIT 21`).bind(...filterBinds, id).all<ListedEntry>(),
-    platform.env.DB.prepare('SELECT script, n FROM script_counts').bind().all<ScriptCount>(),
-  ])
-  const total = counted.results.reduce((sum, row) => sum + row.n, 0)
-  const scripts = counted.results.sort((a, b) =>
-    Number(isHanScript(b.script)) - Number(isHanScript(a.script)) || b.n - a.n || a.script.localeCompare(b.script))
-  // A script whose last record was just hidden keeps its tab while it is the filter.
-  if (script !== null && !scripts.some(row => row.script === script)) scripts.push({ script, n: 0 })
-  const entries = page.results.slice(0, 20)
-  const sequences = entries.map(entry => entry.ids).filter((id): id is string => Boolean(id))
-  const paths = await glyphPaths(platform.env.IMAGES, sequences)
-  const glyphs: Record<string, string> = {}
-  for (const entry of entries) {
-    const path = entry.ids ? paths[cleanIds(entry.ids)] : null
-    if (entry.ids && path) glyphs[entry.ids] = path
-  }
-  const missing = [...new Set(sequences.map(cleanIds).filter(id => !paths[id]))]
-  if (missing.length) platform.ctx?.waitUntil(warmGlyphs(platform.env.IMAGES, missing))
-  return { entries, next: page.results.length > 20 ? page.results[19].id : null, glyphs, scripts, total, script, ivd }
+export const load: PageServerLoad = async (event) => {
+  const { searchParams } = event.url
+  // Records are Han only until other scripts are opened for browsing.
+  const script = 'han'
+  const filter = searchParams.get('filter') || null
+  const query = (searchParams.get('q') ?? '').trim()
+  const cursor = searchParams.get('before')
+  const before = cursor === null ? null : positiveId(cursor)
+  if (cursor !== null && before === null) error(404)
+  if (!listTag(script, filter)) error(404)
+  const exact = query.length <= SEARCH_LENGTH_MAX && exactSearchIds(query)
+  const words = query.length <= SEARCH_LENGTH_MAX && !exact ? new Set(terms(query)) : new Set<string>()
+  const searchError = query.length > SEARCH_LENGTH_MAX ? 'queryTooLong' : !exact && query && words.size === 0 ? 'noSearchTerms' : words.size > SEARCH_TERMS_MAX ? 'tooManyTerms' : null
+  const db = env(event).DB
+  const [page, totals] = await Promise.all([searchError ? null : list(db, { script, filter, query, before }), counts(db)])
+  if (!page && !searchError) error(404)
+  const media = event.platform?.env?.MEDIA
+  const ids = (page?.tiles.map(tile => tile.ids).filter((id): id is string => Boolean(id)) ?? []).map(cleanIds)
+  const glyphs = await glyphPaths(media, ids)
+  const missing = [...new Set(ids.filter(id => !glyphs[id]))]
+  if (missing.length) event.platform?.ctx?.waitUntil(warmGlyphs(media, missing))
+  return { ...(page ?? { tiles: [], next: null, partial: false }), counts: totals, glyphs, filter, query, searchError, continued: before !== null && query.length > 0 }
 }

@@ -1,11 +1,10 @@
 import { expect, test } from 'bun:test'
-import { COMPOSER_VERSION } from '../composer'
+import { COMPOSER_VERSION } from '$lib/composer'
 import { glyphPaths } from './glyphs'
+import { hashHex } from './image'
 
 test('a page reads cached drawings by the cleaned description', async () => {
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('⿰魚羊')))
-  const hash = Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('')
-  const key = `glyphs/${COMPOSER_VERSION}/${hash}.txt`
+  const key = `glyphs/${COMPOSER_VERSION}/${await hashHex('⿰魚羊')}.txt`
   const bucket = {
     get: async (name: string) => name === key ? { text: async () => 'M0 0' } : null,
     put: async () => {},
