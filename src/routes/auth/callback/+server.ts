@@ -1,54 +1,38 @@
 import { error, redirect } from '@sveltejs/kit'
-import { config, cookiesFor, random, sessionHash } from '$lib/server/auth'
-import { hashToken, sessionCookieSettings } from '$lib/server/attribution'
-import { discover, fetchJson, fetchProfile, verifyIdentity, type Profile } from '$lib/server/oidc'
+import { config, flowCookie, flowName, identity, metadata, parseFlow, sessionBinding } from '$lib/server/atlas'
+import { cleanName, joinAtlas, sessionName, sessionCookie, startSession, rotateSession, newSessionToken } from '$lib/server/people'
 import type { RequestHandler } from './$types'
 
 export const GET: RequestHandler = async event => {
-  const cfg = config(event)
-  const { session, flow } = cookiesFor(event.url)
-  const state = event.cookies.get(flow)
-  const params = event.url.searchParams
-  if (!state || !/^[a-f0-9]{64}$/.test(state) || params.getAll('state').length !== 1 || params.get('state') !== state || params.getAll('code').length !== 1 || params.has('error')) error(400, 'Invalid sign-in request')
-  const code = params.get('code')!
-  if (!code || code.length > 4096) error(400, 'Invalid sign-in request')
+  const name = flowName(event)
+  const flow = parseFlow(event.cookies.get(name))
+  event.cookies.delete(name, { path: '/', secure: flowCookie(event).secure })
+  if (!flow || flow.state !== event.url.searchParams.get('state') || flow.binding !== await sessionBinding(event)) error(400, 'Invalid sign-in request')
+  const code = event.url.searchParams.get('code')
+  if (!code || event.url.searchParams.has('error')) error(400, 'Sign-in was not completed')
+  const { issuer, clientId, secret } = config(event)
   const db = event.platform?.env.DB
   if (!db) error(503, 'Sign-in unavailable')
-  const hash = await hashToken(state)
-  const row = await db.prepare('SELECT verifier, nonce, session_hash FROM oidc_flows WHERE state_hash = ? AND expires_at > ?').bind(hash, new Date().toISOString()).first<{ verifier: string; nonce: string; session_hash: string | null }>()
-  if (!row || row.session_hash !== await sessionHash(event.cookies.get(session.name))) error(400, 'Invalid sign-in request')
-  event.cookies.delete(flow, { path: '/', secure: session.secure })
-  let identity: { issuer: string; subject: string }
-  let profile: Profile = { name: null, picture: null }
-  let profileLoaded = false
+  let claims: { sub: string; name: string }
   try {
-    const provider = await discover(cfg.issuer)
-    const tokens = await fetchJson(provider.token_endpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: `Basic ${btoa(`${encodeURIComponent(cfg.clientId)}:${encodeURIComponent(cfg.clientSecret)}`)}` },
-      body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: `${cfg.publicOrigin}/auth/callback`, code_verifier: row.verifier }),
-    }) as { id_token?: unknown; access_token?: unknown }
-    if (typeof tokens.id_token !== 'string') throw new Error('Missing ID token')
-    identity = await verifyIdentity(tokens.id_token, provider.jwks_uri, cfg, row.nonce)
-    if (typeof tokens.access_token === 'string' && provider.userinfo_endpoint) {
-      try {
-        profile = await fetchProfile(provider.userinfo_endpoint, tokens.access_token, cfg.issuer, identity.subject)
-        profileLoaded = true
-      } catch { /* A withheld profile leaves the stored one in place. */ }
-    }
+    const provider = await metadata(issuer)
+    const response = await fetch(provider.token_endpoint, {
+      method: 'POST', redirect: 'error',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: `Basic ${btoa(`${encodeURIComponent(clientId)}:${encodeURIComponent(secret)}`)}` },
+      body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: `${event.url.origin}/auth/callback`, code_verifier: flow.verifier }),
+    })
+    if (!response.ok) throw new Error('Token exchange failed')
+    const tokens = await response.json() as { id_token?: unknown }
+    if (typeof tokens.id_token !== 'string') throw new Error('Missing identity token')
+    claims = await identity(tokens.id_token, provider.jwks_uri, issuer, clientId, flow.nonce)
   } catch { error(502, 'Sign-in unavailable') }
-  const token = random()
-  const now = new Date()
-  try {
-    await db.prepare('INSERT INTO oidc_completions (state_hash, issuer, subject, new_hash, now, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .bind(hash, identity.issuer, identity.subject, await hashToken(token), now.toISOString(), new Date(now.getTime() + sessionCookieSettings.maxAge * 1000).toISOString()).run()
-  } catch { error(409, 'Sign-in could not be completed') }
-  if (profileLoaded) {
-    try {
-      await db.prepare('UPDATE atlas_identities SET name = ?, picture = ? WHERE issuer = ? AND subject = ?')
-        .bind(profile.name, profile.picture, identity.issuer, identity.subject).run()
-    } catch { /* The profile is optional; the session is already complete. */ }
-  }
-  event.cookies.set(session.name, token, { ...sessionCookieSettings, secure: session.secure })
-  redirect(303, '/')
+  if (event.locals.person?.banned) error(403, 'banned')
+  const old = event.cookies.get(sessionName(event))
+  const replacement = event.locals.person && !event.locals.person.atlas ? newSessionToken() : undefined
+  const id = await joinAtlas(db, event.locals.person, claims.sub, cleanName(claims.name) ?? 'Glyph Atlas', old, replacement)
+  const token = replacement ?? (event.locals.person?.atlas
+    ? await rotateSession(db, old!, event.locals.person.id, id)
+    : await startSession(db, id))
+  event.cookies.set(sessionName(event), token, { ...sessionCookie, secure: event.url.protocol === 'https:' })
+  redirect(303, `/${flow.locale}/me`)
 }

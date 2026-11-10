@@ -1,10 +1,10 @@
 <script lang="ts">
   // The character a description names, drawn by han-compose on the server and kept beside its
-  // record. A sequence the page did not have is asked for once it is near the viewport; until
-  // then, and when the composer cannot draw a part, the description stands in.
+  // record. A sequence the page did not have is asked for once it is near the viewport; until then,
+  // and when the composer cannot draw a part, the description stands in.
   import { onMount } from 'svelte'
 
-  let { ids, text, path: given = null }: { ids: string | null; text: string; path?: string | null } = $props()
+  let { ids, path: given = null }: { ids: string; path?: string | null } = $props()
   let host = $state<HTMLElement>()
   let visible = $state(false)
   let fetched = $state<string | null>(null)
@@ -34,17 +34,17 @@
   })
 </script>
 
-<span class="ids-glyph" bind:this={host} aria-hidden="true">
+<span class="glyph" bind:this={host} aria-hidden="true">
   {#if path}
     <svg viewBox="0 0 1000 1000"><path d={path} /></svg>
   {:else}
-    <span class="fallback">{text}</span>
+    <span class="sequence">{ids}</span>
   {/if}
 </span>
 
 <style>
-  .ids-glyph { display: grid; place-items: center; width: 100%; height: 100% }
+  .glyph { display: block; width: 100%; height: 100%; padding: 3% }
   svg { display: block; width: 100%; height: 100% }
   path { fill: currentColor }
-  .fallback { line-height: 1.25; text-align: center; overflow-wrap: anywhere }
+  .sequence { display: grid; place-items: center; width: 100%; height: 100%; padding: 4px; font-size: 20px; line-height: 1.3; text-align: center; overflow-wrap: anywhere }
 </style>

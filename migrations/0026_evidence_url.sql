@@ -1,2 +1,0 @@
-ALTER TABLE evidence ADD COLUMN url TEXT;
-ALTER TABLE sources ADD COLUMN url TEXT;
