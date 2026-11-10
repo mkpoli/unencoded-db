@@ -25,9 +25,10 @@
 /*
  * Design tokens for the Rare Character Compendium.
  *
- * The palette, surfaces, accents, focus ring and status colours are taken from
- * Glyph Atlas (apps/review/src/app.css, commit 798db03e) so the two sites read
- * as one product. Spacing, radii and text sizes are named here for this app.
+ * The palette, surfaces, accents, focus ring and status colours follow the
+ * Glyph Atlas design system (packages/design-system, merged in 70a93349) so the
+ * two sites read as one product. Spacing, radii and text sizes are named here
+ * for this app; the CJK stacks and the 3:1 control border are its own.
  * Every colour pair is light-dark(), so light and dark follow one definition.
  */
 :root {
@@ -90,8 +91,9 @@
 
   --radius-xs: 4px;
   --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 
   --content-max: 1200px;
   --form-max: 720px;

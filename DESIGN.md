@@ -2,10 +2,11 @@
 
 The Rare Character Compendium uses one small design system for every public page. It follows the
 Glyph Atlas interface: the same neutral surfaces, violet accent, status colours, focus ring and
-type-led layout. The palette and control shapes are taken from
-[`apps/review/src/app.css`](https://github.com/mkpoli/glyph-atlas/blob/798db03e/apps/review/src/app.css)
-in Glyph Atlas, which has no separately packaged design system. This repository keeps the shared
-part in `src/lib/design/` so a future package can be extracted without changing the pages.
+type-led layout. The values and control shapes follow Glyph Atlas's
+[`packages/design-system`](https://github.com/mkpoli/glyph-atlas/tree/70a93349/packages/design-system),
+merged in `70a93349`. This repository keeps the shared part in `src/lib/design/`, adapted for the
+compendium's CJK fonts and contrast decisions, so the Worker build has no cross-repository
+dependency; sync it from the package when the package changes.
 
 ## Files
 
@@ -33,7 +34,7 @@ the reader. `data-theme="light"` or `data-theme="dark"` can pin a scheme.
 | Status | `--wrong`, `--wrong-light`, `--good` |
 | Elevation | `--shadow`, `--shadow-soft`, `--shadow-menu` |
 | Type | `--font-ui`, `--font-mono`, `--text-xs` to `--text-3xl` |
-| Layout | `--space-1` to `--space-12`, `--radius-xs` to `--radius-lg`, `--content-max`, `--form-max`, `--gutter` |
+| Layout | `--space-1` to `--space-12`, `--radius-xs` to `--radius-xl`, `--content-max`, `--form-max`, `--gutter` |
 
 Text uses the bundled variable Inter with a CJK face chosen by the document language: Noto Sans CJK
 JP for Japanese, SC for Simplified Chinese, TC for Traditional Chinese and KR for Korean. Inter is
