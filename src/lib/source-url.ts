@@ -68,7 +68,8 @@ function postText(tweet: { text?: unknown; raw_text?: unknown }): string {
 // A single line for the title field, without the t.co link the API appends for media.
 function titleFrom(text: string): string {
   const line = text.replace(/\s+/g, ' ').replace(/\s*https:\/\/t\.co\/\w+\s*$/, '').trim()
-  return [...line].slice(0, 300).join('')
+  const cut = line.slice(0, 300)
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut
 }
 
 type Photo = { url: string; width?: number; height?: number }

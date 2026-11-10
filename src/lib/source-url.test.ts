@@ -77,6 +77,13 @@ describe('post fields', () => {
     expect(postInfo({ tweet: { text: 'あ'.repeat(301), author: { screen_name: 'mkpoli' } } })?.title).toHaveLength(300)
   })
 
+  test('do not split an emoji at the title limit', () => {
+    const title = postInfo({ tweet: { text: `a${'😀'.repeat(200)}`, author: { screen_name: 'mkpoli' } } })?.title ?? ''
+    expect(title.length).toBeLessThanOrEqual(300)
+    expect(title.startsWith('a')).toBe(true)
+    expect([...title.slice(1)].every(character => character === '😀')).toBe(true)
+  })
+
   test('leave the provider empty when the author is missing', () => {
     expect(postInfo({ tweet: { text: 'A post' } })).toEqual({ place: 'X', provider: null, providerUrl: null, title: 'A post' })
   })
