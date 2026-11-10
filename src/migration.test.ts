@@ -139,6 +139,10 @@ describe('evidence types migration', () => {
       expect(db.query('SELECT types FROM evidence WHERE id = 1').get()).toEqual({ types: '["attestation","reading"]' })
       expect(() => db.exec(`UPDATE evidence SET types = '{}' WHERE id = 1`)).toThrow()
       expect(() => db.exec(`UPDATE evidence SET types = '["mention","attestation","description","definition","reading","relation","mention"]' WHERE id = 1`)).toThrow()
+      expect(() => db.exec(`UPDATE evidence SET types = '["mention","bogus"]' WHERE id = 1`)).toThrow()
+      expect(() => db.exec(`UPDATE evidence SET types = '["mention","mention"]' WHERE id = 1`)).toThrow()
+      expect(() => db.exec(`UPDATE evidence SET types = '[1]' WHERE id = 1`)).toThrow()
+      expect(db.query('SELECT types FROM evidence WHERE id = 1').get()).toEqual({ types: '["attestation","reading"]' })
     } finally { db.close() }
   })
 })

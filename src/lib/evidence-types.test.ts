@@ -12,6 +12,9 @@ describe('evidence types', () => {
     expect(readEvidenceTypes(form('reading', 'mention', 'mention', 'unknown'))).toEqual(['mention', 'reading'])
     expect(readEvidenceTypes(form())).toEqual([])
     expect(readEvidenceTypes(form('unknown'))).toEqual([])
+    const fileForm = new FormData()
+    fileForm.append('types', new Blob(['mention']))
+    expect(readEvidenceTypes(fileForm)).toEqual([])
   })
 
   test('parses stored arrays in the form order and ignores malformed values', () => {
@@ -21,6 +24,7 @@ describe('evidence types', () => {
     expect(parseEvidenceTypes('{}')).toEqual([])
     expect(parseEvidenceTypes('not json')).toEqual([])
     expect(parseEvidenceTypes(JSON.stringify(['mention', 'bogus']))).toEqual(['mention'])
+    expect(parseEvidenceTypes(JSON.stringify([null, 1, { type: 'mention' }, 'reading']))).toEqual(['reading'])
   })
 
   test('serializes every known type once in the form order', () => {
