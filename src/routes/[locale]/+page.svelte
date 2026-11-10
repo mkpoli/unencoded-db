@@ -1,5 +1,6 @@
 <script lang="ts">
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
+  import { primaryIds } from '$lib/ids'
   import { localizedHref, t, type Locale } from '$lib/i18n'
 
   type Entry = { id: number; script: string; ids: string | null; encoded_as: string | null; equivalent_to: string | null; evidence: number; first_year: number | null; category: string | null }
@@ -33,9 +34,10 @@
 {#if data.entries.length}
   <div class="card-grid gallery">
     {#each data.entries as entry (entry.id)}
-      {@const glyph = entry.ids ? data.glyphs?.[entry.ids] : undefined}
+      {@const sequence = primaryIds(entry.ids)}
+      {@const glyph = sequence ? data.glyphs?.[sequence] : undefined}
       <a class="entry-card gallery-card" href={localizedHref(data.locale, `/entry/${entry.id}`)}>
-        <span class="plate"><span class="glyph"><IdsGlyph ids={entry.ids} text={entry.ids || entry.script} path={glyph} /></span></span>
+        <span class="plate"><span class="glyph"><IdsGlyph ids={sequence ?? ''} text={sequence ?? entry.script} path={glyph} /></span></span>
         {#if entry.ids}<span class="visually-hidden">{entry.ids}</span>{/if}
         <span class="badges">
           {#if entry.encoded_as}<span class="encoded">{t(data.locale, 'browse.encoded')}<span class="visually-hidden"> {entry.encoded_as}</span></span>{/if}

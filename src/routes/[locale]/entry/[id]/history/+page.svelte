@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { splitIds } from '$lib/ids'
   import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
 
   type FieldName = 'script' | 'ids' | 'description' | 'place' | 'title' | 'author' | 'publisher' | 'year' | 'page' | 'note'
@@ -22,7 +23,7 @@
         {:else}
           <dl class="entry-meta">
             <div class="entry-row"><dt>{t(data.locale, 'field.script')}</dt><dd>{revision.script}</dd></div>
-            {#if revision.ids}<div class="entry-row"><dt>{t(data.locale, 'field.ids')}</dt><dd>{revision.ids}</dd></div>{/if}
+            {#if revision.ids}<div class="entry-row"><dt>{t(data.locale, 'field.ids')}</dt><dd>{splitIds(revision.ids).join(' · ')}</dd></div>{/if}
             {#if revision.description}<div class="entry-row"><dt>{t(data.locale, 'field.description')}</dt><dd>{revision.description}</dd></div>{/if}
             <div class="entry-row"><dt>{t(data.locale, 'field.place')}</dt><dd>{revision.place}</dd></div>
             {#if revision.title}<div class="entry-row"><dt>{t(data.locale, 'field.title')}</dt><dd>{revision.title}</dd></div>{/if}

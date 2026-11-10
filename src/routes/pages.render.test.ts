@@ -404,6 +404,52 @@ describe('localized pages', () => {
     expect(body).toContain('suggestion-list')
   })
 
+  test('new record form keeps every description in one comma-separated field', async () => {
+    const { body } = await page('src/routes/[locale]/new/+page.svelte', 'new-several-ids', {
+      data: { locale: 'en' },
+      form: { values: { ids: '⿰木木, ⿱木木', script: 'Han' } },
+    })
+    expect(body.match(/name="ids"/g)).toHaveLength(1)
+    expect(body).toContain('value="⿰木木, ⿱木木"')
+    expect(body).toContain('Separate descriptions with commas. The first one draws the glyph.')
+    expect(body).not.toContain('Add another description')
+  })
+
+  test('edit form shows every description in one comma-separated field', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/edit/+page.svelte', 'edit-several-ids', {
+      data: {
+        locale: 'en',
+        entry: { id: 9, revision: 2, edit_generation: 5, script: 'Han', ids: '⿰木木 ⿱木木', description: null, radical: null, encoded_as: null, equivalent_to: null, strokes: null, ivd_status: null, ivd_sequence: null, comparisons: [] },
+        evidence: [],
+        senses: [],
+        tags: [],
+        genres: [],
+        collections: [],
+        allGenres: [],
+        allCollections: [],
+        allTags: [],
+        encodings: [],
+      },
+    })
+    expect(body.match(/name="ids"/g)).toHaveLength(1)
+    expect(body).toContain('value="⿰木木, ⿱木木"')
+  })
+
+  test('entry page lists every description of the character', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-several-ids', {
+      data: {
+        locale: 'en',
+        entry: { id: 9, script: 'Han', ids: '⿰木木 ⿱木木', description: null, radical: null, encoded_as: null, strokes: null, created_at: '2026-11-08T05:00:00.000Z' },
+        glyph: 'M0 0',
+        comparisons: [],
+        evidence: [],
+      },
+    })
+    expect(body).toContain('⿰木木')
+    expect(body).toContain('⿱木木')
+    expect(body.match(/ids-sequence/g)).toHaveLength(2)
+  })
+
   test('entry page keeps the character text apart from its evidence', async () => {
     const { head, body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry', {
       data: {

@@ -2,7 +2,7 @@
 
 A community evidence wiki for characters and glyphs. Anyone can add a character and attach evidence, revise its text, view the revision history and report a public record. Moderators review reports, can dismiss individual reports, and can hide records; hidden records can be restored from a private queue.
 
-A character holds text: script, IDS, description, tags and meanings. Evidence holds what was seen elsewhere: an image, a place and its citation. A character page lists its evidence, and each image is served only through that evidence at `/{locale}/entry/[id]/evidence/[evidence]/image`. Classifying the glyph is a later question.
+A character holds text: script, IDS descriptions in one comma-separated field, description, tags and meanings. The first description, when present, draws its glyph. Evidence holds what was seen elsewhere: an image, a place and its citation. A character page lists its evidence, and each image is served only through that evidence at `/{locale}/entry/[id]/evidence/[evidence]/image`. Classifying the glyph is a later question.
 
 ## Names
 
@@ -221,7 +221,7 @@ curl 'https://example.org/export.json?limit=200'
 curl 'https://example.org/export.json?limit=200&after=200'
 ```
 
-Each record contains its id, script, IDS, description, creation time, comparisons and an `evidence` array. Evidence carries the source fields, date precision and whether an image exists.
+Each record contains its id, script, IDS, description, creation time, comparisons and an `evidence` array. `ids` is the first description; `ids_all` lists every description in entered order. Evidence carries the source fields, date precision and whether an image exists.
 
 ## Deployment
 
