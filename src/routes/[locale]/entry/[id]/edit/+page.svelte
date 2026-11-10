@@ -265,7 +265,6 @@
   <section class="evidence-section" aria-labelledby="evidence-heading">
     <div class="page-heading">
       <h2 class="section-label" id="evidence-heading">{t(data.locale, 'entry.sightings')}</h2>
-      <p>{t(data.locale, 'entry.addSightingHint')}</p>
     </div>
     {#each evidence as item (item.id)}
       <form class="form-panel evidence-form" id={`evidence-${item.id}`} method="POST" action="?/evidence" enctype="multipart/form-data" novalidate>

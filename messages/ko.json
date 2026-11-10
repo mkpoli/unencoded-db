@@ -33,7 +33,6 @@
   "edit.intro": "수정 내용은 공개되며 익명으로 기록됩니다. 이전 버전도 남습니다.",
   "edit.save": "수정 저장",
   "entry.addSighting": "증거 추가",
-  "entry.addSightingHint": "출처가 더해질수록 증거가 더 확실해집니다.",
   "entry.added": "추가일",
   "entry.history": "수정 이력",
   "entry.record": "문자 {id}",

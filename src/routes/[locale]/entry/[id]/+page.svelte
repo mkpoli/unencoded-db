@@ -88,7 +88,6 @@
   <section class="evidence-section" aria-labelledby="evidence-heading">
     <div class="section-head">
       <h2 class="section-label" id="evidence-heading">{t(data.locale, 'entry.sightings')}</h2>
-      <p class="field-help">{t(data.locale, 'entry.addSightingHint')}</p>
     </div>
     {#each evidence as item (item.id)}
       <article class="evidence-card" id={`evidence-${item.id}`}>
