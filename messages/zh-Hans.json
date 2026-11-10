@@ -82,6 +82,8 @@
   "field.encodingOther": "其他字符集",
   "field.encodingRemove": "删除编码",
   "field.encodings": "编码",
+  "field.extraImages": "更多图片",
+  "field.extraImagesHint": "可以添加同一出处的更多照片或扫描件。",
   "field.fileFormats": "JPEG、PNG 或 WebP · 16 MiB",
   "field.genre": "类属",
   "field.ids": "汉字结构描述（IDS）",

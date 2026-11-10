@@ -4,6 +4,7 @@
   import ComparisonGrid from '$lib/components/ComparisonGrid.svelte'
   import EncodingFields from '$lib/components/EncodingFields.svelte'
   import FileField from '$lib/components/FileField.svelte'
+  import ExtraImagesField from '$lib/components/ExtraImagesField.svelte'
   import { cleanLinkInput } from '$lib/link-input'
   import type { PostInfo } from '$lib/source-url'
   import type { Comparison } from '$lib/comparison-rows'
@@ -272,6 +273,12 @@
           fetchingLabel={t(data.locale, 'field.linkImageWorking')}
           fetchFailedLabel={t(data.locale, 'field.linkImageFailed')}
           onpost={fillFromPost}
+        />
+        <ExtraImagesField
+          label={t(data.locale, 'field.extraImages')}
+          choose={t(data.locale, 'field.chooseImage')}
+          remove={t(data.locale, 'field.removeImage')}
+          hint={t(data.locale, 'field.extraImagesHint')}
         />
         <p class="field-help" id="image-help">{t(data.locale, 'field.sourceImageHint')}</p>
         <p class="field-help" id="image-rights">{t(data.locale, 'field.rightsHint')}</p>

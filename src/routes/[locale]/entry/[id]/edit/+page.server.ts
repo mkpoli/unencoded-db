@@ -1,8 +1,8 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import { SCRIPT_MAX } from '$lib/script'
 import { readIvd } from '$lib/server/ivd'
-import { addEvidence, evidenceFields, listEvidence, primaryEvidenceId, readEvidenceFields, updateEvidence } from '$lib/server/evidence-links'
-import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, type ImageError } from '$lib/server/images'
+import { addEvidence, addEvidenceMedia, evidenceFields, listEvidence, listEvidenceMedia, primaryEvidenceId, readEvidenceFields, updateEvidence } from '$lib/server/evidence-links'
+import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, readSourceImages, type ImageError } from '$lib/server/images'
 import { readComparisons } from '$lib/server/related'
 import type { Comparison } from '$lib/comparison-rows'
 import { listGenres, genresForEntry, selectedGenres, saveGenres } from '$lib/server/genres'
@@ -75,7 +75,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
      FROM entries WHERE id = ? AND ${publicEntryPredicate}`
   ).bind(id).first<EntryRow>()
   if (!row) error(404)
-  const [evidence, senses, tags, genres, collections, allGenres, allCollections, allTags, encodings] = await Promise.all([
+  const [evidence, senses, tags, genres, collections, allGenres, allCollections, allTags, encodings, media] = await Promise.all([
     listEvidence(platform.env.DB, id),
     listSenses(platform.env.DB, id),
     tagsForEntry(platform.env.DB, id),
@@ -85,6 +85,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     listCollections(platform.env.DB),
     listTags(platform.env.DB),
     listEncodings(platform.env.DB, id),
+    listEvidenceMedia(platform.env.DB, id),
   ])
   return {
     entry: { ...row, comparisons: JSON.parse(row.comparisons) as Comparison[] },
@@ -97,6 +98,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     allCollections,
     allTags,
     encodings,
+    media,
   }
 }
 
@@ -200,6 +202,9 @@ export const actions: Actions = {
     const revision = positive(form.get('revision'))
     const generation = positive(form.get('edit_generation'))
     const removeImage = form.get('remove_image') === '1'
+    const extraSource = await readSourceImages(form)
+    if ('error' in extraSource) errors.image = imageError(locale, extraSource.error)
+    const extraImages = 'images' in extraSource ? extraSource.images : []
     let image: { key: string; type: string; size: number } | null | undefined
     const file = form.get('image')
     if (file instanceof File && file.size) {
@@ -247,6 +252,17 @@ export const actions: Actions = {
       if (!visible) error(404)
       return failForm(409, t(locale, 'edit.conflict'))
     }
+    const extraMetas: { key: string; type: string; size: number }[] = []
+    for (const extra of extraImages) {
+      const key = createImageKey()
+      try {
+        await putSourceImage(platform.env.IMAGES, key, extra)
+        extraMetas.push({ key, type: extra.type, size: extra.size })
+      } catch {
+        // An extra picture is optional; the evidence edit still stands.
+      }
+    }
+    await addEvidenceMedia(platform.env.DB, evidenceId, extraMetas)
     if (image !== undefined && row.image_key && row.image_key !== image?.key) await discardImage(platform.env.DB, platform.env.IMAGES, row.image_key)
     redirect(303, `${localizedHref(locale, `/entry/${id}/edit`)}#evidence-${evidenceId}`)
   },

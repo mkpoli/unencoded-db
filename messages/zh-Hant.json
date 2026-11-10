@@ -82,6 +82,8 @@
   "field.encodingOther": "其他字元集",
   "field.encodingRemove": "刪除編碼",
   "field.encodings": "編碼",
+  "field.extraImages": "更多圖片",
+  "field.extraImagesHint": "可以新增同一出處的更多照片或掃描件。",
   "field.fileFormats": "JPEG、PNG 或 WebP · 16 MiB",
   "field.genre": "類屬",
   "field.ids": "漢字結構描述（IDS）",

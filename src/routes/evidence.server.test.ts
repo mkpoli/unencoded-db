@@ -532,6 +532,29 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
+  test('stores extra pictures on one evidence record', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const form = new FormData()
+      for (const [key, value] of Object.entries(record)) form.set(key, value)
+      form.set('image', imageFile(PNG_BYTES))
+      form.append('extra_image', imageFile(PNG_BYTES, 'second.png'))
+      form.append('extra_image', imageFile(PNG_BYTES, 'third.png'))
+      const e = {
+        request: new Request('https://example.test/en/new', { method: 'POST', body: form }),
+        url: new URL('https://example.test/en/new'),
+        cookies: testCookies().cookies,
+        platform: { env: { DB: d1Binding(db), IMAGES: images.bucket } },
+        params: { locale: 'en' },
+      } as any
+      await expect(actions.default!(e)).rejects.toMatchObject({ status: 303 })
+      expect(db.query('SELECT count(*) AS n FROM evidence').get()).toEqual({ n: 1 })
+      expect(db.query('SELECT count(*) AS n FROM evidence_media').get()).toEqual({ n: 3 })
+      expect(images.puts).toHaveLength(3)
+    } finally { db.close() }
+  })
+
   test('stores several character encodings for one character', async () => {
     const db = createTestDatabase()
     const images = fakeImages()

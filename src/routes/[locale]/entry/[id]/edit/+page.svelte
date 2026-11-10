@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import FileField from '$lib/components/FileField.svelte'
+  import ExtraImagesField from '$lib/components/ExtraImagesField.svelte'
   import { cleanLinkInput } from '$lib/link-input'
   import type { PostInfo } from '$lib/source-url'
   import ComparisonGrid from '$lib/components/ComparisonGrid.svelte'
@@ -13,6 +14,7 @@
   type Sense = { id?: number; gloss: string; reading: string | null }
   type Genre = { slug: string; label: string }
   type Collection = { slug: string; label: string }
+  type EvidenceMedia = { id: number; evidence_id: number }
   type Evidence = {
     id: number
     place: string
@@ -68,6 +70,7 @@
       allCollections: Collection[]
       allTags: string[]
       encodings: Encoding[]
+      media: EvidenceMedia[]
     }
     form?: FormState
   } = $props()
@@ -75,6 +78,7 @@
   const entry = $derived(data.entry)
   const evidence = $derived(data.evidence ?? [])
   const tags = $derived(data.tags ?? [])
+  const media = $derived(data.media ?? [])
   const allGenres = $derived(data.allGenres ?? [])
   const allCollections = $derived(data.allCollections ?? [])
   const allTags = $derived(data.allTags ?? [])
@@ -257,7 +261,14 @@
         {#if form?.action === 'evidence' && form.evidenceId === item.id && form.message}
           <p class="notice error" role="alert">{form.message}</p>
         {/if}
-        {#if item.has_image}
+        {#if media.some(image => image.evidence_id === item.id)}
+          <div class="current-image evidence-gallery">
+            {#each media.filter(image => image.evidence_id === item.id) as image (image.id)}
+              <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image/${image.id}`)} alt={item.place || t(data.locale, 'field.sourceImage')} />
+            {/each}
+          </div>
+          <label class="check"><input type="checkbox" name="remove_image" value="1" /> {t(data.locale, 'field.removeImage')}</label>
+        {:else if item.has_image}
           <figure class="current-image">
             <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} alt={item.place || t(data.locale, 'field.sourceImage')} />
             <figcaption>{t(data.locale, 'evidence.current')}</figcaption>
@@ -281,6 +292,13 @@
             error={evidenceError(item, 'image') ?? ''}
           />
           <p class="field-help" id={`evidence-keep-${item.id}`}>{t(data.locale, 'evidence.keepImage')}</p>
+          <ExtraImagesField
+            id={`extra-images-${item.id}`}
+            label={t(data.locale, 'field.extraImages')}
+            choose={t(data.locale, 'field.chooseImage')}
+            remove={t(data.locale, 'field.removeImage')}
+            hint={t(data.locale, 'field.extraImagesHint')}
+          />
         </div>
         <div class="field">
           <label class="field-label" for={`url-${item.id}`}>{t(data.locale, 'field.url')}</label>

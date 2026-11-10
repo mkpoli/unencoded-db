@@ -82,6 +82,8 @@
   "field.encodingOther": "その他の文字集合",
   "field.encodingRemove": "符号化を削除",
   "field.encodings": "符号化",
+  "field.extraImages": "追加の画像",
+  "field.extraImagesHint": "同じ出典の写真やスキャンを追加できます。",
   "field.fileFormats": "JPEG、PNG、WebP · 16 MiB",
   "field.genre": "分類",
   "field.ids": "漢字構成記述（IDS）",
