@@ -1,10 +1,11 @@
 {
+  "account.profile": "Glyph Atlas profile",
   "add.intro": "Upload a photo, scan or screenshot of the character or glyph, or give a link. Contributions are public and anonymous.",
   "add.title": "Add a character",
   "app.name": "Rare Character Compendium",
   "app.tagline": "A community evidence wiki for characters and glyphs",
   "auth.signIn": "Log in / Register",
-  "auth.signOut": "Sign out",
+  "auth.signOut": "Log out",
   "batch.add": "Add another character",
   "batch.character": "Character {n}",
   "batch.characters": "Characters",

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { exportJWK, generateKeyPair, SignJWT } from 'jose'
-import { discover, fetchJson, validateIssuer, verifyIdentity } from './oidc'
+import { discover, fetchJson, fetchProfile, validateIssuer, verifyIdentity } from './oidc'
 import { configured } from './auth'
 
 const issuer = 'https://identity.example'
@@ -38,15 +38,30 @@ describe('OIDC discovery and ID tokens', () => {
   })
   test('pins discovery issuer and endpoints', async () => {
     expect(() => validateIssuer('http://identity.example')).toThrow()
-    const metadata = { issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/keys` }
+    const metadata = { issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/keys`, userinfo_endpoint: `${issuer}/userinfo` }
     globalThis.fetch = (async () => Response.json(metadata)) as unknown as typeof fetch
     expect(await discover(issuer)).toEqual(metadata)
-    for (const bad of [{ ...metadata, issuer: `${issuer}/other` }, { ...metadata, token_endpoint: 'https://attacker.example/token' }, { ...metadata, authorization_endpoint: `${issuer}/authorize?state=attacker` }]) {
+    for (const bad of [{ ...metadata, issuer: `${issuer}/other` }, { ...metadata, token_endpoint: 'https://attacker.example/token' }, { ...metadata, authorization_endpoint: `${issuer}/authorize?state=attacker` }, { ...metadata, userinfo_endpoint: 'https://attacker.example/userinfo' }]) {
       globalThis.fetch = (async () => Response.json(bad)) as unknown as typeof fetch
       await expect(discover(issuer)).rejects.toThrow()
     }
   })
 
+  test('reads the profile with the access token and pins its subject', async () => {
+    let authorization = ''
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      authorization = new Headers(init?.headers).get('authorization') ?? ''
+      return Response.json({ sub: 'alice', name: '  Alice\u0000  Example  ', picture: '/api/avatars/alice.webp' })
+    }) as unknown as typeof fetch
+    expect(await fetchProfile(`${issuer}/userinfo`, 'access', issuer, 'alice')).toEqual({ name: 'Alice Example', picture: `${issuer}/api/avatars/alice.webp` })
+    expect(authorization).toBe('Bearer access')
+
+    globalThis.fetch = (async () => Response.json({ sub: 'bob', name: 'Bob' })) as unknown as typeof fetch
+    await expect(fetchProfile(`${issuer}/userinfo`, 'access', issuer, 'alice')).rejects.toThrow('Invalid profile')
+
+    globalThis.fetch = (async () => Response.json({ sub: 'alice', name: 'Alice', picture: 'http://tracker.example/a.png' })) as unknown as typeof fetch
+    expect(await fetchProfile(`${issuer}/userinfo`, 'access', issuer, 'alice')).toEqual({ name: 'Alice', picture: null })
+  })
   test('requires the signature, issuer, audience, authorized party, nonce and fresh iat', async () => {
     const { privateKey, publicKey } = await generateKeyPair('RS256', { extractable: true })
     const jwk = { ...await exportJWK(publicKey), kid: 'key' }

@@ -16,7 +16,7 @@ afterEach(() => { globalThis.fetch = oldFetch })
 async function setup() {
   const sqlite = new Database(':memory:')
   sqlite.exec('PRAGMA foreign_keys = ON')
-  for (const file of ['0001_init.sql', '0002_entry_visibility.sql', '0003_related_characters.sql', '0004_attribution.sql', '0005_oidc.sql', '0006_source_images.sql']) sqlite.exec(readFileSync(new URL(`../../../migrations/${file}`, import.meta.url), 'utf8'))
+  for (const file of ['0001_init.sql', '0002_entry_visibility.sql', '0003_related_characters.sql', '0004_attribution.sql', '0005_oidc.sql', '0006_source_images.sql', '0031_atlas_profile.sql']) sqlite.exec(readFileSync(new URL(`../../../migrations/${file}`, import.meta.url), 'utf8'))
   const db = {
     prepare(sql: string) { return { bind(...args: any[]) {
       const execute = () => sqlite.prepare(sql).all(...args)
@@ -29,10 +29,10 @@ async function setup() {
   const event = (path: string, method = 'GET', requestOrigin = origin) => ({ url: new URL(path, origin), request: new Request(new URL(path, origin), { method, headers: { origin: requestOrigin } }), cookies, platform: { env: { DB: db, ATLAS_ISSUER: issuer, ATLAS_CLIENT_ID: 'client', ATLAS_CLIENT_SECRET: 'secret', ATLAS_PUBLIC_ORIGIN: origin } } }) as any
   const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
   const jwk = { ...await exportJWK(publicKey), kid: 'one' }
-  let nonce = '', verifier = '', subject = 'alice'
+  let nonce = '', verifier = '', subject = 'alice', userinfoSubject: string | null = null
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
-    if (url.endsWith('/.well-known/openid-configuration')) return Response.json({ issuer, authorization_endpoint: `${issuer}/authorize?provider=atlas`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/keys` })
+    if (url.endsWith('/.well-known/openid-configuration')) return Response.json({ issuer, authorization_endpoint: `${issuer}/authorize?provider=atlas`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/keys`, userinfo_endpoint: `${issuer}/userinfo` })
     if (url.endsWith('/keys')) return Response.json({ keys: [jwk] })
     if (url.endsWith('/token')) {
       const now = Math.floor(Date.now() / 1000)
@@ -41,8 +41,9 @@ async function setup() {
       const requestVerifier = params.get('code_verifier')
       const stored = sqlite.query('SELECT nonce FROM oidc_flows WHERE verifier = ?').get(requestVerifier) as { nonce: string } | null
       const id_token = await new SignJWT({ nonce: stored?.nonce ?? nonce }).setProtectedHeader({ alg: 'RS256', kid: 'one' }).setIssuer(issuer).setSubject(subject).setAudience('client').setIssuedAt(now).setExpirationTime(now + 300).sign(privateKey)
-      return Response.json({ id_token })
+      return Response.json({ id_token, access_token: 'access' })
     }
+    if (url.endsWith('/userinfo')) return Response.json({ sub: userinfoSubject ?? subject, name: 'Alice', picture: '/api/avatars/alice.webp' })
     throw new Error(`Unexpected URL ${url}`)
   }) as unknown as typeof fetch
   const start = async () => {
@@ -59,6 +60,7 @@ async function setup() {
     expect(url.searchParams.get('provider')).toBe('atlas')
     expect(url.searchParams.get('redirect_uri')).toBe(`${origin}/auth/callback`)
     expect(url.searchParams.get('code_challenge_method')).toBe('S256')
+    expect(url.searchParams.get('scope')).toBe('openid profile')
     nonce = url.searchParams.get('nonce')!
     const state = url.searchParams.get('state')!
     verifier = (sqlite.query('SELECT verifier FROM oidc_flows WHERE state_hash = ?').get(await hashToken(state)) as any).verifier
@@ -66,7 +68,7 @@ async function setup() {
     expect(url.searchParams.get('code_challenge')).toBe(btoa(String.fromCharCode(...digest)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''))
     return `/auth/callback?code=test&state=${state}`
   }
-  return { sqlite, jar, event, start, setSubject: (value: string) => { subject = value } }
+  return { sqlite, jar, event, start, setSubject: (value: string) => { subject = value }, setUserinfoSubject: (value: string) => { userinfoSubject = value } }
 }
 
 describe('OIDC routes', () => {
@@ -143,7 +145,7 @@ describe('OIDC routes', () => {
       await expect(callback(s.event(path))).rejects.toMatchObject({ status: 303, location: '/' })
       const token = s.jar.get('__Host-contributor')!
       expect(token).toMatch(/^[a-f0-9]{64}$/)
-      expect(s.sqlite.query('SELECT issuer, subject FROM atlas_identities').get()).toEqual({ issuer, subject: 'alice' })
+      expect(s.sqlite.query('SELECT issuer, subject, name, picture FROM atlas_identities').get()).toEqual({ issuer, subject: 'alice', name: 'Alice', picture: `${issuer}/api/avatars/alice.webp` })
       await expect(callback(s.event(path))).rejects.toMatchObject({ status: 400 })
       await expect(signOut(s.event('/auth/sign-out', 'POST'))).rejects.toMatchObject({ status: 303 })
       expect((s.sqlite.query('SELECT revoked_at FROM contributor_sessions WHERE token_hash = ?').get(await hashToken(token)) as any).revoked_at).toBeTruthy()
@@ -161,6 +163,14 @@ describe('OIDC routes', () => {
       s.sqlite.exec("UPDATE contributor_sessions SET revoked_at = '2020'")
       await expect(callback(s.event(path))).rejects.toMatchObject({ status: 409 })
       expect(s.sqlite.query('SELECT count(*) AS n FROM atlas_identities').get()).toEqual({ n: 0 })
+    } finally { s.sqlite.close() }
+  })
+  test('signs in without a profile when the userinfo subject disagrees', async () => {
+    const s = await setup()
+    try {
+      s.setUserinfoSubject('another')
+      await expect(callback(s.event(await s.start()))).rejects.toMatchObject({ status: 303 })
+      expect(s.sqlite.query('SELECT issuer, subject, name, picture FROM atlas_identities').get()).toEqual({ issuer, subject: 'alice', name: null, picture: null })
     } finally { s.sqlite.close() }
   })
   test('merges anonymous attribution without rewriting historical creator ids', async () => {

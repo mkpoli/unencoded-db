@@ -95,6 +95,8 @@ Sign-in is optional. Configure `ATLAS_ISSUER`, `ATLAS_CLIENT_ID`, `ATLAS_CLIENT_
 
 Sign-in requires an anonymous contributor session. Adding evidence creates one; otherwise, select “Log in / Register”. Sign-in links the contributor to the verified issuer and subject. If that identity already exists, the anonymous person is mapped to the existing person; historical entry creator IDs stay unchanged. Signing out revokes the current session. Changing to another Glyph Atlas account requires signing out first.
 
+With the `profile` scope, the account name and picture come from the userinfo endpoint and appear in the header. The account menu links to the profile on Glyph Atlas.
+
 The protocol follows [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html), [OpenID Connect Discovery 1.0](https://openid.net/specs/openid-connect-discovery-1_0.html), and [RFC 7636: PKCE](https://www.rfc-editor.org/rfc/rfc7636).
 
 ## Moderation setup

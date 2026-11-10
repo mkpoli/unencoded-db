@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import { page } from '$app/state'
+  import AccountMenu from '$lib/components/AccountMenu.svelte'
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte'
   import { isLocale, localizedHref, t, type Locale } from '$lib/i18n'
 
@@ -9,6 +10,7 @@
     signInEnabled: boolean
     signedIn: boolean
     hasSession: boolean
+    profile: { name: string | null; picture: string | null } | null
     isModerator: boolean
   }
   let { data, children }: { data: Data; children: Snippet } = $props()
@@ -35,8 +37,7 @@
     </nav>
     <div class="header-actions">
       {#if data.signedIn}
-        <span class="account">Glyph Atlas</span>
-        <form method="POST" action="/auth/sign-out"><button class="secondary" type="submit">{t(locale, 'auth.signOut')}</button></form>
+        <AccountMenu name={data.profile?.name ?? null} picture={data.profile?.picture ?? null} {locale} />
       {:else if data.signInEnabled}
         <form method="POST" action={data.hasSession ? '/auth/sign-in' : '/auth/prepare'}><button class="secondary" type="submit">{t(locale, 'auth.signIn')}</button></form>
       {/if}

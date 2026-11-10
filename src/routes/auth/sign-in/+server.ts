@@ -23,6 +23,6 @@ export const POST: RequestHandler = async event => {
     .bind(await hashToken(state), verifier, nonce, oldHash, person, expires).run()
   event.cookies.set(flow, state, { ...flowSettings, secure: session.secure })
   const target = new URL(provider.authorization_endpoint)
-  for (const [key, value] of Object.entries({ response_type: 'code', client_id: cfg.clientId, redirect_uri: `${cfg.publicOrigin}/auth/callback`, scope: 'openid', state, nonce, code_challenge: await challenge(verifier), code_challenge_method: 'S256' })) target.searchParams.append(key, value)
+  for (const [key, value] of Object.entries({ response_type: 'code', client_id: cfg.clientId, redirect_uri: `${cfg.publicOrigin}/auth/callback`, scope: 'openid profile', state, nonce, code_challenge: await challenge(verifier), code_challenge_method: 'S256' })) target.searchParams.append(key, value)
   redirect(303, target.href)
 }
