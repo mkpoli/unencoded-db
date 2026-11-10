@@ -20,6 +20,7 @@
   "browse.emptyAll": "まだ記録はありません。",
   "browse.emptyIvd": "このIVD状態の記録はありません。",
   "browse.emptyScript": "この文字体系の記録はありません。",
+  "browse.encoded": "符号化済み",
   "browse.equivalent": "対応する文字: {character}",
   "browse.export": "JSONで書き出す",
   "browse.more": "もっと見る",

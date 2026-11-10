@@ -20,6 +20,7 @@
   "browse.emptyAll": "Nothing has been recorded yet.",
   "browse.emptyIvd": "No records with this IVD status.",
   "browse.emptyScript": "No records in this script.",
+  "browse.encoded": "Encoded",
   "browse.equivalent": "Equivalent character: {character}",
   "browse.export": "Export as JSON",
   "browse.more": "More",

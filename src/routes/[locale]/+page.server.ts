@@ -5,7 +5,7 @@ import { glyphPaths, warmGlyphs } from '$lib/server/glyphs'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import type { PageServerLoad } from './$types'
 
-type ListedEntry = { id: number; script: string; ids: string | null; equivalent_to: string | null; evidence: number; first_year: number | null; category: string | null }
+type ListedEntry = { id: number; script: string; ids: string | null; encoded_as: string | null; equivalent_to: string | null; evidence: number; first_year: number | null; category: string | null }
 
 export const load: PageServerLoad = async ({ platform, url }) => {
   if (!platform) error(500, 'Database unavailable')
@@ -23,7 +23,7 @@ export const load: PageServerLoad = async ({ platform, url }) => {
   if (ivd !== null) { filters.push('ivd_status = ?'); filterBinds.push(ivd) }
   filters.push('script = ?'); filterBinds.push(script)
   const filter = filters.length ? ` AND ${filters.join(' AND ')}` : ''
-  const page = await platform.env.DB.prepare(`SELECT id, script, ids, equivalent_to, (SELECT count(*) FROM evidence ev WHERE ev.entry_id = entries.id) AS evidence, (SELECT min(ev.date_year) FROM evidence ev WHERE ev.entry_id = entries.id AND ev.date_year IS NOT NULL) AS first_year, (SELECT g.label FROM entry_genres eg JOIN genres g ON g.slug = eg.genre WHERE eg.entry_id = entries.id ORDER BY eg.genre LIMIT 1) AS category FROM entries WHERE ${publicEntryPredicate}${filter} AND id < ? ORDER BY id DESC LIMIT 21`).bind(...filterBinds, id).all<ListedEntry>()
+  const page = await platform.env.DB.prepare(`SELECT id, script, ids, encoded_as, equivalent_to, (SELECT count(*) FROM evidence ev WHERE ev.entry_id = entries.id) AS evidence, (SELECT min(ev.date_year) FROM evidence ev WHERE ev.entry_id = entries.id AND ev.date_year IS NOT NULL) AS first_year, (SELECT g.label FROM entry_genres eg JOIN genres g ON g.slug = eg.genre WHERE eg.entry_id = entries.id ORDER BY eg.genre LIMIT 1) AS category FROM entries WHERE ${publicEntryPredicate}${filter} AND id < ? ORDER BY id DESC LIMIT 21`).bind(...filterBinds, id).all<ListedEntry>()
   const entries = page.results.slice(0, 20)
   const sequences = entries.map(entry => entry.ids).filter((id): id is string => Boolean(id))
   const paths = await glyphPaths(platform.env.IMAGES, sequences)

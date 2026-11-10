@@ -20,6 +20,7 @@
   "browse.emptyAll": "Chưa có mục từ nào.",
   "browse.emptyIvd": "Chưa có mục từ nào với trạng thái IVD này.",
   "browse.emptyScript": "Hệ chữ này chưa có mục từ nào.",
+  "browse.encoded": "Đã mã hóa",
   "browse.equivalent": "Ký tự tương đương: {character}",
   "browse.export": "Xuất JSON",
   "browse.more": "Xem thêm",
