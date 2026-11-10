@@ -13,6 +13,8 @@ const ids = resolve('src/lib/ids.ts')
 const composer = resolve('src/lib/composer.ts')
 const comparisonRows = resolve('src/lib/comparison-rows.ts')
 const encodings = resolve('src/lib/encodings.ts')
+const evidenceTypes = resolve('src/lib/evidence-types.ts')
+const evidenceTypeLabels = resolve('src/lib/evidence-type-labels.ts')
 const fileField = resolve('src/lib/components/FileField.svelte')
 const cropField = resolve('src/lib/components/CropField.svelte')
 const idsGlyph = resolve('src/lib/components/IdsGlyph.svelte')
@@ -21,6 +23,7 @@ const scriptSelect = resolve('src/lib/components/ScriptSelect.svelte')
 const comparisonGrid = resolve('src/lib/components/ComparisonGrid.svelte')
 const encodingFields = resolve('src/lib/components/EncodingFields.svelte')
 const extraImagesField = resolve('src/lib/components/ExtraImagesField.svelte')
+const evidenceTypesComponent = resolve('src/lib/components/EvidenceTypes.svelte')
 const appForms = resolve(tmp, 'app-forms.js')
 writeFileSync(appForms, 'export function enhance() { return {} }\n')
 const components = new Map<string, Promise<any>>()
@@ -32,6 +35,7 @@ let scriptSelectModule: Promise<string> | null = null
 let comparisonGridModule: Promise<string> | null = null
 let encodingFieldsModule: Promise<string> | null = null
 let extraImagesFieldModule: Promise<string> | null = null
+let evidenceTypesComponentModule: Promise<string> | null = null
 
 function loadFileField(): Promise<string> {
   if (!fileFieldModule) {
@@ -85,6 +89,19 @@ function loadEncodingFields(): Promise<string> {
   return encodingFieldsModule
 }
 
+function loadEvidenceTypesComponent(): Promise<string> {
+  if (!evidenceTypesComponentModule) {
+    evidenceTypesComponentModule = (async () => {
+      const preprocessed = await preprocess(readFileSync(evidenceTypesComponent, 'utf8'), vitePreprocess({ script: true }), { filename: evidenceTypesComponent })
+      const { js } = compile(preprocessed.code, { filename: evidenceTypesComponent, generate: 'server' })
+      const target = resolve(tmp, 'evidence-types.js')
+      writeFileSync(target, js.code.replaceAll('"$lib/evidence-types"', `"${evidenceTypes}"`).replaceAll("'$lib/evidence-types'", `'${evidenceTypes}'`).replaceAll('"$lib/evidence-type-labels"', `"${evidenceTypeLabels}"`).replaceAll("'$lib/evidence-type-labels'", `'${evidenceTypeLabels}'`).replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`))
+      return target
+    })()
+  }
+  return evidenceTypesComponentModule
+}
+
 function loadIdsGlyph(): Promise<string> {
   if (!idsGlyphModule) {
     idsGlyphModule = (async () => {
@@ -117,7 +134,7 @@ function loadScriptSelect(): Promise<string> {
     scriptSelectModule = (async () => {
       const preprocessed = await preprocess(readFileSync(scriptSelect, 'utf8'), vitePreprocess({ script: true }), { filename: scriptSelect })
       let { js } = compile(preprocessed.code, { filename: scriptSelect, generate: 'server' })
-      const code = js.code.replaceAll("'$lib/encodings'", `'${encodings}'`).replaceAll('"$lib/encodings"', `"${encodings}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`)
+      const code = js.code.replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`)
       const target = resolve(tmp, 'scriptselect.js')
       writeFileSync(target, code)
       return target
@@ -154,7 +171,38 @@ async function load(path: string, name: string) {
       const grid = await loadComparisonGrid()
       const encoding = await loadEncodingFields()
       const extra = await loadExtraImagesField()
-      const code = js.code.replaceAll('"$lib/components/ComparisonGrid.svelte"', `"${grid}"`).replaceAll("'$lib/components/ComparisonGrid.svelte'", `'${grid}'`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/CropField.svelte'", `'${crop}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$lib/components/IdsDrawing.svelte"', `"${drawing}"`).replaceAll("'$lib/components/IdsDrawing.svelte'", `'${drawing}'`).replaceAll('"$lib/components/ExtraImagesField.svelte"', `"${extra}"`).replaceAll("'$lib/components/ExtraImagesField.svelte'", `'${extra}'`).replaceAll('"$lib/components/EncodingFields.svelte"', `"${encoding}"`).replaceAll("'$lib/components/EncodingFields.svelte'", `'${encoding}'`).replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`).replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`).replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/encodings'", `'${encodings}'`).replaceAll('"$lib/encodings"', `"${encodings}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
+      const evidenceTypesComponentPath = await loadEvidenceTypesComponent()
+      const code = js.code
+        .replaceAll('"$lib/components/EvidenceTypes.svelte"', `"${evidenceTypesComponentPath}"`)
+        .replaceAll("'$lib/components/EvidenceTypes.svelte'", `'${evidenceTypesComponentPath}'`)
+        .replaceAll('"$lib/components/ComparisonGrid.svelte"', `"${grid}"`)
+        .replaceAll("'$lib/components/ComparisonGrid.svelte'", `'${grid}'`)
+        .replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`)
+        .replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`)
+        .replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`)
+        .replaceAll("'$lib/components/CropField.svelte'", `'${crop}'`)
+        .replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`)
+        .replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`)
+        .replaceAll('"$lib/components/IdsDrawing.svelte"', `"${drawing}"`)
+        .replaceAll("'$lib/components/IdsDrawing.svelte'", `'${drawing}'`)
+        .replaceAll('"$lib/components/ExtraImagesField.svelte"', `"${extra}"`)
+        .replaceAll("'$lib/components/ExtraImagesField.svelte'", `'${extra}'`)
+        .replaceAll('"$lib/components/EncodingFields.svelte"', `"${encoding}"`)
+        .replaceAll("'$lib/components/EncodingFields.svelte'", `'${encoding}'`)
+        .replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`)
+        .replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`)
+        .replaceAll('"$lib/evidence-types"', `"${evidenceTypes}"`)
+        .replaceAll("'$lib/evidence-types'", `'${evidenceTypes}'`)
+        .replaceAll('"$lib/evidence-type-labels"', `"${evidenceTypeLabels}"`)
+        .replaceAll("'$lib/evidence-type-labels'", `'${evidenceTypeLabels}'`)
+        .replaceAll("'$lib/i18n'", `'${i18n}'`)
+        .replaceAll('"$lib/i18n"', `"${i18n}"`)
+        .replaceAll("'$lib/encodings'", `'${encodings}'`)
+        .replaceAll('"$lib/encodings"', `"${encodings}"`)
+        .replaceAll("'$lib/script'", `'${script}'`)
+        .replaceAll('"$lib/script"', `"${script}"`)
+        .replaceAll('"$app/forms"', `"${appForms}"`)
+        .replaceAll("'$app/forms'", `'${appForms}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
@@ -348,7 +396,7 @@ describe('localized pages', () => {
         entry: { id: 9, script: 'Han', ids: '⿰木木', description: null, radical: null, encoded_as: null, strokes: null, created_at: '2026-11-08T05:00:00.000Z' },
         glyph: 'M0 0',
         comparisons: [{ character: '漢', relationship: 'variant' }],
-        evidence: [{ id: 4, place: '서울', url: null, title: null, author: null, publisher: null, year: null, page: null, note: null, source_id: null, has_image: 1, created_at: '2026-11-08T05:00:00.000Z' }],
+        evidence: [{ id: 4, place: '서울', url: null, title: null, author: null, publisher: null, year: null, page: null, note: null, types: [], source_id: null, has_image: 1, created_at: '2026-11-08T05:00:00.000Z' }],
       },
     })
     expect(head).toContain('문자 9 · 진자집람')
@@ -424,7 +472,7 @@ describe('localized pages', () => {
         entry: { id: 9, script: 'Han', ids: null, description: null, place: 'Seoul', title: null, author: null, publisher: null, year: null, page: null, note: null, created_at: '2026-11-08T05:00:00.000Z', has_image: 0 },
         glyph: null,
         comparisons: [],
-        evidence: [{ id: 5, place: 'https://example.org/scan', url: null, title: 'Scan', author: null, publisher: null, year: '2026', page: null, note: null, source_id: 3, has_image: 0, created_at: '2026-11-08T05:00:00.000Z' }],
+        evidence: [{ id: 5, place: 'https://example.org/scan', url: null, title: 'Scan', author: null, publisher: null, year: '2026', page: null, note: null, types: [], source_id: 3, has_image: 0, created_at: '2026-11-08T05:00:00.000Z' }],
         crops: [],
       },
     })
@@ -498,7 +546,7 @@ describe('localized pages', () => {
       data: {
         locale: 'ja',
         entry: { id: 9, revision: 2, edit_generation: 5, script: 'Han', ids: '⿰木木', description: '説明', radical: null, encoded_as: null, equivalent_to: '漢', strokes: null, comparisons: [] },
-        evidence: [{ id: 4, place: '本書', url: 'https://example.org/scan', title: '題名', author: '著者', publisher: '出版者', year: '1900', page: '8', note: 'メモ', has_image: 1, source_id: null }],
+        evidence: [{ id: 4, place: '本書', url: 'https://example.org/scan', title: '題名', author: '著者', publisher: '出版者', year: '1900', page: '8', note: 'メモ', types: ['attestation', 'reading'], has_image: 1, source_id: null }],
         senses: [{ id: 1, gloss: '意味', reading: 'いみ' }],
         tags: ['客家'],
         genres: [],
@@ -513,7 +561,7 @@ describe('localized pages', () => {
         message: '編集中にこの記録が更新されました。現在の版を別のタブで開き、そちらに変更を反映してください。',
         revision: '2',
         generation: '5',
-        values: { place: '未保存の場所', url: 'https://example.org/scan', title: '題名', note: 'メモ' },
+        values: { place: '未保存の場所', url: 'https://example.org/scan', title: '題名', note: 'メモ', types: ['attestation'] },
         errors: { place: '文字を見つけた場所を入力してください（500文字以内）。' },
       },
     })
@@ -525,6 +573,10 @@ describe('localized pages', () => {
     expect(body).toContain('編集中にこの記録が更新されました。')
     expect(body).toContain('aria-invalid="true"')
     expect(body).toContain('証拠を保存')
+    expect(body).toContain('出典の種類')
+    expect(body).toContain('name="types"')
+    expect(body).toMatch(/value="attestation"[^>]*checked/)
+    expect(body).toContain('用例')
     expect(body).toContain('href="/ja/entry/9"')
     expect(body).toContain('name="script"')
     expect(body).toContain('<select id="script" name="script"')
@@ -722,12 +774,14 @@ describe('localized pages', () => {
         glyph: null,
         comparisons: [],
         evidence: [
-          { id: 1, place: '', url: null, provider: '難読漢字図書館', provider_url: 'https://example.org/nandoku', title: null, author: null, publisher: null, year: null, page: null, note: null, source_id: 1, has_image: 0, created_at: '2026-11-08T05:00:00.000Z' },
+          { id: 1, place: '', url: null, provider: '難読漢字図書館', provider_url: 'https://example.org/nandoku', title: null, author: null, publisher: null, year: null, page: null, note: null, types: ['relation'], source_id: 1, has_image: 0, created_at: '2026-11-08T05:00:00.000Z' },
         ],
       },
     })
     expect(body).toContain('提供者')
     expect(body).toContain('href="https://example.org/nandoku"')
     expect(body).toContain('難読漢字図書館 ↗')
+    expect(body).toContain('関係')
+    expect(body).toContain('name="types"')
   })
 })

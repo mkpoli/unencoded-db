@@ -3,6 +3,7 @@
   import { untrack } from 'svelte'
   import ComparisonGrid from '$lib/components/ComparisonGrid.svelte'
   import EncodingFields from '$lib/components/EncodingFields.svelte'
+  import EvidenceTypes from '$lib/components/EvidenceTypes.svelte'
   import FileField from '$lib/components/FileField.svelte'
   import ExtraImagesField from '$lib/components/ExtraImagesField.svelte'
   import IdsDrawing from '$lib/components/IdsDrawing.svelte'
@@ -18,7 +19,7 @@
   import partsUrl from 'ids-input/data/han-parts.json.gz?url'
   import { estimateStrokes } from '$lib/strokes'
 
-  type Values = Record<string, string> & { genres?: string[]; collections?: string[]; encodings?: Encoding[] }
+  type Values = Record<string, string> & { genres?: string[]; collections?: string[]; encodings?: Encoding[]; types?: string[] }
   type Suggestion = { ids: string; script: string }
   type Genre = { slug: string; label: string; parent: string | null }
   type Collection = { slug: string; label: string }
@@ -308,6 +309,7 @@
         <textarea id="note" name="note" maxlength="5000" aria-invalid={!!form?.errors?.note} aria-describedby={form?.errors?.note ? 'note-error' : undefined}>{form?.values?.note ?? ''}</textarea>
         {#if form?.errors?.note}<p class="field-error" id="note-error">{form.errors.note}</p>{/if}
       </div>
+      <EvidenceTypes locale={data.locale} value={form?.values?.types ?? []} />
       <div class="field">
         <label class="field-label" for="title">{t(data.locale, 'field.title')}</label>
         <input id="title" name="title" maxlength="300" bind:value={title} aria-invalid={!!form?.errors?.title} aria-describedby={form?.errors?.title ? 'title-error' : undefined} />

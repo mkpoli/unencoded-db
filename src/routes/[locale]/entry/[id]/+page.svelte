@@ -1,11 +1,14 @@
 <script lang="ts">
   import { groupedComparisons, relationshipLabel, type Comparison } from '$lib/comparison-rows'
   import CropField from '$lib/components/CropField.svelte'
+  import EvidenceTypes from '$lib/components/EvidenceTypes.svelte'
   import FileField from '$lib/components/FileField.svelte'
   import { cleanLinkInput } from '$lib/link-input'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
   import { encodingSetLabel, type Encoding } from '$lib/encodings'
+  import { evidenceTypeLabel } from '$lib/evidence-type-labels'
+  import type { EvidenceType } from '$lib/evidence-types'
 
   type Genre = { slug: string; label: string }
   type Crop = { id: number; evidence_id: number; x: number; y: number; w: number; h: number }
@@ -13,7 +16,7 @@
   type Sense = { id: number; gloss: string; reading: string | null }
   type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
   type EvidenceMedia = { id: number; evidence_id: number }
-  type Evidence = { id: number; place: string; url: string | null; provider?: string | null; provider_url?: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; source_id: number | null; has_image: number; created_at: string }
+  type Evidence = { id: number; place: string; url: string | null; provider?: string | null; provider_url?: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; types: EvidenceType[]; source_id: number | null; has_image: number; created_at: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; equivalent_to: string | null; strokes: number | null; ivd_status: 'registered' | 'none' | null; ivd_sequence: string | null; created_at: string }
   let { data }: { data: { locale: Locale; entry: Entry; glyph: string | null; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; encodings: Encoding[]; media: EvidenceMedia[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
@@ -102,6 +105,7 @@
           <h3>{#if isLink(item.place)}<a href={item.place} target="_blank" rel="noopener noreferrer">{item.place} <span aria-hidden="true">↗</span></a>{:else}{item.place}{/if}</h3>
         {/if}
         {#if item.url && item.url !== item.place}<p class="evidence-url"><a class="text-link" href={item.url} target="_blank" rel="noopener noreferrer">{item.url} ↗</a></p>{/if}
+        {#if item.types.length}<p class="genre-list">{#each item.types as type (type)}<span class="genre-chip">{evidenceTypeLabel(data.locale, type)}</span>{/each}</p>{/if}
         {#if crops.some(crop => crop.evidence_id === item.id)}
           <div class="crop-list">
             {#each crops.filter(crop => crop.evidence_id === item.id) as crop, n (crop.id)}
@@ -190,6 +194,7 @@
           <div class="field"><label class="field-label" for="evidence-page">{t(data.locale, 'field.page')}</label><input id="evidence-page" name="page" maxlength="80" /></div>
         </div>
         <div class="field"><label class="field-label" for="evidence-note">{t(data.locale, 'field.note')}</label><textarea id="evidence-note" name="note" maxlength="5000"></textarea></div>
+        <EvidenceTypes locale={data.locale} />
         <div class="form-actions"><button class="primary" type="submit">{t(data.locale, 'entry.addSighting')}</button></div>
       </form>
     </details>

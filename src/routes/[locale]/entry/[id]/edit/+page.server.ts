@@ -14,6 +14,7 @@ import { listEncodings, parseEncodings, primaryEncoding, saveEncodings } from '$
 import type { Encoding } from '$lib/encodings'
 import { cookieOptions, hashToken } from '$lib/server/attribution'
 import { publicEntryPredicate } from '$lib/server/visibility'
+import { readEvidenceTypes } from '$lib/evidence-types'
 import { isLocale, localizedHref, t, type Locale } from '$lib/i18n'
 import type { Actions, PageServerLoad } from './$types'
 
@@ -193,6 +194,7 @@ export const actions: Actions = {
     ).bind(evidenceId, id).first<{ id: number; image_key: string | null; image_type: string | null; image_size: number | null; provider: string | null; provider_url: string | null }>()
     if (!row) error(404)
     const raw = Object.fromEntries(evidenceFields.map(name => [name, text(form, name)])) as Record<string, string>
+    const submitted = { ...raw, types: readEvidenceTypes(form) }
     const errors: Record<string, string> = {}
     const limits: Record<string, number> = { place: 500, url: 1000, provider: 300, provider_url: 1000, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
     for (const [name, limit] of Object.entries(limits)) if (raw[name]!.length > limit) errors[name] = t(locale, name === 'place' ? 'error.placeSeen' : 'error.length')
@@ -222,12 +224,12 @@ export const actions: Actions = {
           await putSourceImage(platform.env.IMAGES, key, source.image)
           image = { key, type: source.image.type, size: source.image.size }
         } catch {
-          return fail(500, { action: 'evidence', evidenceId, values: raw, revision: form.get('revision'), generation: form.get('edit_generation'), errors: { image: t(locale, 'error.save') } })
+          return fail(500, { action: 'evidence', evidenceId, values: submitted, revision: form.get('revision'), generation: form.get('edit_generation'), errors: { image: t(locale, 'error.save') } })
         }
       }
     }
     const discard = async () => { if (image) await deleteSourceImage(platform.env.IMAGES, image.key) }
-    const failForm = async (status: 400 | 404 | 409, message: string) => { await discard(); return fail(status, { action: 'evidence', evidenceId, values: raw, revision: form.get('revision'), generation: form.get('edit_generation'), errors, message }) }
+    const failForm = async (status: 400 | 404 | 409, message: string) => { await discard(); return fail(status, { action: 'evidence', evidenceId, values: submitted, revision: form.get('revision'), generation: form.get('edit_generation'), errors, message }) }
     if (image === undefined) image = removeImage ? null : undefined
     if (!revision || !generation) return failForm(400, t(locale, 'error.fields'))
     if (Object.keys(errors).length || !fields) return failForm(400, t(locale, 'error.fields'))
@@ -280,6 +282,7 @@ export const actions: Actions = {
     if (!entry) error(404)
     const form = await request.formData()
     const values = Object.fromEntries(evidenceFields.map(name => [name, text(form, name)])) as Record<string, string>
+    const submitted = { ...values, types: readEvidenceTypes(form) }
     const errors: Record<string, string> = {}
     const limits: Record<string, number> = { place: 500, url: 1000, provider: 300, provider_url: 1000, title: 300, author: 300, publisher: 300, year: 40, page: 80, note: 5000 }
     for (const [name, limit] of Object.entries(limits)) if (values[name]!.length > limit) errors[name] = t(locale, name === 'place' ? 'error.placeSeen' : 'error.length')
@@ -299,13 +302,13 @@ export const actions: Actions = {
           await putSourceImage(platform.env.IMAGES, key, source.image)
           image = { key, type: source.image.type, size: source.image.size }
         } catch {
-          return fail(500, { action: 'addEvidence', values, errors: { image: t(locale, 'error.save') } })
+          return fail(500, { action: 'addEvidence', values: submitted, errors: { image: t(locale, 'error.save') } })
         }
       }
     }
     const failForm = async (status: 400, message: string) => {
       if (image) await deleteSourceImage(platform.env.IMAGES, image.key)
-      return fail(status, { action: 'addEvidence', values, errors, message })
+      return fail(status, { action: 'addEvidence', values: submitted, errors, message })
     }
     if (Object.keys(errors).length || !fields) return failForm(400, t(locale, 'error.fields'))
     const cookie = cookieOptions(url)
@@ -318,7 +321,7 @@ export const actions: Actions = {
       added = await addEvidence(platform.env.DB, id, fields, image, person?.person_id ?? null)
     } catch {
       if (image) await deleteSourceImage(platform.env.IMAGES, image.key)
-      return fail(500, { action: 'addEvidence', values, errors: {}, message: t(locale, 'error.save') })
+      return fail(500, { action: 'addEvidence', values: submitted, errors: {}, message: t(locale, 'error.save') })
     }
     redirect(303, `${localizedHref(locale, `/entry/${id}/edit`)}#evidence-${added.id}`)
   },
