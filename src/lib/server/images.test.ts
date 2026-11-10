@@ -58,7 +58,7 @@ describe('source image validation', () => {
     expect(html.error).toBe('unsupported')
   })
 
-  test('accepts exactly 8 MiB, strips padding and rejects one byte more', async () => {
+  test('accepts exactly 16 MiB, strips padding and rejects one byte more', async () => {
     const boundary = new Uint8Array(MAX_IMAGE_BYTES)
     boundary.set(PNG_BYTES)
     const accepted = await readSourceImage(formWith(imageFile(boundary)))

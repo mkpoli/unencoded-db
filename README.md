@@ -66,11 +66,12 @@ bun run build
 
 - Each evidence record can carry one image. The edit page can replace or remove it; a new character starts with one evidence image. Rows migrated from `0001` remain image-less.
 - JPEG, PNG and WebP are accepted, identified by magic bytes. SVG, HTML, empty and unrecognised files are rejected.
-- The maximum file size is 8 MiB.
+- The maximum file size is 16 MiB.
 - Bytes live in R2; content type and size live in D1.
 - Images are not decoded or re-encoded. A corrupt file with a valid signature may fail to render in the browser.
-- `POST /{locale}/new` accepts up to 8 MiB plus form framing. Other POST routes keep the 128 KiB limit.
+- `POST` routes with an image field (`/{locale}/new`, `/{locale}/batch`, `/{locale}/entry/[id]`, `/{locale}/entry/[id]/edit`) accept up to 16 MiB plus form framing. Other POST routes keep the 512 KiB limit.
 - Evidence image responses use the stored content type, `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, so hiding takes effect on the next request. Missing, hidden and invalid-locale images also return an uncached 404.
+- The request body, the parsed file and the stripped image are held in Worker memory. Concurrent uploads share the 128 MB isolate limit.
 - Images are stripped of common metadata on upload: JPEG EXIF, XMP, IPTC and comments before the image scan, PNG text, tIME and EXIF chunks, and WebP EXIF/XMP chunks. JPEG EXIF orientation is kept; ICC colour profiles and pixel content are stored as uploaded. Image metadata is not preserved for attribution, so record credit in the bibliographic fields.
 - An X or Twitter post link drops its `a` and `s` share-tracking parameters. Pasting one into a new evidence form fetches the post through the FxTwitter API (`https://api.fxtwitter.com`), fills the place as `X`, the provider as the author's `@handle` with their profile link, and the title with the post text, and attaches the first photo to the image field. Photos are taken only from `pbs.twimg.com`; the reader can replace any filled field before saving.
 
@@ -82,7 +83,7 @@ The homepage draws each record's IDS with [han-compose](https://github.com/mkpol
 
 Creating a record is limited to five POST requests per IPv4 address or IPv6 /64 prefix per 60 seconds at each Cloudflare location. The `CONTRIBUTION_RATE_LIMIT` binding holds this limit; configure it separately for every named environment and choose a namespace ID unique to the limiter within the account. Counters are local to each location, eventually consistent and approximate: shared networks share a limit, and distributed clients can exceed it. This is not a global quota or a substitute for moderation.
 
-The limiter runs before the request body is read on `POST /{locale}/new`. An exhausted limit returns 429 with `Retry-After: 60`. A missing or unavailable binding, or a missing or malformed client address, returns 503. With JavaScript the form keeps its contents and shows a localized notice; without JavaScript the browser shows a localized error page and the submitted fields are not restored. Oversized requests return 413 after the limiter allows them and also do not preserve the form.
+The limiter runs before the request body is read on `POST /{locale}/new` and `POST /{locale}/batch`. The add-evidence and edit forms accept the larger image body without this limiter. An exhausted limit returns 429 with `Retry-After: 60`. A missing or unavailable binding, or a missing or malformed client address, returns 503. With JavaScript the form keeps its contents and shows a localized notice; without JavaScript the browser shows a localized error page and the submitted fields are not restored. Oversized requests return 413 after the limiter allows them and also do not preserve the form.
 
 Production requests must reach the Worker through Cloudflare, which supplies `CF-Connecting-IP` and request `cf` metadata. For same-zone Worker subrequests, `CF-Connecting-IP` reflects `x-real-ip`, which the calling Worker can modify ([Cloudflare request headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/#cf-connecting-ip)). Do not expose an alternate origin that accepts client-supplied forwarding headers or allow untrusted Workers to invoke this Worker as end users.
 
@@ -209,7 +210,7 @@ There is no global storage quota, no per-user quota and no cleanup job. An R2 pu
 
 Uploaders must have the rights to share the image. Image metadata is stripped, so credit belongs in the record's title, author and publisher fields. Uploaded images keep their original rights; the project license covers the code only.
 
-A validation failure returns the form with its errors; an upload over the request limit returns 413. The browser clears the file input, so the image must be selected again. Text fields are preserved on validation errors. The request limit is 8 MiB plus framing for `/{locale}/new`.
+A validation failure returns the form with its errors; an upload over the request limit returns 413. The browser clears the file input, so the image must be selected again. Text fields are preserved on validation errors. The request limit is 16 MiB plus framing on the routes with an image field.
 
 ## JSON export
 

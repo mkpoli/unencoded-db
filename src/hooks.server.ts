@@ -128,7 +128,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
 
   if (method === 'POST') {
-    const request = await limitWriteBody(event.request, writeBodyLimit(event.url.pathname))
+    const request = await limitWriteBody(event.request, writeBodyLimit(event.route?.id))
     if (!request) return new Response(t(locale, 'error.tooLarge'), { status: 413, headers: { 'content-type': 'text/plain; charset=utf-8' } })
     event.request = request
   }

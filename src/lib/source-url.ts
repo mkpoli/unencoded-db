@@ -1,3 +1,5 @@
+import { MAX_IMAGE_BYTES } from '$lib/limits'
+
 // X and Twitter links carry share tracking in `a` and `s`. A post link also names its author and
 // text, and often a picture that can stand as the evidence image, fetched through the FxTwitter API.
 
@@ -7,8 +9,7 @@ const PHOTO_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp
 const API_ORIGIN = 'https://api.fxtwitter.com'
 const HANDLE = /^[A-Za-z0-9_]{1,15}$/
 
-// Matches MAX_IMAGE_BYTES in $lib/server/images, which is the final check on upload.
-export const MAX_SOURCE_IMAGE = 8 * 1024 * 1024
+export const MAX_SOURCE_IMAGE = MAX_IMAGE_BYTES
 
 /** The numeric id of an X or Twitter post link, or null for another link. */
 export function postId(value: string): string | null {

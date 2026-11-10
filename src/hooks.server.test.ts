@@ -2,21 +2,28 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { SignJWT, exportJWK, generateKeyPair } from 'jose'
 import type { RequestEvent } from '@sveltejs/kit'
 import { handle } from './hooks.server'
-import { MAX_NEW_BODY, MAX_WRITE_BODY } from './lib/server/body-limit'
+import { MAX_IMAGE_BODY, MAX_WRITE_BODY } from './lib/server/body-limit'
 import { MAX_IMAGE_BYTES } from './lib/server/images'
 import { clearJwksCache } from '$lib/server/cf-access'
 import { PNG_BYTES, imageFile } from './test-support'
 
-function event(pathname: string, body: string) {
+function event(pathname: string, body: string, routeId = pathname) {
   const request = new Request(`https://example.test${pathname}`, { method: 'POST', body })
-  return { request, url: new URL(request.url), route: { id: pathname }, locals: { moderator: null } } as any
+  return {
+    request,
+    url: new URL(request.url),
+    route: { id: routeId },
+    locals: { moderator: null },
+    getClientAddress: () => '203.0.113.1',
+    platform: { cf: {}, env: { CONTRIBUTION_RATE_LIMIT: { limit: async () => ({ success: true }) } } },
+  } as any
 }
 
 describe('POST body limit routing', () => {
   test('keeps the small limit on other localized POST routes', async () => {
     let resolved = false
     const response = await handle({
-      event: event('/ja/entry/1', 'x'.repeat(MAX_WRITE_BODY + 1)),
+      event: event('/ja/entry/1/history', 'x'.repeat(MAX_WRITE_BODY + 1)),
       resolve: async () => { resolved = true; return new Response('ok') },
     } as any)
     expect(response.status).toBe(413)
@@ -24,34 +31,55 @@ describe('POST body limit routing', () => {
     expect(resolved).toBe(false)
   })
 
-  test('uses the larger limit on the localized new page', async () => {
+  test('uses the larger limit on the localized image routes', async () => {
+    for (const [path, route] of [
+      ['/ja/new', '/[locale]/new'], ['/ja/batch', '/[locale]/batch'],
+      ['/ja/entry/1', '/[locale]/entry/[id]'], ['/ja/entry/1/edit', '/[locale]/entry/[id]/edit'],
+    ] as const) {
+      let resolved = false
+      const e = event(path, 'x'.repeat(MAX_WRITE_BODY + 1), route)
+      const response = await handle({
+        event: e,
+        resolve: async () => { resolved = true; return new Response('ok') },
+      } as any)
+      expect(response.status, path).toBe(200)
+      expect(resolved, path).toBe(true)
+      expect(e.request.headers.get('content-length'), path).toBe(String(MAX_WRITE_BODY + 1))
+    }
+  })
+
+  test('uses the resolved route id for encoded image paths', async () => {
     let resolved = false
-    const e = event('/ja/new', 'x'.repeat(MAX_WRITE_BODY + 1))
+    const e = event('/ja/%65ntry/%31', 'x'.repeat(MAX_WRITE_BODY + 1), '/[locale]/entry/[id]')
     const response = await handle({
       event: e,
       resolve: async () => { resolved = true; return new Response('ok') },
     } as any)
     expect(response.status).toBe(200)
     expect(resolved).toBe(true)
-    expect(e.request.headers.get('content-length')).toBe(String(MAX_WRITE_BODY + 1))
   })
 
-  test('rejects an oversized localized new body before parsing or resolving', async () => {
-    let resolved = false
-    const e = event('/zh-Hant/new', 'x'.repeat(MAX_NEW_BODY + 1))
-    e.request.formData = () => { throw new Error('form parsed') }
-    const response = await handle({
-      event: e,
-      resolve: async () => { resolved = true; return new Response('ok') },
-    } as any)
-    expect(response.status).toBe(413)
-    expect(await response.text()).toBe('上傳內容過大。')
-    expect(resolved).toBe(false)
+  test('rejects an oversized body on every image route before parsing', async () => {
+    for (const [path, route] of [
+      ['/ja/new', '/[locale]/new'], ['/ja/batch', '/[locale]/batch'],
+      ['/ja/entry/1', '/[locale]/entry/[id]'], ['/ja/entry/1/edit', '/[locale]/entry/[id]/edit'],
+    ] as const) {
+      let resolved = false
+      const e = event(path, 'x'.repeat(MAX_IMAGE_BODY + 1), route)
+      e.request.formData = () => { throw new Error('form parsed') }
+      const response = await handle({
+        event: e,
+        resolve: async () => { resolved = true; return new Response('ok') },
+      } as any)
+      expect(response.status, path).toBe(413)
+      expect(await response.text(), path).toBe('アップロードが大きすぎます。')
+      expect(resolved, path).toBe(false)
+    }
   })
 })
 
 describe('multipart POST on the localized new page', () => {
-  test('reconstructs an 8 MiB multipart body for the form parser', async () => {
+  test('reconstructs a 16 MiB multipart body for the form parser', async () => {
     const bytes = new Uint8Array(MAX_IMAGE_BYTES)
     bytes.set(PNG_BYTES)
     const form = new FormData()
@@ -62,12 +90,19 @@ describe('multipart POST on the localized new page', () => {
 
     let kept: Request | undefined
     const response = await handle({
-      event: { request, url: new URL(request.url), locals: { moderator: null } } as any,
+      event: {
+        request,
+        url: new URL(request.url),
+        route: { id: '/[locale]/new' },
+        locals: { moderator: null },
+        getClientAddress: () => '203.0.113.1',
+        platform: { cf: {}, env: { CONTRIBUTION_RATE_LIMIT: { limit: async () => ({ success: true }) } } },
+      } as any,
       resolve: async (resolvedEvent: any) => { kept = resolvedEvent.request; return new Response('ok') },
     } as any)
     expect(response.status).toBe(200)
     expect(kept!.headers.get('content-type')).toContain('multipart/form-data')
-    expect(Number(kept!.headers.get('content-length'))).toBeLessThan(MAX_NEW_BODY)
+    expect(Number(kept!.headers.get('content-length'))).toBeLessThan(MAX_IMAGE_BODY)
 
     const parsed = await kept!.formData()
     expect(parsed.get('script')).toBe('Han')
@@ -453,9 +488,9 @@ describe('contribution rate limit hook', () => {
     }
   })
   test('still rejects an oversized body on the localized new page after the limiter allows it', async () => {
-    const exact = rateEvent({ body: 'x'.repeat(MAX_NEW_BODY), limiter: allow })
+    const exact = rateEvent({ body: 'x'.repeat(MAX_IMAGE_BODY), limiter: allow })
     expect((await exact.run()).status).toBe(200)
-    const over = rateEvent({ body: 'x'.repeat(MAX_NEW_BODY + 1), limiter: allow })
+    const over = rateEvent({ body: 'x'.repeat(MAX_IMAGE_BODY + 1), limiter: allow })
     expect((await over.run()).status).toBe(413)
     const small = rateEvent({ body: 'x'.repeat(MAX_WRITE_BODY + 1), limiter: allow })
     expect((await small.run()).status).toBe(200)
