@@ -1,10 +1,11 @@
 {
+  "account.profile": "Glyph Atlasのプロフィール",
   "add.intro": "まず文字体系と構成を入力し、続いて写真・スキャン・スクリーンショット、またはリンクを追加してください。投稿は公開され、投稿者は匿名です。",
   "add.title": "文字を追加",
   "app.name": "珍字集覧",
   "app.tagline": "文字と字形の証拠を集めるコミュニティウィキ",
   "auth.signIn": "ログイン / 登録",
-  "auth.signOut": "サインアウト",
+  "auth.signOut": "ログアウト",
   "batch.add": "文字を追加",
   "batch.character": "文字 {n}",
   "batch.characters": "文字",

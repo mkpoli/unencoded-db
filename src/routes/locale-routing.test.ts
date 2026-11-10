@@ -36,7 +36,7 @@ describe('locale routing', () => {
     expect(thrown(() => redirectToLocale(event as any))).toMatchObject({ status: 303, location: '/en' })
   })
 
-  async function layoutEvent(locale: string, options: { token?: string; linked?: string | null; moderator?: string | null } = {}) {
+  async function layoutEvent(locale: string, options: { token?: string; linked?: string | null; name?: string | null; picture?: string | null; moderator?: string | null } = {}) {
     return {
       params: { locale },
       locals: { moderator: options.moderator ?? null },
@@ -47,7 +47,7 @@ describe('locale routing', () => {
           ATLAS_CLIENT_ID: 'client',
           ATLAS_CLIENT_SECRET: 'secret',
           ATLAS_PUBLIC_ORIGIN: 'https://example.test',
-          DB: { prepare: () => ({ bind: () => ({ first: async () => options.linked === undefined ? null : { linked: options.linked } }) }) },
+          DB: { prepare: () => ({ bind: () => ({ first: async () => options.linked === undefined ? null : { linked: options.linked, name: options.name ?? null, picture: options.picture ?? null } }) }) },
         },
       },
       cookies: { get: () => options.token },
@@ -58,15 +58,15 @@ describe('locale routing', () => {
     for (const locale of LOCALES) {
       const event = await layoutEvent(locale)
       event.platform = undefined as any
-      expect(await localeLayout(event as any)).toEqual({ locale, signInEnabled: false, signedIn: false, hasSession: false, isModerator: false })
+      expect(await localeLayout(event as any)).toEqual({ locale, signInEnabled: false, signedIn: false, hasSession: false, profile: null, isModerator: false })
     }
   })
 
   test('reads the session and linked account from the layout cookie', async () => {
     const anonymous = await localeLayout(await layoutEvent('ja', { token: 'a'.repeat(64), linked: null }) as any)
-    expect(anonymous).toEqual({ locale: 'ja', signInEnabled: true, signedIn: false, hasSession: true, isModerator: false })
-    const linked = await localeLayout(await layoutEvent('ja', { token: 'a'.repeat(64), linked: 'person-1' }) as any)
-    expect(linked).toEqual({ locale: 'ja', signInEnabled: true, signedIn: true, hasSession: true, isModerator: false })
+    expect(anonymous).toEqual({ locale: 'ja', signInEnabled: true, signedIn: false, hasSession: true, profile: null, isModerator: false })
+    const linked = await localeLayout(await layoutEvent('ja', { token: 'a'.repeat(64), linked: 'person-1', name: 'Rina', picture: 'https://id.example/avatar.webp' }) as any)
+    expect(linked).toEqual({ locale: 'ja', signInEnabled: true, signedIn: true, hasSession: true, profile: { name: 'Rina', picture: 'https://id.example/avatar.webp' }, isModerator: false })
   })
 
   test('marks the layout for a verified moderator', async () => {

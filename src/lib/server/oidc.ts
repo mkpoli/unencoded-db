@@ -1,7 +1,7 @@
 import { createLocalJWKSet, jwtVerify, type JSONWebKeySet } from 'jose'
 
 export type OidcConfig = { issuer: string; clientId: string; clientSecret: string }
-type Metadata = { issuer: string; authorization_endpoint: string; token_endpoint: string; jwks_uri: string }
+type Metadata = { issuer: string; authorization_endpoint: string; token_endpoint: string; jwks_uri: string; userinfo_endpoint?: string }
 
 // One deadline covers connection, headers and the entire streamed body.
 export async function fetchJson(url: string, init: RequestInit = {}, maxBytes = 131_072, timeoutMs = 5_000): Promise<unknown> {
@@ -62,6 +62,11 @@ export async function discover(issuer: string): Promise<Metadata> {
     const url = new URL(record[key])
     if (url.protocol !== 'https:' || url.origin !== new URL(issuer).origin || url.username || url.password || url.hash) throw new Error('Invalid endpoint')
   }
+  if (record.userinfo_endpoint !== undefined) {
+    if (typeof record.userinfo_endpoint !== 'string') throw new Error('Invalid endpoint')
+    const url = new URL(record.userinfo_endpoint)
+    if (url.protocol !== 'https:' || url.origin !== new URL(issuer).origin || url.username || url.password || url.hash) throw new Error('Invalid endpoint')
+  }
   const authorization = new URL(record.authorization_endpoint as string)
   for (const key of ['response_type', 'client_id', 'redirect_uri', 'scope', 'state', 'nonce', 'code_challenge', 'code_challenge_method']) {
     if (authorization.searchParams.has(key)) throw new Error('Authorization parameter collision')
@@ -88,4 +93,23 @@ export async function verifyIdentity(token: string, jwksUri: string, config: Oid
     throw new Error('Invalid identity')
   }
   return { issuer: config.issuer, subject: payload.sub }
+}
+
+export type Profile = { name: string | null; picture: string | null }
+
+/** The profile scope's name and picture. The subject must be the verified one. */
+export async function fetchProfile(userinfoEndpoint: string, accessToken: string, issuer: string, subject: string): Promise<Profile> {
+  const data = await fetchJson(userinfoEndpoint, {
+    headers: { authorization: `Bearer ${accessToken}`, accept: 'application/json' },
+  }, 16_384) as Record<string, unknown>
+  if (!data || typeof data !== 'object' || data.sub !== subject) throw new Error('Invalid profile')
+  const name = typeof data.name === 'string' ? data.name.replace(/[\u0000-\u001f\u007f]/g, '').trim().replace(/\s+/g, ' ').slice(0, 80) : ''
+  let picture: string | null = null
+  if (typeof data.picture === 'string' && data.picture.length <= 500) {
+    try {
+      const url = new URL(data.picture, issuer)
+      if (url.protocol === 'https:' && !url.username && !url.password) picture = url.href
+    } catch { /* The picture is optional. */ }
+  }
+  return { name: name || null, picture }
 }
