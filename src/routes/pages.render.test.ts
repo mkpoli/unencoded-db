@@ -9,10 +9,13 @@ const tmp = resolve('.svelte-kit/render-tmp')
 mkdirSync(tmp, { recursive: true })
 const i18n = resolve('src/lib/i18n.ts')
 const script = resolve('src/lib/script.ts')
+const ids = resolve('src/lib/ids.ts')
+const composer = resolve('src/lib/composer.ts')
 const comparisonRows = resolve('src/lib/comparison-rows.ts')
 const fileField = resolve('src/lib/components/FileField.svelte')
 const cropField = resolve('src/lib/components/CropField.svelte')
 const idsGlyph = resolve('src/lib/components/IdsGlyph.svelte')
+const idsDrawing = resolve('src/lib/components/IdsDrawing.svelte')
 const scriptSelect = resolve('src/lib/components/ScriptSelect.svelte')
 const comparisonGrid = resolve('src/lib/components/ComparisonGrid.svelte')
 const appForms = resolve(tmp, 'app-forms.js')
@@ -21,6 +24,7 @@ const components = new Map<string, Promise<any>>()
 let fileFieldModule: Promise<string> | null = null
 let cropFieldModule: Promise<string> | null = null
 let idsGlyphModule: Promise<string> | null = null
+let idsDrawingModule: Promise<string> | null = null
 let scriptSelectModule: Promise<string> | null = null
 let comparisonGridModule: Promise<string> | null = null
 
@@ -76,6 +80,20 @@ function loadIdsGlyph(): Promise<string> {
   return idsGlyphModule
 }
 
+function loadIdsDrawing(): Promise<string> {
+  if (!idsDrawingModule) {
+    idsDrawingModule = (async () => {
+      const preprocessed = await preprocess(readFileSync(idsDrawing, 'utf8'), vitePreprocess({ script: true }), { filename: idsDrawing })
+      const { js } = compile(preprocessed.code, { filename: idsDrawing, generate: 'server' })
+      const target = resolve(tmp, 'idsdrawing.js')
+      const code = js.code.replaceAll("'$lib/ids'", `'${ids}'`).replaceAll('"$lib/ids"', `"${ids}"`).replaceAll("'$lib/composer'", `'${composer}'`).replaceAll('"$lib/composer"', `"${composer}"`)
+      writeFileSync(target, code)
+      return target
+    })()
+  }
+  return idsDrawingModule
+}
+
 function loadScriptSelect(): Promise<string> {
   if (!scriptSelectModule) {
     scriptSelectModule = (async () => {
@@ -100,9 +118,10 @@ async function load(path: string, name: string) {
       const dep = await loadFileField()
       const crop = await loadCropField()
       const glyph = await loadIdsGlyph()
+      const drawing = await loadIdsDrawing()
       const select = await loadScriptSelect()
       const grid = await loadComparisonGrid()
-      const code = js.code.replaceAll('"$lib/components/ComparisonGrid.svelte"', `"${grid}"`).replaceAll("'$lib/components/ComparisonGrid.svelte'", `'${grid}'`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/CropField.svelte'", `'${crop}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`).replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`).replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
+      const code = js.code.replaceAll('"$lib/components/ComparisonGrid.svelte"', `"${grid}"`).replaceAll("'$lib/components/ComparisonGrid.svelte'", `'${grid}'`).replaceAll('"$lib/components/FileField.svelte"', `"${dep}"`).replaceAll("'$lib/components/FileField.svelte'", `'${dep}'`).replaceAll('"$lib/components/CropField.svelte"', `"${crop}"`).replaceAll("'$lib/components/CropField.svelte'", `'${crop}'`).replaceAll('"$lib/components/IdsGlyph.svelte"', `"${glyph}"`).replaceAll("'$lib/components/IdsGlyph.svelte'", `'${glyph}'`).replaceAll('"$lib/components/IdsDrawing.svelte"', `"${drawing}"`).replaceAll("'$lib/components/IdsDrawing.svelte'", `'${drawing}'`).replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`).replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`).replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`).replaceAll("'$lib/script'", `'${script}'`).replaceAll('"$lib/script"', `"${script}"`).replaceAll('"$app/forms"', `"${appForms}"`).replaceAll("'$app/forms'", `'${appForms}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
@@ -241,6 +260,8 @@ describe('localized pages', () => {
     expect(body).toContain('<input type="hidden" name="script" value="Han"/>')
     expect(body).not.toContain('<select id="script"')
     expect(body).toContain('name="ids"')
+    expect(body).toContain('class="ids-preview"')
+    expect(body).toContain('ids-drawing')
     expect(body).toContain('required="" aria-required="true"')
     expect(body).toContain('class="required-mark" aria-hidden="true">*</span>')
     expect(body).toContain('https://ids.mkpo.li/')
