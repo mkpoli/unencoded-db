@@ -20,6 +20,7 @@
   "browse.emptyAll": "还没有记录。",
   "browse.emptyIvd": "没有这个IVD状态的记录。",
   "browse.emptyScript": "这个文字体系还没有记录。",
+  "browse.encoded": "已编码",
   "browse.equivalent": "对应字：{character}",
   "browse.export": "导出为JSON",
   "browse.more": "更多",

@@ -20,6 +20,7 @@
   "browse.emptyAll": "還沒有記錄。",
   "browse.emptyIvd": "沒有這個IVD狀態的記錄。",
   "browse.emptyScript": "這個文字體系還沒有記錄。",
+  "browse.encoded": "已編碼",
   "browse.equivalent": "對應字：{character}",
   "browse.export": "匯出為JSON",
   "browse.more": "更多",

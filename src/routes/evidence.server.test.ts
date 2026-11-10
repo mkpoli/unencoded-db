@@ -519,6 +519,8 @@ describe('evidence routes', () => {
       const e = event({ ...record, radical: '木', encoded_as: 'U+2A6D6' }, d1Binding(db), images)
       await expect(actions.default!(e)).rejects.toMatchObject({ status: 303 })
       expect(db.query('SELECT radical, encoded_as FROM entries WHERE id = 1').get()).toEqual({ radical: '木', encoded_as: 'U+2A6D6' })
+      const listing = await list({ platform: { env: { DB: d1Binding(db) } }, url: new URL('https://example.test/en') } as any) as { entries: { encoded_as: string | null }[] }
+      expect(listing.entries[0]).toMatchObject({ encoded_as: 'U+2A6D6' })
     } finally { db.close() }
   })
 

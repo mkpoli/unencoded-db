@@ -2,7 +2,7 @@
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { localizedHref, t, type Locale } from '$lib/i18n'
 
-  type Entry = { id: number; script: string; ids: string | null; equivalent_to: string | null; evidence: number; first_year: number | null; category: string | null }
+  type Entry = { id: number; script: string; ids: string | null; encoded_as: string | null; equivalent_to: string | null; evidence: number; first_year: number | null; category: string | null }
   type IvdFilter = 'registered' | 'none'
   let { data }: { data: { locale: Locale; entries: Entry[]; next: number | null; glyphs?: Record<string, string>; script?: string | null; ivd?: IvdFilter | null } } = $props()
 
@@ -38,6 +38,7 @@
         <span class="plate"><span class="glyph"><IdsGlyph ids={entry.ids} text={entry.ids || entry.script} path={glyph} /></span></span>
         {#if entry.ids}<span class="visually-hidden">{entry.ids}</span>{/if}
         <span class="badges">
+          {#if entry.encoded_as}<span class="encoded">{t(data.locale, 'browse.encoded')}<span class="visually-hidden"> {entry.encoded_as}</span></span>{/if}
           {#if entry.equivalent_to}<span class="equivalent"><span class="visually-hidden">{t(data.locale, 'browse.equivalent', { character: entry.equivalent_to })}</span><span aria-hidden="true">= {entry.equivalent_to}</span></span>{/if}
           {#if entry.category}<span class="category">{entry.category}</span>{/if}
         </span>

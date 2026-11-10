@@ -232,6 +232,23 @@ describe('localized pages', () => {
     expect(body).toContain('1897')
   })
 
+  test('home marks an encoded character and leaves an unencoded one unmarked', async () => {
+    const { body } = await page('src/routes/[locale]/+page.svelte', 'home-encoded', {
+      data: {
+        locale: 'en',
+        entries: [
+          { id: 7, script: 'Han', ids: '⿰魚羊', encoded_as: 'U+9BAE', evidence: 1, first_year: null, category: null },
+          { id: 8, script: 'Han', ids: '⿰未⿱成公', encoded_as: null, evidence: 1, first_year: null, category: null },
+        ],
+        next: null,
+        glyphs: {},
+      },
+    })
+    expect(body.match(/class="encoded"/g)).toHaveLength(1)
+    expect(body).toContain('Encoded')
+    expect(body).toContain('U+9BAE')
+  })
+
   test('home draws a cached description and keeps its IDS for assistive tech', async () => {
     const { body } = await page('src/routes/[locale]/+page.svelte', 'home-glyph', {
       data: { locale: 'en', entries: [{ id: 7, script: 'Han', ids: '⿰木木', evidence: 0, first_year: null, category: null }], glyphs: { '⿰木木': 'M0 0' }, next: null, scripts: [{ script: 'Han', n: 1 }], total: 1, script: null },

@@ -100,6 +100,7 @@
   overflow-wrap: anywhere;
 }
 .entry-card .badges { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; min-width: 0; min-height: 21px; }
+.entry-card .encoded,
 .entry-card .equivalent,
 .entry-card .category {
   max-width: 100%;
@@ -111,6 +112,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.entry-card .encoded { background: var(--surface-selected); color: var(--ink); font-weight: 550; }
 .entry-card .equivalent { background: var(--accent-light); color: var(--accent); }
 .entry-card .category { background: var(--surface-sunken); color: var(--muted); }
 .entry-card .summary { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.4; }
