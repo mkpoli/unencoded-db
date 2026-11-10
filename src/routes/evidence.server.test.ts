@@ -773,13 +773,13 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
-  test('offers the grouped category taxonomy and splits kokuji by origin', async () => {
+  test('offers the grouped category taxonomy with dialect and reform groups', async () => {
     const db = createTestDatabase()
     try {
       const data = await newForm({ platform: { env: { DB: d1Binding(db) } } } as any) as any
-      expect(data.genres).toHaveLength(22)
+      expect(data.genres).toHaveLength(29)
       const labels = data.genres.map((genre: { label: string }) => genre.label)
-      for (const named of ['方言字', '日本國字', '朝鮮國字', '吳語', '閩東語', '樂譜', '醫藥', '化學', '度量衡', '道教', '切身', '音譯']) {
+      for (const named of ['方言字', '日本國字', '朝鮮國字', '吳語', '閩東語', '樂譜', '醫藥', '化學', '度量衡', '道教', '切身', '音譯', '略字・簡化字', '日本新字體', '日本擴張新字體', '大陸簡體字', '大陸二簡字', '韓國略字', '日本俗略字']) {
         expect(labels).toContain(named)
       }
       expect(labels).not.toContain('醫學')
@@ -787,6 +787,9 @@ describe('evidence routes', () => {
       expect(data.genres.find((genre: { slug: string }) => genre.slug === 'medicine')).toEqual({ slug: 'medicine', label: '醫藥', parent: null })
       expect(data.genres.find((genre: { slug: string }) => genre.slug === 'kokuji')).toEqual({ slug: 'kokuji', label: '日本國字', parent: 'dialect' })
       expect(data.genres.find((genre: { slug: string }) => genre.slug === 'dialect')).toEqual({ slug: 'dialect', label: '方言字', parent: null })
+      expect(data.genres.find((genre: { slug: string }) => genre.slug === 'abbreviation')).toEqual({ slug: 'abbreviation', label: '略字・簡化字', parent: null })
+      expect(data.genres.find((genre: { slug: string }) => genre.slug === 'shinjitai')).toEqual({ slug: 'shinjitai', label: '日本新字體', parent: 'abbreviation' })
+      expect(data.genres.find((genre: { slug: string }) => genre.slug === 'simplified-cn-2')).toEqual({ slug: 'simplified-cn-2', label: '大陸二簡字', parent: 'abbreviation' })
     } finally { db.close() }
   })
 
@@ -813,7 +816,7 @@ describe('evidence routes', () => {
       for (const genre of (await newForm({ platform: { env: { DB } } } as any) as any).genres as { slug: string; label: string }[]) {
         const browsed = await genrePage({ platform: { env: { DB } }, params: { locale: 'en', slug: genre.slug } } as any) as any
         expect(browsed.genre).toEqual(genre)
-        expect(browsed.genres).toHaveLength(22)
+        expect(browsed.genres).toHaveLength(29)
         expect(browsed.entries.map((row: { id: number }) => row.id)).toEqual(
           ['medicine', 'wu', 'taoism', 'dialect'].includes(genre.slug) ? [1] : []
         )
