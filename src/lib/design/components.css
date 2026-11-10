@@ -119,20 +119,6 @@
   font-family: var(--font-mono);
   font-size: 10px;
 }
-.entry-card .script-tag {
-  align-self: flex-start;
-  max-width: 100%;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--surface-sunken);
-  color: var(--muted);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.entry-card .script-tag:not(.han) { background: var(--accent-light); color: var(--accent); }
-
 /* The homepage gallery draws each record's description instead of printing it. */
 .card-grid.gallery { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
 .entry-card.gallery-card { padding: 16px; }

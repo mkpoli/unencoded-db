@@ -1,15 +1,13 @@
 <script lang="ts">
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { localizedHref, t, type Locale } from '$lib/i18n'
-  import { isHanScript } from '$lib/script'
 
   type Entry = { id: number; script: string; ids: string | null; equivalent_to: string | null; evidence: number; first_year: number | null; category: string | null }
-  type ScriptCount = { script: string; n: number }
   type IvdFilter = 'registered' | 'none'
-  let { data }: { data: { locale: Locale; entries: Entry[]; next: number | null; glyphs?: Record<string, string>; scripts?: ScriptCount[]; total?: number; script?: string | null; ivd?: IvdFilter | null } } = $props()
+  let { data }: { data: { locale: Locale; entries: Entry[]; next: number | null; glyphs?: Record<string, string>; script?: string | null; ivd?: IvdFilter | null } } = $props()
 
-  const listingHref = (overrides: { script?: string | null; ivd?: IvdFilter | null; before?: number | null } = {}) => {
-    const script = 'script' in overrides ? overrides.script : (data.script ?? null)
+  const listingHref = (overrides: { ivd?: IvdFilter | null; before?: number | null } = {}) => {
+    const script = data.script ?? null
     const ivd = 'ivd' in overrides ? overrides.ivd : (data.ivd ?? null)
     const params = new URLSearchParams()
     if (script) params.set('script', script)
@@ -27,16 +25,6 @@
   <p>{t(data.locale, 'app.tagline')}</p>
   <p><a class="quiet-link" href="/export.json">{t(data.locale, 'browse.export')}</a></p>
 </div>
-<nav class="script-tabs" aria-label={t(data.locale, 'field.script')}>
-  <a class="script-tab" aria-current={(data.script ?? null) === null ? 'page' : undefined} href={listingHref({ script: null })}>
-    <span class="script-name">{t(data.locale, 'browse.all')}</span> <span class="script-count">{data.total}</span>
-  </a>
-  {#each data.scripts ?? [] as item (item.script)}
-    <a class="script-tab" aria-current={data.script === item.script ? 'page' : undefined} href={listingHref({ script: item.script })} title={item.script}>
-      <span class="script-name">{item.script}</span> <span class="script-count">{item.n}</span>
-    </a>
-  {/each}
-</nav>
 <nav class="script-tabs" aria-label={t(data.locale, 'field.ivd')}>
   <a class="script-tab" aria-current={(data.ivd ?? null) === null ? 'page' : undefined} href={listingHref({ ivd: null })}>{t(data.locale, 'browse.all')}</a>
   <a class="script-tab" aria-current={data.ivd === 'registered' ? 'page' : undefined} href={listingHref({ ivd: 'registered' })}>{t(data.locale, 'field.ivdRegistered')}</a>
@@ -47,7 +35,6 @@
     {#each data.entries as entry (entry.id)}
       {@const glyph = entry.ids ? data.glyphs?.[entry.ids] : undefined}
       <a class="entry-card gallery-card" href={localizedHref(data.locale, `/entry/${entry.id}`)}>
-        <span class="script-tag" class:han={isHanScript(entry.script)} title={entry.script}>{entry.script}</span>
         <span class="glyph"><IdsGlyph ids={entry.ids} text={entry.ids || entry.script} path={glyph} /></span>
         {#if entry.ids}<span class="visually-hidden">{entry.ids}</span>{/if}
         {#if entry.equivalent_to}<span class="equivalent"><span class="visually-hidden">{t(data.locale, 'browse.equivalent', { character: entry.equivalent_to })}</span><span aria-hidden="true">= {entry.equivalent_to}</span></span>{/if}
@@ -80,7 +67,7 @@
       <a class="primary" href={localizedHref(data.locale, '/new')}>{t(data.locale, 'browse.addOne')} <span aria-hidden="true">→</span></a>
     {:else}
       <p>{t(data.locale, 'browse.emptyScript')}</p>
-      <a class="secondary" href={listingHref({ script: null })}>{t(data.locale, 'browse.all')}</a>
+      <a class="secondary" href={listingHref()}>{t(data.locale, 'browse.all')}</a>
     {/if}
   </div>
 {/if}

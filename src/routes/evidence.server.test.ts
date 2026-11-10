@@ -264,10 +264,10 @@ describe('evidence routes', () => {
   test('hides entries from listing, pagination and detail', async () => {
     const db = createTestDatabase()
     try {
-      db.exec("INSERT INTO entries (script, place, created_at) VALUES ('old', 'book', '2026')")
-      db.exec("INSERT INTO entries (script, place, created_at) VALUES ('hidden', 'book', '2026')")
+      db.exec("INSERT INTO entries (script, place, created_at) VALUES ('Han', 'book', '2026')")
+      db.exec("INSERT INTO entries (script, place, created_at) VALUES ('Han', 'book', '2026')")
       db.exec('UPDATE entries SET visible = 0 WHERE id = 2')
-      const insert = db.query("INSERT INTO entries (script, place, created_at, visible) VALUES ('new', 'book', '2026', ?)")
+      const insert = db.query("INSERT INTO entries (script, place, created_at, visible) VALUES ('Han', 'book', '2026', ?)")
       for (let i = 0; i < 45; i++) insert.run(i % 2)
       db.exec('UPDATE entries SET visible = 0 WHERE id = 1')
       const DB = d1Binding(db)
@@ -298,10 +298,10 @@ describe('evidence routes', () => {
         if (before !== undefined) url.searchParams.set('before', String(before))
         return await list({ platform: { env: { DB } }, url } as any) as any
       }
-      expect(await page()).toMatchObject({ entries: [], next: null, script: null, total: 0, scripts: [] })
+      expect(await page()).toMatchObject({ entries: [], next: null, script: null })
       const insert = db.query("INSERT INTO entries (script, place, created_at, visible) VALUES ('Han', 'book', '2026', ?)")
       for (let i = 0; i < 21; i++) insert.run(0)
-      expect(await page()).toMatchObject({ entries: [], next: null, script: null, total: 0, scripts: [] })
+      expect(await page()).toMatchObject({ entries: [], next: null, script: null })
       db.exec('UPDATE entries SET visible = 1 WHERE id <= 20')
       const twenty = await page()
       expect(twenty.entries).toHaveLength(20)
@@ -316,7 +316,7 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
-  test('filters by script and reports one count per script', async () => {
+  test('defaults to Han and still honours an explicit script', async () => {
     const db = createTestDatabase()
     try {
       const insert = db.query("INSERT INTO entries (script, place, created_at, visible) VALUES (?, 'book', '2026', ?)")
@@ -324,13 +324,13 @@ describe('evidence routes', () => {
       const DB = d1Binding(db)
       const listAt = (query: string) => list({ platform: { env: { DB } }, url: new URL(`https://example.test/en${query}`) } as any) as any
 
+      const plain = await listAt('')
+      expect(plain.entries.map((entry: { id: number; script: string }) => [entry.id, entry.script])).toEqual([[2, 'Han'], [1, 'Han']])
+      expect(plain).toMatchObject({ script: null })
       const filtered = await listAt('?script=Tangut')
       expect(filtered.entries.map((entry: { id: number; script: string }) => [entry.id, entry.script])).toEqual([[3, 'Tangut']])
-      expect(filtered).toMatchObject({ script: 'Tangut', total: 3, scripts: [{ script: 'Han', n: 2 }, { script: 'Tangut', n: 1 }] })
-
-      const empty = await listAt('?script=Kana')
-      expect(empty.entries).toEqual([])
-      expect(empty.scripts.at(-1)).toEqual({ script: 'Kana', n: 0 })
+      expect(filtered).toMatchObject({ script: 'Tangut' })
+      expect((await listAt('?script=Kana')).entries).toEqual([])
 
       await expect(listAt(`?script=${'x'.repeat(81)}`)).rejects.toMatchObject({ status: 404 })
       await expect(listAt('?script=%20')).rejects.toMatchObject({ status: 404 })
@@ -694,7 +694,7 @@ describe('evidence routes', () => {
       const both = await listAt('?ivd=registered&script=Han')
       expect(both.entries.map(entry => entry.id)).toEqual([1])
       expect(both).toMatchObject({ ivd: 'registered', script: 'Han' })
-      expect((await listAt('')).entries).toHaveLength(3)
+      expect((await listAt('')).entries).toHaveLength(2)
       await expect(listAt('?ivd=unknown')).rejects.toMatchObject({ status: 404 })
     } finally { db.close() }
   })

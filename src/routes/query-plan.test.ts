@@ -40,12 +40,6 @@ function capture(db: Database, found = false) {
   return { binding, plans, sqls }
 }
 
-// The counts table is one row per script; it must never make the page read the records.
-function assertCountPlan(plan: string[]) {
-  expect(plan.some(line => /SCAN script_counts/i.test(line))).toBe(true)
-  expect(plan.some(line => /\bSCAN\s+entries\b|USE TEMP B-TREE/i.test(line))).toBe(false)
-}
-
 function assertPlan(plan: string[], expected: RegExp) {
   expect(plan.some(line => expected.test(line))).toBe(true)
   expect(plan.some(line => /USE TEMP B-TREE/i.test(line))).toBe(false)
@@ -92,35 +86,33 @@ describe('public query plans', () => {
     ].sort())
   })
 
-  test('list uses the visible index for cursor and descending order', async () => {
+  test('list filters Han through the script index for cursor and descending order', async () => {
     const db = database()
     try {
       const { binding, plans } = capture(db)
       for (const path of ['/en', '/en?before=100', '/ja?before=100']) {
         await list({ platform: { env: { DB: binding } }, url: new URL(path, 'https://example.test') } as any)
       }
-      expect(plans).toHaveLength(6)
-      for (const i of [0, 2, 4]) assertPlan(plans[i], /SEARCH entries USING INDEX entries_visible_id \(id<\?\)/i)
-      for (const i of [1, 3, 5]) assertCountPlan(plans[i])
-      db.exec('DROP INDEX entries_visible_id')
+      expect(plans).toHaveLength(3)
+      for (const plan of plans) assertPlan(plan, /SEARCH entries USING INDEX entries_visible_script \(script=\? AND id<\?\)/i)
+      db.exec('DROP INDEX entries_visible_script')
       const withoutIndex = capture(db)
       await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/en?before=100') } as any)
-      expect(() => assertPlan(withoutIndex.plans[0], /SEARCH entries USING INDEX entries_visible_id \(id<\?\)/i)).toThrow()
+      expect(() => assertPlan(withoutIndex.plans[0], /entries_visible_script/i)).toThrow()
     } finally { db.close() }
   })
 
-  test('the script filter uses the script index and keeps counts off the records', async () => {
+  test('an explicit script uses the same index', async () => {
     const db = database()
     try {
       const { binding, plans } = capture(db)
-      await list({ platform: { env: { DB: binding } }, url: new URL('https://example.test/en?script=Han&before=100') } as any)
-      expect(plans).toHaveLength(2)
+      await list({ platform: { env: { DB: binding } }, url: new URL('https://example.test/en?script=Tangut&before=100') } as any)
+      expect(plans).toHaveLength(1)
       assertPlan(plans[0], /SEARCH entries USING INDEX entries_visible_script \(script=\? AND id<\?\)/i)
-      assertCountPlan(plans[1])
 
       db.exec('DROP INDEX entries_visible_script')
       const withoutIndex = capture(db)
-      await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/en?script=Han') } as any)
+      await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/en?script=Tangut') } as any)
       expect(() => assertPlan(withoutIndex.plans[0], /entries_visible_script/i)).toThrow()
     } finally { db.close() }
   })
@@ -131,11 +123,8 @@ describe('public query plans', () => {
       const { binding, plans } = capture(db)
       await list({ platform: { env: { DB: binding } }, url: new URL('https://example.test/en?ivd=registered&before=100') } as any)
       await list({ platform: { env: { DB: binding } }, url: new URL('https://example.test/en?ivd=none&script=Han&before=100') } as any)
-      expect(plans).toHaveLength(4)
-      assertPlan(plans[0], /SEARCH entries USING INDEX entries_visible_ivd \(ivd_status=\? AND id<\?\)/i)
-      assertCountPlan(plans[1])
-      assertPlan(plans[2], /SEARCH entries USING INDEX entries_visible_ivd_script \(ivd_status=\? AND script=\? AND id<\?\)/i)
-      assertCountPlan(plans[3])
+      expect(plans).toHaveLength(2)
+      for (const plan of plans) assertPlan(plan, /SEARCH entries USING INDEX entries_visible_ivd_script \(ivd_status=\? AND script=\? AND id<\?\)/i)
 
       for (let index = 0; index < 40; index++) {
         db.exec(`INSERT INTO entries (script, place, created_at, visible, ivd_status, ivd_sequence) VALUES ('${index % 2 ? 'Han' : 'Tangut'}', 'book', '2026', ${index < 30 ? 1 : 0}, ${index % 2 ? "'registered', 'U+4E00 U+E0100'" : "'none', NULL"})`)
@@ -145,10 +134,10 @@ describe('public query plans', () => {
       await list({ platform: { env: { DB: analyzed.binding } }, url: new URL('https://example.test/en?ivd=registered&script=Han') } as any)
       assertPlan(analyzed.plans[0], /SEARCH entries USING INDEX entries_visible_ivd_script \(ivd_status=\? AND script=\? AND id<\?\)/i)
 
-      db.exec('DROP INDEX entries_visible_ivd')
+      db.exec('DROP INDEX entries_visible_ivd_script')
       const withoutIndex = capture(db)
       await list({ platform: { env: { DB: withoutIndex.binding } }, url: new URL('https://example.test/en?ivd=none') } as any)
-      expect(() => assertPlan(withoutIndex.plans[0], /entries_visible_ivd \(ivd_status=\? AND id<\?\)/i)).toThrow()
+      expect(() => assertPlan(withoutIndex.plans[0], /entries_visible_ivd_script \(ivd_status=\? AND script=\? AND id<\?\)/i)).toThrow()
       await expect(list({ platform: { env: { DB: binding } }, url: new URL('https://example.test/en?ivd=unknown') } as any)).rejects.toMatchObject({ status: 404 })
     } finally { db.close() }
   })
