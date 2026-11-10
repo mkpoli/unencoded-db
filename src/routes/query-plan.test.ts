@@ -7,6 +7,7 @@ import { load as list } from './[locale]/+page.server'
 import { load as detail } from './[locale]/entry/[id]/+page.server'
 import { load as edit, actions as editActions } from './[locale]/entry/[id]/edit/+page.server'
 import { load as history } from './[locale]/entry/[id]/history/+page.server'
+import { load as globalHistory } from './[locale]/history/+page.server'
 import { GET as image } from './[locale]/entry/[id]/image/+server'
 import { load as queue } from './[locale]/moderate/+page.server'
 import { load as reportsQueue } from './[locale]/moderate/reports/+page.server'
@@ -62,6 +63,7 @@ describe('public query plans', () => {
       '[locale]/entry/[id]/+page.server.ts',
       '[locale]/entry/[id]/edit/+page.server.ts',
       '[locale]/entry/[id]/history/+page.server.ts',
+      '[locale]/history/+page.server.ts',
       '[locale]/entry/[id]/image/+server.ts',
       '[locale]/entry/[id]/evidence/[evidence]/image/+server.ts',
       '[locale]/entry/[id]/evidence/[evidence]/image/[media]/+server.ts',
@@ -184,6 +186,21 @@ describe('public query plans', () => {
       const revisions = plans.filter(plan => plan.some(line => /SEARCH r USING PRIMARY KEY \(entry_id=\? AND revision<\?\)/i.test(line)))
       expect(revisions).toHaveLength(2)
       for (const plan of revisions) expect(plan.some(line => /SCAN|TEMP B-TREE/i.test(line))).toBe(false)
+    } finally { db.close() }
+  })
+
+  test('global history ranges the revision time index', async () => {
+    const db = database()
+    try {
+      const { binding, plans } = capture(db)
+      for (const path of ['/en/history', '/en/history?before=2026-01-01T00%3A00%3A00.000Z&entry=1&revision=1']) {
+        await globalHistory({ platform: { env: { DB: binding } }, params: { locale: 'en' }, url: new URL(path, 'https://example.test') } as any)
+      }
+      expect(plans).toHaveLength(2)
+      for (const plan of plans) {
+        assertPlan(plan, /SEARCH r USING INDEX entry_revisions_history/i)
+        expect(plan.some(line => /SCAN\s+entry_revisions/i.test(line))).toBe(false)
+      }
     } finally { db.close() }
   })
 

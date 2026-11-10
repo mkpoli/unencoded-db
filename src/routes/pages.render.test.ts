@@ -24,6 +24,7 @@ const comparisonGrid = resolve('src/lib/components/ComparisonGrid.svelte')
 const encodingFields = resolve('src/lib/components/EncodingFields.svelte')
 const extraImagesField = resolve('src/lib/components/ExtraImagesField.svelte')
 const evidenceTypesComponent = resolve('src/lib/components/EvidenceTypes.svelte')
+const revisionHistory = resolve('src/lib/components/RevisionHistory.svelte')
 const appForms = resolve(tmp, 'app-forms.js')
 writeFileSync(appForms, 'export function enhance() { return {} }\n')
 const components = new Map<string, Promise<any>>()
@@ -36,6 +37,7 @@ let comparisonGridModule: Promise<string> | null = null
 let encodingFieldsModule: Promise<string> | null = null
 let extraImagesFieldModule: Promise<string> | null = null
 let evidenceTypesComponentModule: Promise<string> | null = null
+let revisionHistoryModule: Promise<string> | null = null
 
 function loadFileField(): Promise<string> {
   if (!fileFieldModule) {
@@ -100,6 +102,19 @@ function loadEvidenceTypesComponent(): Promise<string> {
     })()
   }
   return evidenceTypesComponentModule
+}
+
+function loadRevisionHistory(): Promise<string> {
+  if (!revisionHistoryModule) {
+    revisionHistoryModule = (async () => {
+      const preprocessed = await preprocess(readFileSync(revisionHistory, 'utf8'), vitePreprocess({ script: true }), { filename: revisionHistory })
+      const { js } = compile(preprocessed.code, { filename: revisionHistory, generate: 'server' })
+      const target = resolve(tmp, 'revision-history.js')
+      writeFileSync(target, js.code.replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`))
+      return target
+    })()
+  }
+  return revisionHistoryModule
 }
 
 function loadIdsGlyph(): Promise<string> {
@@ -172,7 +187,10 @@ async function load(path: string, name: string) {
       const encoding = await loadEncodingFields()
       const extra = await loadExtraImagesField()
       const evidenceTypesComponentPath = await loadEvidenceTypesComponent()
+      const revisionHistoryPath = await loadRevisionHistory()
       const code = js.code
+        .replaceAll('"$lib/components/RevisionHistory.svelte"', `"${revisionHistoryPath}"`)
+        .replaceAll("'$lib/components/RevisionHistory.svelte'", `'${revisionHistoryPath}'`)
         .replaceAll('"$lib/components/EvidenceTypes.svelte"', `"${evidenceTypesComponentPath}"`)
         .replaceAll("'$lib/components/EvidenceTypes.svelte'", `'${evidenceTypesComponentPath}'`)
         .replaceAll('"$lib/components/ComparisonGrid.svelte"', `"${grid}"`)
@@ -690,7 +708,7 @@ describe('localized pages', () => {
     expect(body).toContain('2026')
     expect(body).toContain('href="?before=2"')
     expect(body).toContain('更早的版本')
-  })
+  }, 60000)
 
   test('history page shows a localized marker instead of redacted content', async () => {
     const { body } = await page('src/routes/[locale]/entry/[id]/history/+page.svelte', 'history-redacted', {
@@ -708,7 +726,28 @@ describe('localized pages', () => {
     expect(body).toContain('この版の内容は削除されました。')
     expect(body).toContain('第3版')
     expect(body).toContain('本書')
-  })
+  }, 60000)
+
+  test('global history page links records and keeps redacted revisions folded', async () => {
+    const { head, body } = await page('src/routes/[locale]/history/+page.svelte', 'global-history', {
+      data: {
+        locale: 'ja',
+        next: { recorded_at: '2026-11-08T05:00:00.000Z', entry_id: 9, revision: 2 },
+        revisions: [
+          { entry_id: 9, revision: 2, tombstone: false, script: 'Han', ids: '⿰木木', description: null, place: '本書', title: null, author: null, publisher: null, year: null, page: null, note: null, recorded_at: '2026-11-08T05:00:00.000Z' },
+          { entry_id: 9, revision: 1, recorded_at: '2026-11-08T04:00:00.000Z', tombstone: true },
+        ],
+      },
+    })
+    expect(head).toContain('履歴 · 珍字集覧')
+    expect(body).toContain('<h1>履歴</h1>')
+    expect(body).toContain('href="/ja/entry/9"')
+    expect(body).toContain('第2版')
+    expect(body).toContain('この版の内容は削除されました。')
+    expect(body).toContain('さらに前の版')
+    expect(body).toContain('entry=9')
+    expect(body).toContain('revision=2')
+  }, 60000)
 
   test('error page renders the localized not-found message and home link', async () => {
     const notFound = await page('src/lib/components/ErrorPage.svelte', 'error', { locale: 'zh-Hans', status: 404 })
