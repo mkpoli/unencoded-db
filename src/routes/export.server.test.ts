@@ -33,6 +33,7 @@ type ExportedRecord = {
   id: number
   script: string
   ids: string | null
+  ids_all: string[]
   description: string
   place: string
   title: string | null
@@ -72,6 +73,7 @@ describe('JSON export', () => {
         id: first,
         script: 'Han',
         ids: null,
+        ids_all: [],
         description: 'Description Han',
         place: 'Example collection',
         title: 'Title',
@@ -88,6 +90,17 @@ describe('JSON export', () => {
         evidence: [{ id: 0, place: 'Example collection', title: 'Title', author: 'Author', publisher: 'Publisher', year: '1900', page: '12', note: 'First', date_precision: 'year', has_image: 0, url: null, provider: null, provider_url: null, types: [] }],
       })
       expect(JSON.stringify(body)).not.toContain('Secret')
+    } finally { db.close() }
+  })
+
+  test('exports the first description as ids and every description as ids_all', async () => {
+    const db = database()
+    try {
+      const id = insert(db, 'Han')
+      db.query('UPDATE entries SET ids = ?, revision = revision + 1 WHERE id = ?').run('⿰木木 ⿱木木', id)
+      const { body } = await exportJson(db)
+      expect(body.records[0]!.ids).toBe('⿰木木')
+      expect(body.records[0]!.ids_all).toEqual(['⿰木木', '⿱木木'])
     } finally { db.close() }
   })
 

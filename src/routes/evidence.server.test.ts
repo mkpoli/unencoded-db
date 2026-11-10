@@ -176,6 +176,30 @@ describe('evidence routes', () => {
     } finally { db.close() }
   })
 
+  test('keeps every submitted description when the list is rejected', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const form = new FormData()
+      form.set('script', 'Han')
+      form.set('place', 'Book')
+      form.set('url', 'https://example.com/source')
+      for (let i = 0; i < 21; i++) form.append('ids', '⿰木' + '木'.repeat(i))
+      const event = {
+        request: new Request('https://example.test/en/new', { method: 'POST', body: form }),
+        url: new URL('https://example.test/en/new'),
+        cookies: testCookies().cookies,
+        platform: { env: { DB: d1Binding(db), IMAGES: images.bucket } },
+        params: { locale: 'en' },
+      } as any
+      const result = await actions.default!(event) as any
+      expect(result.status).toBe(400)
+      expect(result.data.errors.ids).toBeTruthy()
+      expect(result.data.values.ids.split(' ')).toHaveLength(21)
+      expect(db.query('SELECT COUNT(*) AS count FROM entries').get()).toEqual({ count: 0 })
+    } finally { db.close() }
+  })
+
   test('rejects more than ten boxes of one relationship without saving', async () => {
     const db = createTestDatabase()
     const images = fakeImages()
@@ -633,6 +657,26 @@ describe('evidence routes', () => {
       const e = event({ ...record, sense_gloss: 'river', sense_reading: 'he' }, d1Binding(db), images)
       await expect(actions.default!(e)).rejects.toMatchObject({ status: 303 })
       expect(db.query('SELECT gloss, reading FROM senses ORDER BY id').all()).toEqual([{ gloss: 'river', reading: 'he' }])
+    } finally { db.close() }
+  })
+
+  test('stores several descriptions and matches any of them', async () => {
+    const db = createTestDatabase()
+    const images = fakeImages()
+    try {
+      const DB = d1Binding(db)
+      await expect(actions.default!(event({ ...record, ids: '⿰木木 ⿱木木' }, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      expect(db.query('SELECT ids FROM entries').get()).toEqual({ ids: '⿰木木 ⿱木木' })
+      expect(db.query('SELECT ids FROM entry_ids ORDER BY ids').all()).toEqual([{ ids: '⿰木木' }, { ids: '⿱木木' }])
+      const shown = await detail({ platform: { env: { DB } }, params: { locale: 'en', id: '1' } } as any) as { entry: { ids: string } }
+      expect(shown.entry.ids).toBe('⿰木木 ⿱木木')
+
+      await expect(actions.default!(event({ ...record, ids: '⿱木木', place: 'Another page' }, DB, images))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+      expect((db.query('SELECT count(*) AS n FROM entries').get() as { n: number }).n).toBe(1)
+      expect((db.query('SELECT count(*) AS n FROM evidence').get() as { n: number }).n).toBe(2)
+
+      db.exec("UPDATE entries SET ids = '⿰水木', revision = revision + 1 WHERE id = 1")
+      expect(db.query('SELECT ids FROM entry_ids').all()).toEqual([{ ids: '⿰水木' }])
     } finally { db.close() }
   })
 

@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import { SCRIPT_MAX } from '$lib/script'
 import { readIvd } from '$lib/server/ivd'
+import { idsInvalid, rawIds, readIds } from '$lib/server/ids'
 import { addEvidence, addEvidenceMedia, evidenceFields, listEvidence, listEvidenceMedia, primaryEvidenceId, readEvidenceFields, updateEvidence } from '$lib/server/evidence-links'
 import { createImageKey, deleteSourceImage, putSourceImage, readSourceImage, readSourceImages, type ImageError } from '$lib/server/images'
 import { readComparisons } from '$lib/server/related'
@@ -61,7 +62,7 @@ async function discardImage(db: D1Database, bucket: R2Bucket, key: string) {
 
 function readCharacter(form: FormData) {
   const script = text(form, 'script')
-  const ids = text(form, 'ids')
+  const ids = readIds(form) ?? ''
   const description = text(form, 'description')
   const radical = text(form, 'radical')
   const equivalentTo = readEquivalentTo(form.get('equivalent_to'))
@@ -127,7 +128,7 @@ export const actions: Actions = {
     const generation = positive(form.get('edit_generation'))
     const submitted: FormValues = {
       script: values.script,
-      ids: values.ids,
+      ids: rawIds(form).join(' '),
       description: values.description,
       radical: values.radical,
       equivalent_to: values.equivalentTo.value ?? '',
@@ -141,7 +142,7 @@ export const actions: Actions = {
     }
     const errors: Record<string, string> = {}
     if (!values.script || values.script.length > SCRIPT_MAX) errors.script = t(locale, 'error.script')
-    if (values.ids.length > 200) errors.ids = t(locale, 'error.length')
+    if (idsInvalid(form)) errors.ids = t(locale, 'error.length')
     if (values.description.length > 5000) errors.description = t(locale, 'error.length')
     if (values.radical.length > 20) errors.radical = t(locale, 'error.length')
     if (!encodings) errors.encodings = t(locale, 'error.encodings')

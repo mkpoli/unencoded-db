@@ -3,11 +3,13 @@
   import EvidenceTypes from '$lib/components/EvidenceTypes.svelte'
   import FileField from '$lib/components/FileField.svelte'
   import ExtraImagesField from '$lib/components/ExtraImagesField.svelte'
+  import IdsMore from '$lib/components/IdsMore.svelte'
   import { cleanLinkInput } from '$lib/link-input'
   import type { PostInfo } from '$lib/source-url'
   import ComparisonGrid from '$lib/components/ComparisonGrid.svelte'
   import EncodingFields from '$lib/components/EncodingFields.svelte'
   import ScriptSelect from '$lib/components/ScriptSelect.svelte'
+  import { splitIds } from '$lib/ids'
   import { localizedHref, t, type Locale } from '$lib/i18n'
   import type { Comparison } from '$lib/comparison-rows'
   import type { Encoding } from '$lib/encodings'
@@ -92,6 +94,11 @@
   const selectedCollections = $derived(form?.action === 'character' && Array.isArray(form.values?.collections) ? form.values.collections as string[] : (data.collections ?? []).map(collection => collection.slug))
   let senses = $state<Sense[]>(untrack(() => form?.action === 'character' && Array.isArray(form.senses) ? form.senses.map(sense => ({ gloss: sense.gloss, reading: sense.reading })) : (data.senses ?? [])))
   let comparisons = $state<Comparison[]>(untrack(() => form?.action === 'character' ? form.comparisons?.rows ?? [] : (data.entry.comparisons ?? [])))
+  let ids = $state<string[]>(untrack(() => {
+    const raw = form?.action === 'character' ? String(form.values?.ids ?? '') : data.entry.ids
+    const submitted = splitIds(raw)
+    return submitted.length ? submitted : ['']
+  }))
 
   function addSense() {
     if (senses.length < 10) senses.push({ gloss: '', reading: '' })
@@ -157,7 +164,8 @@
       </div>
       <div class="field">
         <label class="field-label" for="ids">{t(data.locale, 'field.ids')}</label>
-        <input id="ids" name="ids" maxlength="200" value={current('ids')} aria-invalid={!!characterError('ids')} />
+        <input id="ids" name="ids" maxlength="200" bind:value={ids[0]} aria-invalid={!!characterError('ids')} />
+        <IdsMore bind:values={ids} locale={data.locale} />
         {#if characterError('ids')}<p class="field-error">{characterError('ids')}</p>{/if}
         <div class="field-grid">
           <div class="field">

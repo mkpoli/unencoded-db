@@ -94,6 +94,8 @@
   "field.genre": "類屬",
   "field.ids": "漢字結構描述（IDS）",
   "field.idsWorkshop": "IDS Workshop",
+  "field.idsAdd": "新增另一種描述",
+  "field.idsRemove": "刪除此描述",
   "field.imagePaste": "也可以用Ctrl+V貼上圖片。",
   "field.imagePreview": "所選圖片預覽",
   "field.ivd": "IVD",

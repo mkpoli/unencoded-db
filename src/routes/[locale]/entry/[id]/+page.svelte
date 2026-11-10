@@ -3,6 +3,7 @@
   import CropField from '$lib/components/CropField.svelte'
   import EvidenceTypes from '$lib/components/EvidenceTypes.svelte'
   import FileField from '$lib/components/FileField.svelte'
+  import { splitIds } from '$lib/ids'
   import { cleanLinkInput } from '$lib/link-input'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
@@ -20,6 +21,7 @@
   type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; equivalent_to: string | null; strokes: number | null; ivd_status: 'registered' | 'none' | null; ivd_sequence: string | null; created_at: string }
   let { data }: { data: { locale: Locale; entry: Entry; glyph: string | null; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; encodings: Encoding[]; media: EvidenceMedia[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
+  const sequences = $derived(splitIds(entry.ids))
   let comparisons = $derived(data.comparisons ?? [])
   let evidence = $derived(data.evidence ?? [])
   let media = $derived(data.media ?? [])
@@ -49,10 +51,10 @@
   </header>
   <section class="character-card" aria-labelledby="character-name">
     <div class="character-mark">
-      <h1 class="character-glyph" class:character-glyph-text={!entry.ids} id="character-name">
-        {#if entry.ids}
-          <span class="visually-hidden">{entry.ids}</span>
-          <IdsGlyph ids={entry.ids} text={entry.ids} path={data.glyph} />
+      <h1 class="character-glyph" class:character-glyph-text={!sequences.length} id="character-name">
+        {#if sequences.length}
+          <span class="visually-hidden">{sequences.join(' ')}</span>
+          <IdsGlyph ids={sequences[0]} text={sequences[0]} path={data.glyph} />
         {:else}
           {entry.script}
         {/if}
@@ -73,7 +75,7 @@
       {/if}
       <dl class="entry-meta">
         <div class="entry-row"><dt>{t(data.locale, 'field.script')}</dt><dd>{entry.script}</dd></div>
-        {#if entry.ids}<div class="entry-row"><dt>{t(data.locale, 'field.ids')}</dt><dd>{entry.ids}</dd></div>{/if}
+        {#if sequences.length}<div class="entry-row"><dt>{t(data.locale, 'field.ids')}</dt><dd>{#each sequences as sequence}<span class="ids-sequence">{sequence}</span>{/each}</dd></div>{/if}
         {#if entry.description}<div class="entry-row"><dt>{t(data.locale, 'field.description')}</dt><dd>{entry.description}</dd></div>{/if}
         {#if entry.radical}<div class="entry-row"><dt>{t(data.locale, 'field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
         {#each data.encodings ?? [] as encoding (encoding.charset + '\u0000' + encoding.code)}<div class="entry-row"><dt>{encodingSetLabel(encoding.charset)}</dt><dd>{encoding.code}</dd></div>{/each}
@@ -277,3 +279,7 @@
     </form>
   </details>
 </div>
+
+<style>
+  .ids-sequence { display: block }
+</style>

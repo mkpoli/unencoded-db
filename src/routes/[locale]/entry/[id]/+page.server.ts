@@ -12,7 +12,7 @@ import { addRelation, listRelations } from '$lib/server/relation-graph'
 import { createImageKey, putSourceImage, readSourceImage } from '$lib/server/images'
 import { cookieOptions, hashToken } from '$lib/server/attribution'
 import { glyphPaths, warmGlyphs } from '$lib/server/glyphs'
-import { cleanIds } from '$lib/ids'
+import { primaryIds } from '$lib/ids'
 import { localizedHref, type Locale } from '$lib/i18n'
 import { readEvidenceTypes } from '$lib/evidence-types'
 import type { PageServerLoad } from './$types'
@@ -53,7 +53,7 @@ export const load: PageServerLoad = async ({ params, platform, locals, url }) =>
   const senses = await listSenses(platform.env.DB, Number(params.id))
   const storedEncodings = await listEncodings(platform.env.DB, Number(params.id))
   const encodings = storedEncodings.length ? storedEncodings : entry.encoded_as ? [{ charset: 'unicode', code: entry.encoded_as }] : []
-  const sequence = entry.ids ? cleanIds(entry.ids) : null
+  const sequence = primaryIds(entry.ids)
   const paths = await glyphPaths(platform.env.IMAGES, sequence ? [sequence] : [])
   const glyph = sequence && Object.prototype.hasOwnProperty.call(paths, sequence) ? paths[sequence] : null
   if (sequence && !glyph) platform.ctx?.waitUntil(warmGlyphs(platform.env.IMAGES, [sequence]))

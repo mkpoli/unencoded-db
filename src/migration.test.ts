@@ -146,3 +146,26 @@ describe('evidence types migration', () => {
     } finally { db.close() }
   })
 })
+
+describe('description index migration', () => {
+  test('splits existing descriptions on spaces, tabs and newlines', () => {
+    const db = createTestDatabase('0035_evidence_types.sql')
+    try {
+      db.exec("INSERT INTO entries (id, script, ids, place, created_at, visible) VALUES (1, 'Han', '⿰木木\t⿱木木\n⿰水木', 'Book', '2026', 1)")
+      applyMigration(db, '0036_entry_ids.sql')
+      expect(db.query('SELECT ids FROM entry_ids WHERE entry_id = 1 ORDER BY ids').all()).toEqual([
+        { ids: '⿰木木' }, { ids: '⿰水木' }, { ids: '⿱木木' },
+      ])
+    } finally { db.close() }
+  })
+
+  test('triggers split any whitespace on insert and update', () => {
+    const db = createTestDatabase()
+    try {
+      db.exec("INSERT INTO entries (id, script, ids, place, created_at, visible) VALUES (1, 'Han', '⿰木木\t⿱木木', 'Book', '2026', 1)")
+      expect(db.query('SELECT ids FROM entry_ids ORDER BY ids').all()).toEqual([{ ids: '⿰木木' }, { ids: '⿱木木' }])
+      db.exec("UPDATE entries SET ids = '⿰水木\n⿰火火', revision = revision + 1 WHERE id = 1")
+      expect(db.query('SELECT ids FROM entry_ids ORDER BY ids').all()).toEqual([{ ids: '⿰水木' }, { ids: '⿰火火' }])
+    } finally { db.close() }
+  })
+})

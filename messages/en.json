@@ -94,6 +94,8 @@
   "field.genre": "Category",
   "field.ids": "Ideographic description (IDS)",
   "field.idsWorkshop": "IDS Workshop",
+  "field.idsAdd": "Add another description",
+  "field.idsRemove": "Remove this description",
   "field.imagePaste": "Or paste an image with Ctrl+V.",
   "field.imagePreview": "Selected image preview",
   "field.ivd": "IVD",

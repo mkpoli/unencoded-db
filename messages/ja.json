@@ -94,6 +94,8 @@
   "field.genre": "分類",
   "field.ids": "漢字構成記述（IDS）",
   "field.idsWorkshop": "IDS Workshop",
+  "field.idsAdd": "別の記述を追加",
+  "field.idsRemove": "この記述を削除",
   "field.imagePaste": "またはCtrl+Vで画像を貼り付けられます。",
   "field.imagePreview": "選択した画像のプレビュー",
   "field.ivd": "IVD",

@@ -15,6 +15,8 @@ import { parseSenses, saveSenses } from '$lib/server/senses'
 import { readIvd } from '$lib/server/ivd'
 import { cleanSourceUrl } from '$lib/source-url'
 import { readEvidenceTypes } from '$lib/evidence-types'
+import { idsInvalid, rawIds, readIds } from '$lib/server/ids'
+import { splitIds } from '$lib/ids'
 import type { Actions, PageServerLoad } from './$types'
 
 function imageError(locale: Locale, error: ImageError): string {
@@ -70,6 +72,8 @@ export const actions: Actions = {
     const locale = params.locale
     const form = await request.formData()
     const values = fieldValues(form)
+    const ids = readIds(form)
+    values.ids = rawIds(form).join(' ')
     const types = readEvidenceTypes(form)
     const errors: FormErrors = {}
     const rawProvider = String(form.get('provider') ?? '').normalize('NFC').trim()
@@ -88,7 +92,8 @@ export const actions: Actions = {
         : name === 'place' ? t(locale, 'error.placeSeen')
         : t(locale, 'error.length')
     }
-    if (!values.ids.trim()) errors.ids = t(locale, 'error.ids')
+    if (idsInvalid(form)) errors.ids = t(locale, 'error.length')
+    else if (!values.ids.trim()) errors.ids = t(locale, 'error.ids')
     const source = await readSourceImage(form)
     if (source.error && source.error !== 'missing') errors.image = imageError(locale, source.error)
     const extraSource = await readSourceImages(form)
@@ -104,6 +109,7 @@ export const actions: Actions = {
       const parsed = readEvidence(fallback)
       if (parsed) row = { ...parsed, place: '' }
     }
+    if (row) row = { ...row, ids }
     const radical = String(form.get('radical') ?? '').normalize('NFC').trim().slice(0, 20) || null
     const encodings = parseEncodings(form)
     if (!encodings) errors.encodings = t(locale, 'error.encodings')
@@ -146,7 +152,7 @@ export const actions: Actions = {
     let duplicate: { id: number } | null = null
     if (row.ids) {
       try {
-        duplicate = await platform.env.DB.prepare(`SELECT id FROM entries WHERE script = ? AND ids = ? AND ${publicEntryPredicate} ORDER BY id LIMIT 1`).bind(row.script, row.ids).first<{ id: number }>()
+        duplicate = await platform.env.DB.prepare(`SELECT e.id FROM entry_ids x JOIN entries e ON e.id = x.entry_id WHERE e.script = ? AND e.visible = 1 AND x.ids IN (SELECT value FROM json_each(?)) ORDER BY e.id LIMIT 1`).bind(row.script, JSON.stringify(splitIds(row.ids))).first<{ id: number }>()
       } catch {
         duplicate = null
       }
