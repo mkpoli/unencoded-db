@@ -9,6 +9,8 @@ import { listGenres, genresForEntry, selectedGenres, saveGenres } from '$lib/ser
 import { listCollections, collectionsForEntry, selectedCollections, saveCollections } from '$lib/server/collections'
 import { listTags, tagsForEntry, parseTags, saveTags } from '$lib/server/tags'
 import { listSenses, parseSenses, replaceSenses } from '$lib/server/senses'
+import { listEncodings, parseEncodings, primaryEncoding, saveEncodings } from '$lib/server/encodings'
+import type { Encoding } from '$lib/encodings'
 import { cookieOptions, hashToken } from '$lib/server/attribution'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import { isLocale, localizedHref, t, type Locale } from '$lib/i18n'
@@ -29,7 +31,7 @@ type EntryRow = {
   comparisons: string
 }
 
-type FormValues = Record<string, string | string[]>
+type FormValues = Record<string, string | string[] | Encoding[]>
 
 function idOf(id: string) {
   if (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id))) error(404)
@@ -59,10 +61,9 @@ function readCharacter(form: FormData) {
   const ids = text(form, 'ids')
   const description = text(form, 'description')
   const radical = text(form, 'radical')
-  const encodedAs = text(form, 'encoded_as')
   const rawStrokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
   const strokes = Number.isInteger(rawStrokes) && rawStrokes >= 0 && rawStrokes < 200 ? rawStrokes : null
-  return { script, ids, description, radical, encodedAs, strokes }
+  return { script, ids, description, radical, strokes }
 }
 
 export const load: PageServerLoad = async ({ params, platform }) => {
@@ -74,7 +75,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
      FROM entries WHERE id = ? AND ${publicEntryPredicate}`
   ).bind(id).first<EntryRow>()
   if (!row) error(404)
-  const [evidence, senses, tags, genres, collections, allGenres, allCollections, allTags] = await Promise.all([
+  const [evidence, senses, tags, genres, collections, allGenres, allCollections, allTags, encodings] = await Promise.all([
     listEvidence(platform.env.DB, id),
     listSenses(platform.env.DB, id),
     tagsForEntry(platform.env.DB, id),
@@ -83,6 +84,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     listGenres(platform.env.DB),
     listCollections(platform.env.DB),
     listTags(platform.env.DB),
+    listEncodings(platform.env.DB, id),
   ])
   return {
     entry: { ...row, comparisons: JSON.parse(row.comparisons) as Comparison[] },
@@ -94,6 +96,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
     allGenres,
     allCollections,
     allTags,
+    encodings,
   }
 }
 
@@ -113,6 +116,7 @@ export const actions: Actions = {
     const collections = selectedCollections(form)
     const senses = parseSenses(form)
     const comparisons = readComparisons(form)
+    const encodings = parseEncodings(form)
     const revision = positive(form.get('revision'))
     const generation = positive(form.get('edit_generation'))
     const submitted: FormValues = {
@@ -120,8 +124,8 @@ export const actions: Actions = {
       ids: values.ids,
       description: values.description,
       radical: values.radical,
-      encoded_as: values.encodedAs,
       strokes: values.strokes === null ? '' : String(values.strokes),
+      encodings: encodings ?? [],
       ivd_status: ivdStatus,
       ivd_sequence: ivdSequence,
       tags: tags.join(', '),
@@ -133,7 +137,7 @@ export const actions: Actions = {
     if (values.ids.length > 200) errors.ids = t(locale, 'error.length')
     if (values.description.length > 5000) errors.description = t(locale, 'error.length')
     if (values.radical.length > 20) errors.radical = t(locale, 'error.length')
-    if (values.encodedAs.length > 80) errors.encoded_as = t(locale, 'error.length')
+    if (!encodings) errors.encodings = t(locale, 'error.encodings')
     if (senses === null) errors.senses = t(locale, 'error.length')
     if (!ivd) errors.ivd_sequence = t(locale, 'error.ivd')
     if (comparisons.invalid) errors.comparison = t(locale, 'error.comparison')
@@ -147,12 +151,12 @@ export const actions: Actions = {
       senses: senses ?? [],
       message,
     })
-    if (!ivd || Object.keys(errors).length) return failForm(400, t(locale, 'error.fields'))
+    if (!ivd || !encodings || Object.keys(errors).length) return failForm(400, t(locale, 'error.fields'))
     if (!revision || !generation) return failForm(400, t(locale, 'error.fields'))
     const updated = await platform.env.DB.prepare(
       `UPDATE entries SET script = ?, ids = ?, description = ?, radical = ?, encoded_as = ?, strokes = ?, ivd_status = ?, ivd_sequence = ?, comparisons = ?, revision = revision + 1
        WHERE id = ? AND ${publicEntryPredicate} AND revision = ? AND edit_generation = ? RETURNING id`
-    ).bind(values.script, values.ids || null, values.description || null, values.radical || null, values.encodedAs || null, values.strokes,
+    ).bind(values.script, values.ids || null, values.description || null, values.radical || null, primaryEncoding(encodings), values.strokes,
       ivd.status, ivd.sequence, JSON.stringify(comparisons.rows), id, revision, generation).first<{ id: number }>()
     if (!updated) {
       const visible = await platform.env.DB.prepare(`SELECT id FROM entries WHERE id = ? AND ${publicEntryPredicate}`).bind(id).first()
@@ -161,6 +165,7 @@ export const actions: Actions = {
     }
     const primary = await primaryEvidenceId(platform.env.DB, id)
     await saveTags(platform.env.DB, id, tags)
+    await saveEncodings(platform.env.DB, id, encodings)
     await saveGenres(platform.env.DB, id, genres)
     await saveCollections(platform.env.DB, id, collections, primary)
     await replaceSenses(platform.env.DB, id, senses ?? [], primary)

@@ -2,6 +2,7 @@
   import { enhance } from '$app/forms'
   import { untrack } from 'svelte'
   import ComparisonGrid from '$lib/components/ComparisonGrid.svelte'
+  import EncodingFields from '$lib/components/EncodingFields.svelte'
   import FileField from '$lib/components/FileField.svelte'
   import { cleanLinkInput } from '$lib/link-input'
   import type { PostInfo } from '$lib/source-url'
@@ -9,11 +10,12 @@
   import { handleContributionResult } from '$lib/contribution-result'
   import { localizedHref, t, type Locale } from '$lib/i18n'
   import { DEFAULT_SCRIPT } from '$lib/script'
+  import type { Encoding } from '$lib/encodings'
   import { cleanIds, workshopUrl } from '$lib/ids'
   import partsUrl from 'ids-input/data/han-parts.json.gz?url'
   import { estimateStrokes } from '$lib/strokes'
 
-  type Values = Record<string, string> & { genres?: string[]; collections?: string[] }
+  type Values = Record<string, string> & { genres?: string[]; collections?: string[]; encodings?: Encoding[] }
   type Suggestion = { ids: string; script: string }
   type Genre = { slug: string; label: string; parent: string | null }
   type Collection = { slug: string; label: string }
@@ -89,7 +91,7 @@
     }).catch(() => {})
   })
   // A validation notice belongs to the section that holds the failing field.
-  const errorOrder = ['ids', 'description', 'image', 'url', 'place', 'note', 'title', 'author', 'publisher', 'year', 'page', 'provider', 'provider_url'] as const
+  const errorOrder = ['ids', 'description', 'encodings', 'image', 'url', 'place', 'note', 'title', 'author', 'publisher', 'year', 'page', 'provider', 'provider_url'] as const
   const operators = new Set([...'⿰⿱⿲⿳⿴⿵⿶⿷⿸⿹⿺⿻'])
   const suggestions = $derived(related(data.suggestions ?? [], ids))
 
@@ -213,6 +215,7 @@
         <input type="hidden" name="tags" value={[...tags, ...(tagDraft.trim() ? [tagDraft.trim()] : [])].join(', ')} />
         <p class="field-help">{t(data.locale, 'field.tagsHint')}</p>
       </fieldset>
+      <EncodingFields locale={data.locale} values={form?.values?.encodings} error={form?.errors?.encodings} />
       <fieldset class="senses-field">
         <legend class="field-label">{t(data.locale, 'field.senses')}</legend>
         {#each senses as sense, i}
