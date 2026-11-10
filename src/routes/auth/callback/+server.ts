@@ -20,6 +20,7 @@ export const GET: RequestHandler = async event => {
   event.cookies.delete(flow, { path: '/', secure: session.secure })
   let identity: { issuer: string; subject: string }
   let profile: Profile = { name: null, picture: null }
+  let profileLoaded = false
   try {
     const provider = await discover(cfg.issuer)
     const tokens = await fetchJson(provider.token_endpoint, {
@@ -29,8 +30,12 @@ export const GET: RequestHandler = async event => {
     }) as { id_token?: unknown; access_token?: unknown }
     if (typeof tokens.id_token !== 'string') throw new Error('Missing ID token')
     identity = await verifyIdentity(tokens.id_token, provider.jwks_uri, cfg, row.nonce)
-    if (typeof tokens.access_token === 'string' && provider.userinfo_endpoint)
-      profile = await fetchProfile(provider.userinfo_endpoint, tokens.access_token, cfg.issuer, identity.subject).catch(() => profile)
+    if (typeof tokens.access_token === 'string' && provider.userinfo_endpoint) {
+      try {
+        profile = await fetchProfile(provider.userinfo_endpoint, tokens.access_token, cfg.issuer, identity.subject)
+        profileLoaded = true
+      } catch { /* A withheld profile leaves the stored one in place. */ }
+    }
   } catch { error(502, 'Sign-in unavailable') }
   const token = random()
   const now = new Date()
@@ -38,9 +43,9 @@ export const GET: RequestHandler = async event => {
     await db.prepare('INSERT INTO oidc_completions (state_hash, issuer, subject, new_hash, now, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
       .bind(hash, identity.issuer, identity.subject, await hashToken(token), now.toISOString(), new Date(now.getTime() + sessionCookieSettings.maxAge * 1000).toISOString()).run()
   } catch { error(409, 'Sign-in could not be completed') }
-  if (profile.name || profile.picture) {
+  if (profileLoaded) {
     try {
-      await db.prepare('UPDATE atlas_identities SET name = COALESCE(?, name), picture = COALESCE(?, picture) WHERE issuer = ? AND subject = ?')
+      await db.prepare('UPDATE atlas_identities SET name = ?, picture = ? WHERE issuer = ? AND subject = ?')
         .bind(profile.name, profile.picture, identity.issuer, identity.subject).run()
     } catch { /* The profile is optional; the session is already complete. */ }
   }

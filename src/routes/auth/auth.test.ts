@@ -30,6 +30,7 @@ async function setup() {
   const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true })
   const jwk = { ...await exportJWK(publicKey), kid: 'one' }
   let nonce = '', verifier = '', subject = 'alice', userinfoSubject: string | null = null
+  let userinfoName: string | null = 'Alice', userinfoPicture: string | null = '/api/avatars/alice.webp'
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     if (url.endsWith('/.well-known/openid-configuration')) return Response.json({ issuer, authorization_endpoint: `${issuer}/authorize?provider=atlas`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/keys`, userinfo_endpoint: `${issuer}/userinfo` })
@@ -43,7 +44,7 @@ async function setup() {
       const id_token = await new SignJWT({ nonce: stored?.nonce ?? nonce }).setProtectedHeader({ alg: 'RS256', kid: 'one' }).setIssuer(issuer).setSubject(subject).setAudience('client').setIssuedAt(now).setExpirationTime(now + 300).sign(privateKey)
       return Response.json({ id_token, access_token: 'access' })
     }
-    if (url.endsWith('/userinfo')) return Response.json({ sub: userinfoSubject ?? subject, name: 'Alice', picture: '/api/avatars/alice.webp' })
+    if (url.endsWith('/userinfo')) return Response.json({ sub: userinfoSubject ?? subject, ...(userinfoName === null ? {} : { name: userinfoName }), ...(userinfoPicture === null ? {} : { picture: userinfoPicture }) })
     throw new Error(`Unexpected URL ${url}`)
   }) as unknown as typeof fetch
   const start = async () => {
@@ -68,7 +69,7 @@ async function setup() {
     expect(url.searchParams.get('code_challenge')).toBe(btoa(String.fromCharCode(...digest)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''))
     return `/auth/callback?code=test&state=${state}`
   }
-  return { sqlite, jar, event, start, setSubject: (value: string) => { subject = value }, setUserinfoSubject: (value: string) => { userinfoSubject = value } }
+  return { sqlite, jar, event, start, setSubject: (value: string) => { subject = value }, setUserinfoSubject: (value: string) => { userinfoSubject = value }, setUserinfoProfile: (name: string | null, picture: string | null) => { userinfoName = name; userinfoPicture = picture } }
 }
 
 describe('OIDC routes', () => {
@@ -171,6 +172,15 @@ describe('OIDC routes', () => {
       s.setUserinfoSubject('another')
       await expect(callback(s.event(await s.start()))).rejects.toMatchObject({ status: 303 })
       expect(s.sqlite.query('SELECT issuer, subject, name, picture FROM atlas_identities').get()).toEqual({ issuer, subject: 'alice', name: null, picture: null })
+    } finally { s.sqlite.close() }
+  })
+  test('clears a profile the issuer stops returning', async () => {
+    const s = await setup()
+    try {
+      await expect(callback(s.event(await s.start()))).rejects.toMatchObject({ status: 303 })
+      s.setUserinfoProfile(null, null)
+      await expect(callback(s.event(await s.start()))).rejects.toMatchObject({ status: 303 })
+      expect(s.sqlite.query('SELECT name, picture FROM atlas_identities').get()).toEqual({ name: null, picture: null })
     } finally { s.sqlite.close() }
   })
   test('merges anonymous attribution without rewriting historical creator ids', async () => {
