@@ -91,6 +91,7 @@ button:not(:disabled):hover { border-color: var(--line-strong); }
   min-height: 44px;
   padding: 12px 18px;
   border: 1px solid var(--accent-solid);
+  border-radius: var(--radius-sm);
   background: var(--accent-solid);
   color: var(--on-color);
   font-size: 13px;
