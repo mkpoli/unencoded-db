@@ -28,7 +28,7 @@
 <Seo title={t('add.title')} />
 <div class="page narrow stack">
   <div class="stack heading"><h1>{t('add.title')}</h1><p class="muted">{t('add.intro')}</p></div>
-  {#if actionError || form?.error}<p class="notice bad" role="alert" tabindex="-1" bind:this={errorNotice}>{actionError ? t(`error.${actionError}`) : form?.error === 'relatedCharacters' ? label('error.relatedCharacters', 'Check each comparison and use at most 50. Character, relationship, differences and evidence must fit their limits.') : t(`error.${form?.error}`)}</p>{/if}
+  {#if actionError || (!pending && form?.error)}<p class="notice bad" role="alert" tabindex="-1" bind:this={errorNotice}>{actionError ? t(`error.${actionError}`) : form?.error === 'relatedCharacters' ? label('error.relatedCharacters', 'Check each comparison and use at most 50. Character, relationship, differences and evidence must fit their limits.') : t(`error.${form?.error}`)}</p>{/if}
   <form class="stack" method="POST" enctype="multipart/form-data" use:enhance={submission.submit}>
     <section class="panel stack"><ScriptPicker value={form?.values?.script} other={form?.values?.script_other} /><IdsField bind:value={ids} /><div class="field"><label for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="4">{form?.values?.description ?? ''}</textarea><p class="hint">{t('field.descriptionHint')}</p></div></section>
     <section class="stack"><h2>{t('entry.sightings')}</h2><div class="panel stack"><PicturePicker optional onready={(working) => busy = working} /><SightingFields values={form?.values} /></div></section>

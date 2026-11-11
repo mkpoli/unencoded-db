@@ -24,7 +24,7 @@
 <Seo {title} />
 <div class="page narrow stack">
   <h1>{title}</h1>
-  {#if actionError || form?.error}<p class="notice bad" role="alert" tabindex="-1" bind:this={errorNotice}>{t(`error.${actionError || form?.error}`)}</p>{/if}
+  {#if actionError || (!pending && form?.error)}<p class="notice bad" role="alert" tabindex="-1" bind:this={errorNotice}>{t(`error.${actionError || form?.error}`)}</p>{/if}
   <form class="stack" method="POST" enctype="multipart/form-data" use:enhance={submission.submit}>
     <section class="panel stack">
       <PicturePicker optional onready={(working) => busy = working} />

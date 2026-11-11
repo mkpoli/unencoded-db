@@ -8,20 +8,22 @@ type CallbackArgs = Parameters<Callback>[0]
 
 function setup() {
   let pending = false, blocked = false, error: string | null = null, focused = 0, cancelled = 0, updated = 0
+  const pendingAtFocus: boolean[] = []
+  const updateOptions: unknown[] = []
   const submission = draftSubmit({
     blocked: () => blocked,
     setPending: value => pending = value,
     setError: value => error = value,
-    focusError: async () => { focused++ },
+    focusError: async () => { focused++; pendingAtFocus.push(pending) },
   })
   function start(controller = new AbortController()) {
     const callback = submission.submit({ controller, cancel: () => { cancelled++ } } as unknown as SubmitArgs) as Callback | undefined
     return { controller, callback }
   }
   async function finish(callback: Callback, result: CallbackArgs['result']) {
-    await callback({ result, update: async () => { updated++ } } as CallbackArgs)
+    await callback({ result, update: async (options) => { updated++; updateOptions.push(options) } } as CallbackArgs)
   }
-  return { ...submission, start, finish, setBlocked: (value: boolean) => blocked = value, state: () => ({ pending, error, focused, cancelled, updated }) }
+  return { ...submission, start, finish, pendingAtFocus, updateOptions, setBlocked: (value: boolean) => blocked = value, state: () => ({ pending, error, focused, cancelled, updated }) }
 }
 
 test('maps action errors like the error page', () => {
@@ -53,6 +55,23 @@ test('applies failures and redirects using the default update', async () => {
   expect(draft.state()).toEqual({ pending: false, error: null, focused: 1, cancelled: 0, updated: 1 })
   await draft.finish(draft.start().callback!, { type: 'redirect', status: 303, location: '/' })
   expect(draft.state()).toEqual({ pending: false, error: null, focused: 1, cancelled: 0, updated: 2 })
+})
+
+test('maps untyped hook errors inline and focuses after clearing pending', async () => {
+  for (const message of ['slow', 'paused', 'banned', 'unknown']) {
+    const draft = setup()
+    const result = { message } as unknown as CallbackArgs['result']
+    await draft.finish(draft.start().callback!, result)
+    expect(draft.state()).toEqual({ pending: false, error: message === 'unknown' ? 'title' : message, focused: 1, cancelled: 0, updated: 0 })
+    expect(draft.pendingAtFocus).toEqual([false])
+  }
+})
+
+test('keeps form controls intact on non-redirect success', async () => {
+  const draft = setup()
+  await draft.finish(draft.start().callback!, { type: 'success', status: 200, data: {} })
+  expect(draft.updateOptions).toEqual([{ reset: false }])
+  expect(draft.state()).toEqual({ pending: false, error: null, focused: 0, cancelled: 0, updated: 1 })
 })
 
 test('aborts and ignores a late response after teardown', async () => {

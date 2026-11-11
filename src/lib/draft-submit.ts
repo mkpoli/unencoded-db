@@ -24,10 +24,17 @@ export function draftSubmit(options: {
         if (controller.signal.aborted || destroyed) return
         if (result.type === 'error') {
           options.setError(actionErrorKey(result.status, result.error))
-        } else {
+        } else if (result.type === 'success') {
+          await update({ reset: false })
+        } else if (result.type === 'failure' || result.type === 'redirect') {
           await update()
+        } else {
+          options.setError(actionErrorKey(undefined, result))
         }
-        if (!destroyed && (result.type === 'error' || result.type === 'failure')) await options.focusError()
+        if (!destroyed && result.type !== 'success' && result.type !== 'redirect') {
+          options.setPending(false)
+          await options.focusError()
+        }
       } finally {
         if (active === controller) active = undefined
         if (!destroyed) options.setPending(false)
