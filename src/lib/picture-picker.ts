@@ -1,7 +1,13 @@
 import { prepare, thumbnail, type Box, type Prepared } from './picture'
+import { moveEdge, normalizeBox, type Edge } from './crop'
 
-type State = { picture: Prepared | null; box: Box | null; thumb: File | null; busy: boolean; bad: boolean; thumbnailBad: boolean }
+type State = { picture: Prepared | null; box: Box | null; thumb: File | null; busy: boolean; preparing: boolean; bad: boolean; thumbnailBad: boolean }
 type Processing = { prepare: typeof prepare; thumbnail: typeof thumbnail }
+type Schedule = (run: () => void) => () => void
+const scheduleAdjustment: Schedule = run => {
+  const timer = setTimeout(run, 150)
+  return () => clearTimeout(timer)
+}
 
 export function preventPendingSubmit(event: Event, busy: boolean) {
   if (!busy) return
@@ -23,14 +29,19 @@ export function beginPointerBox(picker: PicturePickerState, stage: Pick<HTMLElem
 
 // Only the latest selection or crop may publish its result or release the submit gate.
 export class PicturePickerState {
-  private state: State = { picture: null, box: null, thumb: null, busy: false, bad: false, thumbnailBad: false }
+  private state: State = { picture: null, box: null, thumb: null, busy: false, preparing: false, bad: false, thumbnailBad: false }
   private generation = 0
-  private preparing = false
+  private cancelAdjustment: (() => void) | null = null
   private disposed = false
   private drawing: number | null = null
   private saved: { box: Box | null; thumb: File | null } = { box: null, thumb: null }
 
-  constructor(private publish: (state: State) => void, private processing: Processing = { prepare, thumbnail }) {}
+  constructor(private publish: (state: State) => void, private processing: Processing = { prepare, thumbnail }, private schedule: Schedule = scheduleAdjustment) {}
+
+  private cancelScheduledAdjustment() {
+    this.cancelAdjustment?.()
+    this.cancelAdjustment = null
+  }
 
   private update(change: Partial<State>) {
     if (this.disposed) return
@@ -42,26 +53,25 @@ export class PicturePickerState {
 
   async take(source: Blob) {
     if (this.disposed) return
+    this.cancelScheduledAdjustment()
     const generation = ++this.generation
-    this.preparing = true
-    this.update({ busy: true, bad: false, thumbnailBad: false, thumb: null })
+    this.update({ busy: true, preparing: true, bad: false, thumbnailBad: false, thumb: null })
     try {
       const picture = await this.processing.prepare(source)
       if (!this.current(generation)) return
-      this.preparing = false
       this.saved = { box: null, thumb: null }
-      this.update({ picture, box: null })
+      this.update({ picture, box: null, preparing: false })
       await this.makeThumbnail(picture, null, generation, true)
     } catch {
       if (this.current(generation)) {
-        this.preparing = false
-        this.update({ ...this.saved, busy: false, bad: true, thumbnailBad: false })
+        this.update({ ...this.saved, busy: false, preparing: false, bad: true, thumbnailBad: false })
       }
     }
   }
 
   beginBox(): number | null {
-    if (this.disposed || !this.state.picture || this.preparing) return null
+    if (this.disposed || !this.state.picture || this.state.preparing) return null
+    this.cancelScheduledAdjustment()
     const generation = ++this.generation
     this.drawing = generation
     this.update({ box: null, thumb: null, busy: true, bad: false, thumbnailBad: false })
@@ -78,13 +88,30 @@ export class PicturePickerState {
     this.drawing = null
     let box = this.state.box
     if (box && (box[2] < 4 || box[3] < 4)) box = null
+    box = normalizeBox(box, picture.width, picture.height)
     this.update({ box })
     await this.makeThumbnail(picture, box, generation)
   }
 
+  adjustEdge(edge: Edge, value: number) {
+    const picture = this.state.picture
+    if (this.disposed || !picture || picture.width < 4 || picture.height < 4 || this.state.preparing || !Number.isFinite(value)) return
+    const current = this.drawing !== null && this.current(this.drawing) ? this.saved.box : this.state.box
+    const box = moveEdge(edge, value, current, picture.width, picture.height)
+    this.cancelScheduledAdjustment()
+    const generation = ++this.generation
+    this.drawing = null
+    this.update({ box, thumb: null, busy: true, bad: false, thumbnailBad: false })
+    this.cancelAdjustment = this.schedule(() => {
+      this.cancelAdjustment = null
+      if (this.current(generation)) void this.makeThumbnail(picture, box, generation)
+    })
+  }
+
   async clearBox() {
     const picture = this.state.picture
-    if (this.disposed || !picture || this.preparing) return
+    if (this.disposed || !picture || this.state.preparing) return
+    this.cancelScheduledAdjustment()
     const generation = ++this.generation
     this.update({ box: null, thumb: null, busy: true, bad: false, thumbnailBad: false })
     await this.makeThumbnail(picture, null, generation)
@@ -104,11 +131,11 @@ export class PicturePickerState {
 
   clear() {
     if (this.disposed) return
+    this.cancelScheduledAdjustment()
     ++this.generation
-    this.preparing = false
     this.saved = { box: null, thumb: null }
-    this.update({ picture: null, box: null, thumb: null, busy: false, bad: false, thumbnailBad: false })
+    this.update({ picture: null, box: null, thumb: null, busy: false, preparing: false, bad: false, thumbnailBad: false })
   }
 
-  dispose() { this.disposed = true; ++this.generation }
+  dispose() { this.cancelScheduledAdjustment(); this.disposed = true; ++this.generation }
 }

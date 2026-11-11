@@ -11,15 +11,17 @@ function deferred<T>() {
 function fixture() {
   const preparations: ReturnType<typeof deferred<Prepared>>[] = []
   const thumbnails: { bitmap: ImageBitmap; box: Box | null; result: ReturnType<typeof deferred<File>> }[] = []
-  let state!: { picture: Prepared | null; box: Box | null; thumb: File | null; busy: boolean; bad: boolean; thumbnailBad: boolean }
+  let scheduled: (() => void) | null = null
+  let state!: { picture: Prepared | null; box: Box | null; thumb: File | null; busy: boolean; preparing: boolean; bad: boolean; thumbnailBad: boolean }
   const picker = new PicturePickerState(value => { state = value }, {
     prepare: () => { const result = deferred<Prepared>(); preparations.push(result); return result.promise },
     thumbnail: (bitmap, box) => { const result = deferred<File>(); thumbnails.push({ bitmap, box, result }); return result.promise },
-  })
+  }, run => { scheduled = run; return () => { scheduled = null } })
   const picture = (name: string): Prepared => ({ file: new File([name], name), bitmap: { name } as unknown as ImageBitmap, width: 100, height: 100 })
   const thumb = (name: string) => new File([name], name)
   const tick = () => Promise.resolve()
-  return { picker, preparations, thumbnails, picture, thumb, tick, get state() { return state } }
+  const flush = () => { const run = scheduled; scheduled = null; run?.() }
+  return { picker, preparations, thumbnails, picture, thumb, tick, flush, get state() { return state } }
 }
 
 async function selected(f: ReturnType<typeof fixture>, name = 'a') {
@@ -162,6 +164,7 @@ describe('picture selection and thumbnail readiness', () => {
     f.picker.clear()
     expect(f.picker.beginBox()).toBeNull()
     await f.picker.clearBox()
+    await f.picker.adjustEdge('left', 10)
     expect(f.state).toBe(before)
     expect(f.preparations).toHaveLength(1)
     await after
@@ -325,6 +328,155 @@ describe('picture selection and thumbnail readiness', () => {
     f.thumbnails[3].result.resolve(f.thumb('whole'))
     await tiny
     expect(f.state.busy).toBe(false)
+  })
+
+  test('rapid keyboard adjustments coalesce and restore the last successful crop on failure', async () => {
+    const f = fixture()
+    await selected(f)
+    f.picker.adjustEdge('left', 10)
+    f.picker.adjustEdge('top', 20)
+    expect(f.state).toMatchObject({ box: [10, 20, 90, 80], thumb: null, busy: true })
+    const event = new Event('submit', { cancelable: true })
+    preventPendingSubmit(event, f.state.busy)
+    expect(event.defaultPrevented).toBe(true)
+    expect(f.thumbnails).toHaveLength(1)
+    f.flush()
+    expect(f.thumbnails[1].box).toEqual([10, 20, 90, 80])
+    const savedThumb = f.thumb('saved')
+    f.thumbnails[1].result.resolve(savedThumb)
+    await f.tick()
+    expect(f.state).toMatchObject({ box: [10, 20, 90, 80], thumb: savedThumb, busy: false })
+    f.picker.adjustEdge('right', 80)
+    f.flush()
+    f.thumbnails[2].result.reject(new Error('encode'))
+    await f.tick()
+    expect(f.state).toMatchObject({ box: [10, 20, 90, 80], thumb: savedThumb, busy: false, thumbnailBad: true })
+  })
+
+  test('adjusting during a draw uses the last complete crop and invalidates the draw', async () => {
+    const f = fixture()
+    await selected(f)
+    const generation = f.picker.beginBox()!
+    f.picker.moveBox(generation, [1, 2, 2, 3])
+    f.picker.adjustEdge('left', 10)
+    expect(f.state.box).toEqual([10, 0, 90, 100])
+    f.picker.moveBox(generation, [10, 10, 50, 50])
+    await f.picker.endBox(generation)
+    expect(f.state).toMatchObject({ box: [10, 0, 90, 100], busy: true })
+    f.flush()
+    expect(f.thumbnails[1].box).toEqual([10, 0, 90, 100])
+    f.thumbnails[1].result.resolve(f.thumb('crop'))
+    await f.tick()
+    expect(f.state.busy).toBe(false)
+  })
+
+  test('images smaller than the server minimum cannot acquire a crop', async () => {
+    const f = fixture()
+    const pending = f.picker.take(new Blob())
+    f.preparations[0].resolve({ ...f.picture('tiny'), width: 2, height: 100 })
+    await f.tick()
+    f.thumbnails[0].result.resolve(f.thumb('whole'))
+    await pending
+    f.picker.adjustEdge('top', 10)
+    f.flush()
+    expect(f.state).toMatchObject({ box: null, busy: false })
+    expect(f.thumbnails).toHaveLength(1)
+  })
+
+  test('non-finite edges do not schedule work or change state', async () => {
+    const f = fixture()
+    await selected(f)
+    const before = f.state
+    f.picker.adjustEdge('left', NaN)
+    f.picker.adjustEdge('right', Infinity)
+    f.flush()
+    expect(f.state).toBe(before)
+    expect(f.thumbnails).toHaveLength(1)
+  })
+
+  test('clear, replacement, pointer draw and disposal cancel queued adjustment encodes', async () => {
+    for (const action of ['clear', 'replacement', 'draw', 'dispose'] as const) {
+      const f = fixture()
+      await selected(f)
+      f.picker.adjustEdge('left', 10)
+      if (action === 'clear') f.picker.clear()
+      else if (action === 'replacement') void f.picker.take(new Blob())
+      else if (action === 'draw') f.picker.beginBox()
+      else f.picker.dispose()
+      f.flush()
+      expect(f.thumbnails).toHaveLength(1)
+    }
+  })
+
+  test('an older in-flight adjustment cannot release a later queued adjustment', async () => {
+    const f = fixture()
+    await selected(f)
+    f.picker.adjustEdge('left', 10)
+    f.flush()
+    f.picker.adjustEdge('top', 20)
+    f.thumbnails[1].result.resolve(f.thumb('old'))
+    await f.tick()
+    expect(f.state).toMatchObject({ box: [10, 20, 90, 80], thumb: null, busy: true })
+    f.flush()
+    f.thumbnails[2].result.resolve(f.thumb('new'))
+    await f.tick()
+    expect(f.state).toMatchObject({ thumb: { name: 'new' }, busy: false })
+  })
+
+  test('failed replacement restores a keyboard-selected crop', async () => {
+    const f = fixture()
+    const picture = await selected(f)
+    f.picker.adjustEdge('left', 10)
+    f.flush()
+    const thumb = f.thumb('keyboard-crop')
+    f.thumbnails[1].result.resolve(thumb)
+    await f.tick()
+    const replacement = f.picker.take(new Blob())
+    f.preparations[1].reject(new Error('decode'))
+    await replacement
+    expect(f.state).toMatchObject({ picture, box: [10, 0, 90, 100], thumb, busy: false, bad: true, thumbnailBad: false })
+  })
+
+  test('full-image edges and pointer selection submit no box', async () => {
+    const f = fixture()
+    await selected(f)
+    f.picker.adjustEdge('left', 10)
+    f.flush()
+    f.thumbnails[1].result.resolve(f.thumb('crop'))
+    await f.tick()
+    f.picker.adjustEdge('left', 0)
+    expect(f.state).toMatchObject({ box: null, thumb: null, busy: true })
+    f.flush()
+    expect(f.thumbnails[2].box).toBeNull()
+    f.thumbnails[2].result.resolve(f.thumb('whole'))
+    await f.tick()
+    const generation = f.picker.beginBox()!
+    f.picker.moveBox(generation, [0, 0, 100, 100])
+    const draw = f.picker.endBox(generation)
+    expect(f.thumbnails[3].box).toBeNull()
+    f.thumbnails[3].result.resolve(f.thumb('whole'))
+    await draw
+    expect(f.state.box).toBeNull()
+  })
+
+  test('adjustments during replacement cannot change the old image', async () => {
+    const f = fixture()
+    await selected(f)
+    const replacement = f.picker.take(new Blob())
+    await f.picker.adjustEdge('left', 10)
+    expect(f.state).toMatchObject({ box: null, thumb: null, busy: true, preparing: true })
+    expect(f.thumbnails).toHaveLength(1)
+    f.preparations[1].resolve(f.picture('replacement'))
+    await f.tick()
+    expect(f.state).toMatchObject({ preparing: false, busy: true })
+    f.thumbnails[1].result.resolve(f.thumb('new-whole'))
+    await replacement
+    f.picker.adjustEdge('left', 10)
+    expect(f.state).toMatchObject({ box: [10, 0, 90, 100], preparing: false, busy: true })
+    f.flush()
+    f.thumbnails[2].result.resolve(f.thumb('new-crop'))
+    await f.tick()
+    expect(f.state.thumb?.name).toBe('new-crop')
   })
 
   test('crop can supersede the first thumbnail; failure and disposal do not publish stale work', async () => {
