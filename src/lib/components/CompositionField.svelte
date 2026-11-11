@@ -3,7 +3,7 @@
   // until someone opens it, so a record without an analysis looks like the rest of the form. The
   // parsed parts are the starting point; an editor may add, rename or remove them, type a role
   // beyond the three, and name a formation the roles cannot express.
-  import { tick, untrack } from 'svelte'
+  import { onMount, tick, untrack } from 'svelte'
   import { analyze, composeValue, formationOf, parseComposition, FORMATIONS, FORMATION_MAX, PART_MAX, PARTS_MAX, ROLES, ROLE_MAX } from '$lib/composition'
   import { formationFromLabel, formationLabel, roleFromLabel, roleLabel } from '$lib/composition-labels'
   import { splitIds } from '$lib/ids'
@@ -13,11 +13,19 @@
 
   let { ids = '', value = '', locale }: { ids?: string; value?: string; locale: Locale } = $props()
 
-  /** The rows and formation a stored value gives, for the description it was chosen for. */
+  const uid = $props.id()
+  const formationId = `${uid}-formation`
+  const roleOptions = `${uid}-roles`
+  const formationOptions = `${uid}-formations`
+
+  let hydrated = $state(false)
+  onMount(() => { hydrated = true })
+
+  /** The rows and formation a stored value gives, or null while the description is not one. */
   function load(storedValue: string, sequence: string, at: Locale) {
     const stored = parseComposition(storedValue)
     const base = analyze(sequence, stored)
-    if (!base) return { rows: [] as Row[], formation: '' }
+    if (!base) return null
     return {
       rows: base.parts.map(part => ({ part: part.part, roleText: part.role ? roleLabel(at, part.role) : '' })),
       formation: stored?.ids === sequence && stored.formation ? formationLabel(at, stored.formation) : '',
@@ -27,14 +35,37 @@
   const primary = $derived(splitIds(ids)[0] ?? '')
   const parsed = $derived(analyze(primary, null))
   const initial = untrack(() => load(value, primary, locale))
-  let rows = $state<Row[]>(initial.rows)
-  let formationText = $state(initial.formation)
+  let rows = $state<Row[]>(initial?.rows ?? [])
+  let formationText = $state(initial?.formation ?? '')
+  let partsBox = $state<HTMLDivElement>()
+  let loadedFor = untrack(() => primary)
+  let loadedValue = untrack(() => value)
+  let loadedLocale = untrack(() => locale)
 
-  // A failed submission returns its own value; a changed description starts from the new parts.
+  // Keep unsaved rows while the description is being typed; reset them when it becomes a
+  // different valid description, or when a submitted value comes back. A language change
+  // translates the standard labels in place.
   $effect(() => {
-    const next = load(value, primary, locale)
+    const sequence = primary
+    const storedValue = value
+    const at = locale
+    const next = load(storedValue, sequence, at)
+    if (!next) return
+    if (sequence === loadedFor && storedValue === loadedValue) {
+      if (at === loadedLocale) return
+      rows = rows.map(row => {
+        const role = roleFromLabel(loadedLocale, row.roleText)
+        return { ...row, roleText: role ? roleLabel(at, role) : '' }
+      })
+      if (formationText) formationText = formationLabel(at, formationFromLabel(loadedLocale, formationText))
+      loadedLocale = at
+      return
+    }
     rows = next.rows
     formationText = next.formation
+    loadedFor = sequence
+    loadedValue = storedValue
+    loadedLocale = at
   })
 
   const filled = $derived(rows.filter(row => row.part.trim()))
@@ -45,14 +76,13 @@
   const override = $derived(formationText.trim() ? formationFromLabel(locale, formationText) : '')
   const resolved = $derived(override || suggested)
   const set = $derived(Boolean(tags.length || override))
-  const serialized = $derived(composeValue(primary, filled.map(row => row.part.trim()), roleCodes, override || null))
+  const serialized = $derived(set ? composeValue(primary, filled.map(row => row.part.trim()), roleCodes, override || null) : '')
 
   async function add() {
     if (rows.length >= PARTS_MAX) return
     rows = [...rows, { part: '', roleText: '' }]
     await tick()
-    const inputs = document.querySelectorAll<HTMLInputElement>('.composition-part-input')
-    inputs[inputs.length - 1]?.focus()
+    partsBox?.querySelector<HTMLInputElement>('.composition-row:last-child .composition-part-input')?.focus()
   }
 
   function remove(index: number) {
@@ -76,10 +106,8 @@
     </summary>
 
     <div class="composition-body">
-      <p class="field-help" id="composition-hint">{t(locale, 'field.formationHint')}</p>
-
       {#if rows.length}
-        <div class="composition-parts">
+        <div class="composition-parts" bind:this={partsBox}>
           <div class="composition-part-head" aria-hidden="true">
             <span>{t(locale, 'field.part')}</span>
             <span>{t(locale, 'field.role')}</span>
@@ -95,17 +123,19 @@
                 aria-label={`${t(locale, 'field.part')} ${index + 1}`}
                 autocomplete="off"
                 spellcheck="false"
+                disabled={!hydrated}
               />
               <input
                 class="input"
                 bind:value={row.roleText}
                 maxlength={ROLE_MAX}
-                list="composition-roles"
+                list={roleOptions}
                 placeholder={t(locale, 'field.role')}
                 aria-label={`${t(locale, 'field.role')} ${index + 1}`}
                 autocomplete="off"
+                disabled={!hydrated}
               />
-              <button type="button" class="composition-remove" aria-label={`${t(locale, 'field.removePart')} ${index + 1}`} onclick={() => remove(index)}>
+              <button type="button" class="composition-remove" aria-label={`${t(locale, 'field.removePart')} ${index + 1}`} onclick={() => remove(index)} disabled={!hydrated}>
                 <span aria-hidden="true">×</span>
               </button>
             </div>
@@ -113,26 +143,26 @@
         </div>
       {/if}
 
-      <button type="button" class="composition-add" disabled={rows.length >= PARTS_MAX} onclick={add}>+ {t(locale, 'field.addPart')}</button>
+      <button type="button" class="composition-add" disabled={!hydrated || rows.length >= PARTS_MAX} onclick={add}>+ {t(locale, 'field.addPart')}</button>
 
       <div class="composition-formation">
-        <label class="field-label" for="composition-formation">{t(locale, 'field.formationOverride')}</label>
+        <label class="field-label" for={formationId}>{t(locale, 'field.formationOverride')}</label>
         <input
-          id="composition-formation"
+          id={formationId}
           class="input"
           bind:value={formationText}
           maxlength={FORMATION_MAX}
-          list="composition-formations"
+          list={formationOptions}
           placeholder={formationLabel(locale, suggested)}
           autocomplete="off"
+          disabled={!hydrated}
         />
-        <p class="field-help">{t(locale, 'field.formationDerived', { formation: formationLabel(locale, suggested) })}</p>
       </div>
 
-      <datalist id="composition-roles">
+      <datalist id={roleOptions}>
         {#each ROLES as role}<option value={roleLabel(locale, role)}></option>{/each}
       </datalist>
-      <datalist id="composition-formations">
+      <datalist id={formationOptions}>
         {#each FORMATIONS as formation}<option value={formationLabel(locale, formation)}></option>{/each}
       </datalist>
       <input type="hidden" name="composition" value={serialized} />
@@ -159,6 +189,7 @@
   .composition-part-input { text-align: center; }
   .composition-remove { width: 28px; min-height: 32px; align-self: stretch; padding: 0; border: 0; background: none; color: var(--muted); font-size: 1.2rem; line-height: 1; cursor: pointer; }
   .composition-remove:hover { color: var(--wrong); }
+  .composition-remove:disabled { cursor: default; }
   .composition-add { justify-self: start; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: var(--text-sm); cursor: pointer; }
   .composition-add:hover { text-decoration: underline; }
   .composition-add:disabled { color: var(--muted); cursor: default; text-decoration: none; }

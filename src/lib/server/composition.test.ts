@@ -23,9 +23,8 @@ describe('submitted composition', () => {
       .toBe('{"ids":"⿰青鳥","parts":["青","鳥","口"],"roles":["亦聲","semantic",""],"formation":"形聲兼會意"}')
   })
 
-  test('keeps parts without roles and a formation without parts', () => {
-    expect(readComposition(form('{"ids":"⿰青鳥","parts":["青","鳥"],"roles":[]}'), '⿰青鳥'))
-      .toBe('{"ids":"⿰青鳥","parts":["青","鳥"],"roles":["",""],"formation":null}')
+  test('drops parts without roles and keeps a formation without parts', () => {
+    expect(readComposition(form('{"ids":"⿰青鳥","parts":["青","鳥"],"roles":[]}'), '⿰青鳥')).toBeNull()
     expect(readComposition(form('{"ids":"木","formation":"指事"}'), '木'))
       .toBe('{"ids":"木","parts":[],"roles":[],"formation":"指事"}')
   })

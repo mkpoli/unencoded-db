@@ -57,12 +57,22 @@ describe('stored composition', () => {
       .toEqual({ ids: '⿰亻七', parts: ['亻', '七'], roles: ['', ''], formation: null })
   })
 
-  test('caps parts, roles and formation at their limits', () => {
-    const part = '木'.repeat(30), role = '聲'.repeat(50), formation = '形'.repeat(50)
-    const value = stored({ ids: '⿰木木', parts: [part, part], roles: [role, role], formation })
-    expect(value?.parts?.[0]).toHaveLength(20)
+  test('keeps a nested part whole and caps only what exceeds the field', () => {
+    const nested = `⿱${'木'.repeat(30)}`
+    const long = '木'.repeat(250)
+    const role = '聲'.repeat(50), formation = '形'.repeat(50)
+    const value = stored({ ids: '⿰木木', parts: [nested, long], roles: [role, role], formation })
+    expect(value?.parts?.[0]).toBe(nested)
+    expect([...value!.parts![1]!]).toHaveLength(200)
     expect(value?.roles[0]).toHaveLength(40)
     expect(value?.formation).toHaveLength(40)
+  })
+
+  test('caps at code points, not UTF-16 units', () => {
+    const head = '木'.repeat(199)
+    const value = stored({ ids: '⿰木木', parts: [head + '𠀀', head + '𠀀'], roles: ['semantic', 'semantic'] })
+    expect([...value!.parts![0]!]).toHaveLength(200)
+    expect(value!.parts![0]!.endsWith('𠀀')).toBe(true)
   })
 
   test('rejects other values', () => {

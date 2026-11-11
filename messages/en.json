@@ -222,7 +222,6 @@
   "tag.add": "Add tag",
   "tag.remove": "Remove tag {tag}",
   "field.formation": "Formation",
-  "field.formationHint": "Tag the parts of the first description, or type your own.",
   "formation.phonoSemantic": "Phono-semantic",
   "formation.ideographic": "Compound ideograph",
   "formation.indicative": "Simple ideograph",
@@ -237,7 +236,6 @@
   "field.addPart": "Add part",
   "field.removePart": "Remove part",
   "field.formationOverride": "Custom formation",
-  "field.formationDerived": "Derived: {formation}",
   "field.formationNone": "Not set",
   "field.formationEdit": "Edit"
 }

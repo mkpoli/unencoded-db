@@ -11,7 +11,7 @@ export const FORMATIONS = ['phonoSemantic', 'ideographic', 'indicative', 'sign',
 export type Formation = (typeof FORMATIONS)[number]
 
 export const PARTS_MAX = 8
-export const PART_MAX = 20
+export const PART_MAX = 200
 export const ROLE_MAX = 40
 export const FORMATION_MAX = 40
 
@@ -45,7 +45,7 @@ const isRole = (value: unknown): value is Role =>
   typeof value === 'string' && (ROLES as readonly string[]).includes(value)
 
 const clean = (value: unknown, max: number): string =>
-  typeof value === 'string' ? value.normalize('NFC').trim().slice(0, max) : ''
+  typeof value === 'string' ? [...value.normalize('NFC').trim()].slice(0, max).join('') : ''
 
 function cleanList(value: unknown, max: number): string[] | undefined {
   if (!Array.isArray(value)) return undefined

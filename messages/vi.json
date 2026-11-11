@@ -222,7 +222,6 @@
   "tag.add": "Thêm thẻ",
   "tag.remove": "Xóa thẻ {tag}",
   "field.formation": "Cách cấu tạo",
-  "field.formationHint": "Gắn vai trò cho các bộ phận của mô tả đầu tiên, hoặc tự nhập.",
   "formation.phonoSemantic": "Hình thanh",
   "formation.ideographic": "Hội ý",
   "formation.indicative": "Chỉ sự",
@@ -237,7 +236,6 @@
   "field.addPart": "Thêm bộ phận",
   "field.removePart": "Xóa bộ phận",
   "field.formationOverride": "Cách cấu tạo tùy chỉnh",
-  "field.formationDerived": "Suy ra: {formation}",
   "field.formationNone": "Chưa đặt",
   "field.formationEdit": "Sửa"
 }

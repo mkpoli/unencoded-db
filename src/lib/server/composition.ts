@@ -14,7 +14,7 @@ export function readComposition(form: FormData, ids: string | null): string | nu
   if (!analysis) return null
   const parts = analysis.parts.map(part => part.part)
   const roles = analysis.parts.map(part => part.role)
-  if (!parts.length && !parsed.formation) return null
+  if (!roles.some(Boolean) && !parsed.formation) return null
   const normalized: Composition = { ids: primary, parts, roles, formation: parsed.formation }
   return JSON.stringify(normalized)
 }
