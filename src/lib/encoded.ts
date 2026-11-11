@@ -6,6 +6,7 @@ let table: Promise<Map<string, string>> | null = null
 
 async function load() {
   const response = await fetch(url)
+  if (!response.ok) throw new Error(`Encoded table request failed: ${response.status}`)
   const compressed = response.headers.get('content-encoding') ? null : response.body!.pipeThrough(new DecompressionStream('gzip'))
   const text = compressed ? await new Response(compressed).text() : await response.text()
   const map = new Map<string, string>()
@@ -21,6 +22,6 @@ async function load() {
 }
 
 export async function encodedMatch(ids: string) {
-  table ??= load()
+  table ??= load().catch(error => { table = null; throw error })
   return (await table).get(ids) ?? null
 }
