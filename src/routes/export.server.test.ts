@@ -67,7 +67,7 @@ describe('JSON export', () => {
       expect(response.status).toBe(200)
       expect(response.headers.get('cache-control')).toBe('no-store')
       expect(response.headers.get('content-type')).toContain('application/json')
-      expect(body.version).toBe(2)
+      expect(body.version).toBe(3)
       expect(body.next).toBeNull()
       expect(body.records.map(record => record.id)).toEqual([first, third])
       expect(body.records[0]).toEqual({
@@ -93,6 +93,22 @@ describe('JSON export', () => {
       })
       expect(JSON.stringify(body)).not.toContain('Secret')
     } finally { db.close() }
+  })
+
+  test('exports no composition for a description without an analysis', async () => {
+    const db = database()
+    const id = insert(db, 'Han')
+    db.query('UPDATE entries SET ids = ?, revision = revision + 1 WHERE id = ?').run('⿰木木', id)
+    const { body } = await exportJson(db)
+    expect(body.records[0]!.composition).toBeNull()
+  })
+
+  test('exports no composition for a description without an analysis', async () => {
+    const db = database()
+    const id = insert(db, 'Han')
+    db.query('UPDATE entries SET ids = ?, revision = revision + 1 WHERE id = ?').run('⿰木木', id)
+    const { body } = await exportJson(db)
+    expect(body.records[0]!.composition).toBeNull()
   })
 
   test('exports the formation chosen for the first description', async () => {

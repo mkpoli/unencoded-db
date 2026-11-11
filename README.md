@@ -214,14 +214,14 @@ A validation failure returns the form with its errors; an upload over the reques
 
 ## JSON export
 
-`GET /export.json` returns visible records in ascending id order with `version: 2`. Read `next` and request `?after=<next>` until it is null. Pages default to 100 records; `limit` accepts 1 to 200. Hidden records are excluded and responses are not cached.
+`GET /export.json` returns visible records in ascending id order with `version: 3`. Read `next` and request `?after=<next>` until it is null. Pages default to 100 records; `limit` accepts 1 to 200. Hidden records are excluded and responses are not cached.
 
 ```sh
 curl 'https://example.org/export.json?limit=200'
 curl 'https://example.org/export.json?limit=200&after=200'
 ```
 
-Each record contains its id, script, IDS, description, creation time, comparisons and an `evidence` array. `ids` is the first description; `ids_all` lists every description in entered order. Evidence carries the source fields, date precision and whether an image exists.
+Each record contains its id, script, IDS, description, creation time, comparisons and an `evidence` array. `ids` is the first description; `ids_all` lists every description in entered order. A record whose editor set a composition carries it as `composition` with `ids`, `parts`, `roles` and `formation`; other records carry `null`. Evidence carries the source fields, date precision and whether an image exists.
 
 ## Deployment
 

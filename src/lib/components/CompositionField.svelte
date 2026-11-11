@@ -95,12 +95,12 @@
     <summary class="composition-summary">
       <span class="field-label">{t(locale, 'field.formation')}</span>
       {#if set}
-        <span class="composition-value">{formationLabel(locale, resolved)}</span>
+        <span class="composition-value" aria-live="polite">{formationLabel(locale, resolved)}</span>
         <span class="composition-tags">
           {#each tags as tag, index (index)}<span class="composition-tag">{tag.part} · {roleLabel(locale, tag.role)}</span>{/each}
         </span>
       {:else}
-        <span class="composition-value none">{t(locale, 'field.formationNone')}</span>
+        <span class="composition-value none" aria-live="polite">{t(locale, 'field.formationNone')}</span>
       {/if}
       <span class="composition-edit">{t(locale, 'field.formationEdit')}<span class="chevron" aria-hidden="true">⌄</span></span>
     </summary>

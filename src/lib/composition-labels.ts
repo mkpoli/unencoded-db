@@ -26,7 +26,7 @@ export function formationLabel(locale: Locale, formation: string): string {
 
 /** The stored role for what an editor typed: a standard code, or the text as written. */
 export function roleFromLabel(locale: Locale, text: string): string {
-  const value = text.normalize('NFC').trim().slice(0, ROLE_MAX)
+  const value = [...text.normalize('NFC').trim()].slice(0, ROLE_MAX).join('')
   if (!value) return ''
   if ((ROLES as readonly string[]).includes(value)) return value
   for (const role of ROLES) if (roleLabel(locale, role) === value) return role
@@ -35,7 +35,7 @@ export function roleFromLabel(locale: Locale, text: string): string {
 
 /** The stored formation for what an editor typed: a standard code, or the text as written. */
 export function formationFromLabel(locale: Locale, text: string): string {
-  const value = text.normalize('NFC').trim().slice(0, FORMATION_MAX)
+  const value = [...text.normalize('NFC').trim()].slice(0, FORMATION_MAX).join('')
   if (!value) return ''
   if ((FORMATIONS as readonly string[]).includes(value)) return value
   for (const formation of FORMATIONS) if (formationLabel(locale, formation) === value) return formation

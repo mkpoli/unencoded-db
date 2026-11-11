@@ -106,5 +106,5 @@ export const GET: RequestHandler = async ({ platform, url }) => {
     }
   })
   const next = results.length > limit ? records[records.length - 1]!.id : null
-  return json({ version: 2, records, next }, { headers: { 'cache-control': 'no-store' } })
+  return json({ version: 3, records, next }, { headers: { 'cache-control': 'no-store' } })
 }

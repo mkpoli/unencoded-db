@@ -530,7 +530,7 @@ describe('localized pages', () => {
       data: {
         locale: 'zh-Hant',
         entry: { id: 9, script: 'Han', ids: '⿰青鳥', description: null, radical: null, encoded_as: null, strokes: null, ivd_status: null, ivd_sequence: null, created_at: '2026-11-08T05:00:00.000Z' },
-        composition: { ids: '⿰青鳥', parts: [{ part: '青', role: 'phonetic' }, { part: '鳥', role: 'semantic' }], derived: 'phonoSemantic', formation: 'phonoSemantic', tagged: true },
+        composition: { ids: '⿰青鳥', parts: [{ part: '青', role: 'phonetic' }, { part: '鳥', role: 'semantic' }], formation: 'phonoSemantic', tagged: true },
         comparisons: [],
         evidence: [],
       },
@@ -546,7 +546,7 @@ describe('localized pages', () => {
       data: {
         locale: 'zh-Hant',
         entry: { id: 9, script: 'Han', ids: '⿰青鳥', description: null, radical: null, encoded_as: null, strokes: null, ivd_status: null, ivd_sequence: null, created_at: '2026-11-08T05:00:00.000Z' },
-        composition: { ids: '⿰青鳥', parts: [{ part: '青', role: '亦聲' }, { part: '鳥', role: 'semantic' }], derived: null, formation: '形聲兼會意', tagged: true },
+        composition: { ids: '⿰青鳥', parts: [{ part: '青', role: '亦聲' }, { part: '鳥', role: 'semantic' }], formation: '形聲兼會意', tagged: true },
         comparisons: [],
         evidence: [],
       },
@@ -554,6 +554,31 @@ describe('localized pages', () => {
     expect(body).toContain('形聲兼會意')
     expect(body).toContain('青 · 亦聲')
     expect(body).toContain('鳥 · 形符')
+  })
+
+  test('entry page hides the formation row for an unanalysed description', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-formation-unset', {
+      data: {
+        locale: 'en',
+        entry: { id: 9, script: 'Han', ids: '木', description: null, radical: null, encoded_as: null, strokes: null, ivd_status: null, ivd_sequence: null, created_at: '2026-11-08T05:00:00.000Z' },
+        comparisons: [],
+        evidence: [],
+      },
+    })
+    expect(body).not.toContain('<dt>Formation</dt>')
+  })
+
+  test('composition editor summarises a stored analysis', async () => {
+    const path = await loadCompositionField()
+    const component = (await import(`${path}?${Date.now()}`)).default
+    const { body } = render(component, { props: {
+      ids: '⿰青鳥',
+      value: JSON.stringify({ ids: '⿰青鳥', parts: ['青', '鳥'], roles: ['phonetic', 'semantic'], formation: null }),
+      locale: 'en',
+    } })
+    expect(body).toContain('Phono-semantic')
+    expect(body).toContain('青 · Phonetic')
+    expect(body).toContain('disabled')
   })
 
   test('entry page shows the character it normalizes to', async () => {

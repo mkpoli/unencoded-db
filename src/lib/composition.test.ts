@@ -98,7 +98,6 @@ describe('analysis', () => {
     expect(analyze('⿰青鳥')).toEqual({
       ids: '⿰青鳥',
       parts: [{ part: '青', role: '' }, { part: '鳥', role: '' }],
-      derived: null,
       formation: 'unknown',
       tagged: false,
     })
@@ -109,7 +108,6 @@ describe('analysis', () => {
     expect(analyze('⿰青鳥', composition)).toEqual({
       ids: '⿰青鳥',
       parts: [{ part: '青', role: 'phonetic' }, { part: '鳥', role: 'semantic' }],
-      derived: 'phonoSemantic',
       formation: 'phonoSemantic',
       tagged: true,
     })
@@ -120,7 +118,6 @@ describe('analysis', () => {
     expect(analyze('⿰青鳥', composition)).toEqual({
       ids: '⿰青鳥',
       parts: [{ part: '青', role: '亦聲' }, { part: '鳥', role: 'semantic' }],
-      derived: null,
       formation: '形聲兼會意',
       tagged: true,
     })
@@ -142,14 +139,13 @@ describe('analysis', () => {
     expect(analyze('⿰亻七', composition)).toEqual({
       ids: '⿰亻七',
       parts: [{ part: '亻', role: '' }, { part: '七', role: '' }],
-      derived: null,
       formation: 'unknown',
       tagged: false,
     })
   })
 
   test('reads a single component as a single-part character', () => {
-    expect(analyze('木')).toEqual({ ids: '木', parts: [], derived: null, formation: 'single', tagged: false })
+    expect(analyze('木')).toEqual({ ids: '木', parts: [], formation: 'single', tagged: false })
     expect(analyze('木', stored({ ids: '木', parts: ['木'], roles: ['semantic'] }))?.formation).toBe('unknown')
     expect(analyze('木', stored({ ids: '木', parts: ['木'], roles: ['semantic'], formation: '指事' }))?.formation).toBe('指事')
   })
