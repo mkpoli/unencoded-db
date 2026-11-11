@@ -222,7 +222,7 @@
   "tag.add": "Add tag",
   "tag.remove": "Remove tag {tag}",
   "field.formation": "Formation",
-  "field.formationHint": "Tag the parts of the first description. The formation follows from the tags.",
+  "field.formationHint": "Tag the parts of the first description, or type your own. The formation follows from the roles.",
   "formation.phonoSemantic": "Phono-semantic",
   "formation.ideographic": "Compound ideograph",
   "formation.indicative": "Simple ideograph",
@@ -231,5 +231,11 @@
   "formation.unknown": "Undetermined",
   "role.semantic": "Semantic",
   "role.phonetic": "Phonetic",
-  "role.symbol": "Symbol"
+  "role.symbol": "Symbol",
+  "field.part": "Part",
+  "field.role": "Role",
+  "field.addPart": "Add part",
+  "field.removePart": "Remove part",
+  "field.formationOverride": "Custom formation",
+  "field.formationDerived": "Derived: {formation}"
 }

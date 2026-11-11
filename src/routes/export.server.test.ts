@@ -109,6 +109,20 @@ describe('JSON export', () => {
     })
   })
 
+  test('exports a custom role and a custom formation', async () => {
+    const db = database()
+    const id = insert(db, 'Han')
+    db.query('UPDATE entries SET ids = ?, composition = ?, revision = revision + 1 WHERE id = ?')
+      .run('⿰青鳥', '{"ids":"⿰青鳥","parts":["青","鳥"],"roles":["亦聲","semantic"],"formation":"形聲兼會意"}', id)
+    const { body } = await exportJson(db)
+    expect(body.records[0]!.composition).toEqual({
+      ids: '⿰青鳥',
+      parts: ['青', '鳥'],
+      roles: ['亦聲', 'semantic'],
+      formation: '形聲兼會意',
+    })
+  })
+
   test('exports the first description as ids and every description as ids_all', async () => {
     const db = database()
     try {

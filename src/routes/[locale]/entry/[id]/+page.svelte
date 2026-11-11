@@ -34,11 +34,8 @@
   let tags = $derived(data.tags ?? [])
   let senses = $derived(data.senses ?? [])
   const composition = $derived(data.composition)
-  const roleParts = $derived(composition ? composition.parts.flatMap((part, index) => {
-    const role = composition.roles[index]
-    return role ? [{ part, role }] : []
-  }) : [])
-  const hasFormation = $derived(Boolean(composition && (composition.formation === 'single' || composition.roles.some(Boolean))))
+  const roleParts = $derived(composition?.parts.filter(part => part.role) ?? [])
+  const hasFormation = $derived(Boolean(composition && (composition.formation !== 'unknown' || composition.parts.some(part => part.role))))
   const isLink = (text: string) => /^https?:\/\//i.test(text.trim())
 </script>
 

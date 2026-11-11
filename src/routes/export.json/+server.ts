@@ -84,6 +84,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
   }
 
   const records = page.map(({ comparisons: stored, ids, composition: storedComposition, ...record }) => {
+    const composition = analyze(ids, parseComposition(storedComposition))
     const rows = evidence.get(record.id) ?? [{
       id: 0, place: record.place, url: null, provider: null, provider_url: null, title: record.title, author: record.author, publisher: record.publisher,
       year: record.year, page: record.page, note: record.note,
@@ -93,7 +94,12 @@ export const GET: RequestHandler = async ({ platform, url }) => {
       ...record,
       ids: primaryIds(ids),
       ids_all: splitIds(ids),
-      composition: analyze(ids, parseComposition(storedComposition)),
+      composition: composition ? {
+        ids: composition.ids,
+        parts: composition.parts.map(part => part.part),
+        roles: composition.parts.map(part => part.role),
+        formation: composition.formation,
+      } : null,
       date_precision: rows[0].date_precision,
       comparisons: comparisons(stored),
       evidence: rows,

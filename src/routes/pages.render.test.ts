@@ -530,7 +530,7 @@ describe('localized pages', () => {
       data: {
         locale: 'zh-Hant',
         entry: { id: 9, script: 'Han', ids: '⿰青鳥', description: null, radical: null, encoded_as: null, strokes: null, ivd_status: null, ivd_sequence: null, created_at: '2026-11-08T05:00:00.000Z' },
-        composition: { ids: '⿰青鳥', parts: ['青', '鳥'], roles: ['phonetic', 'semantic'], formation: 'phonoSemantic' },
+        composition: { ids: '⿰青鳥', parts: [{ part: '青', role: 'phonetic' }, { part: '鳥', role: 'semantic' }], derived: 'phonoSemantic', formation: 'phonoSemantic' },
         comparisons: [],
         evidence: [],
       },
@@ -538,6 +538,21 @@ describe('localized pages', () => {
     expect(body).toContain('<dt>構字方式</dt>')
     expect(body).toContain('形聲')
     expect(body).toContain('青 · 聲符')
+    expect(body).toContain('鳥 · 形符')
+  })
+
+  test('entry page shows a custom role and formation', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-formation-custom', {
+      data: {
+        locale: 'zh-Hant',
+        entry: { id: 9, script: 'Han', ids: '⿰青鳥', description: null, radical: null, encoded_as: null, strokes: null, ivd_status: null, ivd_sequence: null, created_at: '2026-11-08T05:00:00.000Z' },
+        composition: { ids: '⿰青鳥', parts: [{ part: '青', role: '亦聲' }, { part: '鳥', role: 'semantic' }], derived: null, formation: '形聲兼會意' },
+        comparisons: [],
+        evidence: [],
+      },
+    })
+    expect(body).toContain('形聲兼會意')
+    expect(body).toContain('青 · 亦聲')
     expect(body).toContain('鳥 · 形符')
   })
 

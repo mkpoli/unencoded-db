@@ -222,7 +222,7 @@
   "tag.add": "Thêm thẻ",
   "tag.remove": "Xóa thẻ {tag}",
   "field.formation": "Cách cấu tạo",
-  "field.formationHint": "Đánh dấu các bộ phận của mô tả đầu tiên để xác định cách cấu tạo.",
+  "field.formationHint": "Gắn vai trò cho các bộ phận của mô tả đầu tiên, hoặc tự nhập. Cách cấu tạo suy ra từ các vai trò.",
   "formation.phonoSemantic": "Hình thanh",
   "formation.ideographic": "Hội ý",
   "formation.indicative": "Chỉ sự",
@@ -231,5 +231,11 @@
   "formation.unknown": "Chưa xác định",
   "role.semantic": "Hình phù",
   "role.phonetic": "Thanh phù",
-  "role.symbol": "Ký hiệu"
+  "role.symbol": "Ký hiệu",
+  "field.part": "Bộ phận",
+  "field.role": "Vai trò",
+  "field.addPart": "Thêm bộ phận",
+  "field.removePart": "Xóa bộ phận",
+  "field.formationOverride": "Cách cấu tạo tùy chỉnh",
+  "field.formationDerived": "Suy ra: {formation}"
 }

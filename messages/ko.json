@@ -222,7 +222,7 @@
   "tag.add": "태그 추가",
   "tag.remove": "태그 {tag} 삭제",
   "field.formation": "조자법",
-  "field.formationHint": "첫 번째 설명의 부품에 의부·성부·기호를 붙이면 조자법이 정해집니다.",
+  "field.formationHint": "첫 번째 설명의 부품에 역할을 붙입니다. 직접 입력해도 됩니다. 조자법은 역할에서 정해집니다.",
   "formation.phonoSemantic": "형성",
   "formation.ideographic": "회의",
   "formation.indicative": "지사",
@@ -231,5 +231,11 @@
   "formation.unknown": "미정",
   "role.semantic": "의부",
   "role.phonetic": "성부",
-  "role.symbol": "기호"
+  "role.symbol": "기호",
+  "field.part": "부품",
+  "field.role": "역할",
+  "field.addPart": "부품 추가",
+  "field.removePart": "부품 삭제",
+  "field.formationOverride": "조자법 직접 입력",
+  "field.formationDerived": "추정: {formation}"
 }

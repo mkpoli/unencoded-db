@@ -8,27 +8,46 @@ function form(value: string) {
 }
 
 describe('submitted composition', () => {
-  test('keeps the roles chosen for the first description', () => {
-    expect(readComposition(form('{"ids":"⿰亻七","roles":["semantic","phonetic"]}'), '⿰亻七 ⿱木木'))
-      .toBe('{"ids":"⿰亻七","roles":["semantic","phonetic"]}')
+  test('keeps the parts and roles chosen for the first description', () => {
+    expect(readComposition(form('{"ids":"⿰青鳥","parts":["青","鳥"],"roles":["phonetic","semantic"]}'), '⿰青鳥'))
+      .toBe('{"ids":"⿰青鳥","parts":["青","鳥"],"roles":["phonetic","semantic"],"formation":null}')
   })
 
-  test('trims roles the description has no part for', () => {
-    expect(readComposition(form('{"ids":"⿰亻七","roles":["semantic","phonetic","symbol"]}'), '⿰亻七'))
-      .toBe('{"ids":"⿰亻七","roles":["semantic","phonetic"]}')
+  test('adds the parsed parts to a record tagged before parts could be edited', () => {
+    expect(readComposition(form('{"ids":"⿰青鳥","roles":["phonetic","semantic"]}'), '⿰青鳥'))
+      .toBe('{"ids":"⿰青鳥","parts":["青","鳥"],"roles":["phonetic","semantic"],"formation":null}')
+  })
+
+  test('keeps custom parts, a custom role and a custom formation', () => {
+    expect(readComposition(form('{"ids":"⿰青鳥","parts":["青","鳥","口"],"roles":["亦聲","semantic",""],"formation":"形聲兼會意"}'), '⿰青鳥'))
+      .toBe('{"ids":"⿰青鳥","parts":["青","鳥","口"],"roles":["亦聲","semantic",""],"formation":"形聲兼會意"}')
+  })
+
+  test('keeps parts without roles and a formation without parts', () => {
+    expect(readComposition(form('{"ids":"⿰青鳥","parts":["青","鳥"],"roles":[]}'), '⿰青鳥'))
+      .toBe('{"ids":"⿰青鳥","parts":["青","鳥"],"roles":["",""],"formation":null}')
+    expect(readComposition(form('{"ids":"木","formation":"指事"}'), '木'))
+      .toBe('{"ids":"木","parts":[],"roles":[],"formation":"指事"}')
+  })
+
+  test('drops an empty part with its role', () => {
+    expect(readComposition(form('{"ids":"⿰青鳥","parts":["青",""],"roles":["phonetic","semantic"]}'), '⿰青鳥'))
+      .toBe('{"ids":"⿰青鳥","parts":["青"],"roles":["phonetic"],"formation":null}')
+  })
+
+  test('keeps a custom part on a description of one component', () => {
+    expect(readComposition(form('{"ids":"木","parts":["木"],"roles":["semantic"]}'), '木'))
+      .toBe('{"ids":"木","parts":["木"],"roles":["semantic"],"formation":null}')
   })
 
   test('drops roles named against another description', () => {
-    expect(readComposition(form('{"ids":"⿰木木","roles":["semantic","phonetic"]}'), '⿰亻七')).toBeNull()
+    expect(readComposition(form('{"ids":"⿰木木","parts":["木","木"],"roles":["semantic","phonetic"]}'), '⿰青鳥')).toBeNull()
   })
 
   test('drops an empty or malformed field', () => {
-    expect(readComposition(form(''), '⿰亻七')).toBeNull()
-    expect(readComposition(form('no'), '⿰亻七')).toBeNull()
-    expect(readComposition(form('{"ids":"⿰亻七","roles":[""]}'), '⿰亻七')).toBeNull()
-  })
-
-  test('drops roles on a description with nothing to tag', () => {
-    expect(readComposition(form('{"ids":"木","roles":["semantic"]}'), '木')).toBeNull()
+    expect(readComposition(form(''), '⿰青鳥')).toBeNull()
+    expect(readComposition(form('no'), '⿰青鳥')).toBeNull()
+    expect(readComposition(form('{"ids":"⿰青鳥"}'), '⿰青鳥')).toBeNull()
+    expect(readComposition(form('{"ids":"⿰青鳥","parts":[],"roles":[]}'), '⿰青鳥')).toBeNull()
   })
 })
