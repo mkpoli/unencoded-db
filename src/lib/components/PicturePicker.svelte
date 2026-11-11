@@ -46,9 +46,9 @@
   })
 
   function take(source: Blob | null | undefined) {
+    setFiles(input, lastPicture?.file ?? null)
     if (!source) return
     drag = null
-    setFiles(input, lastPicture?.file ?? null)
     void processing.take(source)
   }
 
@@ -99,7 +99,7 @@
 
 <div class="field">
   <span class="label" class:required={!optional}>{t('field.image')}</span>
-  <input bind:this={input} id="picture" class="file" class:gone={picture} type="file" name="image" accept="image/*" aria-label={t('field.imageChoose')} onchange={event => take(event.currentTarget.files?.[0])} />
+  <input bind:this={input} id="picture" class="file" class:gone={picture} type="file" name="image" accept="image/*" aria-label={t('field.imageChoose')} onchange={event => take(event.currentTarget.files?.[0])} oncancel={() => setFiles(input, lastPicture?.file ?? null)} />
   <input bind:this={thumbInput} type="file" name="thumb" hidden />
   <input bind:this={boxInput} type="hidden" name="box" value={box ? JSON.stringify(box) : ''} />
   {#if picture && previewUrl}
@@ -112,7 +112,7 @@
     <div class="row">
       <button type="button" class="button" aria-pressed={marking} class:on={marking} onclick={() => marking = !marking}>{t('field.mark')}</button>
       {#if box}<button type="button" class="button" onclick={clearBox}>{t('field.markClear')}</button>{/if}
-      <button type="button" class="button" onclick={() => { clear(); input?.click() }}>{t('field.imageReplace')}</button>
+      <button type="button" class="button" onclick={() => input?.click()}>{t('field.imageReplace')}</button>
       <button type="button" class="button" onclick={clear}>{t('field.imageRemove')}</button>
     </div>
     {#if marking}<p class="hint">{t('field.markHint')}</p>{/if}

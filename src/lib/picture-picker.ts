@@ -33,6 +33,7 @@ export class PicturePickerState {
   constructor(private publish: (state: State) => void, private processing: Processing = { prepare, thumbnail }) {}
 
   private update(change: Partial<State>) {
+    if (this.disposed) return
     this.state = { ...this.state, ...change }
     this.publish(this.state)
   }
@@ -40,6 +41,7 @@ export class PicturePickerState {
   private current(generation: number) { return !this.disposed && generation === this.generation }
 
   async take(source: Blob) {
+    if (this.disposed) return
     const generation = ++this.generation
     this.preparing = true
     this.update({ busy: true, bad: false, thumbnailBad: false, thumb: null })
@@ -49,14 +51,17 @@ export class PicturePickerState {
       this.preparing = false
       this.saved = { box: null, thumb: null }
       this.update({ picture, box: null })
-      await this.makeThumbnail(picture, null, generation)
+      await this.makeThumbnail(picture, null, generation, true)
     } catch {
-      if (this.current(generation)) this.fail()
+      if (this.current(generation)) {
+        this.preparing = false
+        this.update({ ...this.saved, busy: false, bad: true, thumbnailBad: false })
+      }
     }
   }
 
   beginBox(): number | null {
-    if (!this.state.picture || this.preparing) return null
+    if (this.disposed || !this.state.picture || this.preparing) return null
     const generation = ++this.generation
     this.drawing = generation
     this.update({ box: null, thumb: null, busy: true, bad: false, thumbnailBad: false })
@@ -79,13 +84,13 @@ export class PicturePickerState {
 
   async clearBox() {
     const picture = this.state.picture
-    if (!picture || this.preparing) return
+    if (this.disposed || !picture || this.preparing) return
     const generation = ++this.generation
     this.update({ box: null, thumb: null, busy: true, bad: false, thumbnailBad: false })
     await this.makeThumbnail(picture, null, generation)
   }
 
-  private async makeThumbnail(picture: Prepared, box: Box | null, generation: number) {
+  private async makeThumbnail(picture: Prepared, box: Box | null, generation: number, initial = false) {
     try {
       const thumb = await this.processing.thumbnail(picture.bitmap, box)
       if (this.current(generation)) {
@@ -93,19 +98,16 @@ export class PicturePickerState {
         this.update({ thumb, busy: false })
       }
     } catch {
-      if (this.current(generation)) this.update({ ...this.saved, busy: false, bad: true, thumbnailBad: true })
+      if (this.current(generation)) this.update({ ...this.saved, busy: false, bad: !initial, thumbnailBad: !initial })
     }
   }
 
   clear() {
+    if (this.disposed) return
     ++this.generation
     this.preparing = false
+    this.saved = { box: null, thumb: null }
     this.update({ picture: null, box: null, thumb: null, busy: false, bad: false, thumbnailBad: false })
-  }
-
-  private fail() {
-    this.clear()
-    this.update({ bad: true })
   }
 
   dispose() { this.disposed = true; ++this.generation }

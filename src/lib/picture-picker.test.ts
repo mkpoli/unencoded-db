@@ -126,6 +126,48 @@ describe('picture selection and thumbnail readiness', () => {
     expect(f.state).toMatchObject({ picture: null, bad: false, thumbnailBad: false })
   })
 
+  test('failed replacement restores the last complete image and crop', async () => {
+    const f = fixture()
+    const picture = await selected(f)
+    const generation = f.picker.beginBox()!
+    const box: Box = [3, 4, 25, 35]
+    f.picker.moveBox(generation, box)
+    const crop = f.picker.endBox(generation)
+    const thumb = f.thumb('crop')
+    f.thumbnails[1].result.resolve(thumb)
+    await crop
+    const replacement = f.picker.take(new Blob())
+    f.preparations[1].reject(new Error('decode'))
+    await replacement
+    expect(f.state).toMatchObject({ picture, box, thumb, busy: false, bad: true, thumbnailBad: false })
+  })
+
+  test('an initial thumbnail failure falls back to the whole image without an error', async () => {
+    const f = fixture()
+    const pending = f.picker.take(new Blob())
+    const picture = f.picture('a')
+    f.preparations[0].resolve(picture)
+    await f.tick()
+    f.thumbnails[0].result.reject(new Error('encode'))
+    await pending
+    expect(f.state).toMatchObject({ picture, box: null, thumb: null, busy: false, bad: false, thumbnailBad: false })
+  })
+
+  test('public operations do not publish or start work after disposal', async () => {
+    const f = fixture()
+    await selected(f)
+    const before = f.state
+    f.picker.dispose()
+    const after = f.picker.take(new Blob())
+    f.picker.clear()
+    expect(f.picker.beginBox()).toBeNull()
+    await f.picker.clearBox()
+    expect(f.state).toBe(before)
+    expect(f.preparations).toHaveLength(1)
+    await after
+    expect(f.thumbnails).toHaveLength(1)
+  })
+
   test('removal invalidates preparation and thumbnail work', async () => {
     const f = fixture()
     const a = f.picker.take(new Blob())
