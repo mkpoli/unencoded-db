@@ -137,3 +137,29 @@ describe('export', () => {
     expect(page.entries[0].evidence[0].media.map(item => item.image_key)).toEqual(['a.jpg'])
   })
 })
+
+describe('review findings', () => {
+  test('a source is not shown once no visible sighting gives it', async () => {
+    const { db } = open()
+    const id = await createEntry(db, fields(), seen({ ...book, page: '3' }), [], who)
+    const source = (await getEntry(db, id))!.sightings[0].source_id!
+    await setHidden(db, { entry: id }, true, who, null)
+    expect(await sourcePage(db, source)).toBeNull()
+  })
+
+  test('a restore of a revision redacted meanwhile is refused', async () => {
+    const { db } = open()
+    const id = await createEntry(db, fields([claim('reading', 'private')]), seen(), [], who)
+    await editEntry(db, id, 1, fields(), who, null)
+    const first = await db.prepare("SELECT id, snapshot FROM revisions WHERE entry_id = ? AND kind = 'create'").bind(id).first<{ id: number; snapshot: string }>()
+    await redactRevision(db, id, first!.id, who, null)
+    expect(await editEntry(db, id, 2, fields([claim('reading', 'private')]), who, 'r1', 'revert', first!.id)).toEqual({ ok: false, code: 'missing' })
+  })
+
+  test('claims over the text limit are refused', () => {
+    const form = new FormData()
+    form.set('related_characters_present', '1')
+    for (let i = 0; i < 10; i++) { form.append('related_character', `字${i}`); form.append('related_relationship', 'variant'); form.append('related_difference', 'x'.repeat(5000)); form.append('related_evidence', 'y'.repeat(5000)) }
+    expect(readClaims(form).error).toBe('relatedCharacters')
+  })
+})

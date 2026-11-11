@@ -27,6 +27,8 @@ export const CLAIM_LIMITS: Record<ClaimKind, { max: number; length: number }> = 
   tag: { max: 30, length: 40 },
 }
 export const CLAIMS_MAX = 200
+/** The most text one record's claims hold together, so a journal page of snapshots stays small. */
+export const CLAIMS_LENGTH_MAX = 60000
 
 const isKind = (value: unknown): value is ClaimKind => CLAIM_KINDS.includes(value as ClaimKind)
 const clean = (value: unknown) => (typeof value === 'string' ? value : '').normalize('NFC').trim()
@@ -78,6 +80,7 @@ export function parseClaims(raw: unknown): Claim[] | null {
   if (!Array.isArray(value) || value.length > CLAIMS_MAX || !value.every(validClaim)) return null
   const claims = value.map(claim => one(claim.kind, claim.value, claim.data ?? null, claim.sighting_id ?? null))
   for (const kind of CLAIM_KINDS) if (claims.filter(claim => claim.kind === kind).length > CLAIM_LIMITS[kind].max) return null
+  if (JSON.stringify(claims).length > CLAIMS_LENGTH_MAX) return null
   return claims
 }
 
@@ -224,5 +227,7 @@ export function readClaims(form: FormData, base: readonly Claim[] = []): { claim
     next.set('tag', tags.map(tag => one('tag', tag)))
   }
 
-  return { claims: CLAIM_KINDS.flatMap(kind => next.get(kind)!), error }
+  const claims = CLAIM_KINDS.flatMap(kind => next.get(kind)!)
+  if (JSON.stringify(claims).length > CLAIMS_LENGTH_MAX) fail('relatedCharacters')
+  return { claims, error }
 }

@@ -1,3 +1,4 @@
+import { ENTRY_HISTORY_PAGE } from '$lib/server/entries'
 import { expect, test } from 'bun:test'
 import { createEntry, editEntry, redactRevision, editSighting, getEntry, setHidden, type EntryFields, type SightingFields } from '$lib/server/entries'
 import { createPerson } from '$lib/server/people'
@@ -108,7 +109,7 @@ test('history pages through a bounded journal even when a page contains hidden s
   const who = { actor: (await createPerson(db)).id, ip: null }
   const id = await createEntry(db, fields, sighting, [], who)
   const seen = (await getEntry(db, id))!.sightings[0]
-  await db.prepare(`WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < 501)
+  await db.prepare(`WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n WHERE x < ${ENTRY_HISTORY_PAGE + 1})
     INSERT INTO revisions(entry_id, sighting_id, kind, rev, snapshot, actor, at)
     SELECT ?, ?, 'sighting_edit', x + 1, '{}', ?, '2026-01-01' FROM n`).bind(id, seen.id, who.actor).run()
   await setHidden(db, { entry: id, sighting: seen.id }, true, who, null)

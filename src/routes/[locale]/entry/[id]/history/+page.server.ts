@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit'
-import { editEntry, getEntry, history, redactRevision, restoreSighting } from '$lib/server/entries'
+import { editEntry, ENTRY_HISTORY_PAGE, getEntry, history, redactRevision, restoreSighting } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { writer } from '$lib/server/people'
 import { entrySnapshot, revisionFields, sightingSnapshot } from '$lib/server/revisions'
@@ -17,8 +17,8 @@ export const load: PageServerLoad = async (event) => {
   const before = event.url?.searchParams.get('before')
   if (before !== null && before !== undefined && !positiveId(before)) error(404)
   const page = await history(db, id, before ? positiveId(before) : null)
-  const next = page.length > 500 ? page[499].id : null
-  const rows = page.slice(0, 500)
+  const next = page.length > ENTRY_HISTORY_PAGE ? page[ENTRY_HISTORY_PAGE - 1].id : null
+  const rows = page.slice(0, ENTRY_HISTORY_PAGE)
     .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id))
     .map(({ id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, snapshot, redacted_at }) => ({
       id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, redacted: Boolean(redacted_at),
@@ -50,7 +50,7 @@ export const actions: Actions = {
       const fields = old && sightingSnapshot(old.snapshot)
       if (!old || !fields) error(404)
       const person = await writer(event, db)
-      const result = await restoreSighting(db, id, sighting.id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, old.rev)
+      const result = await restoreSighting(db, id, sighting.id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, old.rev, revisionId)
       if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })
       redirect(303, `/${event.params.locale}/entry/${id}/history`)
     }
@@ -60,7 +60,7 @@ export const actions: Actions = {
     const fields = old && entrySnapshot(old.snapshot)
     if (!old || !fields) error(404)
     const person = await writer(event, db)
-    const result = await editEntry(db, id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, `r${old.rev}`, 'revert')
+    const result = await editEntry(db, id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, `r${old.rev}`, 'revert', revisionId)
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })
     redirect(303, `/${event.params.locale}/entry/${id}/history`)
   },

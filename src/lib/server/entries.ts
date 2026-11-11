@@ -261,9 +261,14 @@ const abort = "'conflict', 0, '{}'"
 const checkMark = (db: D1Database, id: number, mark: number, who: Who) => db.prepare(`INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) SELECT ?, ${abort}, ?, ? WHERE (SELECT COALESCE(MAX(id), 0) FROM revisions WHERE entry_id = ?) != ?`).bind(id, who.actor, now(), id, mark)
 const checkChanged = (db: D1Database, id: number, who: Who) => db.prepare(`INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) SELECT ?, ${abort}, ?, ? WHERE changes() = 0`).bind(id, who.actor, now())
 
-export async function editEntry(db: D1Database, id: number, baseRev: number, fields: EntryFields, who: Who, summary: string | null, kind: 'edit' | 'revert' = 'edit'): Promise<EditResult> {
+// A redaction writes to the journal, so one made after the mark is read stops the batch; this catches
+// one made before it. `from` is the revision a restore copies.
+const redacted = async (db: D1Database, from: number | null) => from !== null && Boolean(await db.prepare('SELECT 1 FROM revisions WHERE id = ? AND redacted_at IS NOT NULL').bind(from).first())
+
+export async function editEntry(db: D1Database, id: number, baseRev: number, fields: EntryFields, who: Who, summary: string | null, kind: 'edit' | 'revert' = 'edit', from: number | null = null): Promise<EditResult> {
   for (let attempt = 0; ; attempt++) {
     const mark = await revisionMark(db, id)
+    if (await redacted(db, from)) return { ok: false, code: 'missing' }
     const entry = await getEntryRow(db, id)
     if (!entry || entry.hidden_at) return { ok: false, code: 'missing' }
     if (entry.merged_into) return { ok: false, code: 'merged' }
@@ -344,16 +349,17 @@ export async function editSighting(db: D1Database, id: number, baseRev: number, 
   return writeSighting(db, id, baseRev, fields, media, who, summary, expectedEntry)
 }
 
-export async function restoreSighting(db: D1Database, entryId: number, sightingId: number, baseRev: number, fields: SightingFields, who: Who, sourceRev: number): Promise<EditResult> {
-  return writeSighting(db, sightingId, baseRev, fields, null, who, `r${sourceRev}`, entryId)
+export async function restoreSighting(db: D1Database, entryId: number, sightingId: number, baseRev: number, fields: SightingFields, who: Who, sourceRev: number, from: number | null = null): Promise<EditResult> {
+  return writeSighting(db, sightingId, baseRev, fields, null, who, `r${sourceRev}`, entryId, from)
 }
 
-async function writeSighting(db: D1Database, id: number, baseRev: number, fields: SightingFields, media: StoredImage[] | null, who: Who, summary: string | null, expectedEntry: number): Promise<EditResult> {
+async function writeSighting(db: D1Database, id: number, baseRev: number, fields: SightingFields, media: StoredImage[] | null, who: Who, summary: string | null, expectedEntry: number, from: number | null = null): Promise<EditResult> {
   const source = await sourceOf(db, fields)
   for (let attempt = 0; ; attempt++) {
     const initial = await sightingRow(db, id)
     if (!initial || initial.entry_id !== expectedEntry) return { ok: false, code: 'missing' }
     const mark = await revisionMark(db, initial.entry_id)
+    if (await redacted(db, from)) return { ok: false, code: 'missing' }
     const sightings = await sightingRows(db, initial.entry_id)
     const current = sightings.find(sighting => sighting.id === id)
     if (!current) {
@@ -414,7 +420,7 @@ export async function revertEntry(db: D1Database, id: number, revisionId: number
   const entry = await getEntryRow(db, id)
   const fields = old ? entryFieldsOf(old.snapshot) : null
   if (!old || !entry || !fields) return { ok: false as const, code: 'missing' as const }
-  return editEntry(db, id, entry.rev, fields, who, `r${old.rev}`, 'revert')
+  return editEntry(db, id, entry.rev, fields, who, `r${old.rev}`, 'revert', revisionId)
 }
 
 // A redacted revision keeps its row, author and time, and no longer says what the record held. The
@@ -655,7 +661,8 @@ export async function sourcePage(db: D1Database, id: number) {
     if (page && !tile.pages.includes(page)) tile.pages.push(page)
     tiles.set(row.id, tile)
   }
-  return { source, tiles: [...tiles.values()] }
+  // A citation is shown only while a visible sighting gives it.
+  return results.length ? { source, tiles: [...tiles.values()] } : null
 }
 
 // The records that state this value: the ones described by a sequence, given a code, or related to a character.
@@ -672,8 +679,10 @@ export type Revision = { id: number; entry_id: number; sighting_id: number | nul
 export const HISTORY_PAGE = 60
 const REVISION_COLUMNS = 'r.id, r.entry_id, r.sighting_id, r.kind, r.rev, r.snapshot, r.summary, r.at, r.redacted_at'
 
+// A page of one record's journal. Each row carries a whole snapshot, so the page is kept short.
+export const ENTRY_HISTORY_PAGE = 200
 export async function history(db: D1Database, entry: number, before?: number | null) {
-  const { results } = await db.prepare(`SELECT ${REVISION_COLUMNS}, ${WHO_COLUMNS} FROM revisions r ${WHO('r.actor')} WHERE r.entry_id = ? AND r.id < ? ORDER BY r.id DESC LIMIT 501`).bind(entry, before ?? Number.MAX_SAFE_INTEGER).all<Revision>()
+  const { results } = await db.prepare(`SELECT ${REVISION_COLUMNS}, ${WHO_COLUMNS} FROM revisions r ${WHO('r.actor')} WHERE r.entry_id = ? AND r.id < ? ORDER BY r.id DESC LIMIT ${ENTRY_HISTORY_PAGE + 1}`).bind(entry, before ?? Number.MAX_SAFE_INTEGER).all<Revision>()
   return results
 }
 
