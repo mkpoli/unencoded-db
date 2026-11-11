@@ -27,9 +27,24 @@ Sign-in requires a confidential client registered with the Glyph Atlas issuer fo
 
 Without client credentials, the site offers anonymous contributions. Signing in links the browser's anonymous contributions to the account; signing out ends the local session.
 
+## Data model
+
+| Table | Holds |
+|---|---|
+| `entries` | One character: script, status, description, radical, strokes, and the summary a gallery tile draws |
+| `claims` | What a record states more than once: description sequences, composition, readings, meanings, codes, related characters, IVD, categories, collections, tags |
+| `sightings` | One place the character was seen: where, page, date, context, style, source types |
+| `sources` | A citation, stored once however many sightings give it |
+| `sighting_media` | A sighting's pictures, each with its mark and thumbnail |
+| `revisions` | The journal: every state of an entry or a sighting, with its author |
+| `entry_tags`, `tag_counts` | The index behind lists, filters and search |
+| `reports`, `people`, `sessions` | Moderation and identity |
+
+A claim is a row of `kind`, `value` and JSON `data`; the kinds and their form fields are in `src/lib/claims.ts`, and a new kind needs no migration. Categories and collections are listed in `src/lib/genres.ts`.
+
 ## Search index
 
-Each entry indexes at most 400 distinct terms, drawn from its fields and visible sightings. Terms beyond that limit are not searchable; changing this limit requires reindexing existing entries.
+Each entry indexes at most 400 distinct terms, drawn from its fields, its claims and its visible sightings. Terms beyond that limit are not searchable; changing this limit requires reindexing existing entries.
 
 ## Character drawings
 

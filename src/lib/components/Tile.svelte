@@ -17,8 +17,9 @@
     {:else}<span class="blank"><span class="small">{t('browse.noImage')}</span></span>{/if}
   </span>
   <span class="ids-line">{tile.ids ?? ''}</span>
-  {#if tile.types.length}
+  {#if tile.types.length || tile.status === 'encoded'}
     <span class="tags">
+      {#if tile.status === 'encoded'}<span class="tag encoded">{t('browse.encoded')}</span>{/if}
       {#each shown as type}<span class="tag">{label(type)}</span>{/each}
       {#if hidden > 0}<span class="tag" title={tile.types.map(label).join(' · ')}>+{hidden}</span>{/if}
     </span>
@@ -38,6 +39,7 @@
   .ids-line { min-height: 17px; font-size: 12px; line-height: 1.35; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
   .tags { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0 }
   .tag { max-width: 100%; padding: 0 5px; border-radius: 4px; background: var(--surface-sunken); font-size: 10.5px; line-height: 1.6; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+  .tag.encoded { flex: none; background: var(--surface-selected); color: var(--ink); font-weight: 550 }
   .meta { display: flex; align-items: baseline; gap: 5px; min-width: 0; min-height: 18px; font-size: 12px; color: var(--muted) }
   .meta time { flex: none; font-variant-numeric: tabular-nums }
   .sightings { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }

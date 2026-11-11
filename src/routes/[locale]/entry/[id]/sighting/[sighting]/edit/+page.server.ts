@@ -2,7 +2,8 @@ import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
 import { editSighting, getEntryRow, getSighting, readSightingFields } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { writer } from '$lib/server/people'
-import { positiveId, uploadedImage } from '../../../../../../_submission.server'
+import { MEDIA_MAX } from '$lib/limits'
+import { positiveId, uploadedImages } from '../../../../../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
 async function target(event: RequestEvent) {
@@ -25,16 +26,20 @@ export const actions: Actions = {
     const form = await event.request.formData()
     const values = readSightingFields(form)
     const summary = String(form.get('summary') ?? '').trim().slice(0, 500)
-    const removeImage = form.get('remove_image') === '1'
+    // The positions of the pictures the form takes away; new ones follow those that stay.
+    const removed = new Set(form.getAll('remove_media').map(String))
+    const removeMedia = [...removed]
     const rev = positiveId(String(form.get('rev') ?? ''))
-    if (!rev || rev !== sighting.rev) return fail(409, { error: 'conflict', values, summary, removeImage })
-    if (!values.place) return fail(400, { error: 'place', values, summary, removeImage })
+    if (!rev || rev !== sighting.rev) return fail(409, { error: 'conflict', values, summary, removeMedia })
+    if (!values.place) return fail(400, { error: 'place', values, summary, removeMedia })
     const { DB, MEDIA } = env(event)
-    const image = await uploadedImage(form, MEDIA)
-    if (image === 'invalid') return fail(400, { error: 'image', values, summary, removeImage })
+    const added = await uploadedImages(form, MEDIA)
+    const kept = sighting.media.filter((_, position) => !removed.has(String(position)))
+    if (added === 'invalid' || kept.length + added.length > MEDIA_MAX) return fail(400, { error: 'image', values, summary, removeMedia })
+    const media = added.length || kept.length !== sighting.media.length ? [...kept, ...added] : null
     const person = await writer(event, DB)
-    const result = await editSighting(DB, sighting.id, rev, values, image ?? (removeImage ? 'remove' : null), { actor: person.id, ip: await ipHash(event) }, summary || null, id)
-    if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code, values, summary, removeImage })
+    const result = await editSighting(DB, sighting.id, rev, values, media, { actor: person.id, ip: await ipHash(event) }, summary || null, id)
+    if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code, values, summary, removeMedia })
     redirect(303, `/${event.params.locale}/entry/${id}`)
   },
 }

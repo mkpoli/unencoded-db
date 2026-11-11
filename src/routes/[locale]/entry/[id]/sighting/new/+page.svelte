@@ -1,11 +1,13 @@
 <script lang="ts">
   import Seo from '$lib/components/Seo.svelte'
-  import PicturePicker from '$lib/components/PicturePicker.svelte'
+  import PictureList from '$lib/components/PictureList.svelte'
   import SightingFields from '$lib/components/SightingFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
+  import { MEDIA_MAX } from '$lib/limits'
   import { href, t } from '$lib/t'
   let { data, form } = $props()
   let busy = $state(false)
+  let pictures = $state<PictureList>()
   const title = $derived(t('sighting.addTitle', { id: data.id }))
 </script>
 
@@ -15,8 +17,8 @@
   {#if form?.error}<p class="notice bad" role="alert">{t(`error.${form.error}`)}</p>{/if}
   <form class="stack" method="POST" enctype="multipart/form-data">
     <section class="panel stack">
-      <PicturePicker optional onready={(working) => busy = working} />
-      <SightingFields values={form?.values ?? {}} />
+      <PictureList bind:this={pictures} max={MEDIA_MAX} onready={(working) => busy = working} />
+      <SightingFields values={form?.values ?? {}} onphoto={file => pictures?.offer(file)} />
     </section>
     <SubmitBar {busy} label={t('entry.addSighting')} cancel={href(`/entry/${data.id}`)} />
   </form>

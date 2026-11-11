@@ -4,7 +4,7 @@ import { createPerson } from '$lib/server/people'
 import { openTestDb } from '$lib/server/testdb'
 import { load } from './+page.server'
 
-const fields: EntryFields = { script: 'han', script_other: null, ids: '⿰木木', description: null, status: 'unchecked', encoded_as: null, related: null, related_characters: null, reading: null, meaning: null, radical: null, strokes: null }
+const fields: EntryFields = { script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims: [{ kind: 'ids', value: '⿰木木', data: null, sighting_id: null }] }
 const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
 const event = (db: D1Database, person: string, before?: string) => ({
   params: { locale: 'en', id: person },
@@ -15,9 +15,9 @@ const event = (db: D1Database, person: string, before?: string) => ({
 test('personal contributions list visible revisions with their old versions', async () => {
   const { db } = openTestDb()
   const first = await createPerson(db), second = await createPerson(db)
-  const id = await createEntry(db, fields, sighting, null, { actor: first.id, ip: null })
+  const id = await createEntry(db, fields, sighting, [], { actor: first.id, ip: null })
   await editEntry(db, id, 1, { ...fields, description: 'Later' }, { actor: second.id, ip: null }, 'Corrected')
-  await addSighting(db, id, { ...sighting, place: 'Second source' }, null, { actor: first.id, ip: null })
+  await addSighting(db, id, { ...sighting, place: 'Second source' }, [], { actor: first.id, ip: null })
 
   const result = await load(event(db, first.id)) as any
   expect(result.person).toMatchObject({ id: first.id, name: first.name })
@@ -35,7 +35,7 @@ test('personal contributions list visible revisions with their old versions', as
 test('personal contributions hide records and sightings a moderator hid', async () => {
   const { db } = openTestDb()
   const person = await createPerson(db)
-  const id = await createEntry(db, fields, sighting, null, { actor: person.id, ip: null })
+  const id = await createEntry(db, fields, sighting, [], { actor: person.id, ip: null })
   const seen = (await db.prepare('SELECT id FROM sightings WHERE entry_id = ?').bind(id).first<{ id: number }>())!.id
   await setHidden(db, { entry: id, sighting: seen }, true, { actor: person.id, ip: null }, null)
   const withoutSighting = await load(event(db, person.id)) as any
@@ -60,7 +60,7 @@ test('personal contributions reject missing people and follow a merged person', 
 test('personal contributions page through a bounded revision range', async () => {
   const { db, raw } = openTestDb()
   const person = await createPerson(db)
-  const id = await createEntry(db, fields, sighting, null, { actor: person.id, ip: null })
+  const id = await createEntry(db, fields, sighting, [], { actor: person.id, ip: null })
   const insert = raw.prepare("INSERT INTO revisions(entry_id,kind,rev,snapshot,actor,at) VALUES (?, 'edit', 1, ?, ?, '2026')")
   for (let i = 0; i < 65; i++) insert.run(id, JSON.stringify(fields), person.id)
   const first = await load(event(db, person.id)) as any
@@ -85,7 +85,7 @@ test('personal contributions keep the revision range on the actor index', () => 
 test('a merged person\'s contributions join the account they signed in to', async () => {
   const { db } = openTestDb()
   const anonymous = await createPerson(db), account = await createPerson(db, 'atlas-user')
-  const id = await createEntry(db, fields, sighting, null, { actor: anonymous.id, ip: null })
+  const id = await createEntry(db, fields, sighting, [], { actor: anonymous.id, ip: null })
   await db.prepare('UPDATE people SET merged_into = ? WHERE id = ?').bind(account.id, anonymous.id).run()
   const result = await load(event(db, account.id)) as any
   expect(result.rows).toHaveLength(2)

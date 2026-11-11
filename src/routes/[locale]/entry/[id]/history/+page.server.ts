@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit'
-import { editEntry, getEntry, history, restoreSighting } from '$lib/server/entries'
+import { editEntry, getEntry, history, redactRevision, restoreSighting } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { writer } from '$lib/server/people'
 import { entrySnapshot, revisionFields, sightingSnapshot } from '$lib/server/revisions'
@@ -20,9 +20,9 @@ export const load: PageServerLoad = async (event) => {
   const next = page.length > 500 ? page[499].id : null
   const rows = page.slice(0, 500)
     .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id))
-    .map(({ id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, snapshot }) => ({
-      id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name,
-      ...revisionFields({ sighting_id, kind, snapshot }),
+    .map(({ id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, snapshot, redacted_at }) => ({
+      id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, redacted: Boolean(redacted_at),
+      ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
       sightingRev: sighting_id ? visibleSightings.get(sighting_id) : null,
     }))
   return { id, rev: found.entry.rev, rows, next }
@@ -45,7 +45,7 @@ export const actions: Actions = {
       const sighting = found.sightings.find(s => s.id === sightingId && !s.hidden_at)
       if (!sighting) error(404)
       if (!baseRev || baseRev !== sighting.rev) return fail(409, { error: 'conflict' })
-      const old = await db.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id = ? AND kind IN ('sighting','sighting_edit')")
+      const old = await db.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id = ? AND redacted_at IS NULL AND kind IN ('sighting','sighting_edit')")
         .bind(revisionId, id, sighting.id).first<{ snapshot: string; rev: number }>()
       const fields = old && sightingSnapshot(old.snapshot)
       if (!old || !fields) error(404)
@@ -55,13 +55,26 @@ export const actions: Actions = {
       redirect(303, `/${event.params.locale}/entry/${id}/history`)
     }
     if (!baseRev || baseRev !== found.entry.rev) return fail(409, { error: 'conflict' })
-    const old = await db.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id IS NULL AND kind IN ('create','edit','revert')")
+    const old = await db.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id IS NULL AND redacted_at IS NULL AND kind IN ('create','edit','revert')")
       .bind(revisionId, id).first<{ snapshot: string; rev: number }>()
     const fields = old && entrySnapshot(old.snapshot)
     if (!old || !fields) error(404)
     const person = await writer(event, db)
     const result = await editEntry(db, id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, `r${old.rev}`, 'revert')
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })
+    redirect(303, `/${event.params.locale}/entry/${id}/history`)
+  },
+  // A moderator takes a past version's content out of the history.
+  redact: async event => {
+    await guardWrite(event, 'EDITS', true)
+    const id = positiveId(event.params.id)
+    const person = event.locals.person
+    if (!id || !person) error(404)
+    const form = await event.request.formData()
+    const revisionId = positiveId(String(form.get('revision') ?? ''))
+    if (!revisionId) error(404)
+    const summary = String(form.get('summary') ?? '').trim().slice(0, 500) || null
+    if (!await redactRevision(env(event).DB, id, revisionId, { actor: person.id, ip: await ipHash(event) }, summary)) return fail(409, { error: 'redact' })
     redirect(303, `/${event.params.locale}/entry/${id}/history`)
   },
 }

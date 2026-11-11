@@ -48,9 +48,9 @@ test('global history hides private and merged targets and advances through bound
 test('global history carries the old version of every readable revision', async () => {
   const { db } = openTestDb()
   const person = await createPerson(db)
-  const fields: EntryFields = { script: 'han', script_other: null, ids: '⿰木木', description: null, status: 'unchecked', encoded_as: null, related: null, related_characters: null, reading: null, meaning: null, radical: null, strokes: null }
+  const fields: EntryFields = { script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims: [{ kind: 'ids', value: '⿰木木', data: null, sighting_id: null }] }
   const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
-  const id = await createEntry(db, fields, sighting, null, { actor: person.id, ip: null })
+  const id = await createEntry(db, fields, sighting, [], { actor: person.id, ip: null })
   await editEntry(db, id, 1, { ...fields, description: 'Later' }, { actor: person.id, ip: null }, 'Corrected')
   const result = await load(event(db)) as any
   const rows = result.rows.filter((row: any) => row.entry_id === id)

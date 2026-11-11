@@ -1,23 +1,70 @@
 <script lang="ts">
   // Where a character was seen. The place is the only line asked for; the reference IRG wants stays folded.
+  // A post link fills the place, title and author from the post, and hands its photo to `onphoto`.
+  import { untrack } from 'svelte'
   import { CONTEXTS, SIGHTING_TYPES, STYLES, parseSightingTypes } from '$lib/scripts'
+  import { cleanLinkInput } from '$lib/link-input'
+  import { fetchPost, postId, type PostInfo } from '$lib/source-url'
   import { t } from '$lib/t'
   import type { SightingFields } from '$lib/server/entries'
 
-  let { values = {}, requirePlace = true }: { values?: Partial<SightingFields>; requirePlace?: boolean } = $props()
+  let { values = {}, requirePlace = true, onphoto }: { values?: Partial<SightingFields>; requirePlace?: boolean; onphoto?: (file: File | null) => void } = $props()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
   const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.original_date || values.page || values.context || values.style || values.types || values.note))
+
+  let place = $state(untrack(() => values.place ?? ''))
+  let url = $state(untrack(() => values.url ?? ''))
+  let title = $state(untrack(() => values.title ?? ''))
+  let author = $state(untrack(() => values.author ?? ''))
+  let open = $state(untrack(() => filled))
+  let fetching = $state(false), failed = $state(false)
+
+  // The fields keep what someone typed; a value the last post gave is replaced by the next post's.
+  type Filled = { place: string; title: string; author: string }
+  let posted: Filled | null = null
+  function fill(info: PostInfo | null) {
+    const next: Filled | null = info ? { place: info.place, title: info.title, author: info.provider ?? '' } : null
+    const keep = (current: string, name: keyof Filled) => !current || current === posted?.[name] ? next?.[name] ?? '' : current
+    place = keep(place, 'place'); title = keep(title, 'title'); author = keep(author, 'author')
+    if (title || author) open = true
+    posted = next
+  }
+
+  let lookedUp = untrack(() => url)
+  $effect(() => {
+    const link = url
+    if (link === lookedUp) return
+    lookedUp = link
+    fetching = false; failed = false
+    const id = postId(link)
+    if (!id) { if (posted) { fill(null); onphoto?.(null) } return }
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      fetching = true
+      try {
+        const found = await fetchPost(id, controller.signal)
+        if (controller.signal.aborted) return
+        fill(found?.info ?? null)
+        onphoto?.(found?.photo ?? null)
+        failed = !found?.photo
+      } catch {
+        if (!controller.signal.aborted) failed = true
+      } finally { if (!controller.signal.aborted) fetching = false }
+    }, 400)
+    return () => { clearTimeout(timer); controller.abort() }
+  })
 </script>
 
 <div class="field">
-  <label for="place" class:required={requirePlace}>{t('field.place')}</label>
-  <input id="place" class="input" name="place" value={values.place ?? ''} maxlength="500" />
-  <p class="hint">{t('field.placeHint')}</p>
+  <label for="url">{t('field.url')}</label>
+  <input id="url" class="input" type="url" name="url" bind:value={url} use:cleanLinkInput placeholder="https://" maxlength="1000" />
+  <p class="hint">{t('field.urlHint')}</p>
+  {#if fetching}<p class="hint" role="status">{t('field.linkImageWorking')}</p>{:else if failed}<p class="hint" role="status">{t('field.linkImageFailed')}</p>{/if}
 </div>
 <div class="field">
-  <label for="url">{t('field.url')}</label>
-  <input id="url" class="input" type="url" name="url" value={values.url ?? ''} placeholder="https://" maxlength="1000" />
-  <p class="hint">{t('field.urlHint')}</p>
+  <label for="place" class:required={requirePlace}>{t('field.place')}</label>
+  <input id="place" class="input" name="place" bind:value={place} maxlength="500" />
+  <p class="hint">{t('field.placeHint')}</p>
 </div>
 <fieldset class="types">
   <legend>{t('field.sourceTypes')}</legend>
@@ -31,22 +78,22 @@
     {/each}
   </div>
 </fieldset>
-<details class="more" open={filled}>
+<details class="more" bind:open>
   <summary>{t('field.source')}</summary>
   <p class="hint">{t('field.sourceHint')}</p>
   <div class="grid-2">
-    <div class="field"><label for="title">{t('field.title')}</label><input id="title" class="input" name="title" value={values.title ?? ''} /></div>
-    <div class="field"><label for="author">{t('field.author')}</label><input id="author" class="input" name="author" value={values.author ?? ''} /></div>
-    <div class="field"><label for="publisher">{t('field.publisher')}</label><input id="publisher" class="input" name="publisher" value={values.publisher ?? ''} /></div>
-    <div class="field"><label for="page">{t('field.page')}</label><input id="page" class="input" name="page" value={values.page ?? ''} /></div>
-    <div class="field"><label for="report_date">{t('field.reportDate')}</label><input id="report_date" class="input" name="report_date" value={values.report_date ?? ''} /><p class="hint">{t('field.reportDateHint')}</p></div>
-    <div class="field"><label for="original_date">{t('field.originalDate')}</label><input id="original_date" class="input" name="original_date" value={values.original_date ?? ''} /><p class="hint">{t('field.originalDateHint')}</p></div>
+    <div class="field"><label for="title">{t('field.title')}</label><input id="title" class="input" name="title" bind:value={title} maxlength="300" /></div>
+    <div class="field"><label for="author">{t('field.author')}</label><input id="author" class="input" name="author" bind:value={author} maxlength="300" /></div>
+    <div class="field"><label for="publisher">{t('field.publisher')}</label><input id="publisher" class="input" name="publisher" value={values.publisher ?? ''} maxlength="300" /></div>
+    <div class="field"><label for="page">{t('field.page')}</label><input id="page" class="input" name="page" value={values.page ?? ''} maxlength="80" /></div>
+    <div class="field"><label for="report_date">{t('field.reportDate')}</label><input id="report_date" class="input" name="report_date" value={values.report_date ?? ''} maxlength="40" /><p class="hint">{t('field.reportDateHint')}</p></div>
+    <div class="field"><label for="original_date">{t('field.originalDate')}</label><input id="original_date" class="input" name="original_date" value={values.original_date ?? ''} maxlength="40" /><p class="hint">{t('field.originalDateHint')}</p></div>
     <div class="field"><label for="context">{t('field.context')}</label>
       <select id="context" class="input" name="context" value={values.context ?? ''}><option value="">{t('field.unset')}</option>{#each CONTEXTS as item}<option value={item}>{t(`context.${item}`)}</option>{/each}</select></div>
     <div class="field"><label for="style">{t('field.style')}</label>
       <select id="style" class="input" name="style" value={values.style ?? ''}><option value="">{t('field.unset')}</option>{#each STYLES as item}<option value={item}>{t(`style.${item}`)}</option>{/each}</select></div>
   </div>
-  <div class="field"><label for="note">{t('field.note')}</label><textarea id="note" class="input" name="note" rows="2">{values.note ?? ''}</textarea></div>
+  <div class="field"><label for="note">{t('field.note')}</label><textarea id="note" class="input" name="note" rows="2" maxlength="5000">{values.note ?? ''}</textarea></div>
 </details>
 
 <style>
@@ -63,5 +110,4 @@
   .more { display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 12px }
   .more[open] > :global(* + *) { margin-top: 12px }
   summary { font-weight: 500; cursor: pointer }
-  @media (max-width: 560px) { .type-grid { grid-template-columns: minmax(0, 1fr) } }
 </style>

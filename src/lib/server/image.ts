@@ -1,3 +1,5 @@
+import { MAX_IMAGE_BYTES } from '$lib/limits'
+
 // An uploaded file is taken only if its first bytes say it is one of the images a browser shows safely, and
 // it is stored without what a camera writes into it: location, device and time.
 export type ImageType = 'image/jpeg' | 'image/png' | 'image/webp'
@@ -121,7 +123,7 @@ export function stripMetadata(bytes: Uint8Array, type: ImageType) {
 export const EXTENSIONS: Record<ImageType, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
 export const TYPE_OF_EXTENSION: Record<string, ImageType> = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }
 
-export const MAX_IMAGE = 15 * 1024 * 1024
+export const MAX_IMAGE = MAX_IMAGE_BYTES
 export const MAX_THUMB = 1024 * 1024
 export const MAX_SIDE = 12000
 

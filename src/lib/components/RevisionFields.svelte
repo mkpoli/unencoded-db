@@ -1,8 +1,13 @@
 <script lang="ts">
-  import { parseRelatedCharacters } from '$lib/related'
+  // A past version of a record or a sighting, as it read then. A record's claims are listed by kind.
+  import { CLAIM_KINDS, claimsOf, compositionOf, type Claim, type ClaimKind } from '$lib/claims'
+  import { analyze } from '$lib/composition'
+  import { formationLabel, roleLabel } from '$lib/composition-labels'
+  import { encodingSetLabel } from '$lib/encodings'
+  import { COLLECTIONS, genreOf } from '$lib/genres'
   import { parseSightingTypes } from '$lib/scripts'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
-  import { t } from '$lib/t'
+  import { locale, t } from '$lib/t'
   let { fields, sighting = false }: { fields: EntryFields | SightingFields; sighting?: boolean } = $props()
   const sourceFields = [
     { key: 'title', label: 'field.title' },
@@ -12,16 +17,27 @@
     { key: 'original_date', label: 'field.originalDate' },
     { key: 'page', label: 'field.page' },
   ] as const
-  const entryFields = [
-    { key: 'encoded_as', label: 'field.encodedAs' },
-    { key: 'reading', label: 'field.reading' },
-    { key: 'meaning', label: 'field.meaning' },
-    { key: 'radical', label: 'field.radical' },
-    { key: 'strokes', label: 'field.strokes' },
-    { key: 'related', label: 'field.related' },
-  ] as const
-  const relationLabels = { variant: 'Variant', not_variant: 'Not a variant', similar: 'Similar', uncertain: 'Uncertain' }
-  const label = (key: `${string}.${string}`, fallback: string) => { const text = t(key); return text === key ? fallback : text }
+  const KIND_LABELS: Record<ClaimKind, `${string}.${string}`> = {
+    ids: 'field.ids', composition: 'field.formation', reading: 'field.reading', meaning: 'field.meaning', encoding: 'field.encodings',
+    relation: 'field.relatedCharacters', normalizes_to: 'field.normalizesTo', ivd: 'field.ivd', genre: 'field.genre', collection: 'field.collection', tag: 'field.tags',
+  }
+  const WIDE: ClaimKind[] = ['meaning', 'relation', 'composition']
+  const at = locale()
+
+  function shown(claim: Claim, claims: Claim[]): string {
+    switch (claim.kind) {
+      case 'encoding': return `${encodingSetLabel(String(claim.data?.charset ?? ''))} ${claim.value}`
+      case 'ivd': return claim.value === 'none' ? t('field.ivdNone') : claim.value
+      case 'genre': return genreOf(claim.value)?.label ?? claim.value
+      case 'collection': return COLLECTIONS.find(item => item.slug === claim.value)?.label ?? claim.value
+      case 'tag': return `#${claim.value}`
+      case 'composition': {
+        const analysis = analyze(claim.value, compositionOf(claims))
+        return analysis ? [formationLabel(at, analysis.formation), ...analysis.parts.filter(part => part.role).map(part => `${part.part} · ${roleLabel(at, part.role)}`)].join(', ') : claim.value
+      }
+      default: return claim.value
+    }
+  }
 </script>
 
 {#if sighting}
@@ -42,30 +58,31 @@
   </div>
 {:else}
   {@const entry = fields as EntryFields}
-  {@const relations = parseRelatedCharacters(entry.related_characters)}
   <div class="snapshot">
     <div class="row">
       <span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>
       <span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>
     </div>
-    {#if entry.ids}<p class="ids sequence">{entry.ids}</p>{/if}
     <p class:muted={!entry.description} class="description">{entry.description || t('entry.noDescription')}</p>
     <dl class="facts">
-      {#each entryFields as field}
-        {#if entry[field.key] != null && entry[field.key] !== ''}
-          <div class:wide={field.key === 'meaning' || field.key === 'related'}><dt>{t(field.label)}</dt><dd>{entry[field.key]}</dd></div>
+      {#if entry.radical}<div><dt>{t('field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
+      {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
+      {#each CLAIM_KINDS.filter(kind => kind !== 'relation') as kind}
+        {@const items = claimsOf(entry.claims, kind)}
+        {#if items.length}
+          <div class:wide={WIDE.includes(kind)}><dt>{t(KIND_LABELS[kind])}</dt><dd><ul class="claims" class:ids={kind === 'ids'}>{#each items as claim}<li>{shown(claim, entry.claims)}</li>{/each}</ul></dd></div>
         {/if}
       {/each}
     </dl>
-    {#if relations.length}
+    {#if claimsOf(entry.claims, 'relation').length}
       <h3>{t('field.relatedCharacters')}</h3>
       <div class="relations">
-        {#each relations as relation}
+        {#each claimsOf(entry.claims, 'relation') as relation}
           <dl class="facts relation">
-            <div><dt>{t('field.relatedCharacter')}</dt><dd class="relation-character">{relation.character}</dd></div>
-            <div><dt>{t('field.relatedRelationship')}</dt><dd>{label(`relationship.${relation.relationship}`, relationLabels[relation.relationship])}</dd></div>
-            {#if relation.difference}<div class="wide"><dt>{t('field.relatedDifference')}</dt><dd>{relation.difference}</dd></div>{/if}
-            {#if relation.evidence}<div class="wide"><dt>{t('field.relatedEvidence')}</dt><dd>{relation.evidence}</dd></div>{/if}
+            <div><dt>{t('field.relatedCharacter')}</dt><dd class="relation-character">{relation.value}</dd></div>
+            <div><dt>{t('field.relatedRelationship')}</dt><dd>{t(`relationship.${String(relation.data?.relationship ?? '')}`)}</dd></div>
+            {#if relation.data?.difference}<div class="wide"><dt>{t('field.relatedDifference')}</dt><dd>{relation.data.difference}</dd></div>{/if}
+            {#if relation.data?.evidence}<div class="wide"><dt>{t('field.relatedEvidence')}</dt><dd>{relation.data.evidence}</dd></div>{/if}
           </dl>
         {/each}
       </div>
@@ -77,13 +94,14 @@
   .snapshot { display: flex; flex-direction: column; gap: 14px; min-width: 0 }
   .source-head { display: flex; flex-direction: column; gap: 3px; min-width: 0 }
   .source-head h3 { font-size: 16px; font-weight: 600 }
-  .ids { font-size: 24px; line-height: 1.35 }
   .description { max-width: 75ch; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6 }
   .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px 20px; margin: 0 }
   .facts:empty { display: none }
   dt { color: var(--muted); font-size: 11px }
   dd { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere }
   .wide { grid-column: 1 / -1 }
+  .claims { margin: 0; padding: 0; list-style: none }
+  .claims.ids li:first-child { font-size: 20px; line-height: 1.35 }
   h3 { font-size: 13px; font-weight: 600; color: var(--muted) }
   .relations { display: flex; flex-direction: column; gap: 10px }
   .relation { grid-template-columns: 1fr; padding: 12px 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface) }
