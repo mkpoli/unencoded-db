@@ -21,7 +21,7 @@
     <section class="panel stack"><ScriptPicker value={form?.values?.script} other={form?.values?.script_other} /><IdsField bind:value={ids} /><div class="field"><label for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="4">{form?.values?.description ?? ''}</textarea><p class="hint">{t('field.descriptionHint')}</p></div></section>
     <section class="stack"><h2>{t('entry.sightings')}</h2><div class="panel stack"><PicturePicker optional onready={(working) => busy = working} /><SightingFields values={form?.values} /></div></section>
     {#key form?.values?.related_characters}<RelatedCharacters value={form?.values?.related_characters} />{/key}
-    <SubmitBar {busy} label={t('nav.add')} cancel={href()} />
+    <SubmitBar {busy} busyLabel={t('field.imageWorking')} label={t('nav.add')} cancel={href()} />
   </form>
 </div>
 <style>

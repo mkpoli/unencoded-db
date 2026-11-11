@@ -2,12 +2,12 @@
   import { page } from '$app/state'
   import { t } from '$lib/t'
 
-  let { busy = false, label, cancel }: { busy?: boolean; label?: string; cancel?: string } = $props()
+  let { busy = false, busyLabel, label, cancel }: { busy?: boolean; busyLabel?: string; label?: string; cancel?: string } = $props()
   const name = $derived((page.data as { person?: { name: string } | null }).person?.name)
 </script>
 
 <div class="bar">
-  <button class="button primary" disabled={busy}>{busy ? t('form.saving') : label ?? t('form.save')}</button>
+  <button class="button primary" disabled={busy}>{busy ? busyLabel ?? t('form.saving') : label ?? t('form.save')}</button>
   {#if cancel}<a class="button" href={cancel}>{t('form.cancel')}</a>{/if}
   <p class="hint">{#if name}{t('form.as', { name })} {/if}{t('form.terms')}</p>
 </div>

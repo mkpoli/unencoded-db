@@ -18,7 +18,7 @@
       <PicturePicker optional onready={(working) => busy = working} />
       <SightingFields values={form?.values ?? {}} />
     </section>
-    <SubmitBar {busy} label={t('entry.addSighting')} cancel={href(`/entry/${data.id}`)} />
+    <SubmitBar {busy} busyLabel={t('field.imageWorking')} label={t('entry.addSighting')} cancel={href(`/entry/${data.id}`)} />
   </form>
 </div>
 <style>
