@@ -14,6 +14,7 @@ import { parseClaims, type Claim } from '../src/lib/claims'
 import { parseComposition } from '../src/lib/composition'
 import { genreOf, isCollection } from '../src/lib/genres'
 import { splitIds } from '../src/lib/ids'
+import { MEDIA_MAX } from '../src/lib/limits'
 import { isRelationKind } from '../src/lib/related'
 import { isScript, isSightingType, SIGHTING_TYPES } from '../src/lib/scripts'
 import { cleanSourceUrl } from '../src/lib/source-url'
@@ -83,6 +84,7 @@ async function thumbnail(source: string, box: [number, number, number, number] |
 async function mediaOf(evidence: Row): Promise<StoredImage[]> {
   const keys: string[] = rows('SELECT m.key FROM evidence_media em JOIN media m ON m.id = em.media_id WHERE em.evidence_id = ? ORDER BY m.id', evidence.id).map(row => row.key)
   if (evidence.image_key) { const at = keys.indexOf(evidence.image_key); if (at > 0) keys.splice(at, 1); if (at !== 0) keys.unshift(evidence.image_key) }
+  if (keys.length > MEDIA_MAX) throw new Error(`evidence ${evidence.id} has ${keys.length} pictures; a sighting holds ${MEDIA_MAX}`)
   const crops = has('crops') ? rows('SELECT x, y, w, h FROM crops WHERE evidence_id = ? ORDER BY id', evidence.id) : []
   if (crops.length > 1) notes.push(`evidence ${evidence.id}: ${crops.length} marks, the first is kept on the first picture`)
   const out: StoredImage[] = []
@@ -154,8 +156,8 @@ function dated(at: string) {
 }
 
 for (const entry of rows('SELECT * FROM entries ORDER BY id')) {
-  const script = String(entry.script).toLowerCase()
-  const scalars = { script: isScript(script) ? script : 'other', script_other: isScript(script) ? null : text(entry.script), status: 'unchecked', radical: text(entry.radical), strokes: Number.isInteger(entry.strokes) ? entry.strokes : null }
+  const scriptOf = (value: unknown) => { const script = String(value).toLowerCase(); return { script: isScript(script) ? script : 'other', script_other: isScript(script) ? null : text(value) } }
+  const scalars = { ...scriptOf(entry.script), status: 'unchecked', radical: text(entry.radical), strokes: Number.isInteger(entry.strokes) ? entry.strokes : null }
   const creator = entry.creator_id ?? IMPORTER
   const evidence = rows('SELECT * FROM evidence WHERE entry_id = ? ORDER BY id', entry.id)
   if (!evidence.length) throw new Error(`entry ${entry.id} has no evidence`)
@@ -164,7 +166,7 @@ for (const entry of rows('SELECT * FROM entries ORDER BY id')) {
 
   // The first recorded state. A past revision held the entry's text and its first evidence's citation.
   const cited = (state: Row): SightingFields => ({ ...sightingFields(evidence[0]), ...Object.fromEntries(Object.entries(sightingFields({ ...evidence[0], ...state, url: null, types: null })).filter(([field]) => ['place', 'title', 'author', 'publisher', 'report_date', 'page', 'note'].includes(field))), url: null, types: null } as SightingFields)
-  const stated = (state: Row): EntryFields => ({ ...scalars, radical: null, strokes: null, description: text(state.description), claims: splitIds(state.ids).map(sequence => claim('ids', sequence)) })
+  const stated = (state: Row): EntryFields => ({ ...scalars, ...scriptOf(state.script), radical: null, strokes: null, description: text(state.description), claims: splitIds(state.ids).map(sequence => claim('ids', sequence)) })
   const id = await createEntry(db, stated(first), cited(first), [], { actor: creator, ip: null })
   if (id !== entry.id) throw new Error(`entry ${entry.id} would become ${id}`)
   raw.query('UPDATE entries SET created_at = ?, updated_at = ? WHERE id = ?').run(entry.created_at, entry.created_at, id)
@@ -181,7 +183,7 @@ for (const entry of rows('SELECT * FROM entries ORDER BY id')) {
   // Each later revision that recorded a different state is that edit, at its own time. The previous
   // database did not record who made it.
   for (const state of history.slice(1)) {
-    const before = await entryState(), next = { ...before, description: stated(state).description, claims: stated(state).claims }
+    const before = await entryState(), next = { ...before, ...scriptOf(state.script), description: stated(state).description, claims: stated(state).claims }
     if (!same(before, next)) { const done = await editEntry(db, id, (await current()).entry.rev, next, who, null); if (!done.ok) throw new Error(`entry ${id} r${state.revision}: ${done.code}`) }
     const sighting = await sightingState(sightingIds.get(evidence[0].id)!)
     if (!same(sighting.fields, cited(state))) { const done = await editSighting(db, sightingIds.get(evidence[0].id)!, sighting.rev, cited(state), null, who, null, id); if (!done.ok) throw new Error(`entry ${id} r${state.revision}: ${done.code}`) }
@@ -219,7 +221,8 @@ raw.exec('PRAGMA wal_checkpoint(TRUNCATE)')
 const dump = Bun.spawnSync(['sqlite3', join(outDir, 'database.sqlite'), '.dump'])
 if (dump.exitCode !== 0) throw new Error(dump.stderr.toString())
 const data = dump.stdout.toString().split('\n').filter(line => line.startsWith('INSERT INTO') && !/^INSERT INTO "?(sqlite_sequence|d1_migrations)/.test(line))
-writeFileSync(join(outDir, 'data.sql'), data.join('\n') + '\n')
+// Rows refer to rows that come later in the file, such as the person one was merged into.
+writeFileSync(join(outDir, 'data.sql'), 'PRAGMA defer_foreign_keys = true;\n' + data.join('\n') + '\n')
 const count = (table: string) => (raw.query(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n
 console.log(Object.fromEntries(['people', 'entries', 'claims', 'sources', 'sightings', 'sighting_media', 'revisions', 'entry_tags', 'reports'].map(table => [table, count(table)])))
 console.log(`${readdirSync(join(outDir, 'media')).length} objects in ${join(outDir, 'media')}`)
