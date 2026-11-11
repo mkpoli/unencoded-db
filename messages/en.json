@@ -235,7 +235,5 @@
   "field.role": "Role",
   "field.addPart": "Add part",
   "field.removePart": "Remove part",
-  "field.formationOverride": "Custom formation",
-  "field.formationNone": "Not set",
-  "field.formationEdit": "Edit"
+  "field.formationOverride": "Custom formation"
 }

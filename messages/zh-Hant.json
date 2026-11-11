@@ -235,7 +235,5 @@
   "field.role": "角色",
   "field.addPart": "新增部件",
   "field.removePart": "刪除部件",
-  "field.formationOverride": "自訂構字方式",
-  "field.formationNone": "未設定",
-  "field.formationEdit": "編輯"
+  "field.formationOverride": "自訂構字方式"
 }

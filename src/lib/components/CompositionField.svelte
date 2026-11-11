@@ -4,7 +4,7 @@
   // parsed parts are the starting point; an editor may add, rename or remove them, type a role
   // beyond the three, and name a formation the roles cannot express.
   import { onMount, tick, untrack } from 'svelte'
-  import { analyze, composeValue, formationOf, parseComposition, FORMATIONS, FORMATION_MAX, PART_MAX, PARTS_MAX, ROLES, ROLE_MAX } from '$lib/composition'
+  import { analyze, composeValue, formationOf, isRole, parseComposition, FORMATIONS, FORMATION_MAX, PART_MAX, PARTS_MAX, ROLES, ROLE_MAX } from '$lib/composition'
   import { formationFromLabel, formationLabel, roleFromLabel, roleLabel } from '$lib/composition-labels'
   import { splitIds } from '$lib/ids'
   import { t, type Locale } from '$lib/i18n'
@@ -82,7 +82,7 @@
     if (rows.length >= PARTS_MAX) return
     rows = [...rows, { part: '', roleText: '' }]
     await tick()
-    partsBox?.querySelector<HTMLInputElement>('.composition-row:last-child .composition-part-input')?.focus()
+    partsBox?.querySelector<HTMLInputElement>('.part-card:last-of-type .part-glyph')?.focus()
   }
 
   function remove(index: number) {
@@ -93,63 +93,63 @@
 {#if parsed}
   <details class="composition">
     <summary class="composition-summary">
+      <svg class="chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5 8 6l-3.5 3.5" /></svg>
       <span class="field-label">{t(locale, 'field.formation')}</span>
-      {#if set}
-        <span class="composition-value" aria-live="polite">{formationLabel(locale, resolved)}</span>
-        <span class="composition-tags">
-          {#each tags as tag, index (index)}<span class="composition-tag">{tag.part} · {roleLabel(locale, tag.role)}</span>{/each}
-        </span>
-      {:else}
-        <span class="composition-value none" aria-live="polite">{t(locale, 'field.formationNone')}</span>
-      {/if}
-      <span class="composition-edit">{t(locale, 'field.formationEdit')}<span class="chevron" aria-hidden="true">⌄</span></span>
+      <span class="composition-state" aria-live="polite">
+        {#if set}
+          <span class="composition-value">{formationLabel(locale, resolved)}</span>
+          {#each tags as tag, index (index)}
+            <span class="composition-tag"><span class="tag-glyph">{tag.part}</span>{roleLabel(locale, tag.role)}</span>
+          {/each}
+        {:else}
+          <span class="composition-value none">—</span>
+        {/if}
+      </span>
     </summary>
 
     <div class="composition-body">
-      {#if rows.length}
-        <div class="composition-parts" bind:this={partsBox}>
-          <div class="composition-part-head" aria-hidden="true">
-            <span>{t(locale, 'field.part')}</span>
-            <span>{t(locale, 'field.role')}</span>
-            <span></span>
+      <div class="composition-parts" bind:this={partsBox}>
+        {#each rows as row, index (index)}
+          <div class="part-card">
+            <input
+              class="part-glyph"
+              class:long={[...row.part.trim()].length > 2}
+              bind:value={row.part}
+              maxlength={PART_MAX}
+              placeholder={t(locale, 'field.part')}
+              aria-label={`${t(locale, 'field.part')} ${index + 1}`}
+              autocomplete="off"
+              spellcheck="false"
+              disabled={!hydrated}
+            />
+            <input
+              class="part-role"
+              class:standard={isRole(roleFromLabel(locale, row.roleText))}
+              bind:value={row.roleText}
+              maxlength={ROLE_MAX}
+              list={roleOptions}
+              placeholder={t(locale, 'field.role')}
+              aria-label={`${t(locale, 'field.role')} ${index + 1}`}
+              autocomplete="off"
+              disabled={!hydrated}
+            />
+            <button type="button" class="part-remove" aria-label={`${t(locale, 'field.removePart')} ${index + 1}`} onclick={() => remove(index)} disabled={!hydrated}>
+              <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3 3 9" /></svg>
+            </button>
           </div>
-          {#each rows as row, index (index)}
-            <div class="composition-row">
-              <input
-                class="input composition-part-input"
-                bind:value={row.part}
-                maxlength={PART_MAX}
-                placeholder={t(locale, 'field.part')}
-                aria-label={`${t(locale, 'field.part')} ${index + 1}`}
-                autocomplete="off"
-                spellcheck="false"
-                disabled={!hydrated}
-              />
-              <input
-                class="input"
-                bind:value={row.roleText}
-                maxlength={ROLE_MAX}
-                list={roleOptions}
-                placeholder={t(locale, 'field.role')}
-                aria-label={`${t(locale, 'field.role')} ${index + 1}`}
-                autocomplete="off"
-                disabled={!hydrated}
-              />
-              <button type="button" class="composition-remove" aria-label={`${t(locale, 'field.removePart')} ${index + 1}`} onclick={() => remove(index)} disabled={!hydrated}>
-                <span aria-hidden="true">×</span>
-              </button>
-            </div>
-          {/each}
-        </div>
-      {/if}
-
-      <button type="button" class="composition-add" disabled={!hydrated || rows.length >= PARTS_MAX} onclick={add}>+ {t(locale, 'field.addPart')}</button>
+        {/each}
+        {#if rows.length < PARTS_MAX}
+          <button type="button" class="part-add" onclick={add} disabled={!hydrated}>
+            <span class="part-add-mark" aria-hidden="true">+</span>
+            <span>{t(locale, 'field.addPart')}</span>
+          </button>
+        {/if}
+      </div>
 
       <div class="composition-formation">
         <label class="field-label" for={formationId}>{t(locale, 'field.formationOverride')}</label>
         <input
           id={formationId}
-          class="input"
           bind:value={formationText}
           maxlength={FORMATION_MAX}
           list={formationOptions}
@@ -171,30 +171,51 @@
 {/if}
 
 <style>
-  .composition { margin: 14px 0 4px; padding: 10px 0 0; border-top: 1px dashed var(--line); }
-  .composition-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; list-style: none; cursor: pointer; }
+  .composition { margin-block: var(--space-1) var(--space-2); }
+
+  .composition-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); min-height: 40px; border-radius: var(--radius-sm); list-style: none; }
   .composition-summary::-webkit-details-marker { display: none; }
-  .composition-summary:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
-  .composition-value { color: var(--accent); font-size: var(--text-sm); font-weight: 600; }
-  .composition-value.none { color: var(--muted); font-weight: 400; }
-  .composition-tags { display: flex; flex-wrap: wrap; gap: 4px; }
-  .composition-tag { padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: var(--text-sm); }
-  .composition-edit { margin-inline-start: auto; color: var(--muted); font-size: var(--text-sm); white-space: nowrap; }
-  .chevron { display: inline-block; margin-inline-start: 4px; transition: transform 120ms ease; }
-  .composition[open] .chevron { transform: rotate(180deg); }
-  .composition-body { display: grid; gap: 10px; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-subtle); }
-  .composition-parts { display: grid; gap: 6px; }
-  .composition-part-head, .composition-row { display: grid; grid-template-columns: minmax(72px, 110px) minmax(0, 1fr) 28px; align-items: center; gap: 8px; }
-  .composition-part-head { color: var(--muted); font-size: var(--text-sm); }
-  .composition-part-input { text-align: center; }
-  .composition-remove { width: 28px; min-height: 32px; align-self: stretch; padding: 0; border: 0; background: none; color: var(--muted); font-size: 1.2rem; line-height: 1; cursor: pointer; }
-  .composition-remove:hover { color: var(--wrong); }
-  .composition-remove:disabled { cursor: default; }
-  .composition-add { justify-self: start; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: var(--text-sm); cursor: pointer; }
-  .composition-add:hover { text-decoration: underline; }
-  .composition-add:disabled { color: var(--muted); cursor: default; text-decoration: none; }
-  .composition-formation { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .composition-summary:hover .field-label, .composition[open] .composition-summary .field-label { color: var(--accent); }
+  .chevron { flex: none; width: 12px; height: 12px; margin-inline-end: calc(var(--space-1) * -1); fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform 120ms ease; }
+  .composition[open] .chevron { transform: rotate(90deg); stroke: var(--accent); }
+  .composition-state { display: contents; }
+  .composition-value { color: var(--ink); font-size: var(--text-sm); font-weight: 450; }
+  .composition-value.none { color: var(--faint); font-weight: 400; }
+  .composition-tag { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--text-sm); }
+  .tag-glyph { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding-inline: 4px; border-radius: var(--radius-xs); background: var(--surface-tile); color: var(--ink); font-size: var(--text-base); line-height: 1; }
+
+  .composition-body { display: grid; gap: var(--space-4); padding: var(--space-2) 0 var(--space-2) 20px; }
+  .composition-parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: var(--space-2); }
+
+  .part-card { position: relative; display: grid; grid-template-rows: 60px 40px; overflow: hidden; border: 1px solid var(--line-control); border-radius: var(--radius-md); background: var(--surface); transition: border-color 0.12s ease; }
+  .part-card:hover { border-color: var(--line-strong); }
+  .part-card:focus-within { border-color: var(--accent); }
+  .part-card input { min-height: 0; height: 100%; padding: 0 var(--space-1); border: 0; border-radius: 0; text-align: center; }
+  .part-card input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .part-card .part-glyph { border-bottom: 1px solid var(--line); background: var(--surface-tile); font-size: 26px; line-height: 1; }
+  .part-glyph.long { font-size: var(--text-lg); }
+  .part-glyph::placeholder { color: var(--faint); font-size: var(--text-sm); }
+  .part-card .part-role { background: none; font-size: var(--text-sm); }
+  .part-role::-webkit-calendar-picker-indicator { display: none !important; }
+  .part-role.standard { color: var(--accent); font-weight: 550; }
+  .part-role::placeholder { color: var(--faint); }
+
+  .part-remove { position: absolute; inset-block-start: 2px; inset-inline-end: 2px; display: grid; place-items: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: var(--radius-xs); background: none; color: var(--faint); }
+  .part-remove::before { content: ""; position: absolute; inset: -8px; }
+  .part-remove svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  .part-remove:not(:disabled):hover { background: var(--wrong-light); color: var(--wrong); }
+  .part-remove:focus-visible { outline-offset: -2px; }
+
+  .part-add { display: grid; place-content: center; justify-items: center; gap: 2px; min-height: 100px; padding: var(--space-2); border: 1px dashed var(--line-control); border-radius: var(--radius-md); background: none; color: var(--muted); font-size: var(--text-sm); font-weight: 500; line-height: 1.3; text-align: center; }
+  .part-add-mark { font-size: 22px; font-weight: 300; line-height: 1; }
+  .part-add:not(:disabled):hover { border-style: solid; border-color: var(--accent); background: var(--accent-hover); color: var(--accent); }
+
+  .composition-formation { display: grid; grid-template-columns: auto minmax(0, 280px); justify-content: start; align-items: center; gap: var(--space-3); }
+  .composition-formation .field-label { color: var(--muted); font-weight: 500; }
+
   @media (max-width: 700px) {
-    .composition-part-head, .composition-row { grid-template-columns: minmax(56px, 80px) minmax(0, 1fr) 28px; }
+    .composition-body { padding-inline-start: 0; }
+    .composition-parts { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); }
+    .composition-formation { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   }
 </style>

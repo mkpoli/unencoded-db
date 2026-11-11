@@ -39,7 +39,8 @@ export type Analysis = {
   tagged: boolean
 }
 
-const isRole = (value: unknown): value is Role =>
+/** Whether a stored role is one of the standard three. */
+export const isRole = (value: unknown): value is Role =>
   typeof value === 'string' && (ROLES as readonly string[]).includes(value)
 
 const clean = (value: unknown, max: number): string =>

@@ -235,7 +235,5 @@
   "field.role": "Vai trò",
   "field.addPart": "Thêm bộ phận",
   "field.removePart": "Xóa bộ phận",
-  "field.formationOverride": "Cách cấu tạo tùy chỉnh",
-  "field.formationNone": "Chưa đặt",
-  "field.formationEdit": "Sửa"
+  "field.formationOverride": "Cách cấu tạo tùy chỉnh"
 }

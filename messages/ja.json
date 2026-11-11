@@ -235,7 +235,5 @@
   "field.role": "役割",
   "field.addPart": "部品を追加",
   "field.removePart": "部品を削除",
-  "field.formationOverride": "造字法を指定",
-  "field.formationNone": "未設定",
-  "field.formationEdit": "編集"
+  "field.formationOverride": "造字法を指定"
 }

@@ -235,7 +235,5 @@
   "field.role": "역할",
   "field.addPart": "부품 추가",
   "field.removePart": "부품 삭제",
-  "field.formationOverride": "조자법 직접 입력",
-  "field.formationNone": "설정 안 됨",
-  "field.formationEdit": "편집"
+  "field.formationOverride": "조자법 직접 입력"
 }

@@ -577,7 +577,8 @@ describe('localized pages', () => {
       locale: 'en',
     } })
     expect(body).toContain('Phono-semantic')
-    expect(body).toContain('青 · Phonetic')
+    expect(body).toMatch(/<span class="tag-glyph[^"]*">青<\/span>Phonetic/)
+    expect(body).toMatch(/class="part-role[^"]* standard"/)
     expect(body).toContain('disabled')
   })
 
