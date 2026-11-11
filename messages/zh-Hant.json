@@ -220,5 +220,16 @@
   "source.title": "出處",
   "source.view": "出處詳情",
   "tag.add": "新增標籤",
-  "tag.remove": "刪除標籤 {tag}"
+  "tag.remove": "刪除標籤 {tag}",
+  "field.formation": "構字方式",
+  "field.formationHint": "標出第一條描述拆出的部件，構字方式隨之而定。",
+  "formation.phonoSemantic": "形聲",
+  "formation.ideographic": "會意",
+  "formation.indicative": "指事",
+  "formation.sign": "記號",
+  "formation.single": "獨體",
+  "formation.unknown": "未定",
+  "role.semantic": "形符",
+  "role.phonetic": "聲符",
+  "role.symbol": "符號"
 }

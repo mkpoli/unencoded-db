@@ -1,5 +1,7 @@
 <script lang="ts">
   import { groupedComparisons, relationshipLabel, type Comparison } from '$lib/comparison-rows'
+  import { formationLabel, roleLabel } from '$lib/composition-labels'
+  import type { Analysis } from '$lib/composition'
   import CropField from '$lib/components/CropField.svelte'
   import EvidenceTypes from '$lib/components/EvidenceTypes.svelte'
   import FileField from '$lib/components/FileField.svelte'
@@ -19,7 +21,7 @@
   type EvidenceMedia = { id: number; evidence_id: number }
   type Evidence = { id: number; place: string; url: string | null; provider?: string | null; provider_url?: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; types: EvidenceType[]; source_id: number | null; has_image: number; created_at: string }
   type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; equivalent_to: string | null; strokes: number | null; ivd_status: 'registered' | 'none' | null; ivd_sequence: string | null; created_at: string }
-  let { data }: { data: { locale: Locale; entry: Entry; glyph: string | null; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; encodings: Encoding[]; media: EvidenceMedia[]; isModerator: boolean; reported: boolean } } = $props()
+  let { data }: { data: { locale: Locale; entry: Entry; glyph: string | null; composition: Analysis | null; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; encodings: Encoding[]; media: EvidenceMedia[]; isModerator: boolean; reported: boolean } } = $props()
   let entry = $derived(data.entry)
   const sequences = $derived(splitIds(entry.ids))
   let comparisons = $derived(data.comparisons ?? [])
@@ -31,6 +33,12 @@
   let relations = $derived(data.relations ?? [])
   let tags = $derived(data.tags ?? [])
   let senses = $derived(data.senses ?? [])
+  const composition = $derived(data.composition)
+  const roleParts = $derived(composition ? composition.parts.flatMap((part, index) => {
+    const role = composition.roles[index]
+    return role ? [{ part, role }] : []
+  }) : [])
+  const hasFormation = $derived(Boolean(composition && (composition.formation === 'single' || composition.roles.some(Boolean))))
   const isLink = (text: string) => /^https?:\/\//i.test(text.trim())
 </script>
 
@@ -76,6 +84,15 @@
       <dl class="entry-meta">
         <div class="entry-row"><dt>{t(data.locale, 'field.script')}</dt><dd>{entry.script}</dd></div>
         {#if sequences.length}<div class="entry-row"><dt>{t(data.locale, 'field.ids')}</dt><dd>{#each sequences as sequence}<span class="ids-sequence">{sequence}</span>{/each}</dd></div>{/if}
+        {#if composition && hasFormation}
+          <div class="entry-row">
+            <dt>{t(data.locale, 'field.formation')}</dt>
+            <dd class="formation">
+              <span class="formation-method">{formationLabel(data.locale, composition.formation)}</span>
+              {#each roleParts as item, index (index)}<span class="formation-part">{item.part} · {roleLabel(data.locale, item.role)}</span>{/each}
+            </dd>
+          </div>
+        {/if}
         {#if entry.description}<div class="entry-row"><dt>{t(data.locale, 'field.description')}</dt><dd>{entry.description}</dd></div>{/if}
         {#if entry.radical}<div class="entry-row"><dt>{t(data.locale, 'field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
         {#each data.encodings ?? [] as encoding (encoding.charset + '\u0000' + encoding.code)}<div class="entry-row"><dt>{encodingSetLabel(encoding.charset)}</dt><dd>{encoding.code}</dd></div>{/each}
@@ -282,4 +299,7 @@
 
 <style>
   .ids-sequence { display: block }
+  .formation { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .formation-method { font-weight: 600; }
+  .formation-part { padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: var(--text-sm); }
 </style>

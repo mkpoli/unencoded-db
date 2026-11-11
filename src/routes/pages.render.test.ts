@@ -21,6 +21,9 @@ const idsGlyph = resolve('src/lib/components/IdsGlyph.svelte')
 const idsDrawing = resolve('src/lib/components/IdsDrawing.svelte')
 const scriptSelect = resolve('src/lib/components/ScriptSelect.svelte')
 const comparisonGrid = resolve('src/lib/components/ComparisonGrid.svelte')
+const compositionField = resolve('src/lib/components/CompositionField.svelte')
+const composition = resolve('src/lib/composition.ts')
+const compositionLabels = resolve('src/lib/composition-labels.ts')
 const encodingFields = resolve('src/lib/components/EncodingFields.svelte')
 const extraImagesField = resolve('src/lib/components/ExtraImagesField.svelte')
 const evidenceTypesComponent = resolve('src/lib/components/EvidenceTypes.svelte')
@@ -34,6 +37,7 @@ let idsGlyphModule: Promise<string> | null = null
 let idsDrawingModule: Promise<string> | null = null
 let scriptSelectModule: Promise<string> | null = null
 let comparisonGridModule: Promise<string> | null = null
+let compositionFieldModule: Promise<string> | null = null
 let encodingFieldsModule: Promise<string> | null = null
 let extraImagesFieldModule: Promise<string> | null = null
 let evidenceTypesComponentModule: Promise<string> | null = null
@@ -76,6 +80,23 @@ function loadComparisonGrid(): Promise<string> {
     })()
   }
   return comparisonGridModule
+}
+
+function loadCompositionField(): Promise<string> {
+  if (!compositionFieldModule) {
+    compositionFieldModule = (async () => {
+      const preprocessed = await preprocess(readFileSync(compositionField, 'utf8'), vitePreprocess({ script: true }), { filename: compositionField })
+      const { js } = compile(preprocessed.code, { filename: compositionField, generate: 'server' })
+      const target = resolve(tmp, 'composition-field.js')
+      writeFileSync(target, js.code
+        .replaceAll("'$lib/composition'", `'${composition}'`).replaceAll('"$lib/composition"', `"${composition}"`)
+        .replaceAll("'$lib/composition-labels'", `'${compositionLabels}'`).replaceAll('"$lib/composition-labels"', `"${compositionLabels}"`)
+        .replaceAll("'$lib/ids'", `'${ids}'`).replaceAll('"$lib/ids"', `"${ids}"`)
+        .replaceAll("'$lib/i18n'", `'${i18n}'`).replaceAll('"$lib/i18n"', `"${i18n}"`))
+      return target
+    })()
+  }
+  return compositionFieldModule
 }
 
 function loadEncodingFields(): Promise<string> {
@@ -185,6 +206,7 @@ async function load(path: string, name: string) {
       const select = await loadScriptSelect()
       const grid = await loadComparisonGrid()
       const encoding = await loadEncodingFields()
+      const parts = await loadCompositionField()
       const extra = await loadExtraImagesField()
       const evidenceTypesComponentPath = await loadEvidenceTypesComponent()
       const revisionHistoryPath = await loadRevisionHistory()
@@ -206,6 +228,8 @@ async function load(path: string, name: string) {
         .replaceAll('"$lib/components/ExtraImagesField.svelte"', `"${extra}"`)
         .replaceAll("'$lib/components/ExtraImagesField.svelte'", `'${extra}'`)
         .replaceAll('"$lib/components/EncodingFields.svelte"', `"${encoding}"`)
+        .replaceAll('"$lib/components/CompositionField.svelte"', `"${parts}"`)
+        .replaceAll("'$lib/components/CompositionField.svelte'", `'${parts}'`)
         .replaceAll("'$lib/components/EncodingFields.svelte'", `'${encoding}'`)
         .replaceAll('"$lib/components/ScriptSelect.svelte"', `"${select}"`)
         .replaceAll("'$lib/components/ScriptSelect.svelte'", `'${select}'`)
@@ -499,6 +523,22 @@ describe('localized pages', () => {
     expect(body).toContain('수정 이력')
     expect(body).not.toContain('src="/ko/entry/9/image"')
     expect(body).not.toContain('https://example.org/source')
+  })
+
+  test('entry page shows the formation and the role of each part', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-formation', {
+      data: {
+        locale: 'zh-Hant',
+        entry: { id: 9, script: 'Han', ids: '⿰青鳥', description: null, radical: null, encoded_as: null, strokes: null, ivd_status: null, ivd_sequence: null, created_at: '2026-11-08T05:00:00.000Z' },
+        composition: { ids: '⿰青鳥', parts: ['青', '鳥'], roles: ['phonetic', 'semantic'], formation: 'phonoSemantic' },
+        comparisons: [],
+        evidence: [],
+      },
+    })
+    expect(body).toContain('<dt>構字方式</dt>')
+    expect(body).toContain('形聲')
+    expect(body).toContain('青 · 聲符')
+    expect(body).toContain('鳥 · 形符')
   })
 
   test('entry page shows the character it normalizes to', async () => {

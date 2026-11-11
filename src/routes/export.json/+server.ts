@@ -1,6 +1,7 @@
 import { error, json } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
 import { primaryIds, splitIds } from '$lib/ids'
+import { analyze, parseComposition } from '$lib/composition'
 import { publicEntryPredicate } from '$lib/server/visibility'
 import { parseDate } from '$lib/server/evidence-links'
 import type { Comparison } from '$lib/comparison-rows'
@@ -13,6 +14,7 @@ type ExportRecord = {
   id: number
   script: string
   ids: string | null
+  composition: string | null
   description: string | null
   place: string
   title: string | null
@@ -65,7 +67,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
   if (after === null || limit === null) return json({ error: 'Invalid after or limit parameter' }, { status: 400, headers: { 'cache-control': 'no-store' } })
 
   const { results } = await platform.env.DB
-    .prepare(`SELECT id, script, ids, description, place, title, author, publisher, year, page, note, created_at, comparisons, ivd_status, ivd_sequence
+    .prepare(`SELECT id, script, ids, composition, description, place, title, author, publisher, year, page, note, created_at, comparisons, ivd_status, ivd_sequence
               FROM entries INDEXED BY entries_visible_id WHERE ${publicEntryPredicate} AND id > ? ORDER BY id ASC LIMIT ?`)
     .bind(after, limit + 1)
     .all<ExportRecord>()
@@ -81,7 +83,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
     }
   }
 
-  const records = page.map(({ comparisons: stored, ids, ...record }) => {
+  const records = page.map(({ comparisons: stored, ids, composition: storedComposition, ...record }) => {
     const rows = evidence.get(record.id) ?? [{
       id: 0, place: record.place, url: null, provider: null, provider_url: null, title: record.title, author: record.author, publisher: record.publisher,
       year: record.year, page: record.page, note: record.note,
@@ -91,6 +93,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
       ...record,
       ids: primaryIds(ids),
       ids_all: splitIds(ids),
+      composition: analyze(ids, parseComposition(storedComposition)),
       date_precision: rows[0].date_precision,
       comparisons: comparisons(stored),
       evidence: rows,

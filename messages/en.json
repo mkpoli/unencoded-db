@@ -220,5 +220,16 @@
   "source.title": "Source",
   "source.view": "Source details",
   "tag.add": "Add tag",
-  "tag.remove": "Remove tag {tag}"
+  "tag.remove": "Remove tag {tag}",
+  "field.formation": "Formation",
+  "field.formationHint": "Tag the parts of the first description. The formation follows from the tags.",
+  "formation.phonoSemantic": "Phono-semantic",
+  "formation.ideographic": "Compound ideograph",
+  "formation.indicative": "Simple ideograph",
+  "formation.sign": "Sign",
+  "formation.single": "Single component",
+  "formation.unknown": "Undetermined",
+  "role.semantic": "Semantic",
+  "role.phonetic": "Phonetic",
+  "role.symbol": "Symbol"
 }

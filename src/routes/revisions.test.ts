@@ -40,6 +40,7 @@ function dbSetup() {
   applyMigration(db, '0035_evidence_types.sql')
   applyMigration(db, '0036_entry_ids.sql')
   applyMigration(db, '0037_global_history.sql')
+  applyMigration(db, '0038_entry_composition.sql')
   return db
 }
 function binding(db: Database) {

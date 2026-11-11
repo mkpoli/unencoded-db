@@ -220,5 +220,16 @@
   "source.title": "출처",
   "source.view": "출처 상세",
   "tag.add": "태그 추가",
-  "tag.remove": "태그 {tag} 삭제"
+  "tag.remove": "태그 {tag} 삭제",
+  "field.formation": "조자법",
+  "field.formationHint": "첫 번째 설명의 부품에 의부·성부·기호를 붙이면 조자법이 정해집니다.",
+  "formation.phonoSemantic": "형성",
+  "formation.ideographic": "회의",
+  "formation.indicative": "지사",
+  "formation.sign": "기호자",
+  "formation.single": "독체",
+  "formation.unknown": "미정",
+  "role.semantic": "의부",
+  "role.phonetic": "성부",
+  "role.symbol": "기호"
 }
