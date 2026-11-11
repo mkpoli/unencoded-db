@@ -37,6 +37,8 @@ export type Analysis = {
   derived: Formation | null
   /** What the record shows: an editor's override, the derived formation, or `single`/`unknown`. */
   formation: string
+  /** Whether a stored analysis gives the description roles or a formation. */
+  tagged: boolean
 }
 
 const isRole = (value: unknown): value is Role =>
@@ -117,5 +119,6 @@ export function analyze(ids: string | null | undefined, composition: Composition
   const rows = parts.map((part, index) => ({ part, role: stored?.roles[index] ?? '' }))
   const derived = formationOf(rows.map(row => row.role))
   const formation = stored?.formation || derived || (parsedParts.length === 0 && !rows.length ? 'single' : 'unknown')
-  return { ids: sequence, parts: rows, derived, formation }
+  const tagged = Boolean(stored && (stored.roles.some(Boolean) || stored.formation))
+  return { ids: sequence, parts: rows, derived, formation, tagged }
 }

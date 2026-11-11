@@ -35,7 +35,7 @@
   let senses = $derived(data.senses ?? [])
   const composition = $derived(data.composition)
   const roleParts = $derived(composition?.parts.filter(part => part.role) ?? [])
-  const hasFormation = $derived(Boolean(composition && (composition.formation !== 'unknown' || composition.parts.some(part => part.role))))
+  const hasFormation = $derived(Boolean(composition?.tagged))
   const isLink = (text: string) => /^https?:\/\//i.test(text.trim())
 </script>
 

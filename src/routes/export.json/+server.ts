@@ -94,7 +94,7 @@ export const GET: RequestHandler = async ({ platform, url }) => {
       ...record,
       ids: primaryIds(ids),
       ids_all: splitIds(ids),
-      composition: composition ? {
+      composition: composition?.tagged ? {
         ids: composition.ids,
         parts: composition.parts.map(part => part.part),
         roles: composition.parts.map(part => part.role),

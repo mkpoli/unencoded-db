@@ -222,7 +222,7 @@
   "tag.add": "タグを追加",
   "tag.remove": "タグ「{tag}」を削除",
   "field.formation": "造字法",
-  "field.formationHint": "最初の記述の部品に役割を付けます。自分で入力してもかまいません。造字法は役割から決まります。",
+  "field.formationHint": "最初の記述の部品と役割を入力します。",
   "formation.phonoSemantic": "形声",
   "formation.ideographic": "会意",
   "formation.indicative": "指事",
@@ -237,5 +237,7 @@
   "field.addPart": "部品を追加",
   "field.removePart": "部品を削除",
   "field.formationOverride": "造字法を指定",
-  "field.formationDerived": "推定：{formation}"
+  "field.formationDerived": "推定：{formation}",
+  "field.formationNone": "未設定",
+  "field.formationEdit": "編集"
 }

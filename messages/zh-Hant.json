@@ -222,7 +222,7 @@
   "tag.add": "新增標籤",
   "tag.remove": "刪除標籤 {tag}",
   "field.formation": "構字方式",
-  "field.formationHint": "標出第一條描述拆出的部件，也可以自行輸入。構字方式隨部件角色而定。",
+  "field.formationHint": "標出第一條描述拆出的部件，也可以自行輸入。",
   "formation.phonoSemantic": "形聲",
   "formation.ideographic": "會意",
   "formation.indicative": "指事",
@@ -237,5 +237,7 @@
   "field.addPart": "新增部件",
   "field.removePart": "刪除部件",
   "field.formationOverride": "自訂構字方式",
-  "field.formationDerived": "推定：{formation}"
+  "field.formationDerived": "推定：{formation}",
+  "field.formationNone": "未設定",
+  "field.formationEdit": "編輯"
 }

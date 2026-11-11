@@ -530,7 +530,7 @@ describe('localized pages', () => {
       data: {
         locale: 'zh-Hant',
         entry: { id: 9, script: 'Han', ids: '⿰青鳥', description: null, radical: null, encoded_as: null, strokes: null, ivd_status: null, ivd_sequence: null, created_at: '2026-11-08T05:00:00.000Z' },
-        composition: { ids: '⿰青鳥', parts: [{ part: '青', role: 'phonetic' }, { part: '鳥', role: 'semantic' }], derived: 'phonoSemantic', formation: 'phonoSemantic' },
+        composition: { ids: '⿰青鳥', parts: [{ part: '青', role: 'phonetic' }, { part: '鳥', role: 'semantic' }], derived: 'phonoSemantic', formation: 'phonoSemantic', tagged: true },
         comparisons: [],
         evidence: [],
       },
@@ -546,7 +546,7 @@ describe('localized pages', () => {
       data: {
         locale: 'zh-Hant',
         entry: { id: 9, script: 'Han', ids: '⿰青鳥', description: null, radical: null, encoded_as: null, strokes: null, ivd_status: null, ivd_sequence: null, created_at: '2026-11-08T05:00:00.000Z' },
-        composition: { ids: '⿰青鳥', parts: [{ part: '青', role: '亦聲' }, { part: '鳥', role: 'semantic' }], derived: null, formation: '形聲兼會意' },
+        composition: { ids: '⿰青鳥', parts: [{ part: '青', role: '亦聲' }, { part: '鳥', role: 'semantic' }], derived: null, formation: '形聲兼會意', tagged: true },
         comparisons: [],
         evidence: [],
       },

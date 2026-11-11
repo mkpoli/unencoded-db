@@ -90,6 +90,7 @@ describe('analysis', () => {
       parts: [{ part: '青', role: '' }, { part: '鳥', role: '' }],
       derived: null,
       formation: 'unknown',
+      tagged: false,
     })
   })
 
@@ -100,6 +101,7 @@ describe('analysis', () => {
       parts: [{ part: '青', role: 'phonetic' }, { part: '鳥', role: 'semantic' }],
       derived: 'phonoSemantic',
       formation: 'phonoSemantic',
+      tagged: true,
     })
   })
 
@@ -110,12 +112,19 @@ describe('analysis', () => {
       parts: [{ part: '青', role: '亦聲' }, { part: '鳥', role: 'semantic' }],
       derived: null,
       formation: '形聲兼會意',
+      tagged: true,
     })
   })
 
   test('gives a record tagged before parts could be edited the parsed parts', () => {
     const composition = stored({ ids: '⿰亻七', roles: ['semantic', 'phonetic'] })
     expect(analyze('⿰亻七', composition)?.parts).toEqual([{ part: '亻', role: 'semantic' }, { part: '七', role: 'phonetic' }])
+    expect(analyze('⿰亻七', composition)?.tagged).toBe(true)
+  })
+
+  test('treats parts without roles or a formation as untagged', () => {
+    const composition = stored({ ids: '⿰亻七', parts: ['亻', '七'], roles: ['', ''] })
+    expect(analyze('⿰亻七', composition)?.tagged).toBe(false)
   })
 
   test('ignores parts and roles stored for another sequence', () => {
@@ -125,11 +134,12 @@ describe('analysis', () => {
       parts: [{ part: '亻', role: '' }, { part: '七', role: '' }],
       derived: null,
       formation: 'unknown',
+      tagged: false,
     })
   })
 
   test('reads a single component as a single-part character', () => {
-    expect(analyze('木')).toEqual({ ids: '木', parts: [], derived: null, formation: 'single' })
+    expect(analyze('木')).toEqual({ ids: '木', parts: [], derived: null, formation: 'single', tagged: false })
     expect(analyze('木', stored({ ids: '木', parts: ['木'], roles: ['semantic'] }))?.formation).toBe('unknown')
     expect(analyze('木', stored({ ids: '木', parts: ['木'], roles: ['semantic'], formation: '指事' }))?.formation).toBe('指事')
   })
