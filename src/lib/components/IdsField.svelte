@@ -3,6 +3,7 @@
   // whether an encoded character or another record has the same description.
   import { codePoints, cleanIds, workshopUrl } from '$lib/ids'
   import { encodedMatch } from '$lib/encoded'
+  import { lookupIdsHints } from '$lib/ids-hints'
   import { href, locale, t } from '$lib/t'
   import { browser } from '$app/environment'
 
@@ -24,14 +25,11 @@
     const ids = cleanIds(value)
     encoded = null; same = []
     if (!browser || [...ids].length < 2) return
-    let live = true
-    const timer = setTimeout(async () => {
-      const found = await encodedMatch(ids).catch(() => null)
-      if (live) encoded = found
-      const answer = await fetch(`/api/match?ids=${encodeURIComponent(ids)}`).then(r => r.ok ? r.json() : []).catch(() => [])
-      if (live && Array.isArray(answer)) same = answer.filter((item): item is { id: number } => typeof item?.id === 'number')
+    let cancel = () => {}
+    const timer = setTimeout(() => {
+      cancel = lookupIdsHints(ids, encodedMatch, found => { encoded = found }, records => { same = records })
     }, 350)
-    return () => { live = false; clearTimeout(timer) }
+    return () => { cancel(); clearTimeout(timer) }
   })
 </script>
 
