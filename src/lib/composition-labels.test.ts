@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test'
-import { FORMATIONS, ROLES } from './composition'
+import { FORMATIONS, ROLE_PRESETS } from './composition'
 import { formationFromLabel, formationLabel, roleFromLabel, roleLabel } from './composition-labels'
 import { LOCALES } from './i18n'
 
 describe('composition labels', () => {
   for (const locale of LOCALES) {
     test(`round-trips every standard role in ${locale}`, () => {
-      for (const role of ROLES) expect(roleFromLabel(locale, roleLabel(locale, role))).toBe(role)
+      for (const role of ROLE_PRESETS) expect(roleFromLabel(locale, roleLabel(locale, role))).toBe(role)
       expect(roleFromLabel(locale, 'semantic')).toBe('semantic')
-      expect(roleFromLabel(locale, '亦聲')).toBe('亦聲')
+      expect(roleFromLabel(locale, '兼義')).toBe('兼義')
     })
 
     test(`round-trips every standard formation in ${locale}`, () => {

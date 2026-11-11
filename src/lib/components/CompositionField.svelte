@@ -4,7 +4,7 @@
   // parsed parts are the starting point; an editor may add, rename or remove them, type a role
   // beyond the three, and name a formation the roles cannot express.
   import { onMount, tick, untrack } from 'svelte'
-  import { analyze, composeValue, formationOf, isRole, parseComposition, FORMATIONS, FORMATION_MAX, PART_MAX, PARTS_MAX, ROLES, ROLE_MAX } from '$lib/composition'
+  import { analyze, composeValue, formationOf, isRole, parseComposition, FORMATIONS, FORMATION_MAX, PART_MAX, PARTS_MAX, ROLE_PRESETS, ROLE_MAX } from '$lib/composition'
   import { formationFromLabel, formationLabel, roleFromLabel, roleLabel } from '$lib/composition-labels'
   import { splitIds } from '$lib/ids'
   import { t, type Locale } from '$lib/i18n'
@@ -160,7 +160,7 @@
       </div>
 
       <datalist id={roleOptions}>
-        {#each ROLES as role}<option value={roleLabel(locale, role)}></option>{/each}
+        {#each ROLE_PRESETS as role}<option value={roleLabel(locale, role)}></option>{/each}
       </datalist>
       <datalist id={formationOptions}>
         {#each FORMATIONS as formation}<option value={formationLabel(locale, formation)}></option>{/each}

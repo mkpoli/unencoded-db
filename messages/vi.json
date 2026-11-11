@@ -235,5 +235,12 @@
   "field.role": "Vai trò",
   "field.addPart": "Thêm bộ phận",
   "field.removePart": "Xóa bộ phận",
-  "field.formationOverride": "Cách cấu tạo tùy chỉnh"
+  "field.formationOverride": "Cách cấu tạo tùy chỉnh",
+  "role.also": "Kiêm thanh",
+  "role.abbreviatedSound": "Tỉnh thanh",
+  "role.abbreviatedForm": "Tỉnh hình",
+  "role.fanqieUpper": "Thượng tự",
+  "role.fanqieLower": "Hạ tự",
+  "formation.compoundPhonoSemantic": "Hội ý kiêm hình thanh",
+  "formation.qieshen": "Thiết thân"
 }

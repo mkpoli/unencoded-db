@@ -235,5 +235,12 @@
   "field.role": "역할",
   "field.addPart": "부품 추가",
   "field.removePart": "부품 삭제",
-  "field.formationOverride": "조자법 직접 입력"
+  "field.formationOverride": "조자법 직접 입력",
+  "role.also": "역성",
+  "role.abbreviatedSound": "생성",
+  "role.abbreviatedForm": "생형",
+  "role.fanqieUpper": "반절 상자",
+  "role.fanqieLower": "반절 하자",
+  "formation.compoundPhonoSemantic": "회의겸형성",
+  "formation.qieshen": "절신"
 }

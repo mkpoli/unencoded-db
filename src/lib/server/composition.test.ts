@@ -39,6 +39,13 @@ describe('submitted composition', () => {
       .toBe('{"ids":"木","parts":["木"],"roles":["semantic"],"formation":null}')
   })
 
+  test('keeps a preset role and a fanqie pair', () => {
+    expect(readComposition(form('{"ids":"⿰取女","parts":["取","女"],"roles":["also","semantic"]}'), '⿰取女'))
+      .toBe('{"ids":"⿰取女","parts":["取","女"],"roles":["also","semantic"],"formation":null}')
+    expect(readComposition(form('{"ids":"⿰取女","parts":["取","女"],"roles":["fanqieUpper","fanqieLower"]}'), '⿰取女'))
+      .toBe('{"ids":"⿰取女","parts":["取","女"],"roles":["fanqieUpper","fanqieLower"],"formation":null}')
+  })
+
   test('drops roles named against another description', () => {
     expect(readComposition(form('{"ids":"⿰木木","parts":["木","木"],"roles":["semantic","phonetic"]}'), '⿰青鳥')).toBeNull()
   })

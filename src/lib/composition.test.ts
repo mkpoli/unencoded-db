@@ -28,9 +28,21 @@ describe('formation', () => {
     expect(formationOf(roles('phonetic', 'symbol'))).toBeNull()
   })
 
-  test('leaves a custom role outside the standard formation', () => {
-    expect(formationOf(roles('亦聲', 'semantic'))).toBeNull()
-    expect(formationOf(roles('semantic', 'semantic', '亦聲'))).toBeNull()
+  test('reads 亦聲 as a compound ideograph and phono-semantic character', () => {
+    expect(formationOf(roles('also', 'semantic'))).toBe('compoundPhonoSemantic')
+    expect(formationOf(roles('also', 'phonetic'))).toBe('compoundPhonoSemantic')
+  })
+
+  test('reads abbreviated and fanqie roles by what they spell', () => {
+    expect(formationOf(roles('abbreviatedSound', 'semantic'))).toBe('phonoSemantic')
+    expect(formationOf(roles('abbreviatedForm', 'phonetic'))).toBe('phonoSemantic')
+    expect(formationOf(roles('fanqieUpper', 'semantic'))).toBe('phonoSemantic')
+    expect(formationOf(roles('fanqieUpper', 'fanqieLower'))).toBe('qieshen')
+  })
+
+  test('leaves a custom role outside the presets undecided', () => {
+    expect(formationOf(roles('兼義', 'semantic'))).toBeNull()
+    expect(formationOf(roles('semantic', 'semantic', '自訂'))).toBeNull()
   })
 })
 
@@ -132,6 +144,13 @@ describe('analysis', () => {
   test('treats parts without roles or a formation as untagged', () => {
     const composition = stored({ ids: '⿰亻七', parts: ['亻', '七'], roles: ['', ''] })
     expect(analyze('⿰亻七', composition)?.tagged).toBe(false)
+  })
+
+  test('derives 會意兼形聲 and 切身 from the presets', () => {
+    const also = stored({ ids: '⿰取女', parts: ['取', '女'], roles: ['also', 'semantic'] })
+    expect(analyze('⿰取女', also)?.formation).toBe('compoundPhonoSemantic')
+    const qieshen = stored({ ids: '⿰取女', parts: ['取', '女'], roles: ['fanqieUpper', 'fanqieLower'] })
+    expect(analyze('⿰取女', qieshen)?.formation).toBe('qieshen')
   })
 
   test('ignores parts and roles stored for another sequence', () => {

@@ -235,5 +235,12 @@
   "field.role": "Role",
   "field.addPart": "Add part",
   "field.removePart": "Remove part",
-  "field.formationOverride": "Custom formation"
+  "field.formationOverride": "Custom formation",
+  "role.also": "Also phonetic",
+  "role.abbreviatedSound": "Abbreviated phonetic",
+  "role.abbreviatedForm": "Abbreviated semantic",
+  "role.fanqieUpper": "Fanqie upper",
+  "role.fanqieLower": "Fanqie lower",
+  "formation.compoundPhonoSemantic": "Ideographic and phonetic",
+  "formation.qieshen": "Fanqie spelling"
 }

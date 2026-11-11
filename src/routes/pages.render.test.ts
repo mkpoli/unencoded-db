@@ -30,6 +30,8 @@ const evidenceTypesComponent = resolve('src/lib/components/EvidenceTypes.svelte'
 const revisionHistory = resolve('src/lib/components/RevisionHistory.svelte')
 const appForms = resolve(tmp, 'app-forms.js')
 writeFileSync(appForms, 'export function enhance() { return {} }\n')
+const partsUrl = resolve(tmp, 'parts-url.js')
+writeFileSync(partsUrl, 'export default ""\n')
 const components = new Map<string, Promise<any>>()
 let fileFieldModule: Promise<string> | null = null
 let cropFieldModule: Promise<string> | null = null
@@ -245,6 +247,8 @@ async function load(path: string, name: string) {
         .replaceAll('"$lib/script"', `"${script}"`)
         .replaceAll('"$app/forms"', `"${appForms}"`)
         .replaceAll("'$app/forms'", `'${appForms}'`)
+        .replaceAll('"ids-input/data/han-parts.json.gz?url"', `"${partsUrl}"`)
+        .replaceAll("'ids-input/data/han-parts.json.gz?url'", `'${partsUrl}'`)
       const target = resolve(tmp, `${name}.js`)
       writeFileSync(target, code)
       return (await import(`${target}?${Date.now()}`)).default
@@ -546,14 +550,29 @@ describe('localized pages', () => {
       data: {
         locale: 'zh-Hant',
         entry: { id: 9, script: 'Han', ids: '⿰青鳥', description: null, radical: null, encoded_as: null, strokes: null, ivd_status: null, ivd_sequence: null, created_at: '2026-11-08T05:00:00.000Z' },
-        composition: { ids: '⿰青鳥', parts: [{ part: '青', role: '亦聲' }, { part: '鳥', role: 'semantic' }], formation: '形聲兼會意', tagged: true },
+        composition: { ids: '⿰青鳥', parts: [{ part: '青', role: 'also' }, { part: '鳥', role: 'semantic' }], formation: 'compoundPhonoSemantic', tagged: true },
         comparisons: [],
         evidence: [],
       },
     })
-    expect(body).toContain('形聲兼會意')
+    expect(body).toContain('會意兼形聲')
     expect(body).toContain('青 · 亦聲')
     expect(body).toContain('鳥 · 形符')
+  })
+
+  test('entry page shows the fanqie roles and a 切身 formation', async () => {
+    const { body } = await page('src/routes/[locale]/entry/[id]/+page.svelte', 'entry-qieshen', {
+      data: {
+        locale: 'zh-Hant',
+        entry: { id: 9, script: 'Han', ids: '⿰取女', description: null, radical: null, encoded_as: null, strokes: null, ivd_status: null, ivd_sequence: null, created_at: '2026-11-08T05:00:00.000Z' },
+        composition: { ids: '⿰取女', parts: [{ part: '取', role: 'fanqieUpper' }, { part: '女', role: 'fanqieLower' }], formation: 'qieshen', tagged: true },
+        comparisons: [],
+        evidence: [],
+      },
+    })
+    expect(body).toContain('切身')
+    expect(body).toContain('取 · 切上字')
+    expect(body).toContain('女 · 切下字')
   })
 
   test('entry page hides the formation row for an unanalysed description', async () => {

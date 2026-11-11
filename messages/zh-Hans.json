@@ -235,5 +235,12 @@
   "field.role": "角色",
   "field.addPart": "添加部件",
   "field.removePart": "删除部件",
-  "field.formationOverride": "自定义构字方式"
+  "field.formationOverride": "自定义构字方式",
+  "role.also": "亦声",
+  "role.abbreviatedSound": "省声",
+  "role.abbreviatedForm": "省形",
+  "role.fanqieUpper": "切上字",
+  "role.fanqieLower": "切下字",
+  "formation.compoundPhonoSemantic": "会意兼形声",
+  "formation.qieshen": "切身"
 }
