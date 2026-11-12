@@ -33,7 +33,7 @@ Without client credentials, the site offers anonymous contributions. Signing in 
 |---|---|
 | `entries` | One character: script, status, description, radical, strokes, and the summary a gallery tile draws |
 | `claims` | What a record states more than once: description sequences, composition, readings, meanings, codes, related characters, IVD, categories, collections, tags |
-| `sightings` | One place the character was seen: where, page, date, context, style, source types |
+| `sightings` | One place the character was seen: where, page, date, context, style, source types, and who provided it |
 | `sources` | A citation, stored once however many sightings give it |
 | `sighting_media` | A sighting's pictures, each with its mark and thumbnail |
 | `revisions` | The journal: every state of an entry or a sighting, with its author |

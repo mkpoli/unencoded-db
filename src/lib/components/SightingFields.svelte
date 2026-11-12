@@ -10,7 +10,7 @@
 
   let { values = {}, requirePlace = true, onphoto }: { values?: Partial<SightingFields>; requirePlace?: boolean; onphoto?: (file: File | null) => void } = $props()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
-  const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.original_date || values.page || values.context || values.style || values.types || values.note))
+  const filled = $derived(Boolean(values.title || values.author || values.provider || values.provider_url || values.publisher || values.report_date || values.original_date || values.page || values.context || values.style || values.types || values.note))
 
   let place = $state(untrack(() => values.place ?? ''))
   let url = $state(untrack(() => values.url ?? ''))
@@ -84,6 +84,8 @@
   <div class="grid-2">
     <div class="field"><label for="title">{t('field.title')}</label><input id="title" class="input" name="title" bind:value={title} maxlength="300" /></div>
     <div class="field"><label for="author">{t('field.author')}</label><input id="author" class="input" name="author" bind:value={author} maxlength="300" /></div>
+    <div class="field"><label for="provider">{t('field.provider')}</label><input id="provider" class="input" name="provider" value={values.provider ?? ''} maxlength="200" /></div>
+    <div class="field"><label for="provider_url">{t('field.providerUrl')}</label><input id="provider_url" class="input" type="url" name="provider_url" value={values.provider_url ?? ''} use:cleanLinkInput placeholder="https://" maxlength="1000" /></div>
     <div class="field"><label for="publisher">{t('field.publisher')}</label><input id="publisher" class="input" name="publisher" value={values.publisher ?? ''} maxlength="300" /></div>
     <div class="field"><label for="page">{t('field.page')}</label><input id="page" class="input" name="page" value={values.page ?? ''} maxlength="80" /></div>
     <div class="field"><label for="report_date">{t('field.reportDate')}</label><input id="report_date" class="input" name="report_date" value={values.report_date ?? ''} maxlength="40" /><p class="hint">{t('field.reportDateHint')}</p></div>

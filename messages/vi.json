@@ -113,6 +113,8 @@
   "field.title": "Nhan đề",
   "field.author": "Tác giả",
   "field.publisher": "Nhà xuất bản",
+  "field.provider": "Đơn vị cung cấp",
+  "field.providerUrl": "Liên kết đơn vị cung cấp",
   "field.reportDate": "Ngày công bố",
   "field.reportDateHint": "Ngày bài đăng, sách hoặc trang được công bố.",
   "field.originalDate": "Niên đại bản gốc",

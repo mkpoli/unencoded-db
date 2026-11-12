@@ -13,6 +13,8 @@
     { key: 'title', label: 'field.title' },
     { key: 'author', label: 'field.author' },
     { key: 'publisher', label: 'field.publisher' },
+    { key: 'provider', label: 'field.provider' },
+    { key: 'provider_url', label: 'field.providerUrl' },
     { key: 'report_date', label: 'field.reportDate' },
     { key: 'original_date', label: 'field.originalDate' },
     { key: 'page', label: 'field.page' },

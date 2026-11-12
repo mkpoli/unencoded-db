@@ -113,6 +113,8 @@
   "field.title": "書名・題名",
   "field.author": "著者",
   "field.publisher": "出版者",
+  "field.provider": "提供者",
+  "field.providerUrl": "提供者リンク",
   "field.reportDate": "公開日",
   "field.reportDateHint": "投稿、書物、ページが公開された日。",
   "field.originalDate": "原本の年代",

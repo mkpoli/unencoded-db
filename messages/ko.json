@@ -113,6 +113,8 @@
   "field.title": "제목",
   "field.author": "저자",
   "field.publisher": "출판사",
+  "field.provider": "제공자",
+  "field.providerUrl": "제공자 링크",
   "field.reportDate": "공개일",
   "field.reportDateHint": "게시물, 책 또는 페이지가 공개된 날.",
   "field.originalDate": "원본 연대",

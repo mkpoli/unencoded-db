@@ -165,6 +165,7 @@
         {#if types.length}<div class="row badges">{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
         <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{sighting[field.key]}</dd></div>{/if}{/each}
+          {#if sighting.provider || sighting.provider_url}<div><dt>{t('field.provider')}</dt><dd>{#if sighting.provider_url && /^https?:\/\//i.test(sighting.provider_url)}<a class="text-link" href={sighting.provider_url} target="_blank" rel="noopener nofollow">{sighting.provider ?? sighting.provider_url} ↗</a>{:else}{sighting.provider}{/if}</dd></div>{/if}
           {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
         </dl>

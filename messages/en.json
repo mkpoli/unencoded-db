@@ -113,6 +113,8 @@
   "field.title": "Title",
   "field.author": "Author",
   "field.publisher": "Publisher",
+  "field.provider": "Provider",
+  "field.providerUrl": "Provider link",
   "field.reportDate": "Report date",
   "field.reportDateHint": "When the post, book or page was published.",
   "field.originalDate": "Original date",

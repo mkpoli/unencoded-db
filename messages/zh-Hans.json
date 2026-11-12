@@ -113,6 +113,8 @@
   "field.title": "书名或标题",
   "field.author": "作者",
   "field.publisher": "出版者",
+  "field.provider": "提供者",
+  "field.providerUrl": "提供者链接",
   "field.reportDate": "发布日期",
   "field.reportDateHint": "帖子、书籍或页面发布的日期。",
   "field.originalDate": "原始年代",
