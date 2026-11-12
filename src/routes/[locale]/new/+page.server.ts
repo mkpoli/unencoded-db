@@ -1,9 +1,22 @@
 import { fail, redirect } from '@sveltejs/kit'
-import { createEntry, readEntryFields, readSightingFields } from '$lib/server/entries'
+import { CITATION_FIELDS, type SightingFields, createEntry, getEntryRow, getSighting, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { writer } from '$lib/server/people'
-import { uploadedImages } from '../../_submission.server'
-import type { Actions } from './$types'
+import { positiveId, uploadedImages } from '../../_submission.server'
+import type { Actions, PageServerLoad } from './$types'
+
+// `?sighting=` starts the form from a visible sighting: its citation, where it was found and its pictures,
+// for another character seen in the same place.
+export const load: PageServerLoad = async (event) => {
+  const id = positiveId(event.url.searchParams.get('sighting'))
+  if (!id) return { seed: null }
+  const { DB } = env(event)
+  const sighting = await getSighting(DB, id)
+  const entry = sighting && !sighting.hidden_at ? await getEntryRow(DB, sighting.entry_id) : null
+  if (!sighting || !entry || entry.hidden_at || entry.merged_into) return { seed: null }
+  const values: Partial<SightingFields> = Object.fromEntries(([...CITATION_FIELDS, 'place', 'original_date', 'page'] as const).map(field => [field, sighting[field]]))
+  return { seed: { values, pictures: sighting.media.map(picture => picture.image_key) } }
+}
 
 export const actions: Actions = {
   default: async (event) => {

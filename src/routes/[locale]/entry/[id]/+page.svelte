@@ -181,6 +181,7 @@
         <div class="row">
           {#if sighting.source_id}<a class="text-link small" href={href(`/source/${sighting.source_id}`)}>{t('source.view')}</a>{/if}
           <a class="text-link small" href={href(`/entry/${entry.id}/sighting/${sighting.id}/edit`)}>{t('sighting.edit')}</a>
+          <a class="text-link small" href={href(`/new?sighting=${sighting.id}`)}>{t('sighting.addAnother')}</a>
           <a class="text-link small" href={href(`/entry/${entry.id}/report?sighting=${sighting.id}`)}>{t('entry.report')}</a>
         </div>
       </article>

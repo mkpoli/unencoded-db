@@ -196,6 +196,7 @@
   "entry.firstAdded": "{name} thêm vào ngày {date}",
   "sighting.by": "{name} ghi nhận",
   "sighting.edit": "Sửa lần ghi nhận này",
+  "sighting.addAnother": "Thêm chữ khác từ đây",
   "sighting.evidence": "Tải xuống cho IRG",
   "sighting.evidenceHint": "Ảnh toàn trang với khung đỏ quanh chữ, dưới 1 MB.",
   "sighting.editTitle": "Sửa lần ghi nhận của mục từ {id}",
