@@ -183,6 +183,7 @@
   "error.sightingLimit": "此記錄已達到200處發現的上限。",
   "error.sightingsMax": "新記錄最多可附{max}處發現。",
   "error.image": "無法儲存此檔案。請使用小於15 MB的JPEG、PNG或WebP圖片。",
+  "error.tooLarge": "圖片總大小過大，無法一次提交。",
   "error.conflict": "你編輯時有人儲存了更改。你的文字仍在這裡：請在另一個分頁重新載入頁面進行比較。",
   "error.merged": "此記錄已合併到另一條記錄。",
   "error.missing": "該記錄不存在。",

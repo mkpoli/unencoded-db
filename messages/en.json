@@ -183,6 +183,7 @@
   "error.sightingLimit": "This record has reached its limit of 200 sightings.",
   "error.sightingsMax": "A new record takes up to {max} sightings.",
   "error.image": "This file could not be stored. Use a JPEG, PNG or WebP image under 15 MB.",
+  "error.tooLarge": "The pictures are too large to send in one form.",
   "error.conflict": "Someone saved a change while you were editing. Your text is still here: reload the page in another tab to compare.",
   "error.merged": "This record has been merged into another.",
   "error.missing": "That record does not exist.",

@@ -183,6 +183,7 @@
   "error.sightingLimit": "Mục từ này đã đạt giới hạn 200 lần ghi nhận.",
   "error.sightingsMax": "Mỗi mục từ mới nhận tối đa {max} lần ghi nhận.",
   "error.image": "Không thể lưu tệp này. Hãy dùng ảnh JPEG, PNG hoặc WebP dưới 15 MB.",
+  "error.tooLarge": "Các hình ảnh quá lớn để gửi trong một lần.",
   "error.conflict": "Có người đã lưu thay đổi trong lúc bạn chỉnh sửa. Nội dung của bạn vẫn còn ở đây; hãy tải lại trang trong một thẻ khác để so sánh.",
   "error.merged": "Mục từ này đã được gộp vào mục từ khác.",
   "error.missing": "Mục từ đó không tồn tại.",

@@ -12,7 +12,7 @@
   import CategoryFields from '$lib/components/CategoryFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { claimsOf, compositionOf, relationsOf, valuesOf } from '$lib/claims'
-  import { ADD_SIGHTINGS_MAX, MEDIA_MAX } from '$lib/limits'
+  import { ADD_SIGHTINGS_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
   import { SIGHTING_START } from '$lib/scripts'
   import { href, media, t } from '$lib/t'
   import type { CharacterFacts } from '$lib/encoded'
@@ -60,14 +60,25 @@
   const composition = $derived.by(() => { const found = compositionOf(claims); return found ? JSON.stringify(found) : '' })
   const filed = $derived(claims.some(claim => claim.kind === 'genre' || claim.kind === 'collection' || claim.kind === 'tag'))
 
-  const message = $derived(form?.error ? `${form.sighting ? `${t('add.sighting', { n: form.sighting })} · ` : ''}${t(`error.${form.error}`, { max: ADD_SIGHTINGS_MAX })}` : null)
+  // A form heavier than the server takes is stopped here, where what was typed is still on the page.
+  let heavy = $state(false)
+  let notice = $state<HTMLElement>()
+  async function weigh(event: SubmitEvent) {
+    const files = [...(event.currentTarget as HTMLFormElement).querySelectorAll<HTMLInputElement>('input[type=file]')].flatMap(input => [...(input.files ?? [])])
+    heavy = files.reduce((sum, file) => sum + file.size, 0) > PICTURES_BODY_MAX - 1024 * 1024
+    if (!heavy) return
+    event.preventDefault()
+    await tick()
+    notice?.scrollIntoView({ block: 'center' })
+  }
+  const message = $derived(heavy ? t('error.tooLarge') : form?.error ? `${form.sighting ? `${t('add.sighting', { n: form.sighting })} · ` : ''}${t(`error.${form.error}`, { max: ADD_SIGHTINGS_MAX })}` : null)
 </script>
 
 <Seo title={t('add.title')} />
 <div class="page narrow stack">
   <header class="heading"><h1>{t('add.title')}</h1><a class="text-link" href={href('/batch')}>{t('batch.link')}</a></header>
-  {#if message}<p class="notice bad" role="alert">{message}</p>{/if}
-  <form class="form" method="POST" enctype="multipart/form-data">
+  {#if message}<p class="notice bad" role="alert" bind:this={notice}>{message}</p>{/if}
+  <form class="form" method="POST" enctype="multipart/form-data" onsubmit={weigh}>
     <section class="panel character">
       <div class="plate"><IdsDrawing ids={primary} /></div>
       <div class="described">

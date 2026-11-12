@@ -183,6 +183,7 @@
   "error.sightingLimit": "この記録の用例は上限の200件に達しました。",
   "error.sightingsMax": "新しい記録に付けられる用例は{max}件までです。",
   "error.image": "このファイルを保存できませんでした。15 MB未満のJPEG、PNG、WebP画像を使ってください。",
+  "error.tooLarge": "画像の合計が大きすぎて、一度に送信できません。",
   "error.conflict": "編集中に別の人が変更を保存しました。入力内容は残っています。別のタブでページを再読み込みして比較してください。",
   "error.merged": "この記録は別の記録に統合されました。",
   "error.missing": "この記録は存在しません。",
