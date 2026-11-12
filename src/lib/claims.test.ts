@@ -89,18 +89,14 @@ describe('related characters', () => {
   })
 })
 
-describe('normalization', () => {
-  test('one character is kept, with its variation selector, and none clears it', () => {
-    expect(read([['normalizes_to', '木']])).toEqual({ claims: [claim('normalizes_to', '木')] })
-    expect(read([['normalizes_to', '𠀀󠄀']])).toEqual({ claims: [claim('normalizes_to', '𠀀󠄀')] })
-    expect(read([['normalizes_to', '']], [claim('normalizes_to', '木')])).toEqual({ claims: [] })
+describe('unification', () => {
+  test('the character a record should be unified with is a relation', () => {
+    const result = read([['related_characters_present', '1'], ['related_character', '木'], ['related_relationship', 'unifiable'], ['related_difference', ''], ['related_evidence', '']])
+    expect(result).toEqual({ claims: [claim('relation', '木', { relationship: 'unifiable' })] })
   })
 
-  test('several characters, a lone mark or a long value is refused', () => {
-    expect(read([['normalizes_to', '木水']])).toEqual({ error: 'normalizesTo' })
-    expect(read([['normalizes_to', '́']])).toEqual({ error: 'normalizesTo' })
-    expect(read([['normalizes_to', '\u{FE00}']])).toEqual({ error: 'normalizesTo' })
-    expect(read([['normalizes_to', '木'.repeat(100)]])).toEqual({ error: 'normalizesTo' })
+  test('the former field is not read', () => {
+    expect(read([['normalizes_to', '木']])).toEqual({ claims: [] })
   })
 })
 

@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
-import { sightingSnapshot } from './revisions'
+import { entrySnapshot, sightingSnapshot } from './revisions'
 
 const migration = (name: string) => readFileSync(join(import.meta.dir, '../../../migrations', name), 'utf8')
 
@@ -40,4 +40,30 @@ test('0002 and 0003 together give an old sighting snapshot the via fields and ar
   expect(sightingSnapshot(row.snapshot)).toMatchObject({ place: 'A shop', via_url: null })
   expect(JSON.parse(row.snapshot).media.map((image: { box: string | null }) => image.box)).toEqual(['[[1,2,10,10]]', null])
   expect((raw.query('SELECT box FROM sighting_media ORDER BY position').all() as { box: string | null }[]).map(image => image.box)).toEqual(['[[1,2,10,10]]', null])
+})
+
+test('0004 turns the character to unify with into a relation, in claims and in past versions', () => {
+  const raw = new Database(':memory:')
+  for (const name of ['0001_init.sql', '0002_sighting_via.sql', '0003_media_boxes.sql']) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec("INSERT INTO entries(script, created_by, created_at, updated_at) VALUES ('han', 'p', '2026', '2026')")
+  raw.exec(`INSERT INTO claims(entry_id, position, kind, value, data) VALUES (1, 0, 'ids', '⿰山東', NULL), (1, 1, 'normalizes_to', '崠', NULL), (1, 2, 'relation', '崬', '{"relationship":"variant"}')`)
+  const claims = [{ kind: 'ids', value: '⿰山東', data: null, sighting_id: null }, { kind: 'normalizes_to', value: '崠', data: null, sighting_id: null }, { kind: 'relation', value: '崬', data: { relationship: 'variant' }, sighting_id: null }]
+  const old = JSON.stringify({ script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims })
+  const insert = raw.prepare("INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) VALUES (1, ?, 1, ?, 'p', '2026')")
+  insert.run('create', old)
+  insert.run('hide', '{}')
+  raw.exec(migration('0004_unify_relation.sql'))
+  expect(raw.query('SELECT kind, value, data FROM claims ORDER BY position').all()).toEqual([
+    { kind: 'ids', value: '⿰山東', data: null },
+    { kind: 'relation', value: '崠', data: '{"relationship":"unifiable"}' },
+    { kind: 'relation', value: '崬', data: '{"relationship":"variant"}' },
+  ])
+  const rows = raw.query('SELECT snapshot FROM revisions ORDER BY id').all() as { snapshot: string }[]
+  expect(entrySnapshot(rows[0].snapshot)?.claims).toEqual([
+    { kind: 'ids', value: '⿰山東', data: null, sighting_id: null },
+    { kind: 'relation', value: '崠', data: { relationship: 'unifiable' }, sighting_id: null },
+    { kind: 'relation', value: '崬', data: { relationship: 'variant' }, sighting_id: null },
+  ])
+  expect(rows[1].snapshot).toBe('{}')
 })

@@ -8,7 +8,7 @@ import { IDS_LENGTH_MAX, IDS_MAX, splitIds } from './ids'
 import { ivdSequence } from './ivd'
 import { isRelationKind, type RelatedDraft } from './related'
 
-export const CLAIM_KINDS = ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'normalizes_to', 'ivd', 'genre', 'collection', 'tag'] as const
+export const CLAIM_KINDS = ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'genre', 'collection', 'tag'] as const
 export type ClaimKind = (typeof CLAIM_KINDS)[number]
 export type Claim = { kind: ClaimKind; value: string; data: Record<string, unknown> | null; sighting_id: number | null }
 
@@ -20,7 +20,6 @@ export const CLAIM_LIMITS: Record<ClaimKind, { max: number; length: number }> = 
   meaning: { max: 20, length: 500 },
   encoding: { max: 20, length: 80 },
   relation: { max: 50, length: 80 },
-  normalizes_to: { max: 1, length: 80 },
   ivd: { max: 1, length: 80 },
   genre: { max: 30, length: 40 },
   collection: { max: 10, length: 40 },
@@ -64,7 +63,6 @@ export function validClaim(claim: unknown): claim is Claim {
     case 'composition': return Boolean(data && parseComposition(JSON.stringify({ ...data, ids: value })))
     case 'encoding': return Boolean(data && typeof data.charset === 'string' && data.charset.length > 0 && data.charset.length <= 40)
     case 'relation': return Boolean(data && isRelationKind(data.relationship) && short(data.difference ?? '', 5000) && short(data.evidence ?? '', 5000))
-    case 'normalizes_to': return splitCharacters(value).length === 1 && !ATTACHED_ONLY.test(value)
     case 'ivd': return value === 'none' || ivdSequence(value) === value
     case 'genre': return Boolean(genreOf(value))
     case 'collection': return isCollection(value)
@@ -102,7 +100,7 @@ export const relationsOf = (claims: readonly Claim[]): (RelatedDraft & { sightin
   character: claim.value, relationship: String(claim.data?.relationship), difference: String(claim.data?.difference ?? ''), evidence: String(claim.data?.evidence ?? ''), sighting_id: claim.sighting_id,
 }))
 
-export type ClaimError = 'ids' | 'encodings' | 'relatedCharacters' | 'normalizesTo' | 'ivd' | 'readings' | 'tags'
+export type ClaimError = 'ids' | 'encodings' | 'relatedCharacters' | 'ivd' | 'readings' | 'tags'
 
 // The form fields of each kind. A group is replaced when the form carries it, by its own field or by
 // the `<group>_present` marker a list of rows sends even when it is empty; otherwise the record keeps
@@ -197,12 +195,6 @@ export function readClaims(form: FormData, base: readonly Claim[] = []): { claim
     if (!valid) fail('relatedCharacters')
     next.set('relation', (valid ? found! : typed(form, names)).map(([character, relationship, difference, evidence, sighting]) =>
       one('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) }, sightingRef(sighting))))
-  }
-
-  if (form.has('normalizes_to')) {
-    const value = clean(form.get('normalizes_to'))
-    if (value && (value.length > CLAIM_LIMITS.normalizes_to.length || splitCharacters(value).length !== 1 || ATTACHED_ONLY.test(value))) fail('normalizesTo')
-    next.set('normalizes_to', value ? [one('normalizes_to', value)] : [])
   }
 
   if (form.has('ivd_status')) {

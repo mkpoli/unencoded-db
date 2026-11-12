@@ -85,7 +85,7 @@ test('export gives every claim kind a column and the pictures a cell', async () 
   const [head, first] = (await response.text()).split('\r\n')
   const columns = head.split(',').map(column => column.slice(1, -1))
   const cells = first.split('","').map(cell => cell.replace(/^"|"$/g, ''))
-  for (const kind of ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'normalizes_to', 'ivd', 'genre', 'collection', 'tag', 'images']) expect(columns).toContain(kind)
+  for (const kind of ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'genre', 'collection', 'tag', 'images']) expect(columns).toContain(kind)
   const cell = (name: string) => cells[columns.indexOf(name)]
   expect(cell('ids')).toBe('⿰亻木; ⿱亻木')
   expect(cell('reading')).toBe('tung; dong')
@@ -95,7 +95,6 @@ test('export gives every claim kind a column and the pictures a cell', async () 
   expect(cell('genre')).toBe('hakka')
   expect(cell('tag')).toBe('IRG')
   expect(cell('images')).toBe('one.png; two.png')
-  expect(cell('normalizes_to')).toBe('')
 })
 
 test('export carries claims and pictures in JSON', async () => {
