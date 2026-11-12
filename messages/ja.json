@@ -334,6 +334,8 @@
   "field.linkImageWorking": "投稿から画像を取得しています",
   "field.linkImageFailed": "投稿の画像を追加できませんでした。ファイルを選択してください。",
   "browse.encoded": "符号化済み",
+  "browse.unencoded": "未符号化",
+  "browse.variant": "異体字",
   "source.title": "出典",
   "source.view": "出典の詳細",
   "source.record": "記録{n}件",

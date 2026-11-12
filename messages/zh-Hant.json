@@ -334,6 +334,8 @@
   "field.linkImageWorking": "正在從貼文中取得圖片",
   "field.linkImageFailed": "無法加入貼文中的圖片。請改為選擇檔案。",
   "browse.encoded": "已編碼",
+  "browse.unencoded": "未編碼",
+  "browse.variant": "異體字",
   "source.title": "出處",
   "source.view": "出處詳情",
   "source.record": "{n}筆記錄",

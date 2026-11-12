@@ -34,6 +34,9 @@ const text = (form: FormData, name: string, max: number) => {
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
 const now = () => new Date().toISOString()
 
+// A record nobody has checked that states a Unicode code is an encoded character.
+const stated = (status: string, claims: readonly Claim[]) => status === 'unchecked' && claims.some(claim => claim.kind === 'encoding' && claim.data?.charset === 'unicode') ? 'encoded' : status
+
 export function readEntryFields(form: FormData, base?: Partial<EntryFields>): { fields: EntryFields; error: ClaimError | null } {
   const script = text(form, 'script', 20)
   const status = text(form, 'status', 20)
@@ -46,7 +49,7 @@ export function readEntryFields(form: FormData, base?: Partial<EntryFields>): { 
       script: isScript(script) ? script : base?.script ?? 'han',
       script_other: field('script_other', 80),
       description: field('description', 20000),
-      status: isStatus(status) ? status : base?.status ?? 'unchecked',
+      status: stated(isStatus(status) ? status : base?.status ?? 'unchecked', read.claims),
       radical: field('radical', 20),
       strokes: form.has('strokes') ? (Number.isInteger(strokes) && strokes >= 0 && strokes < 200 ? strokes : null) : base?.strokes ?? null,
       claims: read.claims,

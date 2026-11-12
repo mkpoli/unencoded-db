@@ -334,6 +334,8 @@
   "field.linkImageWorking": "Đang lấy ảnh từ bài đăng",
   "field.linkImageFailed": "Không thể thêm ảnh từ bài đăng. Hãy chọn tệp thay thế.",
   "browse.encoded": "Đã mã hóa",
+  "browse.unencoded": "Chưa mã hóa",
+  "browse.variant": "Dị thể",
   "source.title": "Nguồn",
   "source.view": "Chi tiết nguồn",
   "source.record": "{n} bản ghi",
