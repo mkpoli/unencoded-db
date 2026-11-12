@@ -93,6 +93,7 @@
   "field.idsClose": "關閉",
   "field.idsLoading": "正在載入編輯器…",
   "field.idsEncoded": "此描述與{char}（{code}）相符，這個字可能已經編碼。你仍然可以新增。",
+  "field.idsFill": "填入該字的資訊",
   "field.idsSame": "以下記錄已有相同描述：",
   "field.source": "出處詳情",
   "field.sourceHint": "IRG要求每條證據提供這些資訊。任何人都可以稍後補充。",

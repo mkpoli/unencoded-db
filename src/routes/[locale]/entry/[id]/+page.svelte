@@ -9,6 +9,7 @@
   import CompositionField from '$lib/components/CompositionField.svelte'
   import ClaimFields from '$lib/components/ClaimFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
+  import type { CharacterFacts } from '$lib/encoded'
   import { claimsOf, compositionOf, encodingsOf, relationsOf, valuesOf, type Claim } from '$lib/claims'
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
@@ -24,6 +25,7 @@
   const claims = $derived(data.claims)
   const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
   const editValues = $derived(editing && form?.values && 'script' in form.values ? form.values : { ...entry, claims })
+  let filled = $state<CharacterFacts | null>(null)
   let ids = $derived.by(() => {
     entry.id
     return valuesOf(editValues.claims, 'ids').join(', ')
@@ -136,11 +138,11 @@
       {#if editing}<p class="notice bad" role="alert">{t(`error.${form?.error}`)}</p>{/if}
       <input type="hidden" name="rev" value={entry.rev} />
       {#key entry.id}<ScriptPicker value={editValues.script} other={editValues.script_other} />{/key}
-      <IdsField bind:value={ids} />
+      <IdsField bind:value={ids} onfill={facts => filled = facts} />
       <CompositionField {ids} value={editComposition} />
       <div class="field"><label for="description">{t('field.description')}</label><textarea id="description" class="input" name="description">{editValues.description ?? ''}</textarea></div>
       <div class="field"><label for="status">{t('field.status')}</label><select id="status" class="input" name="status" value={editValues.status ?? 'unchecked'}>{#each STATUSES as status}<option value={status}>{t(`status.${status}`)}</option>{/each}</select><p class="hint">{t('field.statusHint')}</p></div>
-      {#key `${entry.id}:${entry.rev}:${editing}`}<ClaimFields claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} sightings={options} />{/key}
+      {#key `${entry.id}:${entry.rev}:${editing}`}<ClaimFields claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} sightings={options} fill={filled} />{/key}
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" /></div>
       {#if editing && form?.error === 'conflict'}<button class="button" type="submit" disabled>{t('form.save')}</button>{:else}<SubmitBar />{/if}
     </form>
