@@ -45,6 +45,7 @@
               {#each sighting.media as picture, position (picture.image_key)}<MarkedPicture {picture} alt="{sighting.place} {position + 1}" />{/each}
             </div>
           {/if}
+          {#if sighting.via}<span class="badge via">{t('source.foundVia')}</span>{/if}
           <h3>{sighting.place}</h3>
           {#if sighting.types.length}<div class="row badges">{#each sighting.types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
           <dl class="facts">{#each seenFacts as fact}{#if sighting[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{sighting[fact.key]}</dd></div>{/if}{/each}
@@ -73,6 +74,6 @@
   .body { gap:10px; min-width:0 }
   .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; --picture-height:260px } .pictures.single { grid-template-columns:minmax(0,1fr); --picture-height:65vh }
   .note { margin:0; white-space:pre-wrap; overflow-wrap:anywhere }
-  h3 { margin:0 }
+  h3 { margin:0 } .badge.via { align-self:start }
   @media(max-width:600px) { .panel { padding:16px } .seen { grid-template-columns:minmax(0,1fr) } .record { flex-direction:row; justify-content:flex-start; gap:10px } .plate { width:56px; height:56px } }
 </style>

@@ -8,7 +8,7 @@ const fields = (over: Partial<EntryFields> = {}): EntryFields => ({ script: 'han
 const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null): Claim => ({ kind, value, data, sighting_id: null })
 const described = (...sequences: string[]) => fields({ claims: sequences.map(sequence => claim('ids', sequence)) })
 const relation = (character: string, relationship: string, difference = '', evidence = ''): Claim => claim('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) })
-const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null, ...over })
+const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null, ...over })
 const image: StoredImage = { image_key: 'a.webp', image_type: 'image/webp', image_w: 100, image_h: 100, thumb_key: 't.webp', box: null }
 
 let db: D1Database, raw: ReturnType<typeof openTestDb>['raw'], who: { actor: string; ip: null }
@@ -617,14 +617,17 @@ describe('query cost', () => {
       const statement = db.prepare(sql)
       return { bind(...values: unknown[]) { plans.push(plan(sql, values).join('\n')); return statement.bind(...values) } }
     }, batch: (statements: D1PreparedStatement[]) => db.batch(statements) } as D1Database
-    await createEntry(db, fields(), seen({ title: 'Book' }), [], who)
+    await createEntry(db, fields(), seen({ title: 'Book', via_title: 'Post' }), [], who)
     await claimedBy(traced, 'ids', '⿰木木')
     await sourcePage(traced, 1)
-    expect(plans).toHaveLength(4)
+    // claims, then the source itself (a lookup by key), then a direct and a via read of rows and pictures.
+    expect(plans).toHaveLength(6)
     plans.splice(1, 1)
     expect(plans[0]).toMatch(/SEARCH k USING COVERING INDEX claims_by_value \(kind=\? AND value=\?\)/)
     expect(plans[1]).toMatch(/SEARCH s USING INDEX sightings_by_source \(source_id=\?\)/)
     expect(plans[2]).toMatch(/SEARCH s USING INDEX sightings_by_source \(source_id=\?\)/)
+    expect(plans[3]).toMatch(/SEARCH s USING INDEX sightings_by_via \(via_id=\?\)/)
+    expect(plans[4]).toMatch(/SEARCH s USING INDEX sightings_by_via \(via_id=\?\)/)
     for (const details of plans) expect(details).not.toMatch(/TEMP B-TREE|SCAN (?!.*USING)/)
   })
 
