@@ -1,39 +1,34 @@
 import { error } from '@sveltejs/kit'
-import { SCRIPT_MAX } from '$lib/script'
-import { cleanIds, primaryIds } from '$lib/ids'
+import { counts, exactSearchIds, facetTag, list, listTag, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, terms } from '$lib/server/entries'
+import { env } from '$lib/server/guard'
 import { glyphPaths, warmGlyphs } from '$lib/server/glyphs'
-import { publicEntryPredicate } from '$lib/server/visibility'
+import { cleanIds } from '$lib/ids'
+import { positiveId } from '../_submission.server'
 import type { PageServerLoad } from './$types'
 
-type ListedEntry = { id: number; script: string; ids: string | null; encoded_as: string | null; equivalent_to: string | null; evidence: number; first_year: number | null; category: string | null }
-
-export const load: PageServerLoad = async ({ platform, url }) => {
-  if (!platform) error(500, 'Database unavailable')
-  const before = url.searchParams.get('before')
-  const id = before && /^[1-9]\d*$/.test(before) && Number.isSafeInteger(Number(before)) ? Number(before) : Number.MAX_SAFE_INTEGER
-  const requested = url.searchParams.get('script')
-  // Browsing stays on Han until other scripts are opened; an explicit script is still honoured.
-  const script = requested === null ? 'Han' : requested.normalize('NFC').trim()
-  if (!script || script.length > SCRIPT_MAX) error(404)
-  const requestedIvd = url.searchParams.get('ivd')
-  const ivd = requestedIvd === null ? null : requestedIvd
-  if (ivd !== null && ivd !== 'registered' && ivd !== 'none') error(404)
-  const filters: string[] = []
-  const filterBinds: string[] = []
-  if (ivd !== null) { filters.push('ivd_status = ?'); filterBinds.push(ivd) }
-  filters.push('script = ?'); filterBinds.push(script)
-  const filter = filters.length ? ` AND ${filters.join(' AND ')}` : ''
-  const page = await platform.env.DB.prepare(`SELECT id, script, ids, encoded_as, equivalent_to, (SELECT count(*) FROM evidence ev WHERE ev.entry_id = entries.id) AS evidence, (SELECT min(ev.date_year) FROM evidence ev WHERE ev.entry_id = entries.id AND ev.date_year IS NOT NULL) AS first_year, (SELECT g.label FROM entry_genres eg JOIN genres g ON g.slug = eg.genre WHERE eg.entry_id = entries.id ORDER BY eg.genre LIMIT 1) AS category FROM entries WHERE ${publicEntryPredicate}${filter} AND id < ? ORDER BY id DESC LIMIT 21`).bind(...filterBinds, id).all<ListedEntry>()
-  const entries = page.results.slice(0, 20)
-  const sequences = entries.map(entry => primaryIds(entry.ids)).filter((id): id is string => Boolean(id))
-  const paths = await glyphPaths(platform.env.IMAGES, sequences)
-  const glyphs: Record<string, string> = {}
-  for (const entry of entries) {
-    const sequence = primaryIds(entry.ids)
-    const path = sequence ? paths[cleanIds(sequence)] : null
-    if (sequence && path) glyphs[sequence] = path
-  }
-  const missing = [...new Set(sequences.map(cleanIds).filter(id => !paths[id]))]
-  if (missing.length) platform.ctx?.waitUntil(warmGlyphs(platform.env.IMAGES, missing))
-  return { entries, next: page.results.length > 20 ? page.results[19].id : null, glyphs, script: requested === null ? null : script, ivd }
+export const load: PageServerLoad = async (event) => {
+  const { searchParams } = event.url
+  // Records are Han only until other scripts are opened for browsing.
+  const script = 'han'
+  const filter = searchParams.get('filter') || null
+  // A category, a collection or a tag narrows the list: ?genre=, ?collection=, ?tag=.
+  const genre = searchParams.get('genre'), collection = searchParams.get('collection'), tag = searchParams.get('tag')
+  const facet = genre ? `g:${genre}` : collection ? `c:${collection}` : tag ? `t:${tag}` : null
+  const query = (searchParams.get('q') ?? '').trim()
+  const cursor = searchParams.get('before')
+  const before = cursor === null ? null : positiveId(cursor)
+  if (cursor !== null && before === null) error(404)
+  if (!listTag(script, filter) || facetTag(facet) === undefined) error(404)
+  const exact = query.length <= SEARCH_LENGTH_MAX && exactSearchIds(query)
+  const words = query.length <= SEARCH_LENGTH_MAX && !exact ? new Set(terms(query)) : new Set<string>()
+  const searchError = query.length > SEARCH_LENGTH_MAX ? 'queryTooLong' : !exact && query && words.size === 0 ? 'noSearchTerms' : words.size > SEARCH_TERMS_MAX ? 'tooManyTerms' : null
+  const db = env(event).DB
+  const [page, totals] = await Promise.all([searchError ? null : list(db, { script, filter, facet, query, before }), counts(db)])
+  if (!page && !searchError) error(404)
+  const media = event.platform?.env?.MEDIA
+  const ids = (page?.tiles.map(tile => tile.ids).filter((id): id is string => Boolean(id)) ?? []).map(cleanIds)
+  const glyphs = await glyphPaths(media, ids)
+  const missing = [...new Set(ids.filter(id => !glyphs[id]))]
+  if (missing.length) event.platform?.ctx?.waitUntil(warmGlyphs(media, missing))
+  return { ...(page ?? { tiles: [], next: null, partial: false }), counts: totals, glyphs, filter, genre, collection, tag, query, searchError, continued: before !== null && query.length > 0 }
 }

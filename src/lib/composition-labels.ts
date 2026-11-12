@@ -1,21 +1,28 @@
-import type { Formation, Role } from './composition'
-import { t, type Locale } from './i18n'
+import { FORMATIONS, FORMATION_MAX, ROLES, ROLE_MAX } from './composition'
+import { translate } from './i18n'
 
-export function roleLabel(locale: Locale, role: Role): string {
-  switch (role) {
-    case 'semantic': return t(locale, 'role.semantic')
-    case 'phonetic': return t(locale, 'role.phonetic')
-    case 'symbol': return t(locale, 'role.symbol')
-  }
+/** The localized label of a standard role, or custom text as the editor wrote it. */
+export function roleLabel(locale: string, role: string): string {
+  return (ROLES as readonly string[]).includes(role) ? translate(locale, `role.${role}`) : role
 }
 
-export function formationLabel(locale: Locale, formation: Formation): string {
-  switch (formation) {
-    case 'phonoSemantic': return t(locale, 'formation.phonoSemantic')
-    case 'ideographic': return t(locale, 'formation.ideographic')
-    case 'indicative': return t(locale, 'formation.indicative')
-    case 'sign': return t(locale, 'formation.sign')
-    case 'single': return t(locale, 'formation.single')
-    case 'unknown': return t(locale, 'formation.unknown')
-  }
+/** The localized label of a standard formation, or custom text as the editor wrote it. */
+export function formationLabel(locale: string, formation: string): string {
+  return (FORMATIONS as readonly string[]).includes(formation) ? translate(locale, `formation.${formation}`) : formation
+}
+
+/** The stored role for what an editor typed: a standard code, or the text as written. */
+export function roleFromLabel(locale: string, text: string): string {
+  const value = [...text.normalize('NFC').trim()].slice(0, ROLE_MAX).join('')
+  if (!value) return ''
+  if ((ROLES as readonly string[]).includes(value)) return value
+  return ROLES.find(role => roleLabel(locale, role) === value) ?? value
+}
+
+/** The stored formation for what an editor typed: a standard code, or the text as written. */
+export function formationFromLabel(locale: string, text: string): string {
+  const value = [...text.normalize('NFC').trim()].slice(0, FORMATION_MAX).join('')
+  if (!value) return ''
+  if ((FORMATIONS as readonly string[]).includes(value)) return value
+  return FORMATIONS.find(formation => formationLabel(locale, formation) === value) ?? value
 }

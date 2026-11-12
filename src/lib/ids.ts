@@ -42,3 +42,6 @@ export function workshopUrl(ids = '') {
   const sequence = cleanIds(ids)
   return /[./]/.test(sequence) ? `${base}?ids=${encodeURIComponent(sequence)}` : base + encodeURIComponent(sequence)
 }
+
+/** The code points of a text, written U+XXXX. */
+export const codePoints = (text: string) => [...text].map(c => 'U+' + c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')).join(' ')

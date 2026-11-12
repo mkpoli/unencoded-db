@@ -1,305 +1,215 @@
 <script lang="ts">
-  import { groupedComparisons, relationshipLabel, type Comparison } from '$lib/comparison-rows'
-  import { formationLabel, roleLabel } from '$lib/composition-labels'
-  import type { Analysis } from '$lib/composition'
-  import CropField from '$lib/components/CropField.svelte'
-  import EvidenceTypes from '$lib/components/EvidenceTypes.svelte'
-  import FileField from '$lib/components/FileField.svelte'
-  import { splitIds } from '$lib/ids'
-  import { cleanLinkInput } from '$lib/link-input'
+  import { page } from '$app/state'
+  import Seo from '$lib/components/Seo.svelte'
+  import ScriptPicker from '$lib/components/ScriptPicker.svelte'
+  import IdsField from '$lib/components/IdsField.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
-  import { formatDate, localizedHref, t, type Locale } from '$lib/i18n'
-  import { encodingSetLabel, type Encoding } from '$lib/encodings'
-  import { evidenceTypeLabel } from '$lib/evidence-type-labels'
-  import type { EvidenceType } from '$lib/evidence-types'
+  import CompositionField from '$lib/components/CompositionField.svelte'
+  import ClaimFields from '$lib/components/ClaimFields.svelte'
+  import SubmitBar from '$lib/components/SubmitBar.svelte'
+  import { claimsOf, compositionOf, encodingsOf, relationsOf, valuesOf, type Claim } from '$lib/claims'
+  import { analyze } from '$lib/composition'
+  import { formationLabel, roleLabel } from '$lib/composition-labels'
+  import { encodingSetLabel } from '$lib/encodings'
+  import { COLLECTIONS, genreOf } from '$lib/genres'
+  import { evidenceFile, type Box } from '$lib/picture'
+  import { CHECKS, readiness } from '$lib/readiness'
+  import { STATUSES, parseSightingTypes } from '$lib/scripts'
+  import type { Sighting, StoredImage } from '$lib/server/entries'
+  import { href, locale, media, t, day } from '$lib/t'
+  let { data, form } = $props()
+  const entry = $derived(data.entry)
+  const claims = $derived(data.claims)
+  const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
+  const editValues = $derived(editing && form?.values && 'script' in form.values ? form.values : { ...entry, claims })
+  let ids = $derived.by(() => {
+    entry.id
+    return valuesOf(editValues.claims, 'ids').join(', ')
+  })
+  const editComposition = $derived.by(() => { const found = compositionOf(editValues.claims); return found ? JSON.stringify(found) : '' })
 
-  type Genre = { slug: string; label: string }
-  type Crop = { id: number; evidence_id: number; x: number; y: number; w: number; h: number }
-  type Collection = { slug: string; label: string }
-  type Sense = { id: number; gloss: string; reading: string | null }
-  type Relation = { id: number; to_entry: number | null; to_character: string; kind: string; evidence_id: number; difference: string | null; place: string; year: string | null }
-  type EvidenceMedia = { id: number; evidence_id: number }
-  type Evidence = { id: number; place: string; url: string | null; provider?: string | null; provider_url?: string | null; title: string | null; author: string | null; publisher: string | null; year: string | null; page: string | null; note: string | null; types: EvidenceType[]; source_id: number | null; has_image: number; created_at: string }
-  type Entry = { id: number; script: string; ids: string | null; description: string | null; radical: string | null; encoded_as: string | null; equivalent_to: string | null; strokes: number | null; ivd_status: 'registered' | 'none' | null; ivd_sequence: string | null; created_at: string }
-  let { data }: { data: { locale: Locale; entry: Entry; glyph: string | null; composition: Analysis | null; comparisons: Comparison[]; evidence: Evidence[]; crops: Crop[]; genres: Genre[]; collections: Collection[]; relations: Relation[]; tags: string[]; senses: Sense[]; encodings: Encoding[]; media: EvidenceMedia[]; isModerator: boolean; reported: boolean } } = $props()
-  let entry = $derived(data.entry)
-  const sequences = $derived(splitIds(entry.ids))
-  let comparisons = $derived(data.comparisons ?? [])
-  let evidence = $derived(data.evidence ?? [])
-  let media = $derived(data.media ?? [])
-  let genres = $derived(data.genres ?? [])
-  let crops = $derived(data.crops ?? [])
-  let collections = $derived(data.collections ?? [])
-  let relations = $derived(data.relations ?? [])
-  let tags = $derived(data.tags ?? [])
-  let senses = $derived(data.senses ?? [])
-  const composition = $derived(data.composition)
-  const roleParts = $derived(composition ? composition.parts.flatMap((part, index) => {
-    const role = composition.roles[index]
-    return role ? [{ part, role }] : []
-  }) : [])
-  const hasFormation = $derived(Boolean(composition && (composition.formation === 'single' || composition.roles.some(Boolean))))
-  const isLink = (text: string) => /^https?:\/\//i.test(text.trim())
+  const sequences = $derived(valuesOf(claims, 'ids'))
+  const analysis = $derived(sequences[0] ? analyze(sequences[0], compositionOf(claims)) : null)
+  const ivd = $derived(valuesOf(claims, 'ivd')[0] ?? null)
+  const normalizesTo = $derived(valuesOf(claims, 'normalizes_to')[0] ?? null)
+  const encodings = $derived(encodingsOf(claims))
+  const relations = $derived(relationsOf(claims))
+  const genres = $derived(valuesOf(claims, 'genre').map(genreOf).filter(genre => genre !== null))
+  const collections = $derived(COLLECTIONS.filter(collection => valuesOf(claims, 'collection').includes(collection.slug)))
+  const tags = $derived(valuesOf(claims, 'tag'))
+  const options = $derived(data.sightings.map(sighting => ({ id: sighting.id, place: sighting.place })))
+  const ready = $derived(readiness({ ids: entry.ids, radical: entry.radical, strokes: entry.strokes }, data.sightings))
+
+  const sourceFields = [
+    { key: 'author', label: 'field.author' },
+    { key: 'title', label: 'field.title' },
+    { key: 'publisher', label: 'field.publisher' },
+    { key: 'report_date', label: 'field.reportDate' },
+    { key: 'original_date', label: 'field.originalDate' },
+    { key: 'page', label: 'field.page' },
+  ] as const
+  const at = locale()
+
+  const boxOf = (picture: StoredImage): Box | null => {
+    try { const box = JSON.parse(picture.box ?? 'null'); return Array.isArray(box) && box.length === 4 ? box as Box : null } catch { return null }
+  }
+  let preparing = $state<string | null>(null)
+  async function download(sighting: Sighting, picture: StoredImage, position: number) {
+    preparing = picture.image_key
+    try {
+      const file = await evidenceFile(media(picture.image_key), boxOf(picture), `record-${entry.id}-${sighting.id}-${position + 1}`)
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(file)
+      link.download = file.name
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000)
+    } finally { preparing = null }
+  }
 </script>
 
-<svelte:head><title>{t(data.locale, 'entry.record', { id: entry.id })} · {t(data.locale, 'app.name')}</title></svelte:head>
-<div class="entry-page">
-  <a class="back-link" href={localizedHref(data.locale)}>← {t(data.locale, 'nav.browse')}</a>
-  {#if data.reported}<p class="notice" role="status">{t(data.locale, 'report.received')}</p>{/if}
-  {#if data.isModerator}
-    <div class="moderation-bar">
-      <span>{t(data.locale, 'moderate.view')}</span>
-      <form method="POST" action={localizedHref(data.locale, `/moderate/${entry.id}/hide`)}>
-        <button class="secondary" type="submit">{t(data.locale, 'moderate.hide')}</button>
-      </form>
-    </div>
-  {/if}
-  <header class="entry-header">
-    <p class="eyebrow">{t(data.locale, 'entry.record', { id: entry.id })}</p>
-  </header>
-  <section class="character-card" aria-labelledby="character-name">
-    <div class="character-mark">
-      <h1 class="character-glyph" class:character-glyph-text={!sequences.length} id="character-name">
-        {#if sequences.length}
-          <span class="visually-hidden">{sequences.join(' ')}</span>
-          <IdsGlyph ids={sequences[0]} text={sequences[0]} path={data.glyph} />
-        {:else}
-          {entry.script}
-        {/if}
-      </h1>
-      <p class="character-actions">
-        <a href={localizedHref(data.locale, `/entry/${entry.id}/edit`)}>{t(data.locale, 'entry.revise')}</a>
-        <span aria-hidden="true">·</span>
-        <a href={localizedHref(data.locale, `/entry/${entry.id}/history`)}>{t(data.locale, 'entry.history')}</a>
+{#snippet basis(claim: { sighting_id: number | null })}{#if claim.sighting_id}<a class="basis" href="#sighting-{claim.sighting_id}">#{claim.sighting_id}</a>{/if}{/snippet}
+{#snippet texts(items: Claim[])}<ul class="claims">{#each items as claim}<li>{claim.value}{@render basis(claim)}</li>{/each}</ul>{/snippet}
+
+<Seo title={t('entry.record', { id: entry.id })} image={entry.cover_key ? media(entry.cover_key) : null} />
+<div class="page narrow stack">
+  <div class="row"><a class="text-link back" href={href()}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
+  <div class="heading"><div class="stack title"><h1>{t('entry.record', { id: entry.id })}</h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span><span class="badge {entry.status}">{t(`status.${entry.status}`)}</span></div></div></div>
+  {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
+  {#if entry.merged_into}<p class="notice quiet"><a class="text-link" href={href(`/entry/${entry.merged_into}`)}>{t('entry.mergedInto', { id: entry.merged_into })}</a></p>{/if}
+  <section class="panel stack">
+    <h2>{t('entry.about')}</h2>
+    {#if sequences.length}
+      <div class="identity">
+        <span class="plate"><IdsGlyph ids={sequences[0]} /></span>
+        <ul class="sequences">{#each sequences as sequence}<li class="ids">{sequence}</li>{/each}</ul>
+      </div>
+    {/if}
+    {#if analysis?.tagged}
+      <p class="formation"><span class="label">{t('field.formation')}</span><span class="method">{formationLabel(at, analysis.formation)}</span>{#each analysis.parts.filter(part => part.role) as part, index (index)}<span class="part">{part.part} · {roleLabel(at, part.role)}</span>{/each}</p>
+    {/if}
+    <p class:muted={!entry.description} class="description">{entry.description || t('entry.noDescription')}</p>
+    {#if genres.length || collections.length || tags.length}
+      <p class="chips">
+        {#each genres as genre (genre.slug)}<a class="chip-link" href={href(`?genre=${genre.slug}`)}>{genre.label}</a>{/each}
+        {#each collections as collection (collection.slug)}<a class="chip-link" href={href(`?collection=${collection.slug}`)}>{collection.label}</a>{/each}
+        {#each tags as tag}<a class="chip-link tag" href={href(`?tag=${encodeURIComponent(tag)}`)}>#{tag}</a>{/each}
       </p>
-    </div>
-    <div class="character-facts">
-      {#if genres.length || collections.length || tags.length}
-        <p class="genre-list">
-          {#each genres as genre (genre.slug)}<a class="genre-chip" href={localizedHref(data.locale, `/genre/${genre.slug}`)}>{genre.label}</a>{/each}
-          {#each collections as collection (collection.slug)}<a class="genre-chip" href={localizedHref(data.locale, `/collection/${collection.slug}`)}>{collection.label}</a>{/each}
-          {#each tags as tag}<a class="genre-chip" href={localizedHref(data.locale, `/tag/${encodeURIComponent(tag)}`)}>{tag}</a>{/each}
-        </p>
-      {/if}
-      <dl class="entry-meta">
-        <div class="entry-row"><dt>{t(data.locale, 'field.script')}</dt><dd>{entry.script}</dd></div>
-        {#if sequences.length}<div class="entry-row"><dt>{t(data.locale, 'field.ids')}</dt><dd>{#each sequences as sequence}<span class="ids-sequence">{sequence}</span>{/each}</dd></div>{/if}
-        {#if composition && hasFormation}
-          <div class="entry-row">
-            <dt>{t(data.locale, 'field.formation')}</dt>
-            <dd class="formation">
-              <span class="formation-method">{formationLabel(data.locale, composition.formation)}</span>
-              {#each roleParts as item, index (index)}<span class="formation-part">{item.part} · {roleLabel(data.locale, item.role)}</span>{/each}
-            </dd>
-          </div>
-        {/if}
-        {#if entry.description}<div class="entry-row"><dt>{t(data.locale, 'field.description')}</dt><dd>{entry.description}</dd></div>{/if}
-        {#if entry.radical}<div class="entry-row"><dt>{t(data.locale, 'field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
-        {#each data.encodings ?? [] as encoding (encoding.charset + '\u0000' + encoding.code)}<div class="entry-row"><dt>{encodingSetLabel(encoding.charset)}</dt><dd>{encoding.code}</dd></div>{/each}
-        {#if entry.equivalent_to}<div class="entry-row"><dt>{t(data.locale, 'field.equivalentTo')}</dt><dd>{entry.equivalent_to}</dd></div>{/if}
-        {#if entry.ivd_status === 'registered' && entry.ivd_sequence}<div class="entry-row"><dt>{t(data.locale, 'field.ivd')}</dt><dd>{entry.ivd_sequence}</dd></div>
-        {:else if entry.ivd_status === 'none'}<div class="entry-row"><dt>{t(data.locale, 'field.ivd')}</dt><dd>{t(data.locale, 'field.ivdNone')}</dd></div>{/if}
-        {#if entry.strokes != null}<div class="entry-row"><dt>{t(data.locale, 'field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
-        <div class="entry-row"><dt>{t(data.locale, 'entry.added')}</dt><dd>{formatDate(data.locale, entry.created_at)}</dd></div>
-      </dl>
-    </div>
+    {/if}
+    <dl class="facts">
+      {#if normalizesTo}<div><dt>{t('field.normalizesTo')}</dt><dd class="character">{normalizesTo}</dd></div>{/if}
+      {#each encodings as encoding (encoding.charset + '|' + encoding.code)}<div><dt>{encodingSetLabel(encoding.charset)}</dt><dd class="mono">{encoding.code}</dd></div>{/each}
+      {#if ivd}<div><dt>{t('field.ivd')}</dt><dd class:mono={ivd !== 'none'}>{ivd === 'none' ? t('field.ivdNone') : ivd}</dd></div>{/if}
+      {#if entry.radical}<div><dt>{t('field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
+      {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
+      {#if claimsOf(claims, 'reading').length}<div><dt>{t('field.reading')}</dt><dd>{@render texts(claimsOf(claims, 'reading'))}</dd></div>{/if}
+      {#if claimsOf(claims, 'meaning').length}<div class="wide"><dt>{t('field.meaning')}</dt><dd>{@render texts(claimsOf(claims, 'meaning'))}</dd></div>{/if}
+    </dl>
+    {#if relations.length}
+      <h3>{t('field.relatedCharacters')}</h3>
+      <ul class="relations">
+        {#each relations as relation}
+          <li class="relation">
+            <span class="character">{relation.character}</span>
+            <span class="relation-body">
+              <span class="badge">{t(`relationship.${relation.relationship}`)}</span>{@render basis(relation)}
+              {#if relation.difference}<span class="description">{relation.difference}</span>{/if}
+              {#if relation.evidence}<span class="description muted">{relation.evidence}</span>{/if}
+            </span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    {#if entry.by_name && entry.created_at}<p class="hint">{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</p>{/if}
   </section>
-  <section class="evidence-section" aria-labelledby="evidence-heading">
-    <div class="section-head">
-      <h2 class="section-label" id="evidence-heading">{t(data.locale, 'entry.sightings')}</h2>
-    </div>
-    {#each evidence as item (item.id)}
-      <article class="evidence-card" id={`evidence-${item.id}`}>
-        {#if media.some(image => image.evidence_id === item.id)}
-          <div class="evidence-gallery">
-            {#each media.filter(image => image.evidence_id === item.id) as image (image.id)}
-              <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image/${image.id}`)} alt={item.place || item.provider || t(data.locale, 'field.sourceImage')} loading="lazy" />
-            {/each}
-          </div>
-        {:else if item.has_image}
-          <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} alt={item.place || item.provider || t(data.locale, 'field.sourceImage')} loading="lazy" />
-        {/if}
-        {#if item.place}
-          <h3>{#if isLink(item.place)}<a href={item.place} target="_blank" rel="noopener noreferrer">{item.place} <span aria-hidden="true">↗</span></a>{:else}{item.place}{/if}</h3>
-        {/if}
-        {#if item.url && item.url !== item.place}<p class="evidence-url"><a class="text-link" href={item.url} target="_blank" rel="noopener noreferrer">{item.url} ↗</a></p>{/if}
-        {#if item.types.length}<p class="genre-list">{#each item.types as type (type)}<span class="genre-chip">{evidenceTypeLabel(data.locale, type)}</span>{/each}</p>{/if}
-        {#if crops.some(crop => crop.evidence_id === item.id)}
-          <div class="crop-list">
-            {#each crops.filter(crop => crop.evidence_id === item.id) as crop, n (crop.id)}
-              <figure class="crop-thumb">
-                <div style={`width:120px;height:${120 * crop.h / crop.w}px`}>
-                  <img src={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} alt={t(data.locale, 'crop.label', { n: n + 1 })} style={`width:${12000 / crop.w}px;margin-left:-${120 * crop.x / crop.w}px;margin-top:-${120 * crop.y / crop.w}px`} />
-                </div>
-                <figcaption>{t(data.locale, 'crop.label', { n: n + 1 })}</figcaption>
+  <section class="panel stack">
+    <h2>{t('ready.title')}</h2>
+    <ul class="checks">{#each CHECKS as check}<li class:done={ready[check]}><span class="tick" aria-hidden="true">{ready[check] ? '✓' : '○'}</span>{t(`ready.${check}`)}</li>{/each}</ul>
+    <a class="text-link small" href="https://www.unicode.org/irg/pp/" target="_blank" rel="noopener">{t('ready.rules')} ↗</a>
+  </section>
+  <details class="panel" open={editing}>
+    <summary>{t('entry.edit')}</summary>
+    <form class="stack form" method="POST" action="?/edit">
+      {#if editing}<p class="notice bad" role="alert">{t(`error.${form?.error}`)}</p>{/if}
+      <input type="hidden" name="rev" value={entry.rev} />
+      {#key entry.id}<ScriptPicker value={editValues.script} other={editValues.script_other} />{/key}
+      <IdsField bind:value={ids} />
+      <CompositionField {ids} value={editComposition} />
+      <div class="field"><label for="description">{t('field.description')}</label><textarea id="description" class="input" name="description">{editValues.description ?? ''}</textarea></div>
+      <div class="field"><label for="status">{t('field.status')}</label><select id="status" class="input" name="status" value={editValues.status ?? 'unchecked'}>{#each STATUSES as status}<option value={status}>{t(`status.${status}`)}</option>{/each}</select><p class="hint">{t('field.statusHint')}</p></div>
+      {#key `${entry.id}:${entry.rev}:${editing}`}<ClaimFields claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} sightings={options} />{/key}
+      <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" /></div>
+      {#if editing && form?.error === 'conflict'}<button class="button" type="submit" disabled>{t('form.save')}</button>{:else}<SubmitBar />{/if}
+    </form>
+  </details>
+  <section class="stack"><h2>{t('entry.sightings')}</h2>
+    {#each data.sightings as sighting (sighting.id)}
+      {@const types = parseSightingTypes(sighting.types)}
+      <article class="panel stack" id="sighting-{sighting.id}">
+        {#if sighting.media.length}
+          <div class="pictures" class:single={sighting.media.length === 1}>
+            {#each sighting.media as picture, position (picture.image_key)}
+              {@const box = boxOf(picture)}
+              <figure>
+                <a class="image" href={media(picture.image_key)}>
+                  <span class="frame">
+                    <img src={media(picture.image_key)} alt="{sighting.place || t('field.image')} {position + 1}" width={picture.image_w} height={picture.image_h} loading="lazy" />
+                    {#if box}<span class="mark" style:left="{box[0] / picture.image_w * 100}%" style:top="{box[1] / picture.image_h * 100}%" style:width="{box[2] / picture.image_w * 100}%" style:height="{box[3] / picture.image_h * 100}%"></span>{/if}
+                  </span>
+                </a>
+                <figcaption><button class="button small" type="button" title={t('sighting.evidenceHint')} disabled={preparing === picture.image_key} onclick={() => download(sighting, picture, position)}>{t('sighting.evidence')}</button></figcaption>
               </figure>
             {/each}
           </div>
         {/if}
-        <dl class="entry-meta">
-          {#if item.provider}
-            <div class="entry-row">
-              <dt>{t(data.locale, 'field.provider')}</dt>
-              <dd>
-                {#if item.provider_url}
-                  <a class="text-link" href={item.provider_url} target="_blank" rel="noopener noreferrer">{item.provider} ↗</a>
-                {:else if item.url}
-                  <a class="text-link" href={item.url} target="_blank" rel="noopener noreferrer">{item.provider} ↗</a>
-                {:else}
-                  {item.provider}
-                {/if}
-              </dd>
-            </div>
-          {:else if item.provider_url}
-            <div class="entry-row">
-              <dt>{t(data.locale, 'field.providerUrl')}</dt>
-              <dd><a class="text-link" href={item.provider_url} target="_blank" rel="noopener noreferrer">{item.provider_url} ↗</a></dd>
-            </div>
-          {/if}
-          {#if item.title}<div class="entry-row"><dt>{t(data.locale, 'field.title')}</dt><dd>{item.title}</dd></div>{/if}
-          {#if item.author}<div class="entry-row"><dt>{t(data.locale, 'field.author')}</dt><dd>{item.author}</dd></div>{/if}
-          {#if item.publisher}<div class="entry-row"><dt>{t(data.locale, 'field.publisher')}</dt><dd>{item.publisher}</dd></div>{/if}
-          {#if item.year}<div class="entry-row"><dt>{t(data.locale, 'field.year')}</dt><dd>{item.year}</dd></div>{/if}
-          {#if item.page}<div class="entry-row"><dt>{t(data.locale, 'field.page')}</dt><dd>{item.page}</dd></div>{/if}
-          {#if item.note}<div class="entry-row"><dt>{t(data.locale, 'field.note')}</dt><dd>{item.note}</dd></div>{/if}
+        <h3>{sighting.place}</h3>
+        {#if types.length}<div class="row badges">{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
+        {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
+        <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{sighting[field.key]}</dd></div>{/if}{/each}
+          {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
+          {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
         </dl>
-        <p class="evidence-links"><a class="text-link" href={localizedHref(data.locale, `/entry/${entry.id}/edit#evidence-${item.id}`)}>{t(data.locale, 'evidence.edit')}</a>{#if item.source_id}<a class="text-link" href={localizedHref(data.locale, `/source/${item.source_id}`)}>{t(data.locale, 'source.view')}</a>{/if}</p>
-        {#if item.has_image}
-          <details class="details">
-            <summary>{t(data.locale, 'crop.add')}</summary>
-            <form class="details-body" method="POST" action="?/crop">
-              <input type="hidden" name="evidence" value={item.id} />
-              <CropField image={localizedHref(data.locale, `/entry/${entry.id}/evidence/${item.id}/image`)} hint={t(data.locale, 'crop.hint')} />
-              <button class="secondary" type="submit">{t(data.locale, 'crop.save')}</button>
-            </form>
-          </details>
-        {/if}
+        {#if sighting.note}<p class="description">{sighting.note}</p>{/if}
+        {#if sighting.by_name}<p class="hint">{t('sighting.by', { name: sighting.by_name })}</p>{/if}
+        <div class="row">
+          {#if sighting.source_id}<a class="text-link small" href={href(`/source/${sighting.source_id}`)}>{t('source.view')}</a>{/if}
+          <a class="text-link small" href={href(`/entry/${entry.id}/sighting/${sighting.id}/edit`)}>{t('sighting.edit')}</a>
+          <a class="text-link small" href={href(`/entry/${entry.id}/report?sighting=${sighting.id}`)}>{t('entry.report')}</a>
+        </div>
       </article>
     {/each}
-    <details class="details">
-      <summary>{t(data.locale, 'entry.addSighting')}</summary>
-      <form class="details-body" method="POST" action="?/evidence" enctype="multipart/form-data">
-        <div class="field">
-          <label class="field-label" for="evidence-image">{t(data.locale, 'field.sourceImage')}</label>
-          <FileField
-            id="evidence-image"
-            name="image"
-            optional
-            label={t(data.locale, 'field.sourceImage')}
-            choose={t(data.locale, 'field.chooseImage')}
-            browse={t(data.locale, 'field.browseImage')}
-            replace={t(data.locale, 'field.replaceImage')}
-            remove={t(data.locale, 'field.removeImage')}
-            previewAlt={t(data.locale, 'field.imagePreview')}
-            hint={t(data.locale, 'field.fileFormats')} pasteHint={t(data.locale, 'field.imagePaste')}
-            hintId="evidence-formats"
-            describedBy="evidence-formats evidence-image-help evidence-image-rights"
-          />
-          <p class="field-help" id="evidence-image-help">{t(data.locale, 'field.sourceImageHint')}</p>
-          <p class="field-help" id="evidence-image-rights">{t(data.locale, 'field.rightsHint')}</p>
-        </div>
-        <div class="field"><label class="field-label" for="evidence-url">{t(data.locale, 'field.url')}</label><input id="evidence-url" name="url" type="url" maxlength="1000" placeholder="https://" use:cleanLinkInput aria-describedby="evidence-url-help" /><p class="field-help" id="evidence-url-help">{t(data.locale, 'field.urlHint')}</p></div>
-        <div class="field"><label class="field-label" for="evidence-place">{t(data.locale, 'field.place')}</label><input id="evidence-place" name="place" maxlength="500" /></div>
-        <div class="field-grid">
-          <div class="field"><label class="field-label" for="evidence-provider">{t(data.locale, 'field.provider')}</label><input id="evidence-provider" name="provider" maxlength="300" /></div>
-          <div class="field"><label class="field-label" for="evidence-provider-url">{t(data.locale, 'field.providerUrl')}</label><input id="evidence-provider-url" name="provider_url" type="url" maxlength="1000" placeholder="https://" /></div>
-        </div>
-        <div class="field-grid">
-          <div class="field"><label class="field-label" for="evidence-title">{t(data.locale, 'field.title')}</label><input id="evidence-title" name="title" maxlength="300" /></div>
-          <div class="field"><label class="field-label" for="evidence-author">{t(data.locale, 'field.author')}</label><input id="evidence-author" name="author" maxlength="300" /></div>
-          <div class="field"><label class="field-label" for="evidence-publisher">{t(data.locale, 'field.publisher')}</label><input id="evidence-publisher" name="publisher" maxlength="300" /></div>
-          <div class="field"><label class="field-label" for="evidence-year">{t(data.locale, 'field.year')}</label><input id="evidence-year" name="year" maxlength="40" placeholder="1998 / 1998-05 / 1998-05-12 / 05" /></div>
-          <div class="field"><label class="field-label" for="evidence-page">{t(data.locale, 'field.page')}</label><input id="evidence-page" name="page" maxlength="80" /></div>
-        </div>
-        <div class="field"><label class="field-label" for="evidence-note">{t(data.locale, 'field.note')}</label><textarea id="evidence-note" name="note" maxlength="5000"></textarea></div>
-        <EvidenceTypes locale={data.locale} />
-        <div class="form-actions"><button class="primary" type="submit">{t(data.locale, 'entry.addSighting')}</button></div>
-      </form>
-    </details>
+    <div class="row"><a class="button primary" href={href(`/entry/${entry.id}/sighting/new`)}>{t('entry.addSighting')}</a></div>
   </section>
-  {#if comparisons.length}
-    <section class="related-section" aria-labelledby="related-heading">
-      <h2 class="section-label" id="related-heading">{t(data.locale, 'form.related')}</h2>
-      <div class="comparison-rows">
-        {#each groupedComparisons(comparisons) as group (group.relationship)}
-          <span class="comparison-kind" id={`comparison-${group.relationship}-label`}>{relationshipLabel(data.locale, group.relationship)}</span>
-          <ul class="character-tiles" aria-labelledby={`comparison-${group.relationship}-label`}>
-            {#each group.characters as character}<li class="character-tile">{character}</li>{/each}
-          </ul>
-        {/each}
-      </div>
-    </section>
-  {/if}
-  {#if senses.length}
-    <section class="related-section" aria-labelledby="senses-heading">
-      <h2 class="section-label" id="senses-heading">{t(data.locale, 'field.senses')}</h2>
-      <div class="related-list">
-        {#each senses as sense (sense.id)}
-          <article class="related-card">
-            <h3>{sense.gloss}</h3>
-            {#if sense.reading}<p>{sense.reading}</p>{/if}
-          </article>
-        {/each}
-      </div>
-    </section>
-  {/if}
-  <section class="related-section" aria-labelledby="relations-heading">
-    <h2 class="section-label" id="relations-heading">{t(data.locale, 'relation.title')}</h2>
-    <p class="field-help">{t(data.locale, 'relation.intro')}</p>
-    {#if relations.length}
-      <div class="related-list">
-        {#each relations as relation (relation.id)}
-          <article class="related-card">
-            <h3>{relation.to_character}</h3>
-            <dl class="entry-meta">
-              <div class="entry-row"><dt>{t(data.locale, 'relation.kind')}</dt><dd>{relationshipLabel(data.locale, relation.kind)}</dd></div>
-              <div class="entry-row"><dt>{t(data.locale, 'relation.evidence')}</dt><dd><a class="text-link" href={`#evidence-${relation.evidence_id}`}>{relation.place}{#if relation.year} · {relation.year}{/if}</a></dd></div>
-              {#if relation.difference}<div class="entry-row"><dt>{t(data.locale, 'relation.difference')}</dt><dd>{relation.difference}</dd></div>{/if}
-            </dl>
-          </article>
-        {/each}
-      </div>
-    {:else}
-      <p class="field-help">{t(data.locale, 'relation.empty')}</p>
-    {/if}
-    <details class="details">
-      <summary>{t(data.locale, 'relation.add')}</summary>
-      <form class="details-body" method="POST" action="?/relation">
-        <div class="field"><label class="field-label" for="relation-target">{t(data.locale, 'relation.target')}</label><input id="relation-target" name="target" required maxlength="80" /></div>
-        <div class="field"><label class="field-label" for="relation-kind">{t(data.locale, 'relation.kind')}</label><select id="relation-kind" name="kind">{#each ['sound','meaning','glyph','usage','variant','not_variant','similar','uncertain'] as kind}<option value={kind}>{relationshipLabel(data.locale, kind)}</option>{/each}</select></div>
-        <div class="field"><label class="field-label" for="relation-evidence">{t(data.locale, 'relation.evidence')}</label><select id="relation-evidence" name="evidence" required>{#each evidence as item}<option value={item.id}>{item.place}{#if item.year} · {item.year}{/if}</option>{/each}</select></div>
-        <div class="field"><label class="field-label" for="relation-difference">{t(data.locale, 'relation.difference')}</label><textarea id="relation-difference" name="difference" maxlength="5000"></textarea></div>
-        <button class="secondary" type="submit">{t(data.locale, 'relation.save')}</button>
-      </form>
-    </details>
-  </section>
-  <details class="details">
-    <summary>{t(data.locale, 'report.summary')}</summary>
-    <form class="details-body" method="POST" action={localizedHref(data.locale, `/entry/${entry.id}/report`)}>
-      <div class="field">
-        <label class="field-label" for="report-reason">{t(data.locale, 'report.reason')}</label>
-        <select id="report-reason" name="reason" required>
-          <option value="spam">{t(data.locale, 'report.reason.spam')}</option>
-          <option value="privacy">{t(data.locale, 'report.reason.privacy')}</option>
-          <option value="rights">{t(data.locale, 'report.reason.rights')}</option>
-          <option value="other">{t(data.locale, 'report.reason.other')}</option>
-        </select>
-      </div>
-      <div class="field">
-        <label class="field-label" for="report-note">{t(data.locale, 'report.note')} <span class="field-help">{t(data.locale, 'form.optional')}</span></label>
-        <textarea id="report-note" name="note" maxlength="2000" rows="4"></textarea>
-      </div>
-      <p class="field-help">{t(data.locale, 'report.hint')}</p>
-      <div class="form-actions">
-        <button class="primary" type="submit">{t(data.locale, 'report.send')}</button>
-      </div>
-    </form>
-  </details>
 </div>
-
 <style>
-  .ids-sequence { display: block }
-  .formation { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
-  .formation-method { font-weight: 600; }
-  .formation-part { padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: var(--text-sm); }
+  summary { cursor:pointer; font-weight:600 } .form { margin-top:18px }
+  .back { align-self:start; color:var(--muted) } .title { gap:8px } .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
+  h3 { font-size:14px; font-weight:600 }
+  .identity { display:flex; align-items:center; gap:18px; min-width:0 }
+  .plate { flex:none; display:grid; place-items:center; width:96px; height:96px; border-radius:8px; background:var(--surface-tile) }
+  .sequences { display:flex; flex-direction:column; gap:2px; min-width:0; margin:0; padding:0; list-style:none }
+  .sequences li { font-size:22px; line-height:1.35 } .sequences li + li { font-size:16px; color:var(--muted) }
+  .formation { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px } .formation .label { color:var(--muted); font-size:12px; font-weight:400 }
+  .method { font-weight:600 } .part { padding:1px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12.5px }
+  .description { white-space:pre-wrap; overflow-wrap:anywhere } .badges { gap:6px }
+  .chips { display:flex; flex-wrap:wrap; gap:6px } .chip-link { padding:2px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px } .chip-link:hover { border-color:var(--accent); color:var(--accent) } .chip-link.tag { color:var(--muted) }
+  .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:12px; margin:0 } .facts:empty { display:none } .facts .wide { grid-column:1 / -1 }
+  dt { color:var(--muted); font-size:12px } dd { margin:2px 0 0; overflow-wrap:anywhere }
+  .character { font-size:20px; line-height:1.3 }
+  .claims { margin:0; padding:0; list-style:none } .claims li { white-space:pre-wrap }
+  .basis { margin-left:6px; color:var(--muted); font-size:11.5px } .basis:hover { color:var(--accent) }
+  .relations { display:flex; flex-direction:column; gap:8px; margin:0; padding:0; list-style:none }
+  .relation { display:flex; align-items:flex-start; gap:14px; padding:10px 12px; border:1px solid var(--line); border-radius:7px }
+  .relation .character { flex:none; min-width:1.2em; font-size:26px; text-align:center }
+  .relation-body { display:flex; flex-direction:column; align-items:flex-start; gap:4px; min-width:0 }
+  .checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:6px 16px; margin:0; padding:0; list-style:none; color:var(--muted) }
+  .checks li { display:flex; gap:8px } .checks li.done { color:var(--ink) } .checks li.done .tick { color:var(--good) } .tick { flex:none; width:1em; text-align:center }
+  .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px } .pictures.single { grid-template-columns:minmax(0,1fr) }
+  figure { display:flex; flex-direction:column; gap:6px; margin:0; min-width:0 }
+  .image { display:flex; justify-content:center; background:var(--surface-sunken); border-radius:6px; overflow:hidden }
+  .frame { position:relative; display:inline-block; max-width:100%; line-height:0 }
+  .frame img { display:block; width:auto; height:auto; max-width:100%; max-height:65vh } .pictures:not(.single) .frame img { max-height:260px }
+  .mark { position:absolute; border:2px solid var(--mark); pointer-events:none }
+  .button.small { min-height:32px; padding:4px 10px; font-size:12.5px }
+  .url { overflow-wrap:anywhere }
+  @media(max-width:700px) { .panel { padding:16px } .plate { width:72px; height:72px } }
 </style>

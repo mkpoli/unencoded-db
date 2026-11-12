@@ -1,19 +1,18 @@
 <script lang="ts">
-  import RevisionHistory from '$lib/components/RevisionHistory.svelte'
-  import type { RevisionSnapshot } from '$lib/revision'
-  import { localizedHref, t, type Locale } from '$lib/i18n'
-
-  let { data }: { data: { locale: Locale; id: number; revisions: RevisionSnapshot[]; next: number | null } } = $props()
+  import HistoryList from '$lib/components/HistoryList.svelte'
+  import Seo from '$lib/components/Seo.svelte'
+  import { href, t } from '$lib/t'
+  let { data, form } = $props()
 </script>
 
-<svelte:head><title>{t(data.locale, 'entry.history')} · {t(data.locale, 'app.name')}</title></svelte:head>
-<div class="entry-page">
-  <a class="back-link" href={localizedHref(data.locale, `/entry/${data.id}`)}>← {t(data.locale, 'entry.record', { id: data.id })}</a>
-  <div class="page-heading">
-    <h1>{t(data.locale, 'entry.history')}</h1>
-  </div>
-  <RevisionHistory locale={data.locale} revisions={data.revisions} />
-  {#if data.next}
-    <div class="more-row"><a class="secondary" href="?before={data.next}">{t(data.locale, 'history.older')} →</a></div>
-  {/if}
+<Seo title={t('history.title', { id: data.id })} />
+<div class="page narrow stack">
+  <a class="text-link back" href={href(`/entry/${data.id}`)}>← {t('history.back')}</a>
+  <h1>{t('history.title', { id: data.id })}</h1>
+  {#if form?.error}<p class="notice bad" role="alert">{t(`error.${form.error}`)}</p>{/if}
+  <HistoryList rows={data.rows} currentRev={data.rev} restore redact={Boolean(data.person?.moderator)} empty={t('history.empty')} next={data.next} />
 </div>
+
+<style>
+  .back { align-self: start; color: var(--muted) }
+</style>

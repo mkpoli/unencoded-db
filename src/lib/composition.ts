@@ -1,29 +1,54 @@
-// The parts a description breaks into, the role each part plays in the character, and the
-// formation the roles imply. Only the parts an operator writes directly are tagged: a character's
-// 構字方式 is decided at that level, and a nested part is a character of its own.
+// The parts an editor tags for a record's first description, the role each part plays, and the
+// formation those roles imply. The parsed parts are a starting point: an editor may replace them,
+// type a role outside the standard three, and name a formation the roles cannot express.
 import { isNode, parse, write, type IdsPart } from 'ids-input'
-import { splitIds } from './ids'
+import { IDS_LENGTH_MAX, splitIds } from './ids'
 
 export const ROLES = ['semantic', 'phonetic', 'symbol'] as const
 export type Role = (typeof ROLES)[number]
-export type RoleChoice = Role | ''
 
 export const FORMATIONS = ['phonoSemantic', 'ideographic', 'indicative', 'sign', 'single', 'unknown'] as const
 export type Formation = (typeof FORMATIONS)[number]
 
-/** A description, its top-level parts, and the role given to each part. */
-export type Analysis = {
+export const PARTS_MAX = 8
+export const PART_MAX = 200
+export const ROLE_MAX = 40
+export const FORMATION_MAX = 40
+
+/** One part and the role given to it. The role is a standard code or an editor's own text. */
+export type PartRole = { part: string; role: string }
+
+/**
+ * What a record stores for its first description. `parts` is absent in records tagged before parts
+ * could be edited; the parts parsed from the description stand in for it.
+ */
+export type Composition = {
   ids: string
-  parts: string[]
-  roles: RoleChoice[]
-  formation: Formation
+  parts?: string[]
+  roles: string[]
+  formation: string | null
 }
 
-/** What a record stores: roles named against the exact sequence they were chosen for. */
-export type Composition = { ids: string; roles: RoleChoice[] }
+/** The parts tagged for a description and the formation the record shows. */
+export type Analysis = {
+  ids: string
+  parts: PartRole[]
+  /** An editor's override, the derived formation, or `single`/`unknown`. */
+  formation: string
+  /** Whether a stored analysis gives the description roles or a formation. */
+  tagged: boolean
+}
 
 const isRole = (value: unknown): value is Role =>
   typeof value === 'string' && (ROLES as readonly string[]).includes(value)
+
+const clean = (value: unknown, max: number): string =>
+  typeof value === 'string' ? [...value.normalize('NFC').trim()].slice(0, max).join('') : ''
+
+function cleanList(value: unknown, max: number): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.slice(0, PARTS_MAX).map(item => clean(item, max))
+}
 
 /** A stored composition, or null when the value is not one this app writes. */
 export function parseComposition(value: unknown): Composition | null {
@@ -31,25 +56,38 @@ export function parseComposition(value: unknown): Composition | null {
   let data: unknown
   try { data = JSON.parse(value) } catch { return null }
   if (!data || typeof data !== 'object') return null
-  const { ids, roles } = data as { ids?: unknown; roles?: unknown }
-  if (typeof ids !== 'string' || !ids || !Array.isArray(roles) || roles.length > ROLES.length) return null
-  const choices = roles.map(role => isRole(role) ? role : '')
-  return choices.some(Boolean) ? { ids, roles: choices } : null
+  const stored = data as { ids?: unknown; parts?: unknown; roles?: unknown; formation?: unknown }
+  const ids = clean(stored.ids, IDS_LENGTH_MAX)
+  if (!ids) return null
+  const roles = cleanList(stored.roles, ROLE_MAX) ?? []
+  const parts = cleanList(stored.parts, PART_MAX)
+  const formation = clean(stored.formation, FORMATION_MAX) || null
+  if (parts) {
+    // Parts and roles belong to one list; an empty part takes its role with it.
+    const rows = parts
+      .map((part, index) => ({ part, role: roles[index] ?? '' }))
+      .filter(row => row.part)
+    if (!rows.length && !formation) return null
+    return { ids, parts: rows.map(row => row.part), roles: rows.map(row => row.role), formation }
+  }
+  // A record tagged before parts could be edited stores the roles alone.
+  if (!roles.some(Boolean) && !formation) return null
+  return { ids, roles, formation }
 }
 
-/** The value a form carries for these roles, or an empty string while none is chosen. */
-export function serializeComposition(ids: string, roles: readonly RoleChoice[]): string {
-  return roles.some(Boolean) ? JSON.stringify({ ids, roles }) : ''
+/** The JSON a form carries, or an empty string when it carries no analysis. */
+export function composeValue(ids: string, parts: readonly string[], roles: readonly string[], formation: string | null): string {
+  return parts.length || formation ? JSON.stringify({ ids, parts, roles, formation }) : ''
 }
 
 /**
- * The formation the roles imply, or null while any part is untagged or the roles leave it open. A
- * symbol beside a semantic part marks a 指事; symbols on their own make a 記號. A phonetic part with
- * nothing semantic, and a part that is both (亦聲), are outside the three roles.
+ * The standard formation the roles imply, or null while a role is custom, missing, or the only part.
+ * A symbol beside a semantic part marks a 指事; symbols on their own make a 記號. A part that is
+ * both semantic and phonetic (亦聲) is outside the three roles.
  */
-export function formationOf(roles: readonly RoleChoice[]): Formation | null {
+export function formationOf(roles: readonly string[]): Formation | null {
   const has = (role: Role) => roles.includes(role)
-  if (!roles.length || roles.some(role => !role)) return null
+  if (roles.length < 2 || roles.some(role => !isRole(role))) return null
   if (has('semantic') && has('phonetic')) return 'phonoSemantic'
   if (has('semantic')) return has('symbol') ? 'indicative' : 'ideographic'
   if (has('symbol') && !has('phonetic')) return 'sign'
@@ -60,9 +98,9 @@ const complete = (part: IdsPart | undefined): boolean =>
   part !== undefined && part !== null && (!isNode(part) || (part.parts.length > 0 && part.parts.every(complete)))
 
 /**
- * A description's top-level parts, with the roles stored for it. A description of one component has
- * no parts to tag and reads as 獨體. A draft, an empty slot or a text that is not a description
- * gives null.
+ * A description's tagged parts and formation, using the composition stored for that exact
+ * description. A description of one component with no custom parts reads as 獨體. A draft, an
+ * empty slot or a text that is not a description gives null.
  */
 export function analyze(ids: string | null | undefined, composition: Composition | null = null): Analysis | null {
   const sequence = splitIds(ids)[0]
@@ -73,8 +111,12 @@ export function analyze(ids: string | null | undefined, composition: Composition
   // A variant marker or a rotation changes the drawing, not the composition under it.
   while (isNode(tree) && tree.parts.length === 1) tree = tree.parts[0] ?? null
   if (!complete(tree)) return null
-  if (!isNode(tree)) return { ids: sequence, parts: [], roles: [], formation: 'single' }
-  const parts = tree.parts.map(part => write(part))
-  const roles = parts.map((_, index) => composition?.ids === sequence ? composition.roles[index] ?? '' : '')
-  return { ids: sequence, parts, roles, formation: formationOf(roles) ?? 'unknown' }
+  const parsedParts = isNode(tree) ? tree.parts.map(part => write(part)) : []
+  const stored = composition?.ids === sequence ? composition : null
+  const parts = stored?.parts ?? parsedParts
+  const rows = parts.map((part, index) => ({ part, role: stored?.roles[index] ?? '' }))
+  const derived = formationOf(rows.map(row => row.role))
+  const formation = stored?.formation || derived || (parsedParts.length === 0 && !rows.length ? 'single' : 'unknown')
+  const tagged = Boolean(stored && (stored.roles.some(Boolean) || stored.formation))
+  return { ids: sequence, parts: rows, formation, tagged }
 }

@@ -1,38 +1,47 @@
 <script lang="ts">
-  import { primaryIds } from '$lib/ids'
-  import { localizedHref, t, type Locale } from '$lib/i18n'
-  type Source = { id: number; kind: string; title: string | null; author: string | null; publisher: string | null; year: string | null; place: string | null }
-  type Row = { entry_id: number; script: string; ids: string | null; description: string | null; evidence_id: number; place: string; title: string | null; year: string | null; page: string | null; note: string | null; has_image: number }
-  let { data }: { data: { locale: Locale; source: Source; rows: Row[]; next: number | null } } = $props()
-  const heading = $derived(data.source.title || data.source.place || t(data.locale, 'source.title'))
+  import Seo from '$lib/components/Seo.svelte'
+  import Tile from '$lib/components/Tile.svelte'
+  import { cleanIds } from '$lib/ids'
+  import { href, t } from '$lib/t'
+  let { data } = $props()
+  const source = $derived(data.source)
+  const heading = $derived(source.title || source.url || t('source.title'))
+  const facts = [
+    { key: 'author', label: 'field.author' },
+    { key: 'publisher', label: 'field.publisher' },
+    { key: 'report_date', label: 'field.reportDate' },
+  ] as const
 </script>
 
-<svelte:head><title>{heading} · {t(data.locale, 'app.name')}</title></svelte:head>
-<div class="page">
-  <a class="back-link" href={localizedHref(data.locale)}>← {t(data.locale, 'nav.browse')}</a>
-  <header class="page-heading">
-    <p class="eyebrow">{t(data.locale, 'source.title')}</p>
+<Seo title={heading} />
+<div class="page stack">
+  <a class="text-link back" href={href()}>← {t('nav.browse')}</a>
+  <div class="stack intro">
+    <span class="badge">{t('source.title')}</span>
     <h1>{heading}</h1>
-    <p>{t(data.locale, 'source.intro')}</p>
-    <dl class="entry-meta">
-      {#if data.source.author}<div class="entry-row"><dt>{t(data.locale, 'field.author')}</dt><dd>{data.source.author}</dd></div>{/if}
-      {#if data.source.publisher}<div class="entry-row"><dt>{t(data.locale, 'field.publisher')}</dt><dd>{data.source.publisher}</dd></div>{/if}
-      {#if data.source.year}<div class="entry-row"><dt>{t(data.locale, 'field.year')}</dt><dd>{data.source.year}</dd></div>{/if}
-      {#if data.source.place}<div class="entry-row"><dt>{t(data.locale, 'field.place')}</dt><dd>{data.source.place}</dd></div>{/if}
-    </dl>
-  </header>
-  <section>
-    <h2 class="section-label">{t(data.locale, 'entry.sightings')}</h2>
-    <div class="entry-list">
-      {#each data.rows as row (row.evidence_id)}
-        <a class="entry-card" href={localizedHref(data.locale, `/entry/${row.entry_id}`)}>
-          <span class="glyph">{primaryIds(row.ids) || row.script}</span>
-          {#if row.description}<span class="description">{row.description}</span>{/if}
-          <span class="place">{row.place}{#if row.year} · {row.year}{/if}{#if row.page} · {t(data.locale, 'field.page')} {row.page}{/if}</span>
-          <span class="record">#{row.entry_id}</span>
-        </a>
+    {#if source.url && /^https?:\/\//i.test(source.url)}<a class="text-link url" href={source.url} target="_blank" rel="noopener noreferrer">{source.url} ↗</a>{/if}
+    <dl class="facts">{#each facts as fact}{#if source[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{source[fact.key]}</dd></div>{/if}{/each}</dl>
+  </div>
+  <section class="stack">
+    <h2>{t('entry.sightings')}</h2>
+    <div class="tiles">
+      {#each data.tiles as tile (tile.id)}
+        <div class="seen">
+          <Tile {tile} glyph={data.glyphs?.[cleanIds(tile.ids ?? '')]} />
+          {#if tile.pages.length}<span class="pages">{t('field.page')} {tile.pages.join(', ')}</span>{/if}
+        </div>
       {/each}
     </div>
-    {#if data.next}<p><a class="text-link" href={`?before=${data.next}`}>{t(data.locale, 'browse.more')}</a></p>{/if}
   </section>
 </div>
+
+<style>
+  .back { align-self:start; color:var(--muted) }
+  .intro { gap:8px; max-width:800px } .intro .badge { align-self:start }
+  .url { overflow-wrap:anywhere }
+  .facts { display:flex; flex-wrap:wrap; gap:12px 28px; margin:4px 0 0 } .facts:empty { display:none } dt { color:var(--muted); font-size:12px } dd { margin:2px 0 0; overflow-wrap:anywhere }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:22px 16px }
+  .seen { display:flex; flex-direction:column; gap:2px; min-width:0 }
+  .pages { font-size:12px; color:var(--muted); overflow-wrap:anywhere }
+  @media(max-width:500px) { .tiles { grid-template-columns:repeat(2,minmax(0,1fr)) } }
+</style>
