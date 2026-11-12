@@ -7,13 +7,24 @@
   import { t } from '$lib/t'
 
   type Row = { charset: string; code: string; other: string }
-  let { values = [] }: { values?: Encoding[] } = $props()
+  // `code` is a Unicode code to state when no row states it yet.
+  let { values = [], code = '' }: { values?: Encoding[]; code?: string } = $props()
 
   const uid = $props.id()
   const row = (encoding: Encoding): Row => isEncodingSet(encoding.charset)
     ? { charset: encoding.charset, code: encoding.code, other: '' }
     : { charset: OTHER_ENCODING, code: encoding.code, other: encoding.charset }
   let rows = $state<Row[]>(untrack(() => values.length ? values.map(row) : [{ charset: 'unicode', code: '', other: '' }]))
+
+  $effect(() => {
+    if (!code) return
+    untrack(() => {
+      if (rows.some(item => item.charset === 'unicode' && item.code.trim().toUpperCase().startsWith(code))) return
+      const empty = rows.find(item => item.charset === 'unicode' && !item.code.trim())
+      if (empty) empty.code = code
+      else if (rows.length < CLAIM_LIMITS.encoding.max) rows.push({ charset: 'unicode', code, other: '' })
+    })
+  })
 </script>
 
 <fieldset class="group">

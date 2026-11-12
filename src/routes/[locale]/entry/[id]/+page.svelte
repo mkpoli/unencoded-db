@@ -4,9 +4,12 @@
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import IdsField from '$lib/components/IdsField.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
+  import CopyButton from '$lib/components/CopyButton.svelte'
+  import { encodedCharacter } from '$lib/ids'
   import CompositionField from '$lib/components/CompositionField.svelte'
   import ClaimFields from '$lib/components/ClaimFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
+  import type { CharacterFacts } from '$lib/encoded'
   import { claimsOf, compositionOf, encodingsOf, relationsOf, valuesOf, type Claim } from '$lib/claims'
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
@@ -22,6 +25,7 @@
   const claims = $derived(data.claims)
   const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
   const editValues = $derived(editing && form?.values && 'script' in form.values ? form.values : { ...entry, claims })
+  let filled = $state<CharacterFacts | null>(null)
   let ids = $derived.by(() => {
     entry.id
     return valuesOf(editValues.claims, 'ids').join(', ')
@@ -81,7 +85,7 @@
     {#if sequences.length}
       <div class="identity">
         <span class="plate"><IdsGlyph ids={sequences[0]} /></span>
-        <ul class="sequences">{#each sequences as sequence}<li class="ids">{sequence}</li>{/each}</ul>
+        <ul class="sequences">{#each sequences as sequence}<li><span class="ids">{sequence}</span><CopyButton text={sequence} /></li>{/each}</ul>
       </div>
     {/if}
     {#if analysis?.tagged}
@@ -96,8 +100,8 @@
       </p>
     {/if}
     <dl class="facts">
-      {#if normalizesTo}<div><dt>{t('field.normalizesTo')}</dt><dd class="character">{normalizesTo}</dd></div>{/if}
-      {#each encodings as encoding (encoding.charset + '|' + encoding.code)}<div><dt>{encodingSetLabel(encoding.charset)}</dt><dd class="mono">{encoding.code}</dd></div>{/each}
+      {#if normalizesTo}<div><dt>{t('field.normalizesTo')}</dt><dd class="character">{normalizesTo}<CopyButton text={normalizesTo} /></dd></div>{/if}
+      {#each encodings as encoding (encoding.charset + '|' + encoding.code)}{@const character = encoding.charset === 'unicode' ? encodedCharacter(encoding.code) : ''}<div><dt>{encodingSetLabel(encoding.charset)}</dt><dd class="mono">{#if character}<span class="character encoded">{character}</span><CopyButton text={character} /> {/if}{encoding.code}</dd></div>{/each}
       {#if ivd}<div><dt>{t('field.ivd')}</dt><dd class:mono={ivd !== 'none'}>{ivd === 'none' ? t('field.ivdNone') : ivd}</dd></div>{/if}
       {#if entry.radical}<div><dt>{t('field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
       {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
@@ -109,7 +113,7 @@
       <ul class="relations">
         {#each relations as relation}
           <li class="relation">
-            <span class="character">{relation.character}</span>
+            <span class="character">{relation.character}</span><CopyButton text={relation.character} />
             <span class="relation-body">
               <span class="badge">{t(`relationship.${relation.relationship}`)}</span>{@render basis(relation)}
               {#if relation.difference}<span class="description">{relation.difference}</span>{/if}
@@ -132,11 +136,11 @@
       {#if editing}<p class="notice bad" role="alert">{t(`error.${form?.error}`)}</p>{/if}
       <input type="hidden" name="rev" value={entry.rev} />
       {#key entry.id}<ScriptPicker value={editValues.script} other={editValues.script_other} />{/key}
-      <IdsField bind:value={ids} />
+      <IdsField bind:value={ids} onfill={facts => filled = facts} />
       <CompositionField {ids} value={editComposition} />
       <div class="field"><label for="description">{t('field.description')}</label><textarea id="description" class="input" name="description">{editValues.description ?? ''}</textarea></div>
       <div class="field"><label for="status">{t('field.status')}</label><select id="status" class="input" name="status" value={editValues.status ?? 'unchecked'}>{#each STATUSES as status}<option value={status}>{t(`status.${status}`)}</option>{/each}</select><p class="hint">{t('field.statusHint')}</p></div>
-      {#key `${entry.id}:${entry.rev}:${editing}`}<ClaimFields claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} sightings={options} />{/key}
+      {#key `${entry.id}:${entry.rev}:${editing}`}<ClaimFields claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} sightings={options} fill={filled} />{/key}
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" /></div>
       {#if editing && form?.error === 'conflict'}<button class="button" type="submit" disabled>{t('form.save')}</button>{:else}<SubmitBar />{/if}
     </form>
@@ -193,14 +197,14 @@
   .identity { display:flex; align-items:center; gap:18px; min-width:0 }
   .plate { flex:none; display:grid; place-items:center; width:96px; height:96px; border-radius:8px; background:var(--surface-tile) }
   .sequences { display:flex; flex-direction:column; gap:2px; min-width:0; margin:0; padding:0; list-style:none }
-  .sequences li { font-size:22px; line-height:1.35 } .sequences li + li { font-size:16px; color:var(--muted) }
+  .sequences li { display:flex; align-items:center; gap:4px; font-size:22px; line-height:1.35 } .sequences li + li { font-size:16px; color:var(--muted) }
   .formation { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px } .formation .label { color:var(--muted); font-size:12px; font-weight:400 }
   .method { font-weight:600 } .part { padding:1px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12.5px }
   .description { white-space:pre-wrap; overflow-wrap:anywhere } .badges { gap:6px }
   .chips { display:flex; flex-wrap:wrap; gap:6px } .chip-link { padding:2px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px } .chip-link:hover { border-color:var(--accent); color:var(--accent) } .chip-link.tag { color:var(--muted) }
   .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:12px; margin:0 } .facts:empty { display:none } .facts .wide { grid-column:1 / -1 }
   dt { color:var(--muted); font-size:12px } dd { margin:2px 0 0; overflow-wrap:anywhere }
-  .character { font-size:20px; line-height:1.3 }
+  .character { font-size:20px; line-height:1.3 } .character.encoded { font-family:inherit; vertical-align:middle }
   .claims { margin:0; padding:0; list-style:none } .claims li { white-space:pre-wrap }
   .basis { margin-left:6px; color:var(--muted); font-size:11.5px } .basis:hover { color:var(--accent) }
   .relations { display:flex; flex-direction:column; gap:8px; margin:0; padding:0; list-style:none }
