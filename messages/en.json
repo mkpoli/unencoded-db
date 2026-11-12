@@ -338,6 +338,8 @@
   "browse.variant": "Variant",
   "source.title": "Source",
   "source.view": "Source details",
+  "source.record": "{n} record",
+  "source.records": "{n} records",
   "history.redacted": "Revision redacted.",
   "form.remove": "Remove",
   "field.readingAdd": "Add reading",

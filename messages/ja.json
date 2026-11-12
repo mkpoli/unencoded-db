@@ -338,6 +338,8 @@
   "browse.variant": "異体字",
   "source.title": "出典",
   "source.view": "出典の詳細",
+  "source.record": "記録{n}件",
+  "source.records": "記録{n}件",
   "history.redacted": "この版の内容は削除されました。",
   "form.remove": "削除",
   "field.readingAdd": "読みを追加",
