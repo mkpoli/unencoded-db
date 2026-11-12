@@ -21,7 +21,7 @@ function form(rev = '1', place = 'Changed') {
 }
 
 const picture = (raw: { prepare(sql: string): { run(...values: unknown[]): unknown } }, position: number, key: string) =>
-  raw.prepare("INSERT INTO sighting_media(sighting_id, position, image_key, image_type, image_w, image_h, thumb_key, box) VALUES (1, ?, ?, 'image/png', 100, 80, ?, '[1,2,10,10]')").run(position, key, `${key}-thumb`)
+  raw.prepare("INSERT INTO sighting_media(sighting_id, position, image_key, image_type, image_w, image_h, thumb_key, box) VALUES (1, ?, ?, 'image/png', 100, 80, ?, '[[1,2,10,10]]')").run(position, key, `${key}-thumb`)
 const media = (raw: { query(sql: string): { all(): unknown[] } }) => raw.query('SELECT position, image_key, thumb_key, box FROM sighting_media WHERE sighting_id = 1 ORDER BY position').all()
 const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 20, 0, 0, 0, 20, 8, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0, 0, 0, 0])
 const upload = (data: FormData, bytes = png) => data.append('image', new File([bytes], 'new.png', { type: 'image/png' }))
@@ -35,7 +35,7 @@ test('loads and edits a sighting while retaining its pictures', async () => {
   expect(loaded.sighting.media.map((item: { image_key: string }) => item.image_key)).toEqual(['original', 'second'])
   await expect(actions.default(event(form()))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
   expect(raw.query('SELECT place, rev FROM sightings WHERE id = 1').get()).toEqual({ place: 'Changed', rev: 2 })
-  expect(media(raw)).toEqual([{ position: 0, image_key: 'original', thumb_key: 'original-thumb', box: '[1,2,10,10]' }, { position: 1, image_key: 'second', thumb_key: 'second-thumb', box: '[1,2,10,10]' }])
+  expect(media(raw)).toEqual([{ position: 0, image_key: 'original', thumb_key: 'original-thumb', box: '[[1,2,10,10]]' }, { position: 1, image_key: 'second', thumb_key: 'second-thumb', box: '[[1,2,10,10]]' }])
   expect(raw.query("SELECT summary FROM revisions WHERE kind = 'sighting_edit'").get()).toEqual({ summary: 'Correction' })
 })
 
@@ -44,7 +44,7 @@ test('removes the named pictures only when explicitly requested', async () => {
   for (const [position, key] of [[0, 'a'], [1, 'b'], [2, 'c']] as const) picture(raw, position, key)
   const remove = form(); remove.append('remove_media', '0'); remove.append('remove_media', '2')
   await expect(actions.default(event(remove))).rejects.toMatchObject({ status: 303 })
-  expect(media(raw)).toEqual([{ position: 0, image_key: 'b', thumb_key: 'b-thumb', box: '[1,2,10,10]' }])
+  expect(media(raw)).toEqual([{ position: 0, image_key: 'b', thumb_key: 'b-thumb', box: '[[1,2,10,10]]' }])
   expect(raw.query('SELECT place, rev FROM sightings WHERE id = 1').get()).toEqual({ place: 'Changed', rev: 2 })
   expect(JSON.parse((raw.query("SELECT snapshot FROM revisions WHERE kind = 'sighting_edit'").get() as { snapshot: string }).snapshot).media.map((item: { image_key: string }) => item.image_key)).toEqual(['b'])
   const rest = form('2'); rest.set('remove_media', '0')
