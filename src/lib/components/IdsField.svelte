@@ -2,7 +2,8 @@
   // The descriptions of the character, separated by commas: typed or pasted, or built in the IDS editor.
   // The editor works on the first one, which draws the glyph. While the first is complete, the field says
   // whether an encoded character or another record has the same description. A lone encoded character is
-  // replaced by its description, and `onfill` receives what is known of it.
+  // replaced by its description, and `onfill` receives what is known of it; for a description that matches a
+  // character, the person decides.
   import { codePoints, IDS_FIELD_MAX, splitIds, workshopUrl } from '$lib/ids'
   import { characterFacts, encodedMatch, type CharacterFacts } from '$lib/encoded'
   import { href, locale, t } from '$lib/t'
@@ -24,6 +25,12 @@
   function use(sequence: string) {
     value = [sequence, ...splitIds(value).slice(1)].filter(Boolean).join(', ')
     dialog?.close()
+  }
+
+  // The details of a character the description matches are filled only when asked for.
+  async function fill(char: string) {
+    const facts = await characterFacts(char).catch(() => null)
+    if (facts) onfill?.(facts)
   }
 
   $effect(() => {
@@ -57,7 +64,7 @@
     <button type="button" class="button" onclick={open}>{t('field.idsBuild')}</button>
   </div>
   <p class="hint">{t('field.idsHint')} <a class="text-link" href={workshopUrl(primary)} target="_blank" rel="noopener">{t('field.idsWorkshop')} ↗</a></p>
-  {#if encoded}<p class="notice quiet small" data-testid="encoded-hint">{t('field.idsEncoded', { char: encoded, code: codePoints(encoded) })}</p>{/if}
+  {#if encoded}<p class="notice quiet small" data-testid="encoded-hint">{t('field.idsEncoded', { char: encoded, code: codePoints(encoded) })}{#if onfill} <button type="button" class="button small" onclick={() => fill(encoded!)}>{t('field.idsFill')}</button>{/if}</p>{/if}
   {#if same.length}<p class="notice quiet small">{t('field.idsSame')} {#each same as record, i}{i ? ', ' : ''}<a class="text-link" href={href(`/entry/${record.id}`)} target="_blank">#{record.id}</a>{/each}</p>{/if}
 </div>
 
