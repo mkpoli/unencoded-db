@@ -12,7 +12,7 @@
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { encodingSetLabel } from '$lib/encodings'
   import { COLLECTIONS, genreOf } from '$lib/genres'
-  import { evidenceFile, type Box } from '$lib/picture'
+  import { boxesOf, evidenceFile } from '$lib/picture'
   import { CHECKS, readiness } from '$lib/readiness'
   import { STATUSES, parseSightingTypes } from '$lib/scripts'
   import type { Sighting, StoredImage } from '$lib/server/entries'
@@ -50,14 +50,11 @@
   ] as const
   const at = locale()
 
-  const boxOf = (picture: StoredImage): Box | null => {
-    try { const box = JSON.parse(picture.box ?? 'null'); return Array.isArray(box) && box.length === 4 ? box as Box : null } catch { return null }
-  }
   let preparing = $state<string | null>(null)
   async function download(sighting: Sighting, picture: StoredImage, position: number) {
     preparing = picture.image_key
     try {
-      const file = await evidenceFile(media(picture.image_key), boxOf(picture), `record-${entry.id}-${sighting.id}-${position + 1}`)
+      const file = await evidenceFile(media(picture.image_key), boxesOf(picture.box), `record-${entry.id}-${sighting.id}-${position + 1}`)
       const link = document.createElement('a')
       link.href = URL.createObjectURL(file)
       link.download = file.name
@@ -148,12 +145,11 @@
         {#if sighting.media.length}
           <div class="pictures" class:single={sighting.media.length === 1}>
             {#each sighting.media as picture, position (picture.image_key)}
-              {@const box = boxOf(picture)}
-              <figure>
+                            <figure>
                 <a class="image" href={media(picture.image_key)}>
                   <span class="frame">
                     <img src={media(picture.image_key)} alt="{sighting.place || t('field.image')} {position + 1}" width={picture.image_w} height={picture.image_h} loading="lazy" />
-                    {#if box}<span class="mark" style:left="{box[0] / picture.image_w * 100}%" style:top="{box[1] / picture.image_h * 100}%" style:width="{box[2] / picture.image_w * 100}%" style:height="{box[3] / picture.image_h * 100}%"></span>{/if}
+                    {#each boxesOf(picture.box) as box}<span class="mark" style:left="{box[0] / picture.image_w * 100}%" style:top="{box[1] / picture.image_h * 100}%" style:width="{box[2] / picture.image_w * 100}%" style:height="{box[3] / picture.image_h * 100}%"></span>{/each}
                   </span>
                 </a>
                 <figcaption><button class="button small" type="button" title={t('sighting.evidenceHint')} disabled={preparing === picture.image_key} onclick={() => download(sighting, picture, position)}>{t('sighting.evidence')}</button></figcaption>

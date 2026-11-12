@@ -1,9 +1,17 @@
 // What a browser does to a picture before it leaves: turns it upright, sizes it, and writes a new file, which
-// drops what the camera recorded. The thumbnail is the marked character, or the whole picture when none is marked.
+// drops what the camera recorded. The thumbnail is the first marked character, or the whole picture when none is marked.
 export const LONG_SIDE = 3200
 export const THUMB_SIDE = 640
 
 export type Box = [number, number, number, number]
+
+/** The marks a stored picture holds, in the order they were drawn. */
+export function boxesOf(stored: string | null): Box[] {
+  try {
+    const boxes = JSON.parse(stored ?? '[]')
+    return Array.isArray(boxes) ? boxes.filter((box): box is Box => Array.isArray(box) && box.length === 4 && box.every(Number.isFinite)) : []
+  } catch { return [] }
+}
 export type Prepared = { file: File; bitmap: ImageBitmap; width: number; height: number }
 
 function canvasOf(width: number, height: number) {
@@ -46,11 +54,11 @@ export async function thumbnail(bitmap: ImageBitmap, box: Box | null) {
   return named(await lossy(canvas, 0.85), 'thumb')
 }
 
-// The evidence file IRG asks for: the whole page, a red square that clears the character by a margin, and a
+// The evidence file IRG asks for: the whole page, a red square around each marked character, clear of it by a margin, and a
 // size under 1 MB, preferably under 400 KB (IRG Principles & Procedures, Version 18).
 const WANTED = 400 * 1024, CEILING = 1024 * 1024
 
-export async function evidenceFile(url: string, box: Box | null, stem: string) {
+export async function evidenceFile(url: string, boxes: readonly Box[], stem: string) {
   const bitmap = await createImageBitmap(await (await fetch(url)).blob())
   let scale = Math.min(1, 2400 / Math.max(bitmap.width, bitmap.height))
   let last: Blob | null = null
@@ -59,7 +67,7 @@ export async function evidenceFile(url: string, box: Box | null, stem: string) {
     const canvas = canvasOf(width, height)
     const context = canvas.getContext('2d')!
     context.drawImage(bitmap, 0, 0, width, height)
-    if (box) {
+    for (const box of boxes) {
       const margin = Math.max(4, Math.round(Math.min(box[2], box[3]) * scale * 0.12))
       context.strokeStyle = '#e0241b'
       context.lineWidth = Math.max(2, Math.round(Math.min(width, height) / 400))
