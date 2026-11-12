@@ -15,7 +15,7 @@ export function sightingSnapshot(raw: string): SightingFields | null {
     if (value.context !== null && !(CONTEXTS as readonly string[]).includes(value.context)) return null
     if (value.style !== null && !(STYLES as readonly string[]).includes(value.style)) return null
     if (!isStoredSightingTypes(value.types)) return null
-    if (value.url !== null && !/^https?:\/\//i.test(value.url)) return null
+    for (const link of [value.url, value.provider_url]) if (link !== null && !/^https?:\/\//i.test(link)) return null
     return Object.fromEntries(SIGHTING_FIELDS.map(field => [field, value[field]])) as SightingFields
   } catch { return null }
 }

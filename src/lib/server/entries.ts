@@ -13,7 +13,7 @@ import { cleanSourceUrl } from '$lib/source-url'
 import { hashHex } from './image'
 
 export type EntryFields = { script: string; script_other: string | null; description: string | null; status: string; radical: string | null; strokes: number | null; claims: Claim[] }
-export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null }
+export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null; provider: string | null; provider_url: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }
 export type YearKind = 'report' | 'original'
 export type Entry = Omit<EntryFields, 'claims'> & { id: number; rev: number; ids: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
@@ -23,8 +23,8 @@ export type Sighting = SightingFields & { id: number; entry_id: number; first_en
 export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'status', 'radical', 'strokes'] as const
 // A sighting's citation is its source; the other fields are the sighting's own.
 export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date'] as const
-export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'context', 'style', 'types', 'note'] as const
-export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'original_date', 'page', 'context', 'style', 'types', 'note'] as const
+export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'context', 'style', 'types', 'note', 'provider', 'provider_url'] as const
+export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'original_date', 'page', 'context', 'style', 'types', 'note', 'provider', 'provider_url'] as const
 export const IMAGE_FIELDS = ['image_key', 'image_type', 'image_w', 'image_h', 'thumb_key', 'box'] as const
 
 const text = (form: FormData, name: string, max: number) => {
@@ -57,6 +57,7 @@ export function readEntryFields(form: FormData, base?: Partial<EntryFields>): { 
 export function readSightingFields(form: FormData): SightingFields {
   const url = text(form, 'url', 1000)
   const safeUrl = url && /^https?:\/\//i.test(url) ? cleanSourceUrl(url) : null
+  const providerUrl = text(form, 'provider_url', 1000)
   const chosen = new Set(form.getAll('types').map(String))
   const types = SIGHTING_TYPES.filter(type => chosen.has(type))
   return {
@@ -73,6 +74,8 @@ export function readSightingFields(form: FormData): SightingFields {
     style: oneOf(text(form, 'style', 20), STYLES),
     types: types.length ? JSON.stringify(types) : null,
     note: text(form, 'note', 5000),
+    provider: text(form, 'provider', 200),
+    provider_url: providerUrl && /^https?:\/\//i.test(providerUrl) ? providerUrl : null,
   }
 }
 
