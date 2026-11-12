@@ -32,7 +32,7 @@
 <div class="grid-2">
   <div class="field"><label for="{uid}-radical">{t('field.radical')}</label><input id="{uid}-radical" class="input" name="radical" maxlength="20" bind:value={radicalValue} autocomplete="off" /></div>
   <div class="field"><label for="{uid}-strokes">{t('field.strokes')}</label><input id="{uid}-strokes" class="input" name="strokes" type="number" min="0" max="199" bind:value={strokesValue} /></div>
-  <div class="field"><label for="{uid}-normalizes">{t('field.normalizesTo')}</label><input id="{uid}-normalizes" class="input character" name="normalizes_to" maxlength={CLAIM_LIMITS.normalizes_to.length} value={valuesOf(claims, 'normalizes_to')[0] ?? ''} autocomplete="off" spellcheck="false" /></div>
+  <div class="field"><label for="{uid}-normalizes">{t('field.normalizesTo')}</label><input id="{uid}-normalizes" class="input character" name="normalizes_to" maxlength={CLAIM_LIMITS.normalizes_to.length} value={valuesOf(claims, 'normalizes_to')[0] ?? ''} autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" /></div>
   <div class="field">
     <label for="{uid}-ivd">{t('field.ivd')}</label>
     <div class="ivd">
@@ -41,7 +41,7 @@
         <option value="registered">{t('field.ivdRegistered')}</option>
         <option value="none">{t('field.ivdNone')}</option>
       </select>
-      {#if ivdStatus === 'registered'}<input class="input mono" name="ivd_sequence" maxlength="80" value={ivd === 'none' ? '' : ivd} placeholder="U+4E00 U+E0100" aria-label={t('field.ivdSequence')} autocomplete="off" spellcheck="false" required />{/if}
+      {#if ivdStatus === 'registered'}<input class="input mono" name="ivd_sequence" maxlength="80" value={ivd === 'none' ? '' : ivd} placeholder="U+4E00 U+E0100" aria-label={t('field.ivdSequence')} autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" required />{/if}
     </div>
   </div>
 </div>

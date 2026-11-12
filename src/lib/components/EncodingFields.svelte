@@ -44,7 +44,7 @@
       </div>
       <div class="field">
         <label for="{uid}-code-{index}">{t('field.encodingCode')}</label>
-        <input id="{uid}-code-{index}" class="input mono" name="encoding_code" maxlength={CLAIM_LIMITS.encoding.length} bind:value={item.code} placeholder={item.charset === 'unicode' ? 'U+2D6DD' : ''} autocomplete="off" spellcheck="false" />
+        <input id="{uid}-code-{index}" class="input mono" name="encoding_code" maxlength={CLAIM_LIMITS.encoding.length} bind:value={item.code} placeholder={item.charset === 'unicode' ? 'U+2D6DD' : ''} autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
       </div>
       <button class="button remove" type="button" onclick={() => rows.splice(index, 1)}>{t('field.encodingRemove')}</button>
     </div>
