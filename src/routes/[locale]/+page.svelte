@@ -39,7 +39,7 @@
     <div class="search field"><label for="q">{t('browse.searchLabel')}</label><input class="input" id="q" name="q" value={data.query ?? ''} placeholder={t('browse.search')} aria-describedby="search-hint" /></div>
     <div class="field"><label for="filter">{t('browse.needs')}</label><select class="input" id="filter" name="filter" value={NEEDS.includes(data.filter as never) ? data.filter : ''}><option value="">{t('browse.all')}</option>{#each NEEDS as need}<option value={need}>{t(`needs.${need}`)} ({count(`n:${need}`)})</option>{/each}</select></div>
     {#if pinned}
-      <div class="field"><span class="label">{t(pinned.name === 'tag' ? 'field.tags' : 'field.collection')}</span><input type="hidden" name={pinned.name} value={pinned.value} /><a class="pinned" href={without} aria-label="{pinned.label} ×">{pinned.label} <span aria-hidden="true">×</span></a>{#if pinned.value === 'extension-e'}<a class="text-link" href={href('/extension-e')}>{t('extensionE.open')}</a>{/if}</div>
+      <div class="field"><span class="label">{t(pinned.name === 'tag' ? 'field.tags' : 'field.collection')}</span><input type="hidden" name={pinned.name} value={pinned.value} /><a class="pinned" href={without} aria-label="{pinned.label} ×">{pinned.label} <span aria-hidden="true">×</span></a></div>
     {:else}
       <div class="field"><label for="genre">{t('field.genre')}</label><select class="input" id="genre" name="genre" value={data.genre ?? ''}>
         <option value="">{t('browse.all')}</option>
