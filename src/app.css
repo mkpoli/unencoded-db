@@ -58,7 +58,8 @@ h2 { font-size: 16px; font-weight: 600 }
 .button:disabled { opacity: .5; cursor: default }
 .text-button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; text-align: start }
 .text-button:hover { text-decoration: underline; text-underline-offset: 3px }
-.input, select.input, textarea.input { display: block; width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface) }
+/* A control's text is never under 1rem, so a phone does not zoom in on the field it is typing in. */
+.input, select.input, textarea.input { display: block; width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); font-size: max(1rem, 1em) }
 textarea.input { min-height: 96px; resize: vertical; line-height: 1.55 }
 .input::placeholder { color: var(--muted) }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0 }
