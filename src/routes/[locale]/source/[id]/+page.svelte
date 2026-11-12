@@ -52,6 +52,7 @@
             {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
           </dl>
           {#if sighting.note}<p class="note">{sighting.note}</p>{/if}
+          <div class="row"><a class="button small" href={href(`/new?sighting=${sighting.id}`)}>{t('sighting.addAnother')}</a></div>
         </div>
       </article>
     {/each}

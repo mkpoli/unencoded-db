@@ -25,6 +25,9 @@
     else if (first.fromPost()) first.clear()
   }
 
+  /** Puts a picture in the first empty picker, adding one when all are taken. */
+  export const add = (file: Blob) => place(file)
+
   async function place(file: Blob) {
     let picker = free()
     if (!picker && visible.length < max) {
