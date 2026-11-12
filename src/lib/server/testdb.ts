@@ -3,8 +3,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 // A D1 over SQLite with the migrations applied: in memory for tests, or a file to build a database in.
-export function openTestDb(path = ':memory:') {
-  const raw = new Database(path)
+export function openTestDb() {
+  const raw = new Database(':memory:')
   const migrations = join(import.meta.dir, '../../../migrations')
   for (const name of readdirSync(migrations).sort()) raw.exec(readFileSync(join(migrations, name), 'utf8'))
   const db = {
