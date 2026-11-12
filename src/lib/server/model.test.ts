@@ -163,3 +163,12 @@ describe('review findings', () => {
     expect(readClaims(form).error).toBe('relatedCharacters')
   })
 })
+
+describe('search by an encoded character', () => {
+  test('a record that states a Unicode code is found by the character', async () => {
+    const { db } = open()
+    const id = await createEntry(db, fields([claim('ids', '⿳吅工吅'), claim('encoding', 'U+5650', { charset: 'unicode' })]), seen(), [], who)
+    await createEntry(db, fields([claim('ids', '⿰山東'), claim('encoding', 'A140', { charset: 'big5' })]), seen(), [], who)
+    expect((await list(db, { script: 'han', query: '噐' }))!.tiles.map(tile => tile.id)).toEqual([id])
+  })
+})
