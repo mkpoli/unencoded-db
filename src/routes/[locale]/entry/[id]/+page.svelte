@@ -172,6 +172,11 @@
         <h3>{sighting.place}</h3>
         {#if types.length}<div class="row badges">{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
+        {#if sighting.via_id}
+          <p class="via"><span class="muted">{t('field.via')}</span>
+            <a class="text-link" href={href(`/source/${sighting.via_id}`)}>{sighting.via_title || sighting.via_url || t('source.title')}</a>
+            {#if sighting.via_url && /^https?:\/\//i.test(sighting.via_url)}<a class="text-link url" href={sighting.via_url} target="_blank" rel="noopener noreferrer">↗</a>{/if}</p>
+        {/if}
         <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{sighting[field.key]}</dd></div>{/if}{/each}
           {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
@@ -221,5 +226,6 @@
   .mark { position:absolute; border:2px solid var(--mark); pointer-events:none }
   .button.small { min-height:32px; padding:4px 10px; font-size:12.5px }
   .url { overflow-wrap:anywhere }
+  .via { margin:0; overflow-wrap:anywhere }
   @media(max-width:700px) { .panel { padding:16px } .plate { width:72px; height:72px } }
 </style>

@@ -53,6 +53,7 @@
       {#if source.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${source.context}`)}</dd></div>{/if}
       {#if source.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${source.style}`)}</dd></div>{/if}
       {#if types.length}<div><dt>{t('field.sourceTypes')}</dt><dd>{types.map(type => t(`evidence.type.${type}`)).join(' · ')}</dd></div>{/if}
+      {#if source.via_url || source.via_title || source.via_author || source.via_publisher || source.via_report_date}<div class="wide"><dt>{t('field.via')}</dt><dd>{[source.via_title, source.via_author, source.via_publisher, source.via_report_date, source.via_url].filter(Boolean).join(' · ')}</dd></div>{/if}
     </dl>
     {#if source.note}<p class="description">{source.note}</p>{/if}
   </div>

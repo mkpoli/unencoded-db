@@ -17,6 +17,8 @@
   let title = $state(untrack(() => values.title ?? ''))
   let author = $state(untrack(() => values.author ?? ''))
   let open = $state(untrack(() => filled))
+  const viaFilled = $derived(Boolean(values.via_url || values.via_title || values.via_author || values.via_publisher || values.via_report_date))
+  let viaOpen = $state(untrack(() => viaFilled))
   let fetching = $state(false), failed = $state(false)
 
   // The fields keep what someone typed; a value the last post gave is replaced by the next post's.
@@ -94,6 +96,17 @@
       <select id="style" class="input" name="style" value={values.style ?? ''}><option value="">{t('field.unset')}</option>{#each STYLES as item}<option value={item}>{t(`style.${item}`)}</option>{/each}</select></div>
   </div>
   <div class="field"><label for="note">{t('field.note')}</label><textarea id="note" class="input" name="note" rows="2" maxlength="5000">{values.note ?? ''}</textarea></div>
+</details>
+<details class="more" bind:open={viaOpen}>
+  <summary>{t('field.via')}</summary>
+  <p class="hint">{t('field.viaHint')}</p>
+  <div class="field"><label for="via_url">{t('field.url')}</label><input id="via_url" class="input" type="url" name="via_url" value={values.via_url ?? ''} use:cleanLinkInput placeholder="https://" maxlength="1000" /></div>
+  <div class="grid-2">
+    <div class="field"><label for="via_title">{t('field.title')}</label><input id="via_title" class="input" name="via_title" value={values.via_title ?? ''} maxlength="300" /></div>
+    <div class="field"><label for="via_author">{t('field.author')}</label><input id="via_author" class="input" name="via_author" value={values.via_author ?? ''} maxlength="300" /></div>
+    <div class="field"><label for="via_publisher">{t('field.publisher')}</label><input id="via_publisher" class="input" name="via_publisher" value={values.via_publisher ?? ''} maxlength="300" /></div>
+    <div class="field"><label for="via_report_date">{t('field.reportDate')}</label><input id="via_report_date" class="input" name="via_report_date" value={values.via_report_date ?? ''} maxlength="40" /></div>
+  </div>
 </details>
 
 <style>
