@@ -1,5 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit'
-import { CITATION_FIELDS, type SightingFields, createEntry, getEntryRow, getSighting, readEntryFields, readSightingFields } from '$lib/server/entries'
+import { CITATION_FIELDS, VIA_FIELDS, type SightingFields, createEntry, getEntryRow, getSighting, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { writer } from '$lib/server/people'
 import { positiveId, uploadedImages } from '../../_submission.server'
@@ -14,7 +14,7 @@ export const load: PageServerLoad = async (event) => {
   const sighting = await getSighting(DB, id)
   const entry = sighting && !sighting.hidden_at ? await getEntryRow(DB, sighting.entry_id) : null
   if (!sighting || !entry || entry.hidden_at || entry.merged_into) return { seed: null }
-  const values: Partial<SightingFields> = Object.fromEntries(([...CITATION_FIELDS, 'place', 'original_date', 'page'] as const).map(field => [field, sighting[field]]))
+  const values: Partial<SightingFields> = Object.fromEntries(([...CITATION_FIELDS, ...VIA_FIELDS, 'place', 'original_date', 'page'] as const).map(field => [field, sighting[field]]))
   return { seed: { values, pictures: sighting.media.map(picture => picture.image_key) } }
 }
 
@@ -29,7 +29,7 @@ export const actions: Actions = {
     const { DB, MEDIA } = env(event)
     const media = await uploadedImages(form, MEDIA)
     if (media === 'invalid') return fail(400, { error: 'image', values })
-    if (!media.length && !sighting.url) return fail(400, { error: 'evidence', values })
+    if (!media.length && !sighting.url && !sighting.via_url) return fail(400, { error: 'evidence', values })
     const person = await writer(event, DB)
     const id = await createEntry(DB, entry, sighting, media, { actor: person.id, ip: await ipHash(event) })
     redirect(303, `/${event.params.locale}/entry/${id}`)
