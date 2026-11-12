@@ -334,6 +334,8 @@
   "browse.encoded": "부호화됨",
   "source.title": "출처",
   "source.view": "출처 상세",
+  "source.record": "기록 {n}건",
+  "source.records": "기록 {n}건",
   "history.redacted": "이 판의 내용은 삭제되었습니다.",
   "form.remove": "삭제",
   "field.readingAdd": "독음 추가",

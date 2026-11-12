@@ -334,6 +334,8 @@
   "browse.encoded": "Đã mã hóa",
   "source.title": "Nguồn",
   "source.view": "Chi tiết nguồn",
+  "source.record": "{n} bản ghi",
+  "source.records": "{n} bản ghi",
   "history.redacted": "Nội dung của bản này đã bị xoá.",
   "form.remove": "Xóa",
   "field.readingAdd": "Thêm cách đọc",
