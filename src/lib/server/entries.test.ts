@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { readClaims, type Claim } from '$lib/claims'
-import { addSighting, claimedBy, counts, createEntry, editEntry, editSighting, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBox, readEntryFields, readSightingFields, revertEntry, SEARCH_WINDOW, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, claimedBy, counts, createEntry, editEntry, editSighting, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, revertEntry, SEARCH_WINDOW, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -327,7 +327,7 @@ describe('the wiki', () => {
   })
 
   test('merging and undoing keep every claim and picture where it was written', async () => {
-    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰木木'), claim('reading', 'tung'), relation('林', 'variant', 'a stroke')] }), seen({ place: 'one' }), [{ ...image, image_key: 'a.jpg', thumb_key: 'a-t.jpg', box: '[1,2,10,10]' }], who)
+    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰木木'), claim('reading', 'tung'), relation('林', 'variant', 'a stroke')] }), seen({ place: 'one' }), [{ ...image, image_key: 'a.jpg', thumb_key: 'a-t.jpg', box: '[[1,2,10,10]]' }], who)
     const b = await createEntry(db, fields({ claims: [claim('ids', '⿱木木'), claim('encoding', 'U+5D20', { charset: 'unicode' })] }), seen({ place: 'two' }), [], who)
     const claimsOf = async (id: number) => (await getEntry(db, id))!.claims
     const [aClaims, bClaims] = [await claimsOf(a), await claimsOf(b)]
@@ -337,7 +337,7 @@ describe('the wiki', () => {
     const merged = (await getEntry(db, b))!
     expect(merged.sightings.map(item => item.media.map(picture => picture.image_key))).toEqual([['a.jpg'], []])
     expect(merged.entry).toMatchObject({ cover_key: 'a-t.jpg', cover_place: 'one', sightings: 2 })
-    expect(merged.sightings[0].media[0].box).toBe('[1,2,10,10]')
+    expect(merged.sightings[0].media[0].box).toBe('[[1,2,10,10]]')
     expect((await claimedBy(db, 'ids', '⿰木木')).map(row => row.id)).toEqual([])
     expect((await list(db, { query: 'tung' }))!.tiles).toEqual([])
     expect(await mediaVisible(db, 'a.jpg')).toBe(true)
@@ -418,7 +418,7 @@ describe('the wiki', () => {
   })
 
   test('removing an image updates its snapshot, cover, search and image facet together', async () => {
-    const id = await createEntry(db, fields(), seen({ place: 'oldword' }), [{ ...image, box: '[1,2,10,10]' }], who)
+    const id = await createEntry(db, fields(), seen({ place: 'oldword' }), [{ ...image, box: '[[1,2,10,10]]' }], who)
     const sid = (await getEntry(db, id))!.sightings[0].id
     expect(await editSighting(db, sid, 1, seen({ place: 'newword' }), [], who, null, id)).toEqual({ ok: true, rev: 2 })
     const found = (await getEntry(db, id))!
@@ -532,10 +532,20 @@ describe('input', () => {
     expect(readSightingFields(form)).toMatchObject({ url: null, place: '' })
   })
 
-  test('a box is kept inside the image', () => {
-    expect(readBox('[-5,10,500,20]', 100, 100)).toBe('[0,10,100,20]')
-    expect(readBox('nonsense', 100, 100)).toBeNull()
-    expect(readBox('[0,0,1,1]', 100, 100)).toBeNull()
+  test('boxes are kept inside the image, up to eight', () => {
+    expect(readBoxes('[[-5,10,500,20]]', 100, 100)).toBe('[[0,10,100,20]]')
+    expect(readBoxes('[[1,2,10,10],[20,20,30,30]]', 100, 100)).toBe('[[1,2,10,10],[20,20,30,30]]')
+    expect(readBoxes(JSON.stringify(Array(8).fill([0, 0, 5, 5])), 100, 100)).not.toBeNull()
+    expect(readBoxes(JSON.stringify(Array(9).fill([0, 0, 5, 5])), 100, 100)).toBeNull()
+    for (const bad of ['nonsense', '[]', '[1,2,10,10]', '[[0,0,1,1]]', '[[1,2,10,10],[0,0,1,1]]', '[[1,2,10]]']) expect(readBoxes(bad, 100, 100)).toBeNull()
+  })
+
+  test('several boxes of a picture are stored, exported and kept in the snapshot', async () => {
+    const boxes = '[[1,2,10,10],[20,20,30,30]]'
+    const id = await createEntry(db, fields(), seen(), [{ ...image, box: boxes }], who)
+    expect((await getEntry(db, id))!.sightings[0].media[0].box).toBe(boxes)
+    expect((await exportPage(db, 0, 10)).entries[0].evidence[0].media[0].box).toBe(boxes)
+    expect(JSON.parse((await history(db, id)).find(row => row.kind === 'sighting')!.snapshot).media[0].box).toBe(boxes)
   })
 })
 
