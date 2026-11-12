@@ -4,6 +4,7 @@
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import IdsField from '$lib/components/IdsField.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
+  import MarkedPicture from '$lib/components/MarkedPicture.svelte'
   import CopyButton from '$lib/components/CopyButton.svelte'
   import { characterLinks, descriptionLinks } from '$lib/links'
   import { encodedCharacter } from '$lib/ids'
@@ -153,13 +154,8 @@
         {#if sighting.media.length}
           <div class="pictures" class:single={sighting.media.length === 1}>
             {#each sighting.media as picture, position (picture.image_key)}
-                            <figure>
-                <a class="image" href={media(picture.image_key)}>
-                  <span class="frame">
-                    <img src={media(picture.image_key)} alt="{sighting.place || t('field.image')} {position + 1}" width={picture.image_w} height={picture.image_h} loading="lazy" />
-                    {#each boxesOf(picture.box) as box}<span class="mark" style:left="{box[0] / picture.image_w * 100}%" style:top="{box[1] / picture.image_h * 100}%" style:width="{box[2] / picture.image_w * 100}%" style:height="{box[3] / picture.image_h * 100}%"></span>{/each}
-                  </span>
-                </a>
+              <figure>
+                <MarkedPicture {picture} alt="{sighting.place || t('field.image')} {position + 1}" />
                 <figcaption><button class="button small" type="button" title={t('sighting.evidenceHint')} disabled={preparing === picture.image_key} onclick={() => download(sighting, picture, position)}>{t('sighting.evidence')}</button></figcaption>
               </figure>
             {/each}
@@ -216,10 +212,7 @@
   .checks li { display:flex; gap:8px } .checks li.done { color:var(--ink) } .checks li.done .tick { color:var(--good) } .tick { flex:none; width:1em; text-align:center }
   .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px } .pictures.single { grid-template-columns:minmax(0,1fr) }
   figure { display:flex; flex-direction:column; gap:6px; margin:0; min-width:0 }
-  .image { display:flex; justify-content:center; background:var(--surface-sunken); border-radius:6px; overflow:hidden }
-  .frame { position:relative; display:inline-block; max-width:100%; line-height:0 }
-  .frame img { display:block; width:auto; height:auto; max-width:100%; max-height:65vh } .pictures:not(.single) .frame img { max-height:260px }
-  .mark { position:absolute; border:2px solid var(--mark); pointer-events:none }
+  .pictures:not(.single) { --picture-height: 260px }
   .button.small { min-height:32px; padding:4px 10px; font-size:12.5px }
   .url { overflow-wrap:anywhere }
   .via { margin:0; overflow-wrap:anywhere }

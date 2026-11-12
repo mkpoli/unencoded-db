@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { readClaims, type Claim } from '$lib/claims'
-import { addSighting, claimedBy, counts, createEntry, editEntry, editSighting, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, revertEntry, SEARCH_WINDOW, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, claimedBy, counts, createEntry, editEntry, editSighting, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 

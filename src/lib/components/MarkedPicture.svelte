@@ -1,19 +1,17 @@
 <script lang="ts">
-  // A sighting's picture with the character's box drawn over it, linked to the full image.
+  // A sighting's picture with a box drawn over each marked character, linked to the full image.
   import { media } from '$lib/t'
-  import type { Box } from '$lib/picture'
+  import { boxesOf } from '$lib/picture'
   import type { StoredImage } from '$lib/server/entries'
 
   let { picture, alt }: { picture: StoredImage; alt: string } = $props()
-  const box = $derived.by((): Box | null => {
-    try { const found = JSON.parse(picture.box ?? 'null'); return Array.isArray(found) && found.length === 4 ? found as Box : null } catch { return null }
-  })
+  const boxes = $derived(boxesOf(picture.box))
 </script>
 
 <a class="image" href={media(picture.image_key)}>
   <span class="frame">
     <img src={media(picture.image_key)} {alt} width={picture.image_w} height={picture.image_h} loading="lazy" />
-    {#if box}<span class="mark" style:left="{box[0] / picture.image_w * 100}%" style:top="{box[1] / picture.image_h * 100}%" style:width="{box[2] / picture.image_w * 100}%" style:height="{box[3] / picture.image_h * 100}%"></span>{/if}
+    {#each boxes as box}<span class="mark" style:left="{box[0] / picture.image_w * 100}%" style:top="{box[1] / picture.image_h * 100}%" style:width="{box[2] / picture.image_w * 100}%" style:height="{box[3] / picture.image_h * 100}%"></span>{/each}
   </span>
 </a>
 
