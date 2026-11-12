@@ -7,11 +7,22 @@
   import SightingChoice, { type SightingOption } from './SightingChoice.svelte'
 
   type Row = RelatedDraft & { sighting: string }
-  let { values = [], sightings = null }: { values?: (RelatedDraft & { sighting_id: number | null })[]; sightings?: SightingOption[] | null } = $props()
+  // `fill` are variants a reference table names; each is added unless the list already compares it.
+  let { values = [], sightings = null, fill = [] }: { values?: (RelatedDraft & { sighting_id: number | null })[]; sightings?: SightingOption[] | null; fill?: { character: string; field: string }[] } = $props()
 
   const uid = $props.id()
   const blank = (): Row => ({ character: '', relationship: 'uncertain', difference: '', evidence: '', sighting: '' })
   let rows = $state<Row[]>(untrack(() => values.map(({ sighting_id, ...relation }) => ({ ...relation, sighting: sighting_id ? String(sighting_id) : '' }))))
+
+  $effect(() => {
+    if (!fill.length) return
+    untrack(() => {
+      for (const { character, field } of fill) {
+        if (rows.length >= CLAIM_LIMITS.relation.max || rows.some(row => row.character === character)) continue
+        rows.push({ character, relationship: 'variant', difference: '', evidence: `Unihan ${field}`, sighting: '' })
+      }
+    })
+  })
 </script>
 
 <fieldset class="group stack">
