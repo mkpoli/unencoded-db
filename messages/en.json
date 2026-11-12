@@ -185,6 +185,7 @@
   "entry.openIds": "Open in the IDS Workshop",
   "entry.copy": "Copy",
   "entry.copied": "Copied",
+  "entry.copied": "Copied",
   "entry.cite": "Cite this record",
   "entry.mergedInto": "This record was merged into record {id}.",
   "entry.hidden": "A moderator has hidden this record.",

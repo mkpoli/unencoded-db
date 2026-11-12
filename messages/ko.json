@@ -184,6 +184,7 @@
   "entry.addDetails": "상세 정보 추가",
   "entry.openIds": "IDS Workshop에서 열기",
   "entry.copy": "복사",
+  "entry.copied": "복사했습니다",
   "entry.copied": "복사됨",
   "entry.cite": "이 기록 인용하기",
   "entry.mergedInto": "이 기록은 기록 {id}에 병합되었습니다.",
