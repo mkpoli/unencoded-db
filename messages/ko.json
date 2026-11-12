@@ -194,6 +194,7 @@
   "entry.firstAdded": "{name} 님이 추가, {date}",
   "sighting.by": "{name} 님이 기록",
   "sighting.edit": "이 발견 사례 편집",
+  "sighting.addAnother": "여기서 다른 글자 추가",
   "sighting.evidence": "IRG 제출용 다운로드",
   "sighting.evidenceHint": "문자 주위를 빨간 사각형으로 표시한 전체 페이지 이미지입니다. 크기는 1 MB 미만입니다.",
   "sighting.editTitle": "기록 {id}의 발견 사례 편집",

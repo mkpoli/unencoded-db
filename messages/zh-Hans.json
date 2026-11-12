@@ -194,6 +194,7 @@
   "entry.firstAdded": "由{name}添加，{date}",
   "sighting.by": "由{name}记录",
   "sighting.edit": "编辑此发现",
+  "sighting.addAnother": "从这里添加另一个字",
   "sighting.evidence": "下载IRG证据图片",
   "sighting.evidenceHint": "整页图片，用红框标出这个字，文件小于1 MB。",
   "sighting.editTitle": "编辑记录{id}的一处发现",

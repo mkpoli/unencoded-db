@@ -194,6 +194,7 @@
   "entry.firstAdded": "Added by {name}, {date}",
   "sighting.by": "Recorded by {name}",
   "sighting.edit": "Edit this sighting",
+  "sighting.addAnother": "Add another character from here",
   "sighting.evidence": "Download for IRG",
   "sighting.evidenceHint": "The whole page with a red box around the character, under 1 MB.",
   "sighting.editTitle": "Edit a sighting of record {id}",

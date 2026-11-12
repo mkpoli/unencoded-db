@@ -194,6 +194,7 @@
   "entry.firstAdded": "由{name}新增，{date}",
   "sighting.by": "由{name}記錄",
   "sighting.edit": "編輯此發現",
+  "sighting.addAnother": "從這裡新增另一個字",
   "sighting.evidence": "下載IRG證據圖片",
   "sighting.evidenceHint": "整頁圖片，用紅框標出這個字，檔案小於1 MB。",
   "sighting.editTitle": "編輯記錄{id}的一處發現",

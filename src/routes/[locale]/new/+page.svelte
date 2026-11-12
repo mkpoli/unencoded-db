@@ -9,11 +9,22 @@
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { compositionOf, valuesOf } from '$lib/claims'
   import { MEDIA_MAX } from '$lib/limits'
-  import { href, t } from '$lib/t'
-  let { form } = $props()
+  import { href, media, t } from '$lib/t'
+  import { onMount } from 'svelte'
+  let { form, data } = $props()
   let busy = $state(false)
   let pictures = $state<PictureList>()
   const values = $derived(form?.values)
+  const seen = $derived(form?.values ?? data.seed?.values)
+
+  // The pictures of the sighting the form starts from, fetched so that a new box can be drawn on each.
+  onMount(async () => {
+    if (form) return
+    for (const key of data.seed?.pictures ?? []) {
+      const response = await fetch(media(key)).catch(() => null)
+      if (response?.ok) await pictures?.add(await response.blob())
+    }
+  })
   const claims = $derived(values?.claims ?? [])
   let ids = $derived(valuesOf(claims, 'ids').join(', '))
   const composition = $derived.by(() => { const found = compositionOf(claims); return found ? JSON.stringify(found) : '' })
@@ -34,7 +45,7 @@
     <section class="stack"><h2>{t('entry.sightings')}</h2>
       <div class="panel stack">
         <PictureList bind:this={pictures} max={MEDIA_MAX} onready={(working) => busy = working} />
-        <SightingFields {values} onphoto={file => pictures?.offer(file)} />
+        <SightingFields values={seen} onphoto={file => pictures?.offer(file)} />
       </div>
     </section>
     <details class="panel" open={detailed}>

@@ -194,6 +194,7 @@
   "entry.firstAdded": "{name}が追加、{date}",
   "sighting.by": "{name}が記録",
   "sighting.edit": "この用例を編集",
+  "sighting.addAnother": "ここから別の字を追加",
   "sighting.evidence": "IRG用にダウンロード",
   "sighting.evidenceHint": "文字を赤い四角で囲んだページ全体の画像です。1 MB未満。",
   "sighting.editTitle": "記録{id}の用例を編集",
