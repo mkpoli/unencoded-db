@@ -33,7 +33,7 @@
     <div class="search field"><label for="q">{t('browse.searchLabel')}</label><input class="input" id="q" name="q" value={data.query ?? ''} placeholder={t('browse.search')} aria-describedby="search-hint" /></div>
     <div class="field"><label for="filter">{t('browse.filter')}</label><select class="input" id="filter" name="filter" value={data.filter ?? ''}><option value="">{t('browse.anyStatus')}</option><optgroup label={t('field.status')}>{#each STATUSES as status}<option value={status}>{t(`status.${status}`)} ({count(`f:${status}`)})</option>{/each}</optgroup><optgroup label={t('browse.needs')}>{#each NEEDS as need}<option value={need}>{t(`needs.${need}`)} ({count(`n:${need}`)})</option>{/each}</optgroup></select></div>
     {#if pinned}
-      <div class="field"><span class="label">{t(pinned.name === 'tag' ? 'field.tags' : 'field.collection')}</span><input type="hidden" name={pinned.name} value={pinned.value} /><a class="pinned" href={without} aria-label="{pinned.label} ×">{pinned.label} <span aria-hidden="true">×</span></a></div>
+      <div class="field"><span class="label">{t(pinned.name === 'tag' ? 'field.tags' : 'field.collection')}</span><input type="hidden" name={pinned.name} value={pinned.value} /><a class="pinned" href={without} aria-label="{pinned.label} ×">{pinned.label} <span aria-hidden="true">×</span></a>{#if pinned.value === 'extension-e'}<a class="text-link" href={href('/extension-e')}>{t('extensionE.open')}</a>{/if}</div>
     {:else}
       <div class="field"><label for="genre">{t('field.genre')}</label><select class="input" id="genre" name="genre" value={data.genre ?? ''}>
         <option value="">{t('browse.all')}</option>
