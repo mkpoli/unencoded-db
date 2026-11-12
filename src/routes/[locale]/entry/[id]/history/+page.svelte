@@ -9,8 +9,8 @@
 <div class="page narrow stack">
   <a class="text-link back" href={href(`/entry/${data.id}`)}>← {t('history.back')}</a>
   <h1>{t('history.title', { id: data.id })}</h1>
-  {#if form?.error}<p role="alert">{t(`error.${form.error}`)}</p>{/if}
-  <HistoryList rows={data.rows} currentRev={data.rev} restore empty={t('history.empty')} next={data.next} />
+  {#if form?.error}<p class="notice bad" role="alert">{t(`error.${form.error}`)}</p>{/if}
+  <HistoryList rows={data.rows} currentRev={data.rev} restore redact={Boolean(data.person?.moderator)} empty={t('history.empty')} next={data.next} />
 </div>
 
 <style>

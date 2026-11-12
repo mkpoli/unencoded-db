@@ -1,5 +1,11 @@
 declare module 'ids-input' {
+  export type IdsPart = string | IdsNode | null
+  export type IdsNode = { op: string; parts: IdsPart[]; marks?: string; note?: string }
+  export type IdsProblem = 'component' | 'missing' | 'extra' | 'character'
   export function isDescription(text: string | null | undefined): boolean
+  export function parse(ids: string | null | undefined, options?: { open?: boolean }): { tree?: IdsPart; problem?: IdsProblem }
+  export function isNode(part: IdsPart | undefined): part is IdsNode
+  export function write(tree: IdsPart): string
 }
 
 declare module 'ids-input/adapter' {

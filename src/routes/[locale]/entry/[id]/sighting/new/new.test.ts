@@ -18,9 +18,18 @@ async function fixture() {
 test('loads the record and adds a sighting', async () => {
   const { raw, event } = await fixture()
   expect((await load(event()) as any).id).toBe(1)
-  const form = new FormData(); form.set('place', 'Another source'); form.set('types', 'attestation')
+  const form = new FormData(); form.set('place', 'Another source'); form.set('url', 'https://example.test/another'); form.set('types', 'attestation')
   await expect(actions.default(event(form))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
   expect(raw.query('SELECT place, types FROM sightings ORDER BY id DESC').get()).toEqual({ place: 'Another source', types: '["attestation"]' })
+  expect(raw.query('SELECT s.url FROM sightings g JOIN sources s ON s.id = g.source_id ORDER BY g.id DESC').get()).toEqual({ url: 'https://example.test/another' })
+})
+
+test('a sighting needs a picture or a link', async () => {
+  const { raw, event } = await fixture()
+  const form = new FormData(); form.set('place', 'Another source'); form.set('title', 'Kept title')
+  const result = await actions.default(event(form)) as any
+  expect(result).toMatchObject({ status: 400, data: { error: 'evidence', values: { place: 'Another source', title: 'Kept title' } } })
+  expect(raw.query('SELECT count(*) AS n FROM sightings').get()).toEqual({ n: 1 })
 })
 
 test('validates place and image while retaining entered values', async () => {

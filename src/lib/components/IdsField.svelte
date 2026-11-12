@@ -1,7 +1,8 @@
 <script lang="ts">
-  // A description of the character: typed or pasted, or built in the IDS editor. While it holds one, it says
+  // The descriptions of the character, separated by commas: typed or pasted, or built in the IDS editor.
+  // The editor works on the first one, which draws the glyph. While the first is complete, the field says
   // whether an encoded character or another record has the same description.
-  import { codePoints, cleanIds, workshopUrl } from '$lib/ids'
+  import { codePoints, IDS_FIELD_MAX, splitIds, workshopUrl } from '$lib/ids'
   import { encodedMatch } from '$lib/encoded'
   import { href, locale, t } from '$lib/t'
   import { browser } from '$app/environment'
@@ -12,16 +13,20 @@
   let draft = $state('')
   let encoded = $state<string | null>(null)
   let same = $state<{ id: number }[]>([])
+  const primary = $derived(splitIds(value)[0] ?? '')
 
   async function open() {
-    draft = value
+    draft = primary
     dialog?.showModal()
     Editor ??= (await import('./IdsEditor.svelte')).default
   }
-  function use(sequence: string) { value = sequence; dialog?.close() }
+  function use(sequence: string) {
+    value = [sequence, ...splitIds(value).slice(1)].filter(Boolean).join(', ')
+    dialog?.close()
+  }
 
   $effect(() => {
-    const ids = cleanIds(value)
+    const ids = primary
     encoded = null; same = []
     if (!browser || [...ids].length < 2) return
     let live = true
@@ -38,10 +43,10 @@
 <div class="field">
   <label for="ids">{t('field.ids')}</label>
   <div class="row">
-    <input id="ids" class="input ids grow" name="ids" bind:value autocomplete="off" spellcheck="false" placeholder="⿰亻⿱七木" />
+    <input id="ids" class="input ids grow" name="ids" bind:value maxlength={IDS_FIELD_MAX} autocomplete="off" spellcheck="false" placeholder="⿰亻⿱七木" />
     <button type="button" class="button" onclick={open}>{t('field.idsBuild')}</button>
   </div>
-  <p class="hint">{t('field.idsHint')} <a class="text-link" href={workshopUrl(cleanIds(value))} target="_blank" rel="noopener">{t('field.idsWorkshop')} ↗</a></p>
+  <p class="hint">{t('field.idsHint')} <a class="text-link" href={workshopUrl(primary)} target="_blank" rel="noopener">{t('field.idsWorkshop')} ↗</a></p>
   {#if encoded}<p class="notice quiet small" data-testid="encoded-hint">{t('field.idsEncoded', { char: encoded, code: codePoints(encoded) })}</p>{/if}
   {#if same.length}<p class="notice quiet small">{t('field.idsSame')} {#each same as record, i}{i ? ', ' : ''}<a class="text-link" href={href(`/entry/${record.id}`)} target="_blank">#{record.id}</a>{/each}</p>{/if}
 </div>

@@ -7,11 +7,15 @@
     id: number; entry_id: number; sighting_id: number | null; kind: string; rev: number
     summary: string | null; at: string; by_id: string; by_name: string; ids?: string | null
     fields: EntryFields | null; sightingFields: SightingFields | null; sightingRev?: number | null
+    redacted?: boolean; redacted_at?: string | null
   }
 
-  let { rows, currentRev = null, showEntry = false, showActor = true, restore = false, empty, next = null }: {
-    rows: Row[]; currentRev?: number | null; showEntry?: boolean; showActor?: boolean; restore?: boolean; empty: string; next?: number | null
+  let { rows, currentRev = null, showEntry = false, showActor = true, restore = false, redact = false, empty, next = null }: {
+    rows: Row[]; currentRev?: number | null; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; empty: string; next?: number | null
   } = $props()
+
+  // The state a record or a sighting holds now stays; only a past one can be redacted.
+  const past = (row: Row) => row.fields ? row.rev !== currentRev : row.sightingRev != null && row.rev !== row.sightingRev
 
   const stop = (event: MouseEvent) => event.stopPropagation()
 </script>
@@ -29,7 +33,7 @@
       {#if showEntry}<a class="revision-entry" href={href(`/entry/${row.entry_id}`)} onclick={stop}>{row.ids || t('entry.record', { id: row.entry_id })}</a>{/if}
       {#if row.sighting_id}<span class="revision-number">#{row.sighting_id}</span>{/if}
     </span>
-    {#if row.summary}<span class="revision-comment">{row.summary}</span>{/if}
+    {#if row.redacted || row.redacted_at}<span class="revision-comment">{t('history.redacted')}</span>{:else if row.summary}<span class="revision-comment">{row.summary}</span>{/if}
   </span>
   <span class="revision-rev">{row.rev ? `r${row.rev}` : ''}</span>
   <span class="revision-toggle" aria-hidden="true"></span>
@@ -60,6 +64,13 @@
                   <button class="button" type="submit">{t('history.restoreSighting')}</button>
                 </form>
               {/if}
+            {/if}
+            {#if redact && past(row)}
+              <form class="revision-action redact" method="POST" action="?/redact">
+                <input type="hidden" name="revision" value={row.id} />
+                <input class="input" name="summary" maxlength="500" aria-label={t('form.summary')} placeholder={t('form.summary')} />
+                <button class="button danger" type="submit">{t('history.redact')}</button>
+              </form>
             {/if}
           </div>
         </details>
@@ -98,6 +109,8 @@
   details[open] > .revision-row { background: var(--surface-tile) }
   .revision-body { padding: 18px 16px 20px; border-top: 1px solid var(--line); background: var(--surface-sunken) }
   .revision-action { display: flex; justify-content: flex-end; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line) }
+  .revision-action.redact { gap: 8px }
+  .revision-action.redact .input { flex: 1 1 auto; width: auto; min-width: 0 }
   .revision-more { margin-top: 18px }
   @media (max-width: 700px) {
     .revision-row { flex-wrap: wrap; gap: 2px 10px; padding: 12px 2px }

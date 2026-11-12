@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit'
+import { CLAIM_KINDS, claimsOf } from '$lib/claims'
 import { ENTRY_FIELDS, SIGHTING_FIELDS, EXPORT_PAGE_MAX, exportPage } from '$lib/server/entries'
-import { parseRelatedCharacters } from '$lib/related'
 import { parseSightingTypes } from '$lib/scripts'
 import { env } from '$lib/server/guard'
 import { positiveId } from '../../_submission.server'
@@ -36,14 +36,16 @@ export const GET: RequestHandler = async (event) => {
     ...result,
     entries: result.entries.map(entry => ({
       ...entry,
-      related_characters: parseRelatedCharacters(entry.related_characters),
+      types: parseSightingTypes(entry.types),
       evidence: entry.evidence.map(sighting => ({ ...sighting, types: parseSightingTypes(sighting.types) })),
     })),
   }, { headers })
-  const columns = ['entry_id', ...ENTRY_FIELDS, 'sighting_id', ...SIGHTING_FIELDS] as const
-  const rows = result.entries.flatMap(({ evidence, ...entry }) => {
+  // One column for each kind of claim, its values in order; the JSON form carries what else a claim holds.
+  const columns = ['entry_id', ...ENTRY_FIELDS, ...CLAIM_KINDS, 'sighting_id', ...SIGHTING_FIELDS, 'images'] as const
+  const rows = result.entries.flatMap(({ evidence, claims, ...entry }) => {
     const sightings = evidence.length ? evidence : [null]
-    return sightings.map(sighting => [entry.id, ...ENTRY_FIELDS.map(field => entry[field]), sighting?.id, ...SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : sighting?.[field])])
+    const stated = CLAIM_KINDS.map(kind => claimsOf(claims, kind).map(claim => kind === 'encoding' ? `${claim.data?.charset}:${claim.value}` : kind === 'relation' ? `${claim.value} (${claim.data?.relationship})` : claim.value).join('; '))
+    return sightings.map(sighting => [entry.id, ...ENTRY_FIELDS.map(field => entry[field]), ...stated, sighting?.id, ...SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : sighting?.[field]), sighting?.media.map(image => image.image_key).join('; ')])
   })
   headers.set('Content-Type', 'text/csv; charset=utf-8')
   return new Response([columns.map(csvCell).join(','), ...rows.map(row => row.map(csvCell).join(','))].join('\r\n') + '\r\n', { headers })

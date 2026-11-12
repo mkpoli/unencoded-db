@@ -102,6 +102,7 @@ test('browse recognizes complete IDS without applying the component term limit',
   const { db, raw } = openTestDb()
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
   raw.exec("INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES (1, 'han', '⿰木木', 'p', '2026', '2026'), (2, 'han', '⿱木木', 'p', '2026', '2026'), (3, 'han', '⿰木⿰水⿰火⿰土⿰金石', 'p', '2026', '2026')")
+  raw.exec("INSERT INTO claims(entry_id, position, kind, value) SELECT id, 0, 'ids', ids FROM entries")
   raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 's:han', id FROM entries")
   const event = (q: string) => ({ url: new URL(`https://example.test/en?q=${encodeURIComponent(q)}`), platform: { env: { DB: db } } }) as any
   expect(await browseLoad(event('⿰木木'))).toMatchObject({ searchError: null, tiles: [{ id: 1 }] })
@@ -133,4 +134,18 @@ test('a source link can serve as evidence without an upload', async () => {
   form.set('url', 'https://example.test/source')
   const event = { request: { formData: async () => form }, url: new URL('https://example.test/en'), params: { locale: 'en' }, locals: {}, platform: { env: { DB: db, MEDIA: {} } }, cookies: { set() {} }, getClientAddress: () => '127.0.0.1' } as any
   await expect(createActions.default(event)).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+})
+
+test('browse narrows by category, collection or tag and rejects a malformed one', async () => {
+  const { db } = openTestDb()
+  const form = new FormData()
+  form.set('place', 'A book'); form.set('url', 'https://example.test/source'); form.set('genres_present', '1'); form.set('genre', 'hakka'); form.set('tags', 'IRG')
+  const create = { request: { formData: async () => form }, url: new URL('https://example.test/en'), params: { locale: 'en' }, locals: {}, platform: { env: { DB: db, MEDIA: {} } }, cookies: { set() {} }, getClientAddress: () => '127.0.0.1' } as any
+  await expect(createActions.default(create)).rejects.toMatchObject({ status: 303 })
+  const event = (query: string) => ({ url: new URL(`https://example.test/en?${query}`), platform: { env: { DB: db } } }) as any
+  expect(await browseLoad(event('genre=hakka'))).toMatchObject({ genre: 'hakka', tiles: [{ id: 1 }] })
+  expect(await browseLoad(event('genre=dialect'))).toMatchObject({ tiles: [{ id: 1 }] })
+  expect(await browseLoad(event('tag=IRG'))).toMatchObject({ tag: 'IRG', tiles: [{ id: 1 }] })
+  expect(await browseLoad(event('genre=music'))).toMatchObject({ tiles: [] })
+  await expect(browseLoad(event('genre=a%7Cb'))).rejects.toMatchObject({ status: 404 })
 })
