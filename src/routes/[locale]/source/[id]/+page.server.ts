@@ -12,7 +12,7 @@ export const load: PageServerLoad = async (event) => {
   const found = await sourcePage(env(event).DB, id)
   if (!found) error(404)
   const media = event.platform?.env?.MEDIA
-  const ids = found.tiles.map(tile => tile.ids).filter((value): value is string => Boolean(value)).map(cleanIds)
+  const ids = found.sightings.map(sighting => sighting.tile.ids).filter((value): value is string => Boolean(value)).map(cleanIds)
   const glyphs = await glyphPaths(media, ids)
   const missing = [...new Set(ids.filter(value => !glyphs[value]))]
   if (missing.length) event.platform?.ctx?.waitUntil(warmGlyphs(media, missing))
