@@ -3,7 +3,7 @@
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
 import { CONTEXTS, isScript, isStatus, NEEDS, parseSightingTypes, SIGHTING_TYPES, STATUSES, STYLES, type Need, type SightingType } from '$lib/scripts'
-import { cleanIds } from '$lib/ids'
+import { cleanIds, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { parseClaims, primaryIdsOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
@@ -120,6 +120,8 @@ function wordTags(entry: TagInput, claims: readonly Claim[], sightings: Sighting
   const add = (value: unknown) => { if (typeof value === 'string') for (const term of terms(value)) words.add(term) }
   for (const field of ['description', 'script_other'] as const) add(entry[field])
   for (const claim of claims) if (WORD_KINDS.includes(claim.kind)) { add(claim.value); add(claim.data?.difference); add(claim.data?.evidence) }
+  // A Unicode code is found by the character it names, which is what another site links with.
+  for (const claim of claims) if (claim.kind === 'encoding' && claim.data?.charset === 'unicode') add(encodedCharacter(claim.value))
   for (const sighting of sightings) for (const field of ['place', 'title', 'author', 'publisher', 'note'] as const) add(sighting[field])
   return [...words].slice(0, WORDS_MAX).map(word => `w:${word}`)
 }
