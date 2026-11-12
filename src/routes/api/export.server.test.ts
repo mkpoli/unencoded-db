@@ -43,6 +43,18 @@ test('export gives source types as a list in JSON and a readable cell in CSV', a
   expect(await csvResponse.text()).toContain('"mention, definition"')
 })
 
+test('export carries the via citation in JSON and CSV', async () => {
+  const { db, raw } = fixture()
+  raw.exec("INSERT INTO sources(hash, title) VALUES ('a', 'Book'), ('b', 'A post')")
+  raw.exec("UPDATE sightings SET source_id = 1, via_id = 2 WHERE entry_id = 1 AND place = 'source 0'")
+  const body = await (await exportGet({ url: new URL('https://example.test/api/entries?limit=5&format=json'), platform: { env: { DB: db } } } as any)).json() as any
+  expect(body.entries[0].evidence[0]).toMatchObject({ title: 'Book', via_id: 2, via_title: 'A post', via_url: null })
+  const csv = await (await exportGet({ url: new URL('https://example.test/api/entries?limit=5&format=csv'), platform: { env: { DB: db } } } as any)).text()
+  const [head, first] = csv.split('\r\n')
+  expect(head).toContain('"via_url","via_title","via_author","via_publisher","via_report_date"')
+  expect(first).toContain('A post')
+})
+
 test('export links preserve the sighting cursor in JSON and CSV', async () => {
   const { db } = fixture()
   for (const format of ['json', 'csv']) {
