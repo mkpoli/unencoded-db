@@ -1,7 +1,7 @@
 import { redirect, type Handle } from '@sveltejs/kit'
 import { isLocale, LOCALE_COOKIE, negotiate } from '$lib/i18n'
 import { personOf, sessionName } from '$lib/server/people'
-import { limitWriteBody } from '$lib/server/body-limit'
+import { limitWriteBody, MAX_BATCH_BODY } from '$lib/server/body-limit'
 import { guardWrite, writeLimitFor } from '$lib/server/guard'
 
 const UNPREFIXED = /^\/(media|api|auth|_app|robots\.txt|favicon)/
@@ -21,7 +21,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     const limit = writeLimitFor(event)
     if (!limit) return new Response('Not Found', { status: 404 })
     await guardWrite(event, limit, event.route.id === '/[locale]/moderate')
-    const request = await limitWriteBody(event.request)
+    const request = await limitWriteBody(event.request, event.route.id === '/[locale]/batch' ? MAX_BATCH_BODY : undefined)
     if (!request) return new Response('Payload Too Large', { status: 413 })
     event.request = request
   }
