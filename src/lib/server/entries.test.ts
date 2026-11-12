@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { readClaims, type Claim } from '$lib/claims'
-import { addSighting, claimedBy, counts, createEntry, editEntry, editSighting, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBox, readEntryFields, readSightingFields, revertEntry, SEARCH_WINDOW, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, claimedBy, counts, createEntry, editEntry, editSighting, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBox, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
+import { sightingSnapshot } from './revisions'
 import { openTestDb } from './testdb'
 
 const fields = (over: Partial<EntryFields> = {}): EntryFields => ({ script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims: [], ...over })
 const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null): Claim => ({ kind, value, data, sighting_id: null })
 const described = (...sequences: string[]) => fields({ claims: sequences.map(sequence => claim('ids', sequence)) })
 const relation = (character: string, relationship: string, difference = '', evidence = ''): Claim => claim('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) })
-const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null, ...over })
+const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null, provider: null, provider_url: null, ...over })
 const image: StoredImage = { image_key: 'a.webp', image_type: 'image/webp', image_w: 100, image_h: 100, thumb_key: 't.webp', box: null }
 
 let db: D1Database, raw: ReturnType<typeof openTestDb>['raw'], who: { actor: string; ip: null }
@@ -631,5 +632,30 @@ describe('query cost', () => {
     raw.exec('CREATE TABLE plain(tag TEXT, entry_id INTEGER)')
     const details = plan('SELECT entry_id FROM plain WHERE tag = ? ORDER BY entry_id DESC LIMIT 5', ['all'])
     expect(details.join('\n')).toMatch(/TEMP B-TREE|^SCAN plain/m)
+  })
+})
+
+describe('sighting provider', () => {
+  test('reads a name and an http link, and drops a link of any other scheme', () => {
+    const form = new FormData()
+    form.set('provider', `  ${'x'.repeat(250)}  `)
+    form.set('provider_url', 'https://example.org/@someone')
+    expect(readSightingFields(form)).toMatchObject({ provider: 'x'.repeat(200), provider_url: 'https://example.org/@someone' })
+    form.set('provider_url', 'javascript:alert(1)')
+    expect(readSightingFields(form).provider_url).toBeNull()
+    expect(readSightingFields(new FormData())).toMatchObject({ provider: null, provider_url: null })
+  })
+
+  test('is stored, exported, kept in each snapshot and brought back by a restore', async () => {
+    const id = await createEntry(db, fields(), seen({ provider: 'someone', provider_url: 'https://example.org/someone' }), [], who)
+    const sighting = (await getEntry(db, id))!.sightings[0]
+    expect(sighting).toMatchObject({ provider: 'someone', provider_url: 'https://example.org/someone' })
+    expect((await exportPage(db, 0, 10)).entries[0].evidence[0]).toMatchObject({ provider: 'someone', provider_url: 'https://example.org/someone' })
+    await editSighting(db, sighting.id, 1, seen({ provider: null, provider_url: null }), null, who, null, id)
+    expect((await getEntry(db, id))!.sightings[0]).toMatchObject({ provider: null, provider_url: null })
+    const first = (await history(db, id)).find(row => row.kind === 'sighting')!
+    expect(sightingSnapshot(first.snapshot)).toMatchObject({ provider: 'someone', provider_url: 'https://example.org/someone' })
+    expect(await restoreSighting(db, id, sighting.id, 2, sightingSnapshot(first.snapshot)!, who, 1)).toEqual({ ok: true, rev: 3 })
+    expect((await getEntry(db, id))!.sightings[0]).toMatchObject({ provider: 'someone', provider_url: 'https://example.org/someone' })
   })
 })
