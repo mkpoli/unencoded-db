@@ -90,14 +90,14 @@
         </div>
       </div>
     </section>
-    <section class="group">
+    <section class="panel group">
       <div class="titled"><label class="section-title" for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="3">{values?.description ?? ''}</textarea></div>
       <div class="said">
         <TextClaims kind="reading" values={claimsOf(claims, 'reading')} fill={filled?.readings} />
         <TextClaims kind="meaning" values={claimsOf(claims, 'meaning')} fill={filled?.meaning ? [filled.meaning] : []} />
       </div>
     </section>
-    <RelatedCharacters values={relationsOf(claims)} fill={filled?.variants} />
+    <section class="panel"><RelatedCharacters values={relationsOf(claims)} fill={filled?.variants} /></section>
     <section class="group"><h2>{t('entry.sightings')}</h2>
       {#each sightings as item, index (item.key)}
         <fieldset class="panel sighting" bind:this={sections[item.key]} tabindex="-1" data-sighting>
@@ -110,7 +110,7 @@
       {/each}
       {#if sightings.length < ADD_SIGHTINGS_MAX}<div><button type="button" class="text-button" onclick={add}>+ {t('entry.addSighting')}</button></div>{/if}
     </section>
-    <details class="filing" open={filed}>
+    <details class="panel filing" open={filed}>
       <summary class="section-title">{t('field.filing')}</summary>
       <div class="group filed"><CategoryFields genres={valuesOf(claims, 'genre')} collections={valuesOf(claims, 'collection')} tags={valuesOf(claims, 'tag')} /></div>
     </details>
