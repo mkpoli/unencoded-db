@@ -35,7 +35,7 @@
 
 <Seo title={t('add.title')} />
 <div class="page narrow stack">
-  <div class="stack heading"><h1>{t('add.title')}</h1><p class="muted">{t('add.intro')}</p></div>
+  <div class="stack heading"><h1>{t('add.title')}</h1><p class="muted">{t('add.intro')}</p><a class="text-link" href={href('/batch')}>{t('batch.link')}</a></div>
   {#if form?.error}<p class="notice bad" role="alert">{t(`error.${form.error}`)}</p>{/if}
   <form class="stack" method="POST" enctype="multipart/form-data">
     <section class="panel stack">

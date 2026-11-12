@@ -21,7 +21,8 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
     if (key.startsWith('/')) { action = key.slice(1); break }
   }
   switch (event.route?.id) {
-    case '/[locale]/new': return action === 'default' ? 'ADDS' : null
+    case '/[locale]/new':
+    case '/[locale]/batch': return action === 'default' ? 'ADDS' : null
     case '/[locale]/entry/[id]': return action === 'edit' ? 'EDITS' : null
     case '/[locale]/entry/[id]/sighting/new': return action === 'default' ? 'ADDS' : null
     case '/[locale]/me':
@@ -45,6 +46,15 @@ export async function guardWrite(event: RequestEvent, limit: WriteLimit, moderat
   const limits = checked.get(event) ?? new Set<WriteLimit>()
   limits.add(limit)
   checked.set(event, limits)
+}
+
+// Takes `extra` more of the limiter's allowance for a request that saves several records. The request itself
+// has paid for one in `guardWrite`. A false answer means the allowance is spent: nothing should be written.
+export async function chargeWrites(event: RequestEvent, limit: WriteLimit, extra: number) {
+  const limiter = env(event)[limit]
+  if (!limiter) return true
+  for (let i = 0; i < extra; i++) if (!(await limiter.limit({ key: address(event) })).success) return false
+  return true
 }
 
 // Kept with a write so that a moderator can see that two writes share an address, without keeping the address.
