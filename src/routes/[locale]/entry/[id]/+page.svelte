@@ -123,11 +123,13 @@
     {/if}
     {#if entry.by_name && entry.created_at}<p class="hint">{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</p>{/if}
   </section>
+  {#if entry.status !== 'encoded'}
   <section class="panel stack">
     <h2>{t('ready.title')}</h2>
     <ul class="checks">{#each CHECKS as check}<li class:done={ready[check]}><span class="tick" aria-hidden="true">{ready[check] ? '✓' : '○'}</span>{t(`ready.${check}`)}</li>{/each}</ul>
     <a class="text-link small" href="https://www.unicode.org/irg/pp/" target="_blank" rel="noopener">{t('ready.rules')} ↗</a>
   </section>
+  {/if}
   <details class="panel" open={editing}>
     <summary>{t('entry.edit')}</summary>
     <form class="stack form" method="POST" action="?/edit">
