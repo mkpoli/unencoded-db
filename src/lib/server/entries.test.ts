@@ -616,14 +616,15 @@ describe('query cost', () => {
     const traced = { prepare(sql: string) {
       const statement = db.prepare(sql)
       return { bind(...values: unknown[]) { plans.push(plan(sql, values).join('\n')); return statement.bind(...values) } }
-    } } as D1Database
+    }, batch: (statements: D1PreparedStatement[]) => db.batch(statements) } as D1Database
     await createEntry(db, fields(), seen({ title: 'Book' }), [], who)
     await claimedBy(traced, 'ids', '⿰木木')
     await sourcePage(traced, 1)
-    expect(plans).toHaveLength(3)
+    expect(plans).toHaveLength(4)
     plans.splice(1, 1)
     expect(plans[0]).toMatch(/SEARCH k USING COVERING INDEX claims_by_value \(kind=\? AND value=\?\)/)
     expect(plans[1]).toMatch(/SEARCH s USING INDEX sightings_by_source \(source_id=\?\)/)
+    expect(plans[2]).toMatch(/SEARCH s USING INDEX sightings_by_source \(source_id=\?\)/)
     for (const details of plans) expect(details).not.toMatch(/TEMP B-TREE|SCAN (?!.*USING)/)
   })
 

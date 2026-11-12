@@ -336,6 +336,8 @@
   "browse.encoded": "已编码",
   "source.title": "出处",
   "source.view": "出处详情",
+  "source.record": "{n}条记录",
+  "source.records": "{n}条记录",
   "history.redacted": "此版本的内容已删除。",
   "form.remove": "删除",
   "field.readingAdd": "添加读音",

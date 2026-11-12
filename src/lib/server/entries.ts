@@ -651,18 +651,26 @@ export type Source = { id: number; url: string | null; title: string | null; aut
 export const SOURCE_PAGE = 200
 
 // A source and the records seen in it, each once, with the pages it was seen on.
+export type SourceSighting = Pick<Sighting, 'id' | 'entry_id' | 'place' | 'original_date' | 'page' | 'context' | 'style' | 'note' | 'media'> & { types: SightingType[]; tile: Tile }
+const SOURCE_SIGHTING = ['place', 'original_date', 'page', 'context', 'style', 'types', 'note'].map(field => `s.${field} AS s_${field}`).join(', ')
+
+// A source with the visible sightings that cite it, each with its pictures and the record it belongs to.
 export async function sourcePage(db: D1Database, id: number) {
-  const source = await db.prepare(`SELECT id, ${CITATION_FIELDS.join(', ')} FROM sources WHERE id = ?`).bind(id).first<Source>()
-  if (!source) return null
-  const { results } = await db.prepare(`SELECT ${TILE_COLUMNS}, s.page FROM sightings s INDEXED BY sightings_by_source CROSS JOIN entries e ON e.id = s.entry_id WHERE s.source_id = ? AND s.hidden_at IS NULL AND e.hidden_at IS NULL AND e.merged_into IS NULL ORDER BY s.id LIMIT ${SOURCE_PAGE}`).bind(id).all<TileRow & { page: string | null }>()
-  const tiles = new Map<number, Tile & { pages: string[] }>()
-  for (const { page, ...row } of results) {
-    const tile = tiles.get(row.id) ?? { ...toTile(row), pages: [] }
-    if (page && !tile.pages.includes(page)) tile.pages.push(page)
-    tiles.set(row.id, tile)
-  }
+  const live = `s.source_id = ? AND s.hidden_at IS NULL AND e.hidden_at IS NULL AND e.merged_into IS NULL`
+  const [found, rows, pictures] = await db.batch<unknown>([
+    db.prepare(`SELECT id, ${CITATION_FIELDS.join(', ')} FROM sources WHERE id = ?`).bind(id),
+    db.prepare(`SELECT ${TILE_COLUMNS}, s.id AS s_id, ${SOURCE_SIGHTING} FROM sightings s INDEXED BY sightings_by_source CROSS JOIN entries e ON e.id = s.entry_id WHERE ${live} ORDER BY s.id LIMIT ${SOURCE_PAGE}`).bind(id),
+    db.prepare(`SELECT x.sighting_id, ${IMAGE_FIELDS.map(field => `x.${field}`).join(', ')} FROM sightings s INDEXED BY sightings_by_source CROSS JOIN entries e ON e.id = s.entry_id JOIN sighting_media x ON x.sighting_id = s.id WHERE ${live} ORDER BY s.id, x.position LIMIT ${SOURCE_PAGE * MEDIA_MAX}`).bind(id),
+  ])
+  const source = found.results[0] as Source | undefined
+  type Row = TileRow & { s_id: number; s_place: string; s_original_date: string | null; s_page: string | null; s_context: string | null; s_style: string | null; s_types: string | null; s_note: string | null }
+  const results = rows.results as Row[]
   // A citation is shown only while a visible sighting gives it.
-  return results.length ? { source, tiles: [...tiles.values()] } : null
+  if (!source || !results.length) return null
+  const sightings = withMedia(results.map(({ s_id, s_place, s_original_date, s_page, s_context, s_style, s_types, s_note, ...tile }) => ({
+    id: s_id, entry_id: tile.id, place: s_place, original_date: s_original_date, page: s_page, context: s_context, style: s_style, note: s_note, types: parseSightingTypes(s_types), tile: toTile(tile),
+  })), pictures.results as MediaRow[]) as SourceSighting[]
+  return { source, sightings }
 }
 
 // The records that state this value: the ones described by a sequence, given a code, or related to a character.
