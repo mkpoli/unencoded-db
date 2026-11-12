@@ -8,13 +8,13 @@ import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { parseClaims, primaryIdsOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
 import { genreOf } from '$lib/genres'
-import { MEDIA_MAX } from '$lib/limits'
+import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
 import { hashHex } from './image'
 
 export type EntryFields = { script: string; script_other: string | null; description: string | null; status: string; radical: string | null; strokes: number | null; claims: Claim[] }
 export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null; provider: string | null; provider_url: string | null }
-export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }
+export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
 export type Entry = Omit<EntryFields, 'claims'> & { id: number; rev: number; ids: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
 export type Sighting = SightingFields & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; media: StoredImage[]; hidden_at: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
@@ -79,13 +79,20 @@ export function readSightingFields(form: FormData): SightingFields {
   }
 }
 
-export function readBox(raw: unknown, width: number, height: number) {
+// The marks of one picture as the form sends them, a JSON array of [x, y, width, height]. Each is kept inside the image.
+export function readBoxes(raw: unknown, width: number, height: number) {
   try {
-    const box = JSON.parse(String(raw))
-    if (!Array.isArray(box) || box.length !== 4 || !box.every(Number.isFinite)) return null
-    const x = Math.max(0, Math.round(box[0])), y = Math.max(0, Math.round(box[1]))
-    const w = Math.min(width - x, Math.round(box[2])), h = Math.min(height - y, Math.round(box[3]))
-    return w >= 4 && h >= 4 ? JSON.stringify([x, y, w, h]) : null
+    const boxes = JSON.parse(String(raw))
+    if (!Array.isArray(boxes) || !boxes.length || boxes.length > BOXES_MAX) return null
+    const kept: number[][] = []
+    for (const box of boxes) {
+      if (!Array.isArray(box) || box.length !== 4 || !box.every(Number.isFinite)) return null
+      const x = Math.max(0, Math.round(box[0])), y = Math.max(0, Math.round(box[1]))
+      const w = Math.min(width - x, Math.round(box[2])), h = Math.min(height - y, Math.round(box[3]))
+      if (w < 4 || h < 4) return null
+      kept.push([x, y, w, h])
+    }
+    return JSON.stringify(kept)
   } catch { return null }
 }
 
