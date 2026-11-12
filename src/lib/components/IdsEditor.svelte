@@ -19,7 +19,7 @@
   import zhHant from 'ids-input/messages/zh-Hant.json'
 
   let { value = $bindable(''), locale = 'en', onuse }: { value?: string; locale?: string; onuse: (sequence: string) => void } = $props()
-  const adapter = babelStoneAdapter({ ids, additionalIds: projectIds, overwrite: overwriteIds, components, parts, forms, names, folds, characters, characterInfo })
+  const adapter = babelStoneAdapter({ ids, project: projectIds, overwrite: overwriteIds, components, parts, forms, names, folds, characters, characterInfo })
   const CATALOGUES: Record<string, Record<string, string>> = { ja, ko, vi, 'zh-Hans': zhHans, 'zh-Hant': zhHant }
   const messages = $derived(CATALOGUES[locale])
 </script>
