@@ -135,7 +135,7 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own]
 }
 
-const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'relation', 'normalizes_to', 'ivd', 'tag']
+const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'tag']
 function wordTags(entry: TagInput, claims: readonly Claim[], sightings: SightingFields[]) {
   const words = new Set<string>()
   const add = (value: unknown) => { if (typeof value === 'string') for (const term of terms(value)) words.add(term) }

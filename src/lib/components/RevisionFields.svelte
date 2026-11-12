@@ -19,7 +19,7 @@
   ] as const
   const KIND_LABELS: Record<ClaimKind, `${string}.${string}`> = {
     ids: 'field.ids', composition: 'field.formation', reading: 'field.reading', meaning: 'field.meaning', encoding: 'field.encodings',
-    relation: 'field.relatedCharacters', normalizes_to: 'field.normalizesTo', ivd: 'field.ivd', genre: 'field.genre', collection: 'field.collection', tag: 'field.tags',
+    relation: 'field.relatedCharacters', ivd: 'field.ivd', genre: 'field.genre', collection: 'field.collection', tag: 'field.tags',
   }
   const WIDE: ClaimKind[] = ['meaning', 'relation', 'composition']
   const at = locale()

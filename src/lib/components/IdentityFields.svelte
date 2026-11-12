@@ -19,18 +19,16 @@
   let ivdSequence = $state(ivd === 'none' ? '' : ivd)
   let radicalValue = $state(untrack(() => radical ?? ''))
   let strokesValue = $state<number | string>(untrack(() => strokes ?? ''))
-  let equivalent = $state(untrack(() => valuesOf(claims, 'normalizes_to')[0] ?? ''))
   let codes = $state<string[]>([])
 
   const counted = $derived(strokesValue !== '' && strokesValue != null)
   const indexed = $derived(Boolean(radicalValue.trim()) || counted)
   const encoded = $derived([
     ...codes,
-    ...(equivalent.trim() ? [`${t('field.normalizesTo')} ${equivalent.trim()}`] : []),
     ...(ivdStatus === 'none' ? [`${t('field.ivd')} ${t('field.ivdNone')}`] : ivdStatus === 'registered' ? [`${t('field.ivd')} ${ivdSequence.trim()}`.trim()] : []),
   ])
   let indexOpen = $state(untrack(() => indexed))
-  let encodedOpen = $state(untrack(() => claims.some(claim => claim.kind === 'encoding' || claim.kind === 'normalizes_to' || claim.kind === 'ivd')))
+  let encodedOpen = $state(untrack(() => claims.some(claim => claim.kind === 'encoding' || claim.kind === 'ivd')))
 
   $effect(() => {
     if (!fill) return
@@ -53,7 +51,6 @@
   {#snippet value()}{#each encoded as item}<span class="tag">{item}</span>{/each}{/snippet}
   <EncodingFields values={encodingsOf(claims)} code={fill?.code} bind:stated={codes} />
   <div class="pair">
-    <div class="field"><label for="{uid}-normalizes">{t('field.normalizesTo')}</label><input id="{uid}-normalizes" class="input character" name="normalizes_to" maxlength={CLAIM_LIMITS.normalizes_to.length} bind:value={equivalent} autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" /></div>
     <div class="field">
       <label for="{uid}-ivd">{t('field.ivd')}</label>
       <select id="{uid}-ivd" class="input" name="ivd_status" bind:value={ivdStatus}>
@@ -68,6 +65,5 @@
 
 <style>
   .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px }
-  .character { font-size: 18px }
   .tag { padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px }
 </style>

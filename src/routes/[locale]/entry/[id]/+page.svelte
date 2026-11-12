@@ -39,7 +39,6 @@
   const sequences = $derived(valuesOf(claims, 'ids'))
   const analysis = $derived(sequences[0] ? analyze(sequences[0], compositionOf(claims)) : null)
   const ivd = $derived(valuesOf(claims, 'ivd')[0] ?? null)
-  const normalizesTo = $derived(valuesOf(claims, 'normalizes_to')[0] ?? null)
   const encodings = $derived(encodingsOf(claims))
   const relations = $derived(relationsOf(claims))
   const genres = $derived(valuesOf(claims, 'genre').map(genreOf).filter(genre => genre !== null))
@@ -102,7 +101,6 @@
       </p>
     {/if}
     <dl class="facts">
-      {#if normalizesTo}<div><dt>{t('field.normalizesTo')}</dt><dd class="character">{normalizesTo}<CopyButton text={normalizesTo} /></dd></div>{/if}
       {#each encodings as encoding (encoding.charset + '|' + encoding.code)}{@const character = encoding.charset === 'unicode' ? encodedCharacter(encoding.code) : ''}<div><dt>{encodingSetLabel(encoding.charset)}</dt><dd>{#if character}<span class="character encoded">{character}</span><CopyButton text={character} /> {/if}<span class="mono">{encoding.code}</span>{#if character}<span class="sites">{#each characterLinks(character, at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</span>{/if}</dd></div>{/each}
       {#if ivd}<div><dt>{t('field.ivd')}</dt><dd class:mono={ivd !== 'none'}>{ivd === 'none' ? t('field.ivdNone') : ivd}</dd></div>{/if}
       {#if entry.radical}<div><dt>{t('field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
