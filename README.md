@@ -54,10 +54,6 @@ The gallery draws each record's IDS with [han-compose](https://github.com/mkpoli
 
 The IDS editor uses separately licensed data and fonts. See the [third-party notices](static/third-party/ids-input/NOTICE.md); redistribution rights for some materials remain unverified.
 
-## Importing the previous database
-
-`bun scripts/import-production.ts <previous.sqlite> <media-dir> <out-dir>` replays an export of the previous production database through the store and writes `data.sql` for D1 and the objects for the `MEDIA` bucket. It needs `sqlite3` and ImageMagick.
-
 ## Cloudflare bindings
 
 The Worker uses a D1 database (`DB`), an R2 bucket (`MEDIA`), and rate limit bindings (`ADDS` and `EDITS`). `IP_SALT` is an optional secret for hashing contributor IP addresses, and `WRITES_PAUSED=1` disables writes.
