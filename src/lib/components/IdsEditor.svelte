@@ -12,16 +12,9 @@
   import folds from 'ids-input/data/component-name-folds.tsv?url'
   import characterInfo from 'ids-input/data/character-info.json.gz?url'
   import characters from 'ids-input/data/character-vocabulary.tsv.gz?url'
-  import ja from 'ids-input/messages/ja.json'
-  import ko from 'ids-input/messages/ko.json'
-  import vi from 'ids-input/messages/vi.json'
-  import zhHans from 'ids-input/messages/zh-Hans.json'
-  import zhHant from 'ids-input/messages/zh-Hant.json'
 
-  let { value = $bindable(''), locale = 'en', onuse }: { value?: string; locale?: string; onuse: (sequence: string) => void } = $props()
-  const adapter = babelStoneAdapter({ ids, additionalIds: projectIds, overwrite: overwriteIds, components, parts, forms, names, folds, characters, characterInfo })
-  const CATALOGUES: Record<string, Record<string, string>> = { ja, ko, vi, 'zh-Hans': zhHans, 'zh-Hant': zhHant }
-  const messages = $derived(CATALOGUES[locale])
+  let { value = $bindable(''), locale = 'en', messages, onuse }: { value?: string; locale?: string; messages?: Record<string, string>; onuse: (sequence: string) => void } = $props()
+  const adapter = babelStoneAdapter({ ids, project: projectIds, overwrite: overwriteIds, components, parts, forms, names, folds, characters, characterInfo })
 </script>
 
 <IdsInput {adapter} bind:value {messages} {locale} {onuse} recentKey="ug.recentParts" />

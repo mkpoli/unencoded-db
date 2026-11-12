@@ -35,18 +35,19 @@
         <input class="input" name={kind} maxlength={limit.length} bind:value={row.value} aria-label="{t(`field.${kind}`)} {index + 1}" autocomplete="off" />
       {/if}
       {#if sightings}<SightingChoice id="{uid}-sighting-{index}" name="{kind}_sighting" {sightings} bind:value={row.sighting} />{/if}
-      <button class="button remove" type="button" onclick={() => rows.splice(index, 1)}>{t('form.remove')}</button>
+      {#if rows.length > 1 || row.value}<button class="remove" type="button" aria-label="{t('form.remove')} {t(`field.${kind}`)} {index + 1}" title={t('form.remove')} onclick={() => rows.splice(index, 1)}><span aria-hidden="true">×</span></button>{/if}
     </div>
   {/each}
-  {#if rows.length < limit.max}<button class="button" type="button" onclick={() => rows.push(blank())}>{t(`field.${kind}Add`)}</button>{/if}
+  {#if rows.length < limit.max}<button class="text-button" type="button" onclick={() => rows.push(blank())}>+ {t(`field.${kind}Add`)}</button>{/if}
 </fieldset>
 
 <style>
-  .group { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0 }
+  .group { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0 }
   .group legend { padding: 0; margin-bottom: 6px }
-  .claim { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; width: 100% }
-  .claim.with-sighting { grid-template-columns: minmax(0, 1fr) minmax(0, 200px) auto }
+  .claim { display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: start; gap: 8px; width: 100% }
+  .claim.with-sighting { grid-template-columns: minmax(0, 1fr) minmax(0, 200px) 28px }
   textarea.input { min-height: 42px }
-  .remove { color: var(--muted) }
-  @media (max-width: 560px) { .claim.with-sighting { grid-template-columns: minmax(0, 1fr) auto } .claim.with-sighting > :first-child { grid-column: 1 / -1 } }
+  .remove { width: 28px; height: 42px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer }
+  .remove:hover { color: var(--wrong) }
+  @media (max-width: 560px) { .claim.with-sighting { grid-template-columns: minmax(0, 1fr) 28px } .claim.with-sighting > :first-child { grid-column: 1 / -1 } }
 </style>

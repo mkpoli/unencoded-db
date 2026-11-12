@@ -49,5 +49,9 @@ export function isStoredSightingTypes(raw: string | null): boolean {
   } catch { return false }
 }
 
+// A form that holds several sightings opens each of them with this field, so the fields after it, up to
+// the next one, are read as that sighting's.
+export const SIGHTING_START = 'sighting_start'
+
 export const NEEDS = ['image', 'ids', 'source'] as const
 export type Need = (typeof NEEDS)[number]

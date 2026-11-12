@@ -5,7 +5,7 @@
     "": {
       "name": "unencoded-db",
       "dependencies": {
-        "ids-input": "github:mkpoli/ids-input#d638d219",
+        "ids-input": "github:mkpoli/ids-input#f02f8faf",
         "jose": "^6.2.15",
       },
       "devDependencies": {
@@ -265,7 +265,7 @@
 
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
 
-    "ids-input": ["ids-input@github:mkpoli/ids-input#d638d21", { "dependencies": { "@cf-wasm/resvg": "^0.4.0" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-d638d21", "sha512-fvPhSgyiQbhdRZFdnggZrL0x+1qAUL1kt8BaJ5rBiAgfygwAbetab3Fy9PE/QuqBnxKs9orbMNlLEEkKVS3aHg=="],
+    "ids-input": ["ids-input@github:mkpoli/ids-input#f02f8fa", { "dependencies": { "@cf-wasm/resvg": "^0.4.0" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-f02f8fa", "sha512-QMrlj8AsV5U+jgrhqu1X5qNlYxFrquupLLApo6T82wvvb0GnnVgbMILB4tc/CxFiZ4PNGLG6tD606/vfyI3NEQ=="],
 
     "is-reference": ["is-reference@3.0.3", "", { "dependencies": { "@types/estree": "^1.0.6" } }, "sha512-ixkJoqQvAP88E6wLydLGGqCJsrFUnqoH6HnaczB8XmDH1oaWU+xxdptvikTgaEhtZ53Ky6YXiBuUI2WXLMCwjw=="],
 

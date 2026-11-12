@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state'
+  import { untrack } from 'svelte'
   import Seo from '$lib/components/Seo.svelte'
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import IdsField from '$lib/components/IdsField.svelte'
@@ -9,7 +10,10 @@
   import { characterLinks, descriptionLinks } from '$lib/links'
   import { encodedCharacter } from '$lib/ids'
   import CompositionField from '$lib/components/CompositionField.svelte'
-  import ClaimFields from '$lib/components/ClaimFields.svelte'
+  import IdentityFields from '$lib/components/IdentityFields.svelte'
+  import TextClaims from '$lib/components/TextClaims.svelte'
+  import RelatedCharacters from '$lib/components/RelatedCharacters.svelte'
+  import CategoryFields from '$lib/components/CategoryFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import type { CharacterFacts } from '$lib/encoded'
   import { claimsOf, compositionOf, encodingsOf, relationsOf, valuesOf, type Claim } from '$lib/claims'
@@ -28,10 +32,8 @@
   const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
   const editValues = $derived(editing && form?.values && 'script' in form.values ? form.values : { ...entry, claims })
   let filled = $state<CharacterFacts | null>(null)
-  let ids = $derived.by(() => {
-    entry.id
-    return valuesOf(editValues.claims, 'ids').join(', ')
-  })
+  const editIds = $derived(valuesOf(editValues.claims, 'ids'))
+  let primary = $state(untrack(() => editIds[0] ?? ''))
   const editComposition = $derived.by(() => { const found = compositionOf(editValues.claims); return found ? JSON.stringify(found) : '' })
 
   const sequences = $derived(valuesOf(claims, 'ids'))
@@ -137,12 +139,23 @@
     <form class="stack form" method="POST" action="?/edit">
       {#if editing}<p class="notice bad" role="alert">{t(`error.${form?.error}`)}</p>{/if}
       <input type="hidden" name="rev" value={entry.rev} />
-      {#key entry.id}<ScriptPicker value={editValues.script} other={editValues.script_other} />{/key}
-      <IdsField bind:value={ids} onfill={facts => filled = facts} />
-      <CompositionField {ids} value={editComposition} />
-      <div class="field"><label for="description">{t('field.description')}</label><textarea id="description" class="input" name="description">{editValues.description ?? ''}</textarea></div>
-      <div class="field"><label for="status">{t('field.status')}</label><select id="status" class="input" name="status" value={editValues.status ?? 'unchecked'}>{#each STATUSES as status}<option value={status}>{t(`status.${status}`)}</option>{/each}</select><p class="hint">{t('field.statusHint')}</p></div>
-      {#key `${entry.id}:${entry.rev}:${editing}`}<ClaimFields claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} sightings={options} fill={filled} />{/key}
+      {#key `${entry.id}:${entry.rev}:${editing}`}
+        <IdsField values={editIds} bind:primary onfill={facts => filled = facts} />
+        <div class="sheet">
+          <CompositionField ids={primary} value={editComposition} />
+          <ScriptPicker value={editValues.script} other={editValues.script_other} />
+          <IdentityFields claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} fill={filled} />
+        </div>
+        <div class="field"><label for="description">{t('field.description')}</label><textarea id="description" class="input" name="description">{editValues.description ?? ''}</textarea></div>
+        <TextClaims kind="reading" values={claimsOf(editValues.claims, 'reading')} sightings={options} fill={filled?.readings} />
+        <TextClaims kind="meaning" values={claimsOf(editValues.claims, 'meaning')} sightings={options} fill={filled?.meaning ? [filled.meaning] : []} />
+        <RelatedCharacters values={relationsOf(editValues.claims)} sightings={options} fill={filled?.variants} />
+        <div class="field"><label for="status">{t('field.status')}</label><select id="status" class="input" name="status" value={editValues.status ?? 'unchecked'}>{#each STATUSES as status}<option value={status}>{t(`status.${status}`)}</option>{/each}</select><p class="hint">{t('field.statusHint')}</p></div>
+        <details class="filing" open={editValues.claims.some(claim => claim.kind === 'genre' || claim.kind === 'collection' || claim.kind === 'tag')}>
+          <summary class="section-title">{t('field.filing')}</summary>
+          <div class="stack filed"><CategoryFields genres={valuesOf(editValues.claims, 'genre')} collections={valuesOf(editValues.claims, 'collection')} tags={valuesOf(editValues.claims, 'tag')} /></div>
+        </details>
+      {/key}
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" /></div>
       {#if editing && form?.error === 'conflict'}<button class="button" type="submit" disabled>{t('form.save')}</button>{:else}<SubmitBar />{/if}
     </form>
@@ -188,6 +201,7 @@
 </div>
 <style>
   summary { cursor:pointer; font-weight:600 } .form { margin-top:18px }
+  .sheet { display:flex; flex-direction:column; gap:10px; padding-top:10px; border-top:1px dashed var(--line) } .filed { margin-top:14px }
   .back { align-self:start; color:var(--muted) } .title { gap:8px } .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
   h3 { font-size:14px; font-weight:600 }
   .identity { display:flex; align-items:center; gap:18px; min-width:0 }

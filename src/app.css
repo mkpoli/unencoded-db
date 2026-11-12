@@ -42,7 +42,7 @@ button, a { touch-action: manipulation; -webkit-tap-highlight-color: transparent
 :focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px }
 h1, h2, h3, p { margin: 0 }
 h1 { font-size: 24px; font-weight: 600; line-height: 1.3 }
-h2 { font-size: 16px; font-weight: 600 }
+h2, .section-title { font-size: 16px; font-weight: 600 }
 .text-link { text-decoration: underline; text-underline-offset: 3px }
 .text-link:hover { color: var(--accent) }
 .muted { color: var(--muted) }
@@ -56,7 +56,10 @@ h2 { font-size: 16px; font-weight: 600 }
 .button.primary:hover { opacity: .88 }
 .button.danger { color: var(--wrong) }
 .button:disabled { opacity: .5; cursor: default }
-.input, select.input, textarea.input { display: block; width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface) }
+.text-button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; text-align: start }
+.text-button:hover { text-decoration: underline; text-underline-offset: 3px }
+/* A control's text is never under 1rem, so a phone does not zoom in on the field it is typing in. */
+.input, select.input, textarea.input { display: block; width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); font-size: max(1rem, 1em) }
 textarea.input { min-height: 96px; resize: vertical; line-height: 1.55 }
 .input::placeholder { color: var(--muted) }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0 }
@@ -81,5 +84,7 @@ textarea.input { min-height: 96px; resize: vertical; line-height: 1.55 }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px }
 .ids { font-size: 1.05em; overflow-wrap: anywhere }
 dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); padding: 0 }
-dialog::backdrop { background: var(--backdrop) }
+/* Scrolling inside an open dialog, or over its backdrop, stays there. */
+dialog:modal { overscroll-behavior: contain }
+dialog::backdrop { background: var(--backdrop); overflow: hidden; overscroll-behavior: contain }
 @media (max-width: 700px) { :root { --page-gutter: 16px } .page { padding-top: 18px } .grid-2 { grid-template-columns: minmax(0, 1fr) } h1 { font-size: 21px } }

@@ -255,25 +255,32 @@ function revision(db: D1Database, who: Who, row: { entry: number; sighting?: num
 const OCCURRENCE_COLUMNS = OCCURRENCE_FIELDS.join(', ')
 const OCCURRENCE_MARKS = OCCURRENCE_FIELDS.map(() => '?').join(', ')
 
-export async function createEntry(db: D1Database, fields: EntryFields, sighting: SightingFields, media: StoredImage[], who: Who) {
+export type SightingDraft = { fields: SightingFields; media: StoredImage[] }
+
+// `more` are further sightings the record starts with. They go in the same batch as the record and its
+// first sighting, so all of them are saved or none is.
+export async function createEntry(db: D1Database, fields: EntryFields, sighting: SightingFields, media: StoredImage[], who: Who, more: SightingDraft[] = []) {
   const at = now()
   const claims = fields.claims.map(claim => ({ ...claim, sighting_id: null }))
-  const source = await sourceOf(db, sighting)
-  const summary = summarize([{ ...sighting, media }])
+  const drafts = [{ fields: sighting, media }, ...more]
+  const sources = await Promise.all(drafts.map(draft => sourceOf(db, draft.fields)))
+  const summary = summarize(drafts.map(draft => ({ ...draft.fields, media: draft.media })))
   const tags = [...new Set(tagsOf({ ...fields, merged_into: null, hidden_at: null } as unknown as Entry, claims, summary))]
   // AUTOINCREMENT sequences are read inside the same transaction as the inserts.
   const results = await db.batch<{ id: number }>([
     db.prepare(`INSERT INTO entries(${ENTRY_FIELDS.join(', ')}, created_by, created_at, updated_at) VALUES(${ENTRY_FIELDS.map(() => '?').join(', ')}, ?, ?, ?) RETURNING id`)
       .bind(...ENTRY_FIELDS.map(field => fields[field]), who.actor, at, at),
-    ...source.statements,
-    db.prepare(`INSERT INTO sightings(entry_id, first_entry, source_id, via_id, ${OCCURRENCE_COLUMNS}, created_by, created_at, updated_at) VALUES(${ENTRY_SEQ}, ${ENTRY_SEQ}, ${SOURCE_ID}, ${SOURCE_ID}, ${OCCURRENCE_MARKS}, ?, ?, ?)`)
-      .bind(...source.hashes, ...OCCURRENCE_FIELDS.map(field => sighting[field]), who.actor, at, at),
-    insertMedia(db, SIGHTING_SEQ, media),
     insertClaims(db, ENTRY_SEQ, claims),
     db.prepare(`INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at, ip_hash) VALUES(${ENTRY_SEQ}, 'create', 1, ?, ?, ?, ?)`)
       .bind(entrySnapshot({ ...fields, claims }), who.actor, at, who.ip),
-    db.prepare(`INSERT INTO revisions(entry_id, sighting_id, kind, rev, snapshot, actor, at, ip_hash) VALUES(${ENTRY_SEQ}, ${SIGHTING_SEQ}, 'sighting', 1, ?, ?, ?, ?)`)
-      .bind(sightingSnapshot(sighting, media), who.actor, at, who.ip),
+    ...drafts.flatMap((draft, index) => [
+      ...sources[index].statements,
+      db.prepare(`INSERT INTO sightings(entry_id, first_entry, source_id, via_id, ${OCCURRENCE_COLUMNS}, created_by, created_at, updated_at) VALUES(${ENTRY_SEQ}, ${ENTRY_SEQ}, ${SOURCE_ID}, ${SOURCE_ID}, ${OCCURRENCE_MARKS}, ?, ?, ?)`)
+        .bind(...sources[index].hashes, ...OCCURRENCE_FIELDS.map(field => draft.fields[field]), who.actor, at, at),
+      insertMedia(db, SIGHTING_SEQ, draft.media),
+      db.prepare(`INSERT INTO revisions(entry_id, sighting_id, kind, rev, snapshot, actor, at, ip_hash) VALUES(${ENTRY_SEQ}, ${SIGHTING_SEQ}, 'sighting', 1, ?, ?, ?, ?)`)
+        .bind(sightingSnapshot(draft.fields, draft.media), who.actor, at, who.ip),
+    ]),
     db.prepare(`UPDATE entries SET ${SUMMARY_SET} WHERE id = ${ENTRY_SEQ}`).bind(...summaryValues(claims, summary)),
     db.prepare(`INSERT INTO entry_tags(tag, entry_id) SELECT value, ${ENTRY_SEQ} FROM json_each(?)`).bind(JSON.stringify(tags)),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),

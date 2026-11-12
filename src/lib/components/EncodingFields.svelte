@@ -2,13 +2,14 @@
   // The codes the character has in character sets. A set outside the list is named in its own field,
   // which then carries the row's `encoding_charset`, so the two lists the form sends stay in step.
   import { untrack } from 'svelte'
-  import { ENCODING_SETS, OTHER_ENCODING, isEncodingSet, type Encoding } from '$lib/encodings'
+  import { ENCODING_SETS, OTHER_ENCODING, encodingSetLabel, isEncodingSet, type Encoding } from '$lib/encodings'
   import { CLAIM_LIMITS } from '$lib/claims'
   import { t } from '$lib/t'
 
   type Row = { charset: string; code: string; other: string }
-  // `code` is a Unicode code to state when no row states it yet.
-  let { values = [], code = '' }: { values?: Encoding[]; code?: string } = $props()
+  // `code` is a Unicode code to state when no row states it yet. `stated` follows the codes the rows hold,
+  // each with the name of its set, for a summary outside.
+  let { values = [], code = '', stated = $bindable([]) }: { values?: Encoding[]; code?: string; stated?: string[] } = $props()
 
   const uid = $props.id()
   const row = (encoding: Encoding): Row => isEncodingSet(encoding.charset)
@@ -25,16 +26,18 @@
       else if (rows.length < CLAIM_LIMITS.encoding.max) rows.push({ charset: 'unicode', code, other: '' })
     })
   })
+  $effect.pre(() => {
+    stated = rows.filter(item => item.code.trim()).map(item => `${item.charset === OTHER_ENCODING ? item.other.trim() : encodingSetLabel(item.charset)} ${item.code.trim()}`.trim())
+  })
 </script>
 
-<fieldset class="group">
-  <legend class="label">{t('field.encodings')}</legend>
+<div class="group" role="group" aria-label={t('field.encodings')}>
   <input type="hidden" name="encodings_present" value="1" />
+  {#if rows.length}<div class="head" aria-hidden="true"><span>{t('field.encodingCharset')}</span><span>{t('field.encodingCode')}</span><span></span></div>{/if}
   {#each rows as item, index}
     <div class="encoding">
-      <div class="field">
-        <label for="{uid}-set-{index}">{t('field.encodingCharset')}</label>
-        <select id="{uid}-set-{index}" class="input" name={item.charset === OTHER_ENCODING ? undefined : 'encoding_charset'} bind:value={item.charset}>
+      <div class="set">
+        <select id="{uid}-set-{index}" class="input" name={item.charset === OTHER_ENCODING ? undefined : 'encoding_charset'} bind:value={item.charset} aria-label="{t('field.encodingCharset')} {index + 1}">
           {#each ENCODING_SETS as set (set.id)}<option value={set.id}>{set.label}</option>{/each}
           <option value={OTHER_ENCODING}>{t('field.encodingOther')}</option>
         </select>
@@ -42,21 +45,18 @@
           <input class="input" name="encoding_charset" maxlength="40" bind:value={item.other} required={Boolean(item.code.trim())} aria-label={t('field.encodingOther')} placeholder={t('field.encodingOther')} />
         {/if}
       </div>
-      <div class="field">
-        <label for="{uid}-code-{index}">{t('field.encodingCode')}</label>
-        <input id="{uid}-code-{index}" class="input mono" name="encoding_code" maxlength={CLAIM_LIMITS.encoding.length} bind:value={item.code} placeholder={item.charset === 'unicode' ? 'U+2D6DD' : ''} autocomplete="off" spellcheck="false" />
-      </div>
-      <button class="button remove" type="button" onclick={() => rows.splice(index, 1)}>{t('field.encodingRemove')}</button>
+      <input id="{uid}-code-{index}" class="input mono" name="encoding_code" maxlength={CLAIM_LIMITS.encoding.length} bind:value={item.code} placeholder={item.charset === 'unicode' ? 'U+2D6DD' : ''} aria-label="{t('field.encodingCode')} {index + 1}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
+      {#if rows.length > 1 || item.code}<button class="remove" type="button" aria-label="{t('field.encodingRemove')} {index + 1}" title={t('field.encodingRemove')} onclick={() => rows.splice(index, 1)}><span aria-hidden="true">×</span></button>{/if}
     </div>
   {/each}
-  {#if rows.length < CLAIM_LIMITS.encoding.max}<button class="button" type="button" onclick={() => rows.push({ charset: 'unicode', code: '', other: '' })}>{t('field.encodingAdd')}</button>{/if}
-</fieldset>
+  {#if rows.length < CLAIM_LIMITS.encoding.max}<button class="text-button" type="button" onclick={() => rows.push({ charset: 'unicode', code: '', other: '' })}>+ {t('field.encodingAdd')}</button>{/if}
+</div>
 
 <style>
-  .group { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0 }
-  .group legend { padding: 0; margin-bottom: 6px }
-  .encoding { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 10px; width: 100% }
-  .field { gap: 6px }
-  .remove { color: var(--muted) }
-  @media (max-width: 560px) { .encoding { grid-template-columns: minmax(0, 1fr) } .remove { justify-self: start } }
+  .group { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0 }
+  .head, .encoding { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 28px; align-items: start; gap: 8px; width: 100% }
+  .head { font-weight: 500 }
+  .set { display: grid; gap: 6px; min-width: 0 }
+  .remove { width: 28px; height: 42px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer }
+  .remove:hover { color: var(--wrong) }
 </style>

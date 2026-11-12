@@ -1,14 +1,34 @@
-import { readBoxes, type StoredImage } from '$lib/server/entries'
+import { readBoxes, SIGHTING_FIELDS, type StoredImage } from '$lib/server/entries'
 import { MAX_IMAGE, MAX_THUMB, prepareImage, storeImage } from '$lib/server/image'
 import { MEDIA_MAX } from '$lib/limits'
+import { SIGHTING_START } from '$lib/scripts'
+
+const SIGHTING_NAMES = new Set<string>([...SIGHTING_FIELDS, 'image', 'thumb', 'box'])
+
+// The sightings of a form, in the order of the page: one form of its own for each, with the fields and
+// pictures between its opening field and the next. Fields of the record itself are left out, wherever
+// they stand. A form without the opening field holds one sighting, as the form of a single sighting does.
+export function sightingForms(form: FormData): FormData[] {
+  if (!form.has(SIGHTING_START)) return [form]
+  const sightings: FormData[] = []
+  for (const [name, value] of form.entries()) {
+    if (name === SIGHTING_START) sightings.push(new FormData())
+    else if (sightings.length && SIGHTING_NAMES.has(name)) sightings.at(-1)!.append(name, value)
+  }
+  return sightings
+}
+
+type Prepared = NonNullable<Awaited<ReturnType<typeof prepareImage>>>
+export type ReadImage = { image: Prepared; thumb: Prepared; box: string | null }
 
 // The pictures a form sends: each picker posts `image`, `thumb` and `box` together, so the three lists
-// line up. An unenhanced form has no thumbnail; the original is then used as its cover.
-export async function uploadedImages(form: FormData, media: R2Bucket): Promise<StoredImage[] | 'invalid'> {
+// line up. An unenhanced form has no thumbnail; the original is then used as its cover. Nothing is stored
+// here, so a form can be read whole before any of it is kept.
+export async function readImages(form: FormData): Promise<ReadImage[] | 'invalid'> {
   const files = form.getAll('image'), thumbs = form.getAll('thumb'), boxes = form.getAll('box')
   const paired = thumbs.length === files.length, marked = boxes.length === files.length
   if (!paired && thumbs.some(thumb => thumb instanceof File && thumb.size)) return 'invalid'
-  const prepared: { image: NonNullable<Awaited<ReturnType<typeof prepareImage>>>; thumb: NonNullable<Awaited<ReturnType<typeof prepareImage>>>; box: string | null }[] = []
+  const prepared: ReadImage[] = []
   for (const [index, file] of files.entries()) {
     const thumbFile = paired ? thumbs[index] : null
     const hasThumb = thumbFile instanceof File && thumbFile.size > 0
@@ -26,12 +46,21 @@ export async function uploadedImages(form: FormData, media: R2Bucket): Promise<S
     if (rawBox && !box) return 'invalid'
     prepared.push({ image, thumb, box })
   }
-  // Nothing is stored until every picture is known to be one.
-  for (const { image, thumb } of prepared) {
+  return prepared
+}
+
+export async function storeImages(media: R2Bucket, images: ReadImage[]): Promise<StoredImage[]> {
+  for (const { image, thumb } of images) {
     await storeImage(media, image)
     if (thumb.key !== image.key) await storeImage(media, thumb)
   }
-  return prepared.map(({ image, thumb, box }) => ({ image_key: image.key, image_type: image.type, image_w: image.width, image_h: image.height, thumb_key: thumb.key, box }))
+  return images.map(({ image, thumb, box }) => ({ image_key: image.key, image_type: image.type, image_w: image.width, image_h: image.height, thumb_key: thumb.key, box }))
+}
+
+// Nothing is stored until every picture is known to be one.
+export async function uploadedImages(form: FormData, media: R2Bucket): Promise<StoredImage[] | 'invalid'> {
+  const images = await readImages(form)
+  return images === 'invalid' ? images : storeImages(media, images)
 }
 
 export function positiveId(value: string | null | undefined): number | null {

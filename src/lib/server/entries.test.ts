@@ -92,6 +92,43 @@ describe('adding a record', () => {
     expect((await history(db, id)).map(row => row.kind).sort()).toEqual(['create', 'sighting'])
   })
 
+  test('a record starts with several sightings, as if each had been added after it', async () => {
+    const book = { title: 'Zidian', author: 'Mei Yingzuo', report_date: '1615' }
+    const later = [
+      { fields: seen({ place: 'Page 12', ...book, types: JSON.stringify(['definition']) }), media: [image] },
+      { fields: seen({ place: 'Page 40', ...book }), media: [] },
+      { fields: seen({ place: 'A post', url: 'https://example.test/post', via_title: 'A thread' }), media: [] },
+    ]
+    const first = seen({ place: 'A shop sign', report_date: '1932', types: JSON.stringify(['mention']) })
+    const id = await createEntry(db, described('⿰山東'), first, [], who, later)
+    const found = (await getEntry(db, id))!
+    expect(found.sightings.map(sighting => sighting.place)).toEqual(['A shop sign', 'Page 12', 'Page 40', 'A post'])
+    expect(found.sightings.map(sighting => sighting.media.length)).toEqual([0, 1, 0, 0])
+    expect(found.sightings.every(sighting => sighting.entry_id === id && sighting.first_entry === id)).toBe(true)
+    // The two pages cite one book; the sign's date, the post's link and what the post was found through are sources of their own.
+    expect(found.sightings[1].source_id).toBe(found.sightings[2].source_id)
+    expect(new Set(found.sightings.map(sighting => sighting.source_id)).size).toBe(3)
+    expect(found.sightings.map(sighting => sighting.via_id === null)).toEqual([true, true, true, false])
+    expect(raw.query('SELECT count(*) AS n FROM sources').get()).toEqual({ n: 4 })
+    const journal = raw.query('SELECT kind, sighting_id, rev FROM revisions WHERE entry_id = ? ORDER BY id').all(id)
+    expect(journal).toEqual([{ kind: 'create', sighting_id: null, rev: 1 }, ...found.sightings.map(sighting => ({ kind: 'sighting', sighting_id: sighting.id, rev: 1 }))])
+
+    const other = await createEntry(db, described('⿰山東'), first, [], who)
+    for (const draft of later) await addSighting(db, other, draft.fields, draft.media, who)
+    const summary = (entry: number) => raw.query('SELECT ids, cover_key, cover_place, sightings, types, first_year, first_year_kind FROM entries WHERE id = ?').get(entry)
+    const tags = (entry: number) => raw.query('SELECT tag FROM entry_tags WHERE entry_id = ? ORDER BY tag').all(entry)
+    expect(summary(id)).toEqual(summary(other))
+    expect(summary(id)).toMatchObject({ cover_key: 't.webp', cover_place: 'Page 12', sightings: 4, first_year: '1615' })
+    expect(tags(id)).toEqual(tags(other))
+  })
+
+  test('a later sighting that cannot be written leaves nothing behind', async () => {
+    raw.exec("CREATE TRIGGER fail_second BEFORE INSERT ON sightings WHEN NEW.place = 'second' BEGIN SELECT RAISE(ABORT, 'second sighting'); END")
+    await expect(createEntry(db, fields(), seen(), [image], who, [{ fields: seen({ place: 'second', title: 'Book' }), media: [image] }])).rejects.toThrow('second sighting')
+    for (const table of ['entries', 'sightings', 'sighting_media', 'sources', 'claims', 'revisions', 'entry_tags', 'tag_counts'])
+      expect(raw.query(`SELECT count(*) AS n FROM ${table}`).get()).toEqual({ n: 0 })
+  })
+
   test('a record lands in the lists of its script, its status and what it lacks', async () => {
     const id = await createEntry(db, fields({ script: 'nom' }), seen(), [], who)
     for (const [script, filter] of [[null, null], ['nom', null], [null, 'unchecked'], ['nom', 'unchecked'], [null, 'image'], [null, 'ids'], ['nom', 'source']] as const)
