@@ -24,7 +24,7 @@
     "wrangler": "^4.158.0"
   },
   "dependencies": {
-    "ids-input": "github:mkpoli/ids-input#d638d219",
+    "ids-input": "github:mkpoli/ids-input#f02f8faf",
     "jose": "^6.2.15"
   }
 }
