@@ -54,6 +54,8 @@ The gallery draws each record's IDS with [han-compose](https://github.com/mkpoli
 
 The IDS editor uses separately licensed data and fonts. See the [third-party notices](static/third-party/ids-input/NOTICE.md); redistribution rights for some materials remain unverified.
 
+`src/lib/data/unihan-rs.tsv.gz` holds the radical and total stroke count of each ideograph, taken from `kRSUnicode` and `kTotalStrokes` in [Unihan 18.0.0](https://www.unicode.org/Public/18.0.0/ucd/Unihan.zip) (Copyright Unicode, Inc., [Unicode License v3](https://www.unicode.org/license.txt)). `bun scripts/build-unihan.ts <Unihan.zip>` rebuilds it.
+
 ## Importing the previous database
 
 `bun scripts/import-production.ts <previous.sqlite> <media-dir> <out-dir>` replays an export of the previous production database through the store and writes `data.sql` for D1 and the objects for the `MEDIA` bucket. It needs `sqlite3` and ImageMagick.

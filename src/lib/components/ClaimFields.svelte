@@ -9,17 +9,29 @@
   import RelatedCharacters from './RelatedCharacters.svelte'
   import TextClaims from './TextClaims.svelte'
   import type { SightingOption } from './SightingChoice.svelte'
+  import type { CharacterFacts } from '$lib/encoded'
 
-  let { claims = [], radical = null, strokes = null, sightings = null }: { claims?: Claim[]; radical?: string | null; strokes?: number | null; sightings?: SightingOption[] | null } = $props()
+  // `fill` is what is known of an encoded character typed as the description; it fills the fields left empty.
+  let { claims = [], radical = null, strokes = null, sightings = null, fill = null }: { claims?: Claim[]; radical?: string | null; strokes?: number | null; sightings?: SightingOption[] | null; fill?: CharacterFacts | null } = $props()
 
   const uid = $props.id()
   const ivd = untrack(() => valuesOf(claims, 'ivd')[0] ?? '')
   let ivdStatus = $state(ivd === 'none' ? 'none' : ivd ? 'registered' : '')
+  let radicalValue = $state(untrack(() => radical ?? ''))
+  let strokesValue = $state<number | string>(untrack(() => strokes ?? ''))
+
+  $effect(() => {
+    if (!fill) return
+    untrack(() => {
+      if (!radicalValue && fill.radical) radicalValue = fill.radical
+      if (strokesValue === '' && fill.strokes != null) strokesValue = fill.strokes
+    })
+  })
 </script>
 
 <div class="grid-2">
-  <div class="field"><label for="{uid}-radical">{t('field.radical')}</label><input id="{uid}-radical" class="input" name="radical" maxlength="20" value={radical ?? ''} autocomplete="off" /></div>
-  <div class="field"><label for="{uid}-strokes">{t('field.strokes')}</label><input id="{uid}-strokes" class="input" name="strokes" type="number" min="0" max="199" value={strokes ?? ''} /></div>
+  <div class="field"><label for="{uid}-radical">{t('field.radical')}</label><input id="{uid}-radical" class="input" name="radical" maxlength="20" bind:value={radicalValue} autocomplete="off" /></div>
+  <div class="field"><label for="{uid}-strokes">{t('field.strokes')}</label><input id="{uid}-strokes" class="input" name="strokes" type="number" min="0" max="199" bind:value={strokesValue} /></div>
   <div class="field"><label for="{uid}-normalizes">{t('field.normalizesTo')}</label><input id="{uid}-normalizes" class="input character" name="normalizes_to" maxlength={CLAIM_LIMITS.normalizes_to.length} value={valuesOf(claims, 'normalizes_to')[0] ?? ''} autocomplete="off" spellcheck="false" /></div>
   <div class="field">
     <label for="{uid}-ivd">{t('field.ivd')}</label>
@@ -33,7 +45,7 @@
     </div>
   </div>
 </div>
-<EncodingFields values={encodingsOf(claims)} />
+<EncodingFields values={encodingsOf(claims)} code={fill?.code} />
 <TextClaims kind="reading" values={claimsOf(claims, 'reading')} {sightings} />
 <TextClaims kind="meaning" values={claimsOf(claims, 'meaning')} {sightings} />
 <CategoryFields genres={valuesOf(claims, 'genre')} collections={valuesOf(claims, 'collection')} tags={valuesOf(claims, 'tag')} />

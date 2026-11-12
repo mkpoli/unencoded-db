@@ -1,26 +1,27 @@
-// Whether a description sequence is the description of an encoded character, from the BabelStone IDS table that
-// ids-input carries. It compares exact text, so a match is a hint for the person adding a record.
+// What is known of an encoded character, read from the tables in the browser when a form first asks. A
+// description match compares exact text, so it is a hint for the person adding a record.
 import url from 'ids-input/data/babelstone-ids.tsv.gz?url'
+import unihanUrl from '$lib/data/unihan-rs.tsv.gz?url'
+import { factsOf, parseDescriptions, parseUnihan, type Descriptions } from './character-tables'
 
-let table: Promise<Map<string, string>> | null = null
+export type { CharacterFacts } from './character-tables'
 
-async function load() {
-  const response = await fetch(url)
+let descriptions: Promise<Descriptions> | null = null
+let unihan: Promise<Map<string, [string, string]>> | null = null
+
+async function read(address: string) {
+  const response = await fetch(address)
   const compressed = response.headers.get('content-encoding') ? null : response.body!.pipeThrough(new DecompressionStream('gzip'))
-  const text = compressed ? await new Response(compressed).text() : await response.text()
-  const map = new Map<string, string>()
-  for (const line of text.split('\n')) {
-    if (!line || line.startsWith('#')) continue
-    const [char, sequences] = line.split('\t')
-    for (const sequence of sequences?.split(' ') ?? []) {
-      const plain = sequence.replace(/\([^)]*\)$/, '').replace(/^〾/, '')
-      if (!map.has(plain)) map.set(plain, char)
-    }
-  }
-  return map
+  return compressed ? new Response(compressed).text() : response.text()
 }
 
 export async function encodedMatch(ids: string) {
-  table ??= load()
-  return (await table).get(ids) ?? null
+  descriptions ??= read(url).then(parseDescriptions)
+  return (await descriptions).encoded.get(ids) ?? null
+}
+
+export async function characterFacts(char: string) {
+  descriptions ??= read(url).then(parseDescriptions)
+  unihan ??= read(unihanUrl).then(parseUnihan)
+  return factsOf(char, await descriptions, await unihan)
 }

@@ -1,13 +1,14 @@
 <script lang="ts">
   // The descriptions of the character, separated by commas: typed or pasted, or built in the IDS editor.
   // The editor works on the first one, which draws the glyph. While the first is complete, the field says
-  // whether an encoded character or another record has the same description.
+  // whether an encoded character or another record has the same description. A lone encoded character is
+  // replaced by its description, and `onfill` receives what is known of it.
   import { codePoints, IDS_FIELD_MAX, splitIds, workshopUrl } from '$lib/ids'
-  import { encodedMatch } from '$lib/encoded'
+  import { characterFacts, encodedMatch, type CharacterFacts } from '$lib/encoded'
   import { href, locale, t } from '$lib/t'
   import { browser } from '$app/environment'
 
-  let { value = $bindable('') }: { value?: string } = $props()
+  let { value = $bindable(''), onfill }: { value?: string; onfill?: (facts: CharacterFacts) => void } = $props()
   let dialog = $state<HTMLDialogElement>()
   let Editor = $state<typeof import('./IdsEditor.svelte').default | null>(null)
   let draft = $state('')
@@ -28,8 +29,17 @@
   $effect(() => {
     const ids = primary
     encoded = null; same = []
-    if (!browser || [...ids].length < 2) return
+    if (!browser || !ids) return
     let live = true
+    if ([...ids].length === 1) {
+      const timer = setTimeout(async () => {
+        const facts = await characterFacts(ids).catch(() => null)
+        if (!live || !facts) return
+        if (facts.ids) value = [facts.ids, ...splitIds(value).slice(1)].join(', ')
+        onfill?.(facts)
+      }, 500)
+      return () => { live = false; clearTimeout(timer) }
+    }
     const timer = setTimeout(async () => {
       const found = await encodedMatch(ids).catch(() => null)
       if (live) encoded = found
