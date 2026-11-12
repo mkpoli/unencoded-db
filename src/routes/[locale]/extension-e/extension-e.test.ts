@@ -7,7 +7,7 @@ const entry = (collection: boolean): EntryFields => ({
   script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null,
   claims: collection ? [{ kind: 'collection', value: 'extension-e', data: null, sighting_id: null }] : [],
 })
-const seen: SightingFields = { place: 'a book', url: null, title: null, author: null, publisher: null, report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
+const seen: SightingFields = { place: 'a book', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
 
 test('lists only the records in the extension-e collection', async () => {
   const { db, raw } = openTestDb()
