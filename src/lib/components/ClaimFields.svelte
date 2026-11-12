@@ -46,10 +46,10 @@
   </div>
 </div>
 <EncodingFields values={encodingsOf(claims)} code={fill?.code} />
-<TextClaims kind="reading" values={claimsOf(claims, 'reading')} {sightings} />
-<TextClaims kind="meaning" values={claimsOf(claims, 'meaning')} {sightings} />
+<TextClaims kind="reading" values={claimsOf(claims, 'reading')} {sightings} fill={fill?.readings} />
+<TextClaims kind="meaning" values={claimsOf(claims, 'meaning')} {sightings} fill={fill?.meaning ? [fill.meaning] : []} />
 <CategoryFields genres={valuesOf(claims, 'genre')} collections={valuesOf(claims, 'collection')} tags={valuesOf(claims, 'tag')} />
-<RelatedCharacters values={relationsOf(claims)} {sightings} />
+<RelatedCharacters values={relationsOf(claims)} {sightings} fill={fill?.variants} />
 
 <style>
   .character { font-size: 18px }
