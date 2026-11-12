@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state'
+  import { untrack } from 'svelte'
   import Seo from '$lib/components/Seo.svelte'
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import IdsField from '$lib/components/IdsField.svelte'
@@ -28,10 +29,8 @@
   const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
   const editValues = $derived(editing && form?.values && 'script' in form.values ? form.values : { ...entry, claims })
   let filled = $state<CharacterFacts | null>(null)
-  let ids = $derived.by(() => {
-    entry.id
-    return valuesOf(editValues.claims, 'ids').join(', ')
-  })
+  const editIds = $derived(valuesOf(editValues.claims, 'ids'))
+  let primary = $state(untrack(() => editIds[0] ?? ''))
   const editComposition = $derived.by(() => { const found = compositionOf(editValues.claims); return found ? JSON.stringify(found) : '' })
 
   const sequences = $derived(valuesOf(claims, 'ids'))
@@ -138,8 +137,8 @@
       {#if editing}<p class="notice bad" role="alert">{t(`error.${form?.error}`)}</p>{/if}
       <input type="hidden" name="rev" value={entry.rev} />
       {#key entry.id}<ScriptPicker value={editValues.script} other={editValues.script_other} />{/key}
-      <IdsField bind:value={ids} onfill={facts => filled = facts} />
-      <CompositionField {ids} value={editComposition} />
+      {#key `${entry.id}:${entry.rev}:${editing}`}<IdsField values={editIds} bind:primary onfill={facts => filled = facts} />{/key}
+      <CompositionField ids={primary} value={editComposition} />
       <div class="field"><label for="description">{t('field.description')}</label><textarea id="description" class="input" name="description">{editValues.description ?? ''}</textarea></div>
       <div class="field"><label for="status">{t('field.status')}</label><select id="status" class="input" name="status" value={editValues.status ?? 'unchecked'}>{#each STATUSES as status}<option value={status}>{t(`status.${status}`)}</option>{/each}</select><p class="hint">{t('field.statusHint')}</p></div>
       {#key `${entry.id}:${entry.rev}:${editing}`}<ClaimFields claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} sightings={options} fill={filled} />{/key}

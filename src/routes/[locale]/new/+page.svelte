@@ -51,7 +51,8 @@
     }
   })
   const claims = $derived(values?.claims ?? [])
-  let ids = $derived(valuesOf(claims, 'ids').join(', '))
+  const descriptions = untrack(() => valuesOf(form?.values.claims ?? [], 'ids'))
+  let primary = $state(descriptions[0] ?? '')
   const composition = $derived.by(() => { const found = compositionOf(claims); return found ? JSON.stringify(found) : '' })
   const detailed = $derived(Boolean(values && (values.radical || values.strokes != null || claims.some(claim => claim.kind !== 'ids' && claim.kind !== 'composition'))))
   const message = $derived(form?.error ? `${form.sighting ? `${t('add.sighting', { n: form.sighting })} · ` : ''}${t(`error.${form.error}`, { max: ADD_SIGHTINGS_MAX })}` : null)
@@ -64,8 +65,8 @@
   <form class="stack" method="POST" enctype="multipart/form-data">
     <section class="panel stack">
       <ScriptPicker value={values?.script} other={values?.script_other} />
-      <IdsField bind:value={ids} onfill={facts => filled = facts} />
-      <CompositionField {ids} value={composition} />
+      <IdsField values={descriptions} bind:primary onfill={facts => filled = facts} />
+      <CompositionField ids={primary} value={composition} />
       <div class="field"><label for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="4">{values?.description ?? ''}</textarea><p class="hint">{t('field.descriptionHint')}</p></div>
     </section>
     <section class="stack"><h2>{t('entry.sightings')}</h2>
