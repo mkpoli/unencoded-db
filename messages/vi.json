@@ -101,6 +101,7 @@
   "field.markRemove": "Xóa khung {n}",
   "field.script": "Hệ chữ",
   "field.scriptOther": "Tên hệ chữ",
+  "field.scriptChange": "Đổi",
   "field.place": "Nơi tìm thấy",
   "field.placeHint": "Tên sách và số trang, một con phố, trang web hoặc thông tin khác giúp người sau tìm lại được.",
   "field.url": "Liên kết",

@@ -1,34 +1,42 @@
 <script lang="ts">
+  // The script of a record: one line naming it, which opens onto the list of scripts. Nearly every record
+  // is Han, so the list stays folded until someone asks for it.
+  import { untrack } from 'svelte'
   import { SCRIPTS } from '$lib/scripts'
   import { t } from '$lib/t'
 
   let { value = 'han', other = '' }: { value?: string; other?: string | null } = $props()
-  let chosen = $derived(value)
+  const uid = $props.id()
+  let chosen = $state(untrack(() => value))
+  // A script named in the visitor's words shows its name field from the start.
+  let open = $state(untrack(() => value === 'other'))
+  // The name a script gives itself, where the page's language names it otherwise.
+  const own = (id: string) => { const name = SCRIPTS.find(script => script.id === id)?.own; return name && name !== t(`script.${id}`) ? name : '' }
 </script>
 
-<fieldset class="field">
-  <legend class="label required">{t('field.script')}</legend>
-  <div class="options">
-    {#each SCRIPTS as script (script.id)}
-      <label class="option" class:on={chosen === script.id}>
-        <input type="radio" name="script" value={script.id} bind:group={chosen} />
-        <span>{t(`script.${script.id}`)}</span>{#if script.own && script.own !== t(`script.${script.id}`)}<span class="own">{script.own}</span>{/if}
-      </label>
-    {/each}
+<details class="script" bind:open>
+  <summary>
+    <span class="label" id="{uid}-label">{t('field.script')}</span>
+    <span class="value">{t(`script.${chosen}`)}{#if own(chosen)}<span class="own">{own(chosen)}</span>{/if}</span>
+    <span class="change">{t('field.scriptChange')}<span class="chevron" aria-hidden="true">⌄</span></span>
+  </summary>
+  <div class="body">
+    <select class="input" name="script" bind:value={chosen} aria-labelledby="{uid}-label">
+      {#each SCRIPTS as script (script.id)}<option value={script.id}>{t(`script.${script.id}`)}{own(script.id) ? ` ${own(script.id)}` : ''}</option>{/each}
+    </select>
+    {#if chosen === 'other'}
+      <div class="field"><label for="{uid}-other">{t('field.scriptOther')}</label><input id="{uid}-other" class="input" name="script_other" value={other ?? ''} maxlength="80" /></div>
+    {/if}
   </div>
-  {#if chosen === 'other'}
-    <input class="input" name="script_other" value={other ?? ''} aria-label={t('field.scriptOther')} placeholder={t('field.scriptOther')} />
-  {/if}
-</fieldset>
+</details>
 
 <style>
-  fieldset { border: 0; margin: 0; padding: 0 }
-  legend { padding: 0; margin-bottom: 6px }
-  .options { display: flex; flex-wrap: wrap; gap: 6px }
-  .option { display: inline-flex; align-items: baseline; gap: 6px; min-height: 36px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); cursor: pointer }
-  .option:hover { border-color: var(--line-strong) }
-  .option.on { border-color: var(--accent); background: var(--accent-light) }
-  .option:has(input:focus-visible) { outline: 3px solid var(--focus-ring); outline-offset: 2px }
-  .option input { position: absolute; opacity: 0; width: 1px; height: 1px }
-  .own { color: var(--muted); font-size: 12px }
+  summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; list-style: none; cursor: pointer }
+  summary::-webkit-details-marker { display: none }
+  .own { margin-inline-start: 6px; color: var(--muted); font-size: 12.5px }
+  .change { margin-inline-start: auto; color: var(--muted); font-size: 12.5px; white-space: nowrap }
+  .chevron { display: inline-block; margin-inline-start: 4px; transition: transform 120ms ease }
+  .script[open] .chevron { transform: rotate(180deg) }
+  .script[open] .value { display: none }
+  .body { display: grid; gap: 12px; margin-top: 8px }
 </style>

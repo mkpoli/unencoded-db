@@ -101,6 +101,7 @@
   "field.markRemove": "删除方框{n}",
   "field.script": "文字",
   "field.scriptOther": "文字名称",
+  "field.scriptChange": "更改",
   "field.place": "发现地点或出处",
   "field.placeHint": "书名和页码、街道、网站等，能帮助他人再次找到即可。",
   "field.url": "链接",
