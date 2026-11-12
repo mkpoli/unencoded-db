@@ -17,7 +17,7 @@ export const GET: RequestHandler = async event => {
   try {
     const provider = await metadata(issuer)
     const response = await fetch(provider.token_endpoint, {
-      method: 'POST', redirect: 'error',
+      method: 'POST', redirect: 'manual',
       headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: `Basic ${btoa(`${encodeURIComponent(clientId)}:${encodeURIComponent(secret)}`)}` },
       body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: `${event.url.origin}/auth/callback`, code_verifier: flow.verifier }),
     })

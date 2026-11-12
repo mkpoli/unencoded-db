@@ -23,7 +23,7 @@ export function config(event: RequestEvent) {
 
 type Metadata = { issuer: string; authorization_endpoint: string; token_endpoint: string; jwks_uri: string }
 export async function metadata(issuer: string): Promise<Metadata> {
-  const response = await fetch(`${issuer}/.well-known/openid-configuration`, { redirect: 'error' })
+  const response = await fetch(`${issuer}/.well-known/openid-configuration`, { redirect: 'manual' })
   if (!response.ok) throw new Error('Discovery failed')
   const data = await response.json() as Metadata
   if (data.issuer !== issuer) throw new Error('Issuer mismatch')
@@ -44,7 +44,7 @@ export function parseFlow(value: string | undefined): Flow | null {
 }
 
 export async function identity(token: string, jwksUri: string, issuer: string, clientId: string, nonce: string) {
-  const response = await fetch(jwksUri, { redirect: 'error' })
+  const response = await fetch(jwksUri, { redirect: 'manual' })
   if (!response.ok) throw new Error('Keys unavailable')
   const keys = createLocalJWKSet(await response.json() as Parameters<typeof createLocalJWKSet>[0])
   const { payload } = await jwtVerify(token, keys, { issuer, audience: clientId, algorithms: ['RS256'], requiredClaims: ['sub', 'exp', 'iat', 'nonce'] })
