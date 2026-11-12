@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { MEDIA_MAX } from '$lib/limits'
-import { uploadedImages } from './_submission.server'
+import { SIGHTING_START } from '$lib/scripts'
+import { sightingForms, uploadedImages } from './_submission.server'
 
 const png = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10,
@@ -98,5 +99,27 @@ describe('uploaded images validation', () => {
     form.append('image', new File(['not an image'], 'bad.png'))
     expect(await uploadedImages(form, media)).toBe('invalid')
     expect(writes).toEqual([])
+  })
+})
+
+describe('the sightings of a form', () => {
+  const entries = (form: FormData) => [...form.entries()].map(([name, value]) => { const item: unknown = value; return [name, item instanceof File ? `file of ${item.size}` : item] })
+
+  test('are the fields between one opening field and the next, in order', () => {
+    const form = new FormData()
+    form.append('ids', '⿰山東'); form.append('place', 'before any sighting')
+    form.append(SIGHTING_START, ''); form.append('image', imageFile()); form.append('thumb', new File([], '')); form.append('box', ''); form.append('place', 'first'); form.append('types', 'mention'); form.append('types', 'reading')
+    form.append(SIGHTING_START, ''); form.append('place', 'second'); form.append('via_url', 'https://example.test/post')
+    form.append('reading', 'after the sightings'); form.append('radical', '山')
+    const [first, second, ...more] = sightingForms(form)
+    expect(more).toEqual([])
+    expect(entries(first)).toEqual([['image', `file of ${png.length}`], ['thumb', 'file of 0'], ['box', ''], ['place', 'first'], ['types', 'mention'], ['types', 'reading']])
+    expect(entries(second)).toEqual([['place', 'second'], ['via_url', 'https://example.test/post']])
+  })
+
+  test('a form without an opening field is one sighting', () => {
+    const form = new FormData()
+    form.append('place', 'only'); form.append('url', 'https://example.test/only')
+    expect(sightingForms(form)).toEqual([form])
   })
 })

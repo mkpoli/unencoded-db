@@ -1,6 +1,22 @@
-import { readBoxes, type StoredImage } from '$lib/server/entries'
+import { readBoxes, SIGHTING_FIELDS, type StoredImage } from '$lib/server/entries'
 import { MAX_IMAGE, MAX_THUMB, prepareImage, storeImage } from '$lib/server/image'
 import { MEDIA_MAX } from '$lib/limits'
+import { SIGHTING_START } from '$lib/scripts'
+
+const SIGHTING_NAMES = new Set<string>([...SIGHTING_FIELDS, 'image', 'thumb', 'box'])
+
+// The sightings of a form, in the order of the page: one form of its own for each, with the fields and
+// pictures between its opening field and the next. Fields of the record itself are left out, wherever
+// they stand. A form without the opening field holds one sighting, as the form of a single sighting does.
+export function sightingForms(form: FormData): FormData[] {
+  if (!form.has(SIGHTING_START)) return [form]
+  const sightings: FormData[] = []
+  for (const [name, value] of form.entries()) {
+    if (name === SIGHTING_START) sightings.push(new FormData())
+    else if (sightings.length && SIGHTING_NAMES.has(name)) sightings.at(-1)!.append(name, value)
+  }
+  return sightings
+}
 
 type Prepared = NonNullable<Awaited<ReturnType<typeof prepareImage>>>
 export type ReadImage = { image: Prepared; thumb: Prepared; box: string | null }

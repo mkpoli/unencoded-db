@@ -9,6 +9,7 @@
   import type { SightingFields } from '$lib/server/entries'
 
   let { values = {}, requirePlace = true, onphoto }: { values?: Partial<SightingFields>; requirePlace?: boolean; onphoto?: (file: File | null) => void } = $props()
+  const uid = $props.id()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
   const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.original_date || values.page || values.context || values.style || values.types || values.note))
 
@@ -58,14 +59,14 @@
 </script>
 
 <div class="field">
-  <label for="url">{t('field.url')}</label>
-  <input id="url" class="input" type="url" name="url" bind:value={url} use:cleanLinkInput placeholder="https://" maxlength="1000" />
+  <label for="{uid}-url">{t('field.url')}</label>
+  <input id="{uid}-url" class="input" type="url" name="url" bind:value={url} use:cleanLinkInput placeholder="https://" maxlength="1000" />
   <p class="hint">{t('field.urlHint')}</p>
   {#if fetching}<p class="hint" role="status">{t('field.linkImageWorking')}</p>{:else if failed}<p class="hint" role="status">{t('field.linkImageFailed')}</p>{/if}
 </div>
 <div class="field">
-  <label for="place" class:required={requirePlace}>{t('field.place')}</label>
-  <input id="place" class="input" name="place" bind:value={place} maxlength="500" />
+  <label for="{uid}-place" class:required={requirePlace}>{t('field.place')}</label>
+  <input id="{uid}-place" class="input" name="place" bind:value={place} maxlength="500" />
   <p class="hint">{t('field.placeHint')}</p>
 </div>
 <fieldset class="types">
@@ -84,28 +85,28 @@
   <summary>{t('field.source')}</summary>
   <p class="hint">{t('field.sourceHint')}</p>
   <div class="grid-2">
-    <div class="field"><label for="title">{t('field.title')}</label><input id="title" class="input" name="title" bind:value={title} maxlength="300" /></div>
-    <div class="field"><label for="author">{t('field.author')}</label><input id="author" class="input" name="author" bind:value={author} maxlength="300" /></div>
-    <div class="field"><label for="publisher">{t('field.publisher')}</label><input id="publisher" class="input" name="publisher" value={values.publisher ?? ''} maxlength="300" /></div>
-    <div class="field"><label for="page">{t('field.page')}</label><input id="page" class="input" name="page" value={values.page ?? ''} maxlength="80" /></div>
-    <div class="field"><label for="report_date">{t('field.reportDate')}</label><input id="report_date" class="input" name="report_date" value={values.report_date ?? ''} maxlength="40" /><p class="hint">{t('field.reportDateHint')}</p></div>
-    <div class="field"><label for="original_date">{t('field.originalDate')}</label><input id="original_date" class="input" name="original_date" value={values.original_date ?? ''} maxlength="40" /><p class="hint">{t('field.originalDateHint')}</p></div>
-    <div class="field"><label for="context">{t('field.context')}</label>
-      <select id="context" class="input" name="context" value={values.context ?? ''}><option value="">{t('field.unset')}</option>{#each CONTEXTS as item}<option value={item}>{t(`context.${item}`)}</option>{/each}</select></div>
-    <div class="field"><label for="style">{t('field.style')}</label>
-      <select id="style" class="input" name="style" value={values.style ?? ''}><option value="">{t('field.unset')}</option>{#each STYLES as item}<option value={item}>{t(`style.${item}`)}</option>{/each}</select></div>
+    <div class="field"><label for="{uid}-title">{t('field.title')}</label><input id="{uid}-title" class="input" name="title" bind:value={title} maxlength="300" /></div>
+    <div class="field"><label for="{uid}-author">{t('field.author')}</label><input id="{uid}-author" class="input" name="author" bind:value={author} maxlength="300" /></div>
+    <div class="field"><label for="{uid}-publisher">{t('field.publisher')}</label><input id="{uid}-publisher" class="input" name="publisher" value={values.publisher ?? ''} maxlength="300" /></div>
+    <div class="field"><label for="{uid}-page">{t('field.page')}</label><input id="{uid}-page" class="input" name="page" value={values.page ?? ''} maxlength="80" /></div>
+    <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" value={values.report_date ?? ''} maxlength="40" /><p class="hint">{t('field.reportDateHint')}</p></div>
+    <div class="field"><label for="{uid}-original_date">{t('field.originalDate')}</label><input id="{uid}-original_date" class="input" name="original_date" value={values.original_date ?? ''} maxlength="40" /><p class="hint">{t('field.originalDateHint')}</p></div>
+    <div class="field"><label for="{uid}-context">{t('field.context')}</label>
+      <select id="{uid}-context" class="input" name="context" value={values.context ?? ''}><option value="">{t('field.unset')}</option>{#each CONTEXTS as item}<option value={item}>{t(`context.${item}`)}</option>{/each}</select></div>
+    <div class="field"><label for="{uid}-style">{t('field.style')}</label>
+      <select id="{uid}-style" class="input" name="style" value={values.style ?? ''}><option value="">{t('field.unset')}</option>{#each STYLES as item}<option value={item}>{t(`style.${item}`)}</option>{/each}</select></div>
   </div>
-  <div class="field"><label for="note">{t('field.note')}</label><textarea id="note" class="input" name="note" rows="2" maxlength="5000">{values.note ?? ''}</textarea></div>
+  <div class="field"><label for="{uid}-note">{t('field.note')}</label><textarea id="{uid}-note" class="input" name="note" rows="2" maxlength="5000">{values.note ?? ''}</textarea></div>
 </details>
 <details class="more" bind:open={viaOpen}>
   <summary>{t('field.via')}</summary>
   <p class="hint">{t('field.viaHint')}</p>
-  <div class="field"><label for="via_url">{t('field.url')}</label><input id="via_url" class="input" type="url" name="via_url" value={values.via_url ?? ''} use:cleanLinkInput placeholder="https://" maxlength="1000" /></div>
+  <div class="field"><label for="{uid}-via_url">{t('field.url')}</label><input id="{uid}-via_url" class="input" type="url" name="via_url" value={values.via_url ?? ''} use:cleanLinkInput placeholder="https://" maxlength="1000" /></div>
   <div class="grid-2">
-    <div class="field"><label for="via_title">{t('field.title')}</label><input id="via_title" class="input" name="via_title" value={values.via_title ?? ''} maxlength="300" /></div>
-    <div class="field"><label for="via_author">{t('field.author')}</label><input id="via_author" class="input" name="via_author" value={values.via_author ?? ''} maxlength="300" /></div>
-    <div class="field"><label for="via_publisher">{t('field.publisher')}</label><input id="via_publisher" class="input" name="via_publisher" value={values.via_publisher ?? ''} maxlength="300" /></div>
-    <div class="field"><label for="via_report_date">{t('field.reportDate')}</label><input id="via_report_date" class="input" name="via_report_date" value={values.via_report_date ?? ''} maxlength="40" /></div>
+    <div class="field"><label for="{uid}-via_title">{t('field.title')}</label><input id="{uid}-via_title" class="input" name="via_title" value={values.via_title ?? ''} maxlength="300" /></div>
+    <div class="field"><label for="{uid}-via_author">{t('field.author')}</label><input id="{uid}-via_author" class="input" name="via_author" value={values.via_author ?? ''} maxlength="300" /></div>
+    <div class="field"><label for="{uid}-via_publisher">{t('field.publisher')}</label><input id="{uid}-via_publisher" class="input" name="via_publisher" value={values.via_publisher ?? ''} maxlength="300" /></div>
+    <div class="field"><label for="{uid}-via_report_date">{t('field.reportDate')}</label><input id="{uid}-via_report_date" class="input" name="via_report_date" value={values.via_report_date ?? ''} maxlength="40" /></div>
   </div>
 </details>
 

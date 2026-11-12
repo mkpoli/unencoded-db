@@ -1,6 +1,8 @@
 <script lang="ts">
   // The new pictures of a sighting, up to `max`. A pasted picture, or one held from another page, goes to
   // the first empty picker; a source link's photo goes to the first picker unless someone chose its picture.
+  // Where a form holds several sightings, each inside an element marked `data-sighting`, a pasted picture
+  // goes to the sighting that has the focus, or to the first when none has.
   import { onMount, tick } from 'svelte'
   import { takePicture } from '$lib/pending'
   import { t } from '$lib/t'
@@ -9,6 +11,7 @@
   let { max, required = false, onready }: { max: number; required?: boolean; onready?: (busy: boolean) => void } = $props()
 
   let next = 1
+  let root = $state<HTMLElement>()
   let slots = $state<number[]>([0])
   const pickers: Record<number, PicturePicker | null> = {}
   let working = 0
@@ -41,7 +44,12 @@
 
   const pasted = (event: ClipboardEvent) => {
     const file = [...(event.clipboardData?.files ?? [])].find(item => item.type.startsWith('image/'))
-    if (file) { event.preventDefault(); void place(file) }
+    if (!file) return
+    const lists = [...document.querySelectorAll('[data-pictures]')]
+    const focused = document.activeElement?.closest('[data-sighting]')
+    if ((lists.find(list => focused?.contains(list)) ?? lists[0]) !== root) return
+    event.preventDefault()
+    void place(file)
   }
 
   onMount(() => { const held = takePicture(); if (held) void place(held) })
@@ -49,7 +57,7 @@
 
 <svelte:window onpaste={pasted} />
 
-<div class="field">
+<div class="field" bind:this={root} data-pictures>
   <span class="label" class:required>{t('field.image')}</span>
   {#each visible as slot, index (slot)}
     <PicturePicker bind:this={pickers[slot]} label="{t('field.imageChoose')} {index + 1}" onready={ready} onremove={visible.length > 1 ? () => slots = slots.filter(item => item !== slot) : undefined} />

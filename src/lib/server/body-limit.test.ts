@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { handle } from '../../hooks.server'
 import { MAX_IMAGE, MAX_THUMB } from './image'
-import { limitWriteBody, MAX_WRITE_BODY } from './body-limit'
+import { limitWriteBody, MAX_PICTURES_BODY, MAX_WRITE_BODY } from './body-limit'
 import { guardWrite, writeLimitFor } from './guard'
 
 function streamed(chunks: Uint8Array[], length?: string) {
@@ -14,7 +14,7 @@ function streamed(chunks: Uint8Array[], length?: string) {
     },
     cancel() { cancelled = true },
   })
-  const request = new Request('https://example.test/en/new', {
+  const request = new Request('https://example.test/en/entry/1/sighting/new', {
     method: 'POST', body, headers: length === undefined ? {} : { 'content-length': length },
     duplex: 'half',
   } as RequestInit)
@@ -24,7 +24,7 @@ function streamed(chunks: Uint8Array[], length?: string) {
 async function runHook(request: Request, resolve: (event: any) => Promise<Response>, overrides: Record<string, unknown> = {}) {
   const event = {
     request, url: new URL(request.url), cookies: { get: () => undefined }, locals: {},
-    route: { id: '/[locale]/new' }, platform: { env: {} }, ...overrides,
+    route: { id: '/[locale]/entry/[id]/sighting/new' }, platform: { env: {} }, ...overrides,
   }
   return handle({ event, resolve } as any)
 }
@@ -49,6 +49,15 @@ describe('write body limit', () => {
       expect(body.cancelled()).toBe(true)
     })
   }
+
+  test('a form of several pictures has a higher ceiling', async () => {
+    for (const id of ['/[locale]/new', '/[locale]/batch']) {
+      const within = streamed([new Uint8Array(1)], String(MAX_WRITE_BODY + 1))
+      expect((await runHook(within.request, async () => new Response('ok'), { route: { id } })).status).toBe(200)
+      const over = streamed([new Uint8Array(1)], String(MAX_PICTURES_BODY + 1))
+      expect((await runHook(over.request, async () => new Response('ok'), { route: { id } })).status).toBe(413)
+    }
+  })
 
   test('accepts exactly the limit and corrects an inaccurate length', async () => {
     const original = streamed([new Uint8Array(MAX_WRITE_BODY)], '1').request
