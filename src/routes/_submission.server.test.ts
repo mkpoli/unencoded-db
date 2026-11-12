@@ -28,7 +28,7 @@ describe('uploaded images validation', () => {
   test('rejects an invalid crop without storing either image', async () => {
     const form = makeForm(), { media, writes } = bucket()
     form.append('thumb', imageFile())
-    form.append('box', '[0,0,2,2]')
+    form.append('box', '[[0,0,2,2]]')
     expect(await uploadedImages(form, media)).toBe('invalid')
     expect(writes).toEqual([])
   })
@@ -36,11 +36,11 @@ describe('uploaded images validation', () => {
   test('stores a validated image once when the thumbnail shares its key', async () => {
     const form = makeForm(), { media, writes } = bucket()
     form.append('thumb', imageFile())
-    form.append('box', '[1,2,10,11]')
+    form.append('box', '[[1,2,10,11],[5,5,6,6]]')
     const result = await uploadedImages(form, media)
     if (result === 'invalid') throw new Error('expected images')
     expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({ image_w: 20, image_h: 20, image_type: 'image/png', box: '[1,2,10,11]' })
+    expect(result[0]).toMatchObject({ image_w: 20, image_h: 20, image_type: 'image/png', box: '[[1,2,10,11],[5,5,6,6]]' })
     expect(writes).toHaveLength(1)
     expect(result[0].image_key).toBe(result[0].thumb_key)
     expect(writes[0]).toBe(result[0].image_key)
@@ -75,11 +75,11 @@ describe('uploaded images validation', () => {
 
   test('pictures keep their order and each takes its own thumbnail and crop', async () => {
     const form = new FormData(), { media, writes } = bucket()
-    form.append('image', sized(20)); form.append('thumb', sized(10)); form.append('box', '[1,2,10,11]')
+    form.append('image', sized(20)); form.append('thumb', sized(10)); form.append('box', '[[1,2,10,11]]')
     form.append('image', sized(30)); form.append('thumb', sized(30)); form.append('box', '')
     const result = await uploadedImages(form, media)
     if (result === 'invalid') throw new Error('expected images')
-    expect(result.map(item => item.box)).toEqual(['[1,2,10,11]', null])
+    expect(result.map(item => item.box)).toEqual(['[[1,2,10,11]]', null])
     expect(result[0].image_key).not.toBe(result[0].thumb_key)
     expect(result[1].image_key).toBe(result[1].thumb_key)
     expect(new Set(result.map(item => item.image_key)).size).toBe(2)
