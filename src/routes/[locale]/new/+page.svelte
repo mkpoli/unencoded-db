@@ -6,9 +6,12 @@
   import IdsDrawing from '$lib/components/IdsDrawing.svelte'
   import IdsField from '$lib/components/IdsField.svelte'
   import CompositionField from '$lib/components/CompositionField.svelte'
-  import ClaimFields from '$lib/components/ClaimFields.svelte'
+  import IdentityFields from '$lib/components/IdentityFields.svelte'
+  import TextClaims from '$lib/components/TextClaims.svelte'
+  import RelatedCharacters from '$lib/components/RelatedCharacters.svelte'
+  import CategoryFields from '$lib/components/CategoryFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
-  import { compositionOf, valuesOf } from '$lib/claims'
+  import { claimsOf, compositionOf, relationsOf, valuesOf } from '$lib/claims'
   import { ADD_SIGHTINGS_MAX, MEDIA_MAX } from '$lib/limits'
   import { SIGHTING_START } from '$lib/scripts'
   import { href, media, t } from '$lib/t'
@@ -55,7 +58,8 @@
   const descriptions = untrack(() => valuesOf(form?.values.claims ?? [], 'ids'))
   let primary = $state(descriptions[0] ?? '')
   const composition = $derived.by(() => { const found = compositionOf(claims); return found ? JSON.stringify(found) : '' })
-  const detailed = $derived(Boolean(values && (values.radical || values.strokes != null || claims.some(claim => claim.kind !== 'ids' && claim.kind !== 'composition'))))
+  const filed = $derived(claims.some(claim => claim.kind === 'genre' || claim.kind === 'collection' || claim.kind === 'tag'))
+
   const message = $derived(form?.error ? `${form.sighting ? `${t('add.sighting', { n: form.sighting })} · ` : ''}${t(`error.${form.error}`, { max: ADD_SIGHTINGS_MAX })}` : null)
 </script>
 
@@ -63,19 +67,29 @@
 <div class="page narrow stack">
   <header class="heading"><h1>{t('add.title')}</h1><a class="text-link" href={href('/batch')}>{t('batch.link')}</a></header>
   {#if message}<p class="notice bad" role="alert">{message}</p>{/if}
-  <form class="stack" method="POST" enctype="multipart/form-data">
+  <form class="form" method="POST" enctype="multipart/form-data">
     <section class="panel character">
       <div class="plate"><IdsDrawing ids={primary} /></div>
-      <div class="stack described">
+      <div class="described">
         <IdsField values={descriptions} bind:primary onfill={facts => filled = facts} />
-        <CompositionField ids={primary} value={composition} />
-        <div class="line"><ScriptPicker value={values?.script} other={values?.script_other} /></div>
+        <div class="sheet">
+          <CompositionField ids={primary} value={composition} />
+          <ScriptPicker value={values?.script} other={values?.script_other} />
+          <IdentityFields {claims} radical={values?.radical} strokes={values?.strokes} fill={filled} />
+        </div>
       </div>
     </section>
-    <div class="field"><label class="title" for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="3">{values?.description ?? ''}</textarea></div>
-    <section class="stack"><h2>{t('entry.sightings')}</h2>
+    <section class="group">
+      <div class="titled"><label class="section-title" for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="3">{values?.description ?? ''}</textarea></div>
+      <div class="said">
+        <TextClaims kind="reading" values={claimsOf(claims, 'reading')} fill={filled?.readings} />
+        <TextClaims kind="meaning" values={claimsOf(claims, 'meaning')} fill={filled?.meaning ? [filled.meaning] : []} />
+      </div>
+    </section>
+    <RelatedCharacters values={relationsOf(claims)} fill={filled?.variants} />
+    <section class="group"><h2>{t('entry.sightings')}</h2>
       {#each sightings as item, index (item.key)}
-        <fieldset class="panel stack sighting" bind:this={sections[item.key]} tabindex="-1" data-sighting>
+        <fieldset class="panel sighting" bind:this={sections[item.key]} tabindex="-1" data-sighting>
           <legend>{t('add.sighting', { n: index + 1 })}</legend>
           {#if index > 0}<button type="button" class="text-button remove" aria-label={t('add.sightingRemove', { n: index + 1 })} onclick={() => remove(item.key)}>{t('form.remove')}</button>{/if}
           <input type="hidden" name={SIGHTING_START} />
@@ -85,30 +99,36 @@
       {/each}
       {#if sightings.length < ADD_SIGHTINGS_MAX}<div><button type="button" class="text-button" onclick={add}>+ {t('entry.addSighting')}</button></div>{/if}
     </section>
-    <details class="panel" open={detailed || Boolean(filled)}>
-      <summary>{t('entry.addDetails')}</summary>
-      <div class="stack details"><ClaimFields {claims} radical={values?.radical} strokes={values?.strokes} fill={filled} /></div>
+    <details class="filing" open={filed}>
+      <summary class="section-title">{t('field.filing')}</summary>
+      <div class="group filed"><CategoryFields genres={valuesOf(claims, 'genre')} collections={valuesOf(claims, 'collection')} tags={valuesOf(claims, 'tag')} /></div>
     </details>
     <SubmitBar {busy} label={t('nav.add')} cancel={href()} sticky />
   </form>
 </div>
 <style>
+  /* Three steps of space: a label and its control, the fields of a group, one group and the next. */
+  .form { display:flex; flex-direction:column; gap:28px; min-width:0 }
+  .group, .sighting, .described { display:flex; flex-direction:column; gap:16px; min-width:0 }
   .heading { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:6px 16px }
   .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
   .character { display:grid; grid-template-columns:208px minmax(0, 1fr); align-items:start; gap:24px }
-  .described { gap:14px }
-  .line { padding-top:10px; border-top:1px dashed var(--line) }
-  .title, summary { font-size:16px; font-weight:600 }
-  legend { font-weight:600 }
-  .sighting { position:relative; min-width:0; margin:0 }
+  .sheet { display:flex; flex-direction:column; gap:10px; padding-top:10px; border-top:1px dashed var(--line) }
+  .titled { display:flex; flex-direction:column; gap:8px; min-width:0 }
+  /* The drawing stays in view while the facts beside it are filled in. */
+  .plate { position:sticky; inset-block-start:16px }
+  .said { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); align-items:start; gap:16px }
+  .sighting { position:relative; margin:0 }
   .sighting:focus-visible { outline-offset:4px }
-  legend { padding:0 6px; margin-inline-start:-6px }
+  legend { padding:0 6px; margin-inline-start:-6px; font-weight:600 }
   /* On the border, across from the legend: the border runs through the middle of the legend's line. */
   .remove { position:absolute; inset-block-start:-.75em; inset-inline-end:14px; translate:0 -50%; min-height:0; padding:0 6px; background:var(--paper); line-height:1.5 }
-  summary { cursor:pointer } .details { margin-top:18px }
+  .filing summary { cursor:pointer }
+  .filed { margin-top:14px }
   @media(max-width:700px) {
     .panel { padding:16px }
     .character { grid-template-columns:minmax(0, 1fr); gap:16px }
-    .plate { width:148px; justify-self:center }
+    .plate { position:static; width:148px; justify-self:center }
+    .said { grid-template-columns:minmax(0, 1fr) }
   }
 </style>
