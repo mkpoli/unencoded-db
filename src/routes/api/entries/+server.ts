@@ -24,7 +24,7 @@ export const GET: RequestHandler = async (event) => {
   const format = params.get('format') ?? 'json'
   if (after === null || (rawSighting !== null && (sighting === null || after === 0)) || limit === null || limit > EXPORT_PAGE_MAX || !['json', 'csv'].includes(format)) error(400, 'Invalid export parameters')
   const result = await exportPage(env(event).DB, after, limit, sighting)
-  const headers = new Headers()
+  const headers = new Headers({ 'access-control-allow-origin': '*' })
   if (result.next !== null) {
     const next = new URL(event.url)
     next.searchParams.set('after', String(result.next))
