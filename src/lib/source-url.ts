@@ -1,7 +1,8 @@
 import { MAX_IMAGE_BYTES } from '$lib/limits'
 
 // X and Twitter links carry share tracking in `a` and `s`. A post link also names its author and
-// text, and often a picture that can stand as the evidence image, fetched through the FxTwitter API.
+// text, often a picture that can stand as the evidence image, and sometimes the book the picture is
+// from, all read through the FxTwitter API's thread endpoint.
 
 const POST_HOSTS = new Set(['x.com', 'twitter.com', 'mobile.x.com', 'mobile.twitter.com'])
 const PHOTO_HOST = 'pbs.twimg.com'
@@ -35,22 +36,58 @@ export function cleanSourceUrl(value: string): string {
   return url.toString()
 }
 
-/** What a post contributes to the evidence fields. */
-export type PostInfo = { place: string; provider: string | null; providerUrl: string | null; title: string }
+/** A work a post names, with the volume or part when the post gives one. */
+export type Work = { title: string; page: string | null }
+/** What a post contributes to the evidence fields. `work` is the book its author says the picture is from. */
+export type PostInfo = { place: string; author: string | null; title: string; url: string | null; date: string | null; work: Work | null }
 
-/** The citation fields an FxTwitter response supports: the post text and its author. */
+const NUMBER = '[0-9０-９〇一二三四五六七八九十百廿卅]+'
+const VOLUME = `(?:(?:巻|卷|第)[\\s　]*${NUMBER}[\\s　]*(?:巻|卷|冊|册)?|${NUMBER}[\\s　]*(?:巻|卷|冊|册))`
+const QUOTED = new RegExp(`[『《]([^『』《》\\n]{1,60})[』》][\\s　]*(${VOLUME})?`, 'u')
+const LINE = new RegExp(`^([\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}ー・]{2,30}?)[\\s　]*(${VOLUME})$`, 'u')
+
+/**
+ * The work a post's text names: a title in 『 』 or 《 》, or a line that is only a title and a volume, such as
+ * `和名類聚抄 20巻`. Earlier texts win, so the post itself is read before its author's replies.
+ */
+export function workMention(texts: readonly string[]): Work | null {
+  const tidy = (volume: string | undefined) => volume ? volume.replace(/[\s　]+/g, '') : null
+  for (const text of texts) {
+    const quoted = QUOTED.exec(text)
+    if (quoted) return { title: quoted[1].trim(), page: tidy(quoted[2]) }
+  }
+  for (const text of texts) {
+    for (const line of text.split('\n')) {
+      const found = LINE.exec(line.trim())
+      if (found && /\p{Script=Han}/u.test(found[1])) return { title: found[1], page: tidy(found[2]) }
+    }
+  }
+  return null
+}
+
+type Post = { id?: unknown; text?: unknown; raw_text?: unknown; author?: unknown; url?: unknown; created_timestamp?: unknown }
+const handleOf = (post: Post) => {
+  const author = post.author && typeof post.author === 'object' ? post.author as { screen_name?: unknown } : null
+  return typeof author?.screen_name === 'string' && HANDLE.test(author.screen_name) ? author.screen_name : null
+}
+
+/** The citation fields an FxTwitter thread response supports: the post, its author, and the work the author names. */
 export function postInfo(payload: unknown): PostInfo | null {
   if (!payload || typeof payload !== 'object') return null
-  const tweet = (payload as { tweet?: unknown }).tweet
-  if (!tweet || typeof tweet !== 'object') return null
-  const record = tweet as { text?: unknown; raw_text?: unknown; author?: unknown }
-  const author = record.author && typeof record.author === 'object' ? record.author as { screen_name?: unknown } : null
-  const handle = typeof author?.screen_name === 'string' && HANDLE.test(author.screen_name) ? author.screen_name : null
+  const { status, thread } = payload as { status?: unknown; thread?: unknown }
+  if (!status || typeof status !== 'object') return null
+  const post = status as Post
+  const handle = handleOf(post)
+  // The thread holds the author's own posts around this one; anyone else's reply is not read.
+  const own = (Array.isArray(thread) ? thread : []).filter((item): item is Post => Boolean(item) && typeof item === 'object' && (item as Post).id !== post.id && handle !== null && handleOf(item as Post) === handle)
+  const stamp = typeof post.created_timestamp === 'number' ? new Date(post.created_timestamp * 1000) : null
   return {
     place: 'X',
-    provider: handle ? `@${handle}` : null,
-    providerUrl: handle ? `https://x.com/${handle}` : null,
-    title: titleFrom(postText(record)),
+    author: handle ? `@${handle}` : null,
+    title: titleFrom(postText(post)),
+    url: handle && typeof post.id === 'string' && /^\d{1,20}$/.test(post.id) ? `https://x.com/${handle}/status/${post.id}` : null,
+    date: stamp && !Number.isNaN(stamp.getTime()) ? stamp.toISOString().slice(0, 10) : null,
+    work: workMention([postText(post), ...own.map(postText)]),
   }
 }
 
@@ -78,7 +115,7 @@ type Photo = { url: string; width?: number; height?: number }
 /** The first photo in an FxTwitter response, limited to the image host the API reports. */
 export function firstPhoto(payload: unknown): Photo | null {
   if (!payload || typeof payload !== 'object') return null
-  const media = (payload as { tweet?: { media?: { photos?: unknown; all?: unknown } } }).tweet?.media
+  const media = (payload as { status?: { media?: { photos?: unknown; all?: unknown } } }).status?.media
   if (!media) return null
   const candidates = Array.isArray(media.photos) && media.photos.length ? media.photos : Array.isArray(media.all) ? media.all : []
   for (const candidate of candidates) {
@@ -108,7 +145,7 @@ export type PostLookup = { info: PostInfo; photo: File | null }
  * field. Answers null when the API cannot read the post.
  */
 export async function fetchPost(id: string, signal?: AbortSignal): Promise<PostLookup | null> {
-  const response = await fetch(`${API_ORIGIN}/status/${encodeURIComponent(id)}`, {
+  const response = await fetch(`${API_ORIGIN}/2/thread/${encodeURIComponent(id)}`, {
     signal,
     headers: { accept: 'application/json' },
     credentials: 'omit',
