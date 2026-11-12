@@ -5,6 +5,7 @@
   import IdsField from '$lib/components/IdsField.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import CopyButton from '$lib/components/CopyButton.svelte'
+  import { characterLinks, descriptionLinks } from '$lib/links'
   import { encodedCharacter } from '$lib/ids'
   import CompositionField from '$lib/components/CompositionField.svelte'
   import ClaimFields from '$lib/components/ClaimFields.svelte'
@@ -87,6 +88,7 @@
         <span class="plate"><IdsGlyph ids={sequences[0]} /></span>
         <ul class="sequences">{#each sequences as sequence}<li><span class="ids">{sequence}</span><CopyButton text={sequence} /></li>{/each}</ul>
       </div>
+      <p class="sites">{#each descriptionLinks(sequences[0], at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</p>
     {/if}
     {#if analysis?.tagged}
       <p class="formation"><span class="label">{t('field.formation')}</span><span class="method">{formationLabel(at, analysis.formation)}</span>{#each analysis.parts.filter(part => part.role) as part, index (index)}<span class="part">{part.part} · {roleLabel(at, part.role)}</span>{/each}</p>
@@ -101,7 +103,7 @@
     {/if}
     <dl class="facts">
       {#if normalizesTo}<div><dt>{t('field.normalizesTo')}</dt><dd class="character">{normalizesTo}<CopyButton text={normalizesTo} /></dd></div>{/if}
-      {#each encodings as encoding (encoding.charset + '|' + encoding.code)}{@const character = encoding.charset === 'unicode' ? encodedCharacter(encoding.code) : ''}<div><dt>{encodingSetLabel(encoding.charset)}</dt><dd class="mono">{#if character}<span class="character encoded">{character}</span><CopyButton text={character} /> {/if}{encoding.code}</dd></div>{/each}
+      {#each encodings as encoding (encoding.charset + '|' + encoding.code)}{@const character = encoding.charset === 'unicode' ? encodedCharacter(encoding.code) : ''}<div><dt>{encodingSetLabel(encoding.charset)}</dt><dd>{#if character}<span class="character encoded">{character}</span><CopyButton text={character} /> {/if}<span class="mono">{encoding.code}</span>{#if character}<span class="sites">{#each characterLinks(character, at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</span>{/if}</dd></div>{/each}
       {#if ivd}<div><dt>{t('field.ivd')}</dt><dd class:mono={ivd !== 'none'}>{ivd === 'none' ? t('field.ivdNone') : ivd}</dd></div>{/if}
       {#if entry.radical}<div><dt>{t('field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
       {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
@@ -125,11 +127,13 @@
     {/if}
     {#if entry.by_name && entry.created_at}<p class="hint">{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</p>{/if}
   </section>
+  {#if entry.status !== 'encoded'}
   <section class="panel stack">
     <h2>{t('ready.title')}</h2>
     <ul class="checks">{#each CHECKS as check}<li class:done={ready[check]}><span class="tick" aria-hidden="true">{ready[check] ? '✓' : '○'}</span>{t(`ready.${check}`)}</li>{/each}</ul>
     <a class="text-link small" href="https://www.unicode.org/irg/pp/" target="_blank" rel="noopener">{t('ready.rules')} ↗</a>
   </section>
+  {/if}
   <details class="panel" open={editing}>
     <summary>{t('entry.edit')}</summary>
     <form class="stack form" method="POST" action="?/edit">
@@ -196,6 +200,7 @@
   h3 { font-size:14px; font-weight:600 }
   .identity { display:flex; align-items:center; gap:18px; min-width:0 }
   .plate { flex:none; display:grid; place-items:center; width:96px; height:96px; border-radius:8px; background:var(--surface-tile) }
+  .sites { display:flex; flex-wrap:wrap; gap:4px 12px; margin:0 } dd .sites { margin-top:4px }
   .sequences { display:flex; flex-direction:column; gap:2px; min-width:0; margin:0; padding:0; list-style:none }
   .sequences li { display:flex; align-items:center; gap:4px; font-size:22px; line-height:1.35 } .sequences li + li { font-size:16px; color:var(--muted) }
   .formation { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px } .formation .label { color:var(--muted); font-size:12px; font-weight:400 }

@@ -3,7 +3,7 @@
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
 import { CONTEXTS, isScript, isStatus, NEEDS, parseSightingTypes, SIGHTING_TYPES, STATUSES, STYLES, type Need, type SightingType } from '$lib/scripts'
-import { cleanIds } from '$lib/ids'
+import { cleanIds, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { parseClaims, primaryIdsOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
@@ -41,6 +41,9 @@ const link = (form: FormData, name: string) => {
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
 const now = () => new Date().toISOString()
 
+// A record nobody has checked that states a Unicode code is an encoded character.
+const stated = (status: string, claims: readonly Claim[]) => status === 'unchecked' && claims.some(claim => claim.kind === 'encoding' && claim.data?.charset === 'unicode') ? 'encoded' : status
+
 export function readEntryFields(form: FormData, base?: Partial<EntryFields>): { fields: EntryFields; error: ClaimError | null } {
   const script = text(form, 'script', 20)
   const status = text(form, 'status', 20)
@@ -53,7 +56,7 @@ export function readEntryFields(form: FormData, base?: Partial<EntryFields>): { 
       script: isScript(script) ? script : base?.script ?? 'han',
       script_other: field('script_other', 80),
       description: field('description', 20000),
-      status: isStatus(status) ? status : base?.status ?? 'unchecked',
+      status: stated(isStatus(status) ? status : base?.status ?? 'unchecked', read.claims),
       radical: field('radical', 20),
       strokes: form.has('strokes') ? (Number.isInteger(strokes) && strokes >= 0 && strokes < 200 ? strokes : null) : base?.strokes ?? null,
       claims: read.claims,
@@ -131,6 +134,8 @@ function wordTags(entry: TagInput, claims: readonly Claim[], sightings: Sighting
   const add = (value: unknown) => { if (typeof value === 'string') for (const term of terms(value)) words.add(term) }
   for (const field of ['description', 'script_other'] as const) add(entry[field])
   for (const claim of claims) if (WORD_KINDS.includes(claim.kind)) { add(claim.value); add(claim.data?.difference); add(claim.data?.evidence) }
+  // A Unicode code is found by the character it names, which is what another site links with.
+  for (const claim of claims) if (claim.kind === 'encoding' && claim.data?.charset === 'unicode') add(encodedCharacter(claim.value))
   for (const sighting of sightings) for (const field of ['place', 'title', 'author', 'publisher', 'via_title', 'via_author', 'via_publisher', 'note'] as const) add(sighting[field])
   return [...words].slice(0, WORDS_MAX).map(word => `w:${word}`)
 }

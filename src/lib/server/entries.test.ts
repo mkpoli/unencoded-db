@@ -637,3 +637,18 @@ describe('query cost', () => {
     expect(details.join('\n')).toMatch(/TEMP B-TREE|^SCAN plain/m)
   })
 })
+
+describe('status', () => {
+  const form = (pairs: [string, string][]) => { const data = new FormData(); for (const [name, value] of pairs) data.append(name, value); return data }
+  const unicode: [string, string][] = [['encodings_present', '1'], ['encoding_charset', 'unicode'], ['encoding_code', 'U+5650']]
+
+  test('an unchecked record that states a Unicode code is encoded', () => {
+    expect(readEntryFields(form(unicode)).fields.status).toBe('encoded')
+    expect(readEntryFields(form([['encodings_present', '1'], ['encoding_charset', 'big5'], ['encoding_code', 'A140']])).fields.status).toBe('unchecked')
+    expect(readEntryFields(form([])).fields.status).toBe('unchecked')
+  })
+
+  test('a status someone chose is kept', () => {
+    expect(readEntryFields(form([...unicode, ['status', 'variant']])).fields.status).toBe('variant')
+  })
+})
