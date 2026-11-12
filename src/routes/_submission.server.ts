@@ -1,4 +1,4 @@
-import { readBox, type StoredImage } from '$lib/server/entries'
+import { readBoxes, type StoredImage } from '$lib/server/entries'
 import { MAX_IMAGE, MAX_THUMB, prepareImage, storeImage } from '$lib/server/image'
 import { MEDIA_MAX } from '$lib/limits'
 
@@ -22,7 +22,7 @@ export async function uploadedImages(form: FormData, media: R2Bucket): Promise<S
     const thumb = hasThumb ? await prepareImage(thumbFile, MAX_THUMB) : image
     if (!thumb) return 'invalid'
     const rawBox = marked ? boxes[index] : null
-    const box = rawBox ? readBox(rawBox, image.width, image.height) : null
+    const box = rawBox ? readBoxes(rawBox, image.width, image.height) : null
     if (rawBox && !box) return 'invalid'
     prepared.push({ image, thumb, box })
   }
