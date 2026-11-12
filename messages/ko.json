@@ -332,6 +332,8 @@
   "field.linkImageWorking": "게시물에서 사진을 가져오는 중",
   "field.linkImageFailed": "게시물의 사진을 추가하지 못했습니다. 대신 파일을 선택하세요.",
   "browse.encoded": "부호화됨",
+  "browse.unencoded": "미부호화",
+  "browse.variant": "이체자",
   "source.title": "출처",
   "source.view": "출처 상세",
   "history.redacted": "이 판의 내용은 삭제되었습니다.",

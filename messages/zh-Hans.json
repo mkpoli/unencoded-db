@@ -332,6 +332,8 @@
   "field.linkImageWorking": "正在从帖子中获取图片",
   "field.linkImageFailed": "无法添加帖子中的图片。请改为选择文件。",
   "browse.encoded": "已编码",
+  "browse.unencoded": "未编码",
+  "browse.variant": "异体字",
   "source.title": "出处",
   "source.view": "出处详情",
   "history.redacted": "此版本的内容已删除。",

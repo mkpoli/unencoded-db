@@ -332,6 +332,8 @@
   "field.linkImageWorking": "Getting the picture from the post",
   "field.linkImageFailed": "The post's picture could not be added. Choose a file instead.",
   "browse.encoded": "Encoded",
+  "browse.unencoded": "Unencoded",
+  "browse.variant": "Variant",
   "source.title": "Source",
   "source.view": "Source details",
   "history.redacted": "Revision redacted.",
