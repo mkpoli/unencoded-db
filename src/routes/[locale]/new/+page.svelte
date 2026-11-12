@@ -3,6 +3,7 @@
   import PictureList from '$lib/components/PictureList.svelte'
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import SightingFields from '$lib/components/SightingFields.svelte'
+  import IdsDrawing from '$lib/components/IdsDrawing.svelte'
   import IdsField from '$lib/components/IdsField.svelte'
   import CompositionField from '$lib/components/CompositionField.svelte'
   import ClaimFields from '$lib/components/ClaimFields.svelte'
@@ -60,15 +61,18 @@
 
 <Seo title={t('add.title')} />
 <div class="page narrow stack">
-  <div class="stack heading"><h1>{t('add.title')}</h1><p class="muted">{t('add.intro')}</p><a class="text-link" href={href('/batch')}>{t('batch.link')}</a></div>
+  <header class="heading"><h1>{t('add.title')}</h1><a class="text-link" href={href('/batch')}>{t('batch.link')}</a></header>
   {#if message}<p class="notice bad" role="alert">{message}</p>{/if}
   <form class="stack" method="POST" enctype="multipart/form-data">
-    <section class="panel stack">
-      <ScriptPicker value={values?.script} other={values?.script_other} />
-      <IdsField values={descriptions} bind:primary onfill={facts => filled = facts} />
-      <CompositionField ids={primary} value={composition} />
-      <div class="field"><label for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="4">{values?.description ?? ''}</textarea><p class="hint">{t('field.descriptionHint')}</p></div>
+    <section class="panel character">
+      <div class="plate"><IdsDrawing ids={primary} /></div>
+      <div class="stack described">
+        <IdsField values={descriptions} bind:primary onfill={facts => filled = facts} />
+        <CompositionField ids={primary} value={composition} />
+        <div class="line"><ScriptPicker value={values?.script} other={values?.script_other} /></div>
+      </div>
     </section>
+    <div class="field"><label class="title" for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="3">{values?.description ?? ''}</textarea></div>
     <section class="stack"><h2>{t('entry.sightings')}</h2>
       {#each sightings as item, index (item.key)}
         <fieldset class="panel stack sighting" bind:this={sections[item.key]} tabindex="-1" data-sighting>
@@ -85,15 +89,26 @@
       <summary>{t('entry.addDetails')}</summary>
       <div class="stack details"><ClaimFields {claims} radical={values?.radical} strokes={values?.strokes} fill={filled} /></div>
     </details>
-    <SubmitBar {busy} label={t('nav.add')} cancel={href()} />
+    <SubmitBar {busy} label={t('nav.add')} cancel={href()} sticky />
   </form>
 </div>
 <style>
-  .heading { gap:8px } .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
+  .heading { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:6px 16px }
+  .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
+  .character { display:grid; grid-template-columns:208px minmax(0, 1fr); align-items:start; gap:24px }
+  .described { gap:14px }
+  .line { padding-top:10px; border-top:1px dashed var(--line) }
+  .title, summary { font-size:16px; font-weight:600 }
+  legend { font-weight:600 }
   .sighting { position:relative; min-width:0; margin:0 }
   .sighting:focus-visible { outline-offset:4px }
-  legend { padding:0 6px; margin-inline-start:-6px; font-weight:600 }
-  .remove { position:absolute; inset-block-start:0; inset-inline-end:14px; min-height:0; padding:0 6px; background:var(--paper); line-height:1.5 }
-  summary { cursor:pointer; font-weight:600 } .details { margin-top:18px }
-  @media(max-width:700px) { .panel { padding:16px } }
+  legend { padding:0 6px; margin-inline-start:-6px }
+  /* On the border, across from the legend: the border runs through the middle of the legend's line. */
+  .remove { position:absolute; inset-block-start:-.75em; inset-inline-end:14px; translate:0 -50%; min-height:0; padding:0 6px; background:var(--paper); line-height:1.5 }
+  summary { cursor:pointer } .details { margin-top:18px }
+  @media(max-width:700px) {
+    .panel { padding:16px }
+    .character { grid-template-columns:minmax(0, 1fr); gap:16px }
+    .plate { width:148px; justify-self:center }
+  }
 </style>
