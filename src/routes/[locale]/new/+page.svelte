@@ -10,10 +10,12 @@
   import { compositionOf, valuesOf } from '$lib/claims'
   import { MEDIA_MAX } from '$lib/limits'
   import { href, media, t } from '$lib/t'
+  import type { CharacterFacts } from '$lib/encoded'
   import { onMount } from 'svelte'
   let { form, data } = $props()
   let busy = $state(false)
   let pictures = $state<PictureList>()
+  let filled = $state<CharacterFacts | null>(null)
   const values = $derived(form?.values)
   const seen = $derived(form?.values ?? data.seed?.values)
 
@@ -38,7 +40,7 @@
   <form class="stack" method="POST" enctype="multipart/form-data">
     <section class="panel stack">
       <ScriptPicker value={values?.script} other={values?.script_other} />
-      <IdsField bind:value={ids} />
+      <IdsField bind:value={ids} onfill={facts => filled = facts} />
       <CompositionField {ids} value={composition} />
       <div class="field"><label for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="4">{values?.description ?? ''}</textarea><p class="hint">{t('field.descriptionHint')}</p></div>
     </section>
@@ -48,9 +50,9 @@
         <SightingFields values={seen} onphoto={file => pictures?.offer(file)} />
       </div>
     </section>
-    <details class="panel" open={detailed}>
+    <details class="panel" open={detailed || Boolean(filled)}>
       <summary>{t('entry.addDetails')}</summary>
-      <div class="stack details"><ClaimFields {claims} radical={values?.radical} strokes={values?.strokes} /></div>
+      <div class="stack details"><ClaimFields {claims} radical={values?.radical} strokes={values?.strokes} fill={filled} /></div>
     </details>
     <SubmitBar {busy} label={t('nav.add')} cancel={href()} />
   </form>

@@ -6,13 +6,22 @@
   import { t } from '$lib/t'
   import SightingChoice, { type SightingOption } from './SightingChoice.svelte'
 
-  let { kind, values = [], sightings = null }: { kind: 'reading' | 'meaning'; values?: Claim[]; sightings?: SightingOption[] | null } = $props()
+  // `fill` are values to state when the list is still empty.
+  let { kind, values = [], sightings = null, fill = [] }: { kind: 'reading' | 'meaning'; values?: Claim[]; sightings?: SightingOption[] | null; fill?: string[] } = $props()
 
   const uid = $props.id()
   type Row = { value: string; sighting: string }
   const blank = (): Row => ({ value: '', sighting: '' })
   let rows = $state<Row[]>(untrack(() => values.length ? values.map(claim => ({ value: claim.value, sighting: claim.sighting_id ? String(claim.sighting_id) : '' })) : [blank()]))
   const limit = $derived(CLAIM_LIMITS[kind])
+
+  $effect(() => {
+    if (!fill.length) return
+    untrack(() => {
+      if (rows.some(row => row.value.trim())) return
+      rows = fill.slice(0, CLAIM_LIMITS[kind].max).map(value => ({ value: value.slice(0, CLAIM_LIMITS[kind].length), sighting: '' }))
+    })
+  })
 </script>
 
 <fieldset class="group">

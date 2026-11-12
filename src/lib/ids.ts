@@ -45,3 +45,10 @@ export function workshopUrl(ids = '') {
 
 /** The code points of a text, written U+XXXX. */
 export const codePoints = (text: string) => [...text].map(c => 'U+' + c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')).join(' ')
+
+/** The character a Unicode code such as `U+5D20` names, or '' when the text does not start with one. */
+export function encodedCharacter(code: string) {
+  const point = /^U\+([0-9A-F]{4,6})(?![0-9A-F])/i.exec(code.trim())
+  const value = point ? parseInt(point[1], 16) : -1
+  return value >= 0x20 && value <= 0x10FFFF && !(value >= 0xD800 && value <= 0xDFFF) ? String.fromCodePoint(value) : ''
+}
