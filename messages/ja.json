@@ -93,6 +93,7 @@
   "field.idsClose": "閉じる",
   "field.idsLoading": "エディターを読み込んでいます…",
   "field.idsEncoded": "この記述は{char}（{code}）と一致します。すでに収録されている文字かもしれません。このまま登録することもできます。",
+  "field.idsFill": "この字の情報を入力",
   "field.idsSame": "同じ記述の記録：",
   "field.source": "出典の詳細",
   "field.sourceHint": "IRGは各用例についてこれらの情報を求めています。後から誰でも記入できます。",
