@@ -185,6 +185,7 @@
   "entry.openIds": "在IDS Workshop中打开",
   "entry.copy": "复制",
   "entry.copied": "已复制",
+  "entry.copied": "已复制",
   "entry.cite": "引用此记录",
   "entry.mergedInto": "此记录已合并到记录{id}。",
   "entry.hidden": "管理员已隐藏此记录。",
