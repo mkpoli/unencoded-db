@@ -62,6 +62,5 @@
   {#each visible as slot, index (slot)}
     <PicturePicker bind:this={pickers[slot]} label="{t('field.imageChoose')} {index + 1}" onready={ready} onremove={visible.length > 1 ? () => slots = slots.filter(item => item !== slot) : undefined} />
   {/each}
-  {#if visible.length < max}<div><button type="button" class="button" onclick={() => slots.push(next++)}>{t('field.imageAdd')}</button></div>{/if}
-  <p class="hint">{t('field.imageHint')}</p>
+  {#if visible.length < max}<div><button type="button" class="text-button" onclick={() => slots.push(next++)}>+ {t('field.imageAdd')}</button></div>{/if}
 </div>
