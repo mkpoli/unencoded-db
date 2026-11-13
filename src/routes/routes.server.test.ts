@@ -102,7 +102,7 @@ test('browse recognizes complete IDS without applying the component term limit',
   const { db, raw } = openTestDb()
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
   raw.exec("INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES (1, 'han', '⿰木木', 'p', '2026', '2026'), (2, 'han', '⿱木木', 'p', '2026', '2026'), (3, 'han', '⿰木⿰水⿰火⿰土⿰金石', 'p', '2026', '2026')")
-  raw.exec("INSERT INTO claims(entry_id, position, kind, value) SELECT id, 0, 'ids', ids FROM entries")
+  raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) SELECT id, 0, printf('ids%05d', id), 'ids', ids FROM entries")
   raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 's:han', id FROM entries")
   const event = (q: string) => ({ url: new URL(`https://example.test/en?q=${encodeURIComponent(q)}`), platform: { env: { DB: db } } }) as any
   expect(await browseLoad(event('⿰木木'))).toMatchObject({ searchError: null, tiles: [{ id: 1 }] })

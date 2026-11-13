@@ -2,7 +2,10 @@ import { Database } from 'bun:sqlite'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
+import { isClaimKey, parseClaims, type Claim } from '$lib/claims'
+import { getEntry, revertEntry } from './entries'
 import { entrySnapshot, sightingSnapshot } from './revisions'
+import { d1Over } from './testdb'
 
 const migration = (name: string) => readFileSync(join(import.meta.dir, '../../../migrations', name), 'utf8')
 
@@ -60,10 +63,135 @@ test('0004 turns the character to unify with into a relation, in claims and in p
     { kind: 'relation', value: '崬', data: '{"relationship":"variant"}' },
   ])
   const rows = raw.query('SELECT snapshot FROM revisions ORDER BY id').all() as { snapshot: string }[]
-  expect(entrySnapshot(rows[0].snapshot)?.claims).toEqual([
+  expect(JSON.parse(rows[0].snapshot).claims).toEqual([
     { kind: 'ids', value: '⿰山東', data: null, sighting_id: null },
     { kind: 'relation', value: '崠', data: { relationship: 'unifiable' }, sighting_id: null },
     { kind: 'relation', value: '崬', data: { relationship: 'variant' }, sighting_id: null },
   ])
   expect(rows[1].snapshot).toBe('{}')
+  // The next migration brings that version to the form the app reads.
+  raw.exec(migration('0005_claim_links.sql'))
+  const after = raw.query('SELECT snapshot FROM revisions ORDER BY id').all() as { snapshot: string }[]
+  expect(entrySnapshot(after[0].snapshot)?.claims.map(({ key, ...rest }) => rest)).toEqual([
+    { kind: 'ids', value: '⿰山東', data: null, sightings: [], under: [] },
+    { kind: 'relation', value: '崠', data: { relationship: 'unifiable' }, sightings: [], under: [] },
+    { kind: 'relation', value: '崬', data: { relationship: 'variant' }, sightings: [], under: [] },
+  ])
+  expect(after[1].snapshot).toBe('{}')
+})
+
+// A database as 0001–0004 leave it, holding two records whose claims rest on sightings or on none, and
+// the journal of the first: three versions, one redacted, and rows that hold no claims.
+function before0005() {
+  const raw = new Database(':memory:')
+  for (const name of ['0001_init.sql', '0002_sighting_via.sql', '0003_media_boxes.sql', '0004_unify_relation.sql']) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec("INSERT INTO entries(script, rev, created_by, created_at, updated_at) VALUES ('han', 4, 'p', '2026', '2026'), ('han', 1, 'p', '2026', '2026')")
+  raw.exec("INSERT INTO sightings(entry_id, first_entry, place, created_by, created_at, updated_at) VALUES (1, 1, 'A shop', 'p', '2026', '2026'), (1, 1, 'A book', 'p', '2026', '2026'), (2, 2, 'A sign', 'p', '2026', '2026')")
+  type Old = { kind: string; value: string; data: Record<string, unknown> | null; sighting_id: number | null }
+  const old = (kind: string, value: string, data: Old['data'] = null, sighting_id: number | null = null): Old => ({ kind, value, data, sighting_id })
+  const ids = old('ids', '⿰山東'), tung = old('reading', 'tung', null, 1)
+  const live = [ids, tung, old('reading', 'ki', { doculect: 'ja' }), old('reading', 'ki', { doculect: 'ko' }, 2), old('meaning', 'east hill'),
+    old('encoding', 'A140', { charset: 'big5' }), old('encoding', 'A140', { charset: 'cns11643' }),
+    old('relation', '崬', { relationship: 'variant', difference: 'a stroke' }, 2), old('relation', '崬', { relationship: 'similar' }), old('ivd', 'none'), old('tag', 'IRG')]
+  const versions = [[ids, tung], [old('ids', '⿱山東'), ids, tung, old('reading', 'ki', { doculect: 'ko' }), old('meaning', 'east')], [ids, old('reading', 'private')], live]
+  const other = [ids, old('reading', 'tung', null, 3)]
+  const insert = raw.prepare('INSERT INTO claims(entry_id, position, kind, value, data, sighting_id) VALUES (?, ?, ?, ?, ?, ?)')
+  for (const [entry, claims] of [[1, live], [2, other]] as const) claims.forEach((claim, position) => insert.run(entry, position, claim.kind, claim.value, claim.data ? JSON.stringify(claim.data) : null, claim.sighting_id))
+  const snapshot = (claims: Old[]) => JSON.stringify({ script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims })
+  const revision = raw.prepare("INSERT INTO revisions(entry_id, sighting_id, kind, rev, snapshot, actor, at, redacted_at) VALUES (?, ?, ?, ?, ?, 'p', '2026', ?)")
+  const sighting = JSON.stringify({ place: 'A shop', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null, media: [] })
+  revision.run(1, null, 'create', 1, snapshot(versions[0]), null)
+  revision.run(1, 1, 'sighting', 1, sighting, null)
+  revision.run(1, null, 'edit', 2, snapshot(versions[1]), null)
+  revision.run(1, null, 'edit', 3, '{}', '2026')
+  revision.run(1, null, 'redact', 3, '{"revision":4}', null)
+  revision.run(1, null, 'hide', 0, '{}', null)
+  revision.run(1, null, 'merge', 4, '{"from":3}', null)
+  revision.run(1, null, 'edit', 4, snapshot(live), null)
+  revision.run(2, null, 'create', 1, snapshot(other), null)
+  return { raw, sighting }
+}
+
+test('0005 gives every claim a key, a list of sightings and a scope, in claims and in past versions', async () => {
+  const { raw, sighting } = before0005()
+  raw.exec(migration('0005_claim_links.sql'))
+
+  // The table: the old column is gone, and the two indexes it had are back beside the one for keys.
+  expect((raw.query("SELECT name FROM pragma_table_info('claims') ORDER BY cid").all() as { name: string }[]).map(column => column.name)).toEqual(['id', 'entry_id', 'position', 'key', 'kind', 'value', 'data', 'sightings', 'under'])
+  expect((raw.query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'claims' ORDER BY name").all() as { name: string }[]).map(index => index.name)).toEqual(['claims_by_entry', 'claims_by_key', 'claims_by_value'])
+  expect(raw.query("SELECT name FROM sqlite_master WHERE name IN ('claim_keys', 'claims_linked')").all()).toEqual([])
+  expect(raw.query('PRAGMA foreign_key_check').all()).toEqual([])
+  expect(() => raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) SELECT 1, 99, key, 'tag', 'again' FROM claims WHERE entry_id = 1 LIMIT 1")).toThrow(/UNIQUE/)
+
+  // The rows a record holds now.
+  type Row = { entry_id: number; key: string; kind: string; value: string; data: string | null; sightings: string; under: string }
+  const rows = raw.query('SELECT entry_id, key, kind, value, data, sightings, under FROM claims ORDER BY entry_id, position').all() as Row[]
+  const claimsOf = (entry: number) => rows.filter(row => row.entry_id === entry).map(row => ({ key: row.key, kind: row.kind, value: row.value, data: row.data ? JSON.parse(row.data) : null, sightings: JSON.parse(row.sightings), under: JSON.parse(row.under) }))
+  const live = claimsOf(1)
+  expect(live.map(({ key, ...rest }) => rest)).toEqual([
+    { kind: 'ids', value: '⿰山東', data: null, sightings: [], under: [] },
+    { kind: 'reading', value: 'tung', data: null, sightings: [1], under: [] },
+    { kind: 'reading', value: 'ki', data: { doculect: 'ja' }, sightings: [], under: [] },
+    { kind: 'reading', value: 'ki', data: { doculect: 'ko' }, sightings: [2], under: [] },
+    { kind: 'meaning', value: 'east hill', data: null, sightings: [], under: [] },
+    { kind: 'encoding', value: 'A140', data: { charset: 'big5' }, sightings: [], under: [] },
+    { kind: 'encoding', value: 'A140', data: { charset: 'cns11643' }, sightings: [], under: [] },
+    { kind: 'relation', value: '崬', data: { relationship: 'variant', difference: 'a stroke' }, sightings: [2], under: [] },
+    { kind: 'relation', value: '崬', data: { relationship: 'similar' }, sightings: [], under: [] },
+    { kind: 'ivd', value: 'none', data: null, sightings: [], under: [] },
+    { kind: 'tag', value: 'IRG', data: null, sightings: [], under: [] },
+  ])
+  for (const entry of [1, 2]) {
+    const keys = claimsOf(entry).map(claim => claim.key)
+    expect(keys.every(isClaimKey)).toBe(true)
+    expect(new Set(keys).size).toBe(keys.length)
+  }
+  expect(parseClaims(live)).toEqual(live as Claim[])
+  expect(claimsOf(2).map(claim => claim.sightings)).toEqual([[], [3]])
+
+  // The journal. Every version of a record parses, and a version that is the record's present state is
+  // the rows themselves, key for key.
+  const journal = raw.query('SELECT id, entry_id, kind, snapshot FROM revisions ORDER BY id').all() as { id: number; entry_id: number; kind: string; snapshot: string }[]
+  const versions = journal.filter(row => ['create', 'edit'].includes(row.kind) && row.snapshot !== '{}').map(row => ({ ...row, claims: entrySnapshot(row.snapshot)!.claims }))
+  expect(versions.map(row => row.id)).toEqual([1, 3, 8, 9])
+  expect(versions[2].claims).toEqual(live as Claim[])
+  expect(versions[3].claims).toEqual(claimsOf(2) as Claim[])
+  expect(JSON.parse(versions[2].snapshot).claims.every((claim: object) => !('sighting_id' in claim))).toBe(true)
+  for (const version of versions) expect(new Set(version.claims.map(claim => claim.key)).size).toBe(version.claims.length)
+
+  // A statement keeps one key through the versions that make it: the same kind and value, with the
+  // doculect of a reading and the character set of a code. One the record no longer makes has a key no
+  // present claim has.
+  const key = (claims: { key: string; kind: string; value: string; data: Record<string, unknown> | null }[], kind: string, value: string, mark?: string) => claims.find(claim => claim.kind === kind && claim.value === value && (!mark || Object.values(claim.data ?? {}).includes(mark)))!.key
+  const [first, second] = versions.map(version => version.claims)
+  expect(first.map(claim => [claim.key, claim.sightings])).toEqual([[key(live, 'ids', '⿰山東'), []], [key(live, 'reading', 'tung'), [1]]])
+  expect(key(second, 'ids', '⿰山東')).toBe(key(live, 'ids', '⿰山東'))
+  expect(key(second, 'reading', 'tung')).toBe(key(live, 'reading', 'tung'))
+  expect(key(second, 'reading', 'ki')).toBe(key(live, 'reading', 'ki', 'ko'))
+  expect(key(second, 'reading', 'ki')).not.toBe(key(live, 'reading', 'ki', 'ja'))
+  for (const gone of [key(second, 'ids', '⿱山東'), key(second, 'meaning', 'east')]) expect(live.map(claim => claim.key)).not.toContain(gone)
+  expect(key(live, 'encoding', 'A140', 'big5')).not.toBe(key(live, 'encoding', 'A140', 'cns11643'))
+  // The same statement in another record is another claim.
+  expect(key(claimsOf(2), 'ids', '⿰山東')).not.toBe(key(live, 'ids', '⿰山東'))
+
+  // Rows that hold no claims are as they were.
+  expect(journal.filter(row => !versions.some(version => version.id === row.id)).map(row => row.snapshot)).toEqual([sighting, '{}', '{"revision":4}', '{}', '{"from":3}'])
+
+  // An old version is restored through the store, with its keys and the sighting it rested on.
+  const db = d1Over(raw)
+  expect(await revertEntry(db, 1, 1, { actor: 'p', ip: null })).toEqual({ ok: true, rev: 5 })
+  expect((await getEntry(db, 1))!.claims).toEqual(first)
+  expect(await revertEntry(db, 1, 4, { actor: 'p', ip: null })).toEqual({ ok: false, code: 'missing' })
+})
+
+test('0005 leaves a database without claims with the new table', () => {
+  const raw = new Database(':memory:')
+  for (const name of ['0001_init.sql', '0002_sighting_via.sql', '0003_media_boxes.sql', '0004_unify_relation.sql', '0005_claim_links.sql']) raw.exec(migration(name))
+  expect(raw.query('SELECT count(*) AS n FROM claims').get()).toEqual({ n: 0 })
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec("INSERT INTO entries(script, created_by, created_at, updated_at) VALUES ('han', 'p', '2026', '2026')")
+  expect(() => raw.exec("INSERT INTO claims(entry_id, position, key, kind, value, sightings) VALUES (1, 0, 'abcd1234', 'tag', 'a', '7')")).toThrow(/CHECK/)
+  raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) VALUES (1, 0, 'abcd1234', 'tag', 'a')")
+  expect(raw.query('SELECT sightings, under FROM claims').get()).toEqual({ sightings: '[]', under: '[]' })
 })

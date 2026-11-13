@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { readClaims, type Claim } from '$lib/claims'
+import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { addSighting, claimedBy, counts, createEntry, editEntry, editSighting, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
 const fields = (over: Partial<EntryFields> = {}): EntryFields => ({ script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims: [], ...over })
-const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null): Claim => ({ kind, value, data, sighting_id: null })
+const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null, links: Partial<Pick<Claim, 'sightings' | 'under'>> = {}): Claim => newClaim(kind, value, data, links)
 const described = (...sequences: string[]) => fields({ claims: sequences.map(sequence => claim('ids', sequence)) })
 const relation = (character: string, relationship: string, difference = '', evidence = ''): Claim => claim('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) })
 const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null, ...over })
@@ -26,8 +26,8 @@ test('structured comparisons retain evidence across edits and restoration', asyn
   }
   const { fields: values, error } = readEntryFields(form)
   expect(error).toBeNull()
-  const relations = [relation('木', 'variant', 'One extra stroke', 'Dictionary p. 10'), relation('林', 'uncertain', 'Different component', 'Inscription A')]
-  expect(values.claims).toEqual(relations)
+  const relations = values.claims
+  expect(relations.map(({ key, ...rest }) => rest)).toEqual([relation('木', 'variant', 'One extra stroke', 'Dictionary p. 10'), relation('林', 'uncertain', 'Different component', 'Inscription A')].map(({ key, ...rest }) => rest))
   const id = await createEntry(db, values, seen(), [], who)
   const original = (await history(db, id)).find(row => row.kind === 'create')!
   expect((await getEntry(db, id))!.sightings[0].place).toBe('A shop sign in Tainan')
@@ -169,7 +169,7 @@ describe('search', () => {
     raw.prepare(`WITH RECURSIVE seq(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM seq WHERE x < ?)
       INSERT INTO entries(id, script, ids, created_by, created_at, updated_at)
       SELECT x, 'han', CASE WHEN x IN (1, 2, 300, 520) THEN '⿰木木' ELSE '⿱木木' END, ?, '2026', '2026' FROM seq`).run(n, who.actor)
-    raw.exec("INSERT INTO claims(entry_id, position, kind, value) SELECT id, 0, 'ids', ids FROM entries")
+    raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) SELECT id, 0, printf('ids%05d', id), 'ids', ids FROM entries")
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'all', id FROM entries")
     let before: number | null = null
     const found: number[] = []
@@ -676,6 +676,27 @@ describe('query cost', () => {
     expect(plans[3]).toMatch(/SEARCH s USING INDEX sightings_by_via \(via_id=\?\)/)
     expect(plans[4]).toMatch(/SEARCH s USING INDEX sightings_by_via \(via_id=\?\)/)
     for (const details of plans) expect(details).not.toMatch(/TEMP B-TREE|SCAN (?!.*USING)/)
+  })
+
+  test('a new record gives its claims the ids of their sightings through the indexes of the record', async () => {
+    const written: string[] = []
+    const traced = { prepare(sql: string) { written.push(sql); return db.prepare(sql) }, batch: (statements: D1PreparedStatement[]) => db.batch(statements) } as D1Database
+    // A record whose claims name no sighting writes neither statement.
+    await createEntry(traced, fields({ claims: [claim('meaning', 'east')] }), seen(), [], who)
+    expect(written.filter(sql => /^UPDATE (claims SET sightings|revisions SET snapshot)/.test(sql))).toEqual([])
+    await createEntry(traced, fields({ claims: [claim('meaning', 'east', null, { sightings: [1] })] }), seen(), [], who)
+    const cited = written.filter(sql => /^UPDATE (claims SET sightings|revisions SET snapshot)/.test(sql)).map(sql => plan(sql, []).join('\n'))
+    expect(cited).toHaveLength(2)
+    expect(cited[0]).toMatch(/SEARCH claims USING INDEX claims_by_entry \(entry_id=\?\)/)
+    expect(cited[0]).toMatch(/SEARCH sightings USING COVERING INDEX sightings_by_entry \(entry_id=\?\)/)
+    expect(cited[1]).toMatch(/SEARCH revisions USING INDEX revisions_by_entry \(entry_id=\?\)/)
+    expect(cited[1]).toMatch(/SEARCH k USING INDEX claims_by_key \(entry_id=\? AND key=\?\)/)
+    // Nothing is read whole but the sequence row, the lists a claim carries and the record's own sightings.
+    for (const details of cited) expect(details).not.toMatch(/^SCAN (entries|claims|revisions|sightings|k)\b/m)
+  })
+
+  test('a record reads its claims in order from their index', () => {
+    expect(plan('SELECT key, kind, value, data, sightings, under FROM claims WHERE entry_id = ? ORDER BY position', [1]).join('\n')).toMatch(/^SEARCH claims USING INDEX claims_by_entry \(entry_id=\?\)$/)
   })
 
   test('the test sees a missing index', () => {

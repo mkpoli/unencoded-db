@@ -6,7 +6,7 @@ import { CONTEXTS, isScript, isStatus, NEEDS, parseSightingTypes, SIGHTING_TYPES
 import { cleanIds, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
-import { parseClaims, primaryIdsOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
+import { mapSightings, parseClaims, primaryIdsOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
 import { genreOf } from '$lib/genres'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
@@ -213,9 +213,11 @@ const SIGHTING_SEQ = "(SELECT seq FROM sqlite_sequence WHERE name = 'sightings')
 // `owner` is an id to bind or one of the sequence reads above, for a row made in the same batch.
 const owned = (owner: number | string) => ({ sql: typeof owner === 'number' ? '?' : owner, values: typeof owner === 'number' ? [owner] : [] })
 
+const CLAIM_COLUMNS = ['key', 'kind', 'value', 'data', 'sightings', 'under'] as const
+
 function insertClaims(db: D1Database, entry: number | string, claims: readonly Claim[]) {
   const { sql, values } = owned(entry)
-  return db.prepare(`INSERT INTO claims(entry_id, position, kind, value, data, sighting_id) SELECT ${sql}, key, json_extract(value, '$.kind'), json_extract(value, '$.value'), json_extract(value, '$.data'), json_extract(value, '$.sighting_id') FROM json_each(?)`).bind(...values, JSON.stringify(claims))
+  return db.prepare(`INSERT INTO claims(entry_id, position, ${CLAIM_COLUMNS.join(', ')}) SELECT ${sql}, key, ${CLAIM_COLUMNS.map(column => `json_extract(value, '$.${column}')`).join(', ')} FROM json_each(?)`).bind(...values, JSON.stringify(claims))
 }
 
 function insertMedia(db: D1Database, sighting: number | string, media: readonly StoredImage[]) {
@@ -223,8 +225,17 @@ function insertMedia(db: D1Database, sighting: number | string, media: readonly 
   return db.prepare(`INSERT INTO sighting_media(sighting_id, position, ${IMAGE_FIELDS.join(', ')}) SELECT ${sql}, key, ${IMAGE_FIELDS.map(field => `json_extract(value, '$.${field}')`).join(', ')} FROM json_each(?)`).bind(...values, JSON.stringify(media.slice(0, MEDIA_MAX)))
 }
 
-// A claim may rest only on a sighting of its own record.
-const ownClaims = (claims: readonly Claim[], sightings: { id: number }[]) => claims.map(claim => claim.sighting_id && !sightings.some(sighting => sighting.id === claim.sighting_id) ? { ...claim, sighting_id: null } : claim)
+// A claim may rest only on sightings of its own record. A hidden one is still the record's, so a claim
+// keeps naming it and the page leaves it out until it is shown again.
+function ownClaims(claims: readonly Claim[], sightings: { id: number }[]) {
+  const own = new Set(sightings.map(sighting => sighting.id))
+  return mapSightings(claims, id => own.has(id) ? id : null)
+}
+
+// A record that is being made names the sightings behind a claim by their place among its own, from 1.
+// Once they are rows, the claims take their ids, and the version the journal opened with takes them too.
+const CITED_BY_PLACE = `UPDATE claims SET sightings = (SELECT json_group_array((SELECT s.id FROM (SELECT id, row_number() OVER (ORDER BY id) AS place FROM sightings WHERE entry_id = claims.entry_id) s WHERE s.place = named.value)) FROM json_each(claims.sightings) named) WHERE entry_id = ${ENTRY_SEQ} AND sightings != '[]'`
+const CITED_IN_SNAPSHOT = `UPDATE revisions SET snapshot = json_set(snapshot, '$.claims', json((SELECT json_group_array(json(json_set(claim.value, '$.sightings', json((SELECT k.sightings FROM claims k WHERE k.entry_id = revisions.entry_id AND k.key = json_extract(claim.value, '$.key')))))) FROM json_each(revisions.snapshot, '$.claims') claim))) WHERE entry_id = ${ENTRY_SEQ} AND kind = 'create'`
 
 // The citation is the source's identity: the same five fields are the same row, whether a sighting cites
 // it as its work or as where it was found.
@@ -258,11 +269,13 @@ const OCCURRENCE_MARKS = OCCURRENCE_FIELDS.map(() => '?').join(', ')
 export type SightingDraft = { fields: SightingFields; media: StoredImage[] }
 
 // `more` are further sightings the record starts with. They go in the same batch as the record and its
-// first sighting, so all of them are saved or none is.
+// first sighting, so all of them are saved or none is. The sightings have no ids before this write, so a
+// claim of `fields` names the ones that support it by their place among them: 1 is `sighting`, 2 the
+// first of `more`.
 export async function createEntry(db: D1Database, fields: EntryFields, sighting: SightingFields, media: StoredImage[], who: Who, more: SightingDraft[] = []) {
   const at = now()
-  const claims = fields.claims.map(claim => ({ ...claim, sighting_id: null }))
   const drafts = [{ fields: sighting, media }, ...more]
+  const claims = mapSightings(fields.claims, place => Number.isInteger(place) && place >= 1 && place <= drafts.length ? place : null)
   const sources = await Promise.all(drafts.map(draft => sourceOf(db, draft.fields)))
   const summary = summarize(drafts.map(draft => ({ ...draft.fields, media: draft.media })))
   const tags = [...new Set(tagsOf({ ...fields, merged_into: null, hidden_at: null } as unknown as Entry, claims, summary))]
@@ -281,6 +294,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
       db.prepare(`INSERT INTO revisions(entry_id, sighting_id, kind, rev, snapshot, actor, at, ip_hash) VALUES(${ENTRY_SEQ}, ${SIGHTING_SEQ}, 'sighting', 1, ?, ?, ?, ?)`)
         .bind(sightingSnapshot(draft.fields, draft.media), who.actor, at, who.ip),
     ]),
+    ...(claims.some(claim => claim.sightings.length) ? [db.prepare(CITED_BY_PLACE), db.prepare(CITED_IN_SNAPSHOT)] : []),
     db.prepare(`UPDATE entries SET ${SUMMARY_SET} WHERE id = ${ENTRY_SEQ}`).bind(...summaryValues(claims, summary)),
     db.prepare(`INSERT INTO entry_tags(tag, entry_id) SELECT value, ${ENTRY_SEQ} FROM json_each(?)`).bind(JSON.stringify(tags)),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),
@@ -556,9 +570,9 @@ const CITATION = 'LEFT JOIN sources c ON c.id = s.source_id LEFT JOIN sources v 
 
 export const getEntryRow = (db: D1Database, id: number) => db.prepare('SELECT * FROM entries WHERE id = ?').bind(id).first<Entry>()
 
-type ClaimRow = { kind: string; value: string; data: string | null; sighting_id: number | null }
-const toClaim = (row: ClaimRow): Claim => ({ kind: row.kind as Claim['kind'], value: row.value, data: row.data ? JSON.parse(row.data) : null, sighting_id: row.sighting_id })
-export const claimRows = async (db: D1Database, id: number) => (await db.prepare('SELECT kind, value, data, sighting_id FROM claims WHERE entry_id = ? ORDER BY position').bind(id).all<ClaimRow>()).results.map(toClaim)
+type ClaimRow = { key: string; kind: string; value: string; data: string | null; sightings: string; under: string }
+const toClaim = (row: ClaimRow): Claim => ({ key: row.key, kind: row.kind as Claim['kind'], value: row.value, data: row.data ? JSON.parse(row.data) : null, sightings: JSON.parse(row.sightings), under: JSON.parse(row.under) })
+export const claimRows = async (db: D1Database, id: number) => (await db.prepare(`SELECT ${CLAIM_COLUMNS.join(', ')} FROM claims WHERE entry_id = ? ORDER BY position`).bind(id).all<ClaimRow>()).results.map(toClaim)
 
 type MediaRow = StoredImage & { sighting_id: number }
 function withMedia<T extends { id: number }>(sightings: T[], media: MediaRow[]) {
@@ -800,7 +814,7 @@ export async function exportPage(db: D1Database, after: number, limit: number, s
     lastSighting = sighting?.id ?? null
   }
   if (page.length) {
-    const { results } = await db.prepare(`SELECT entry_id, kind, value, data, sighting_id FROM claims WHERE entry_id IN (SELECT value FROM json_each(?)) ORDER BY entry_id, position`).bind(JSON.stringify(page.map(entry => entry.id))).all<ClaimRow & { entry_id: number }>()
+    const { results } = await db.prepare(`SELECT entry_id, ${CLAIM_COLUMNS.join(', ')} FROM claims WHERE entry_id IN (SELECT value FROM json_each(?)) ORDER BY entry_id, position`).bind(JSON.stringify(page.map(entry => entry.id))).all<ClaimRow & { entry_id: number }>()
     const found = new Map(page.map(entry => [entry.id, entry.claims]))
     for (const row of results) found.get(row.entry_id)?.push(toClaim(row))
   }

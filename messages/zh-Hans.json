@@ -207,6 +207,7 @@
   "entry.addSightingHint": "更多出处可以增强记录的证据。",
   "entry.firstAdded": "由{name}添加，{date}",
   "sighting.by": "由{name}记录",
+  "sighting.supports": "佐证",
   "sighting.edit": "编辑此证据",
   "sighting.addAnother": "从这里添加另一个字",
   "sighting.evidence": "下载IRG证据图片",
@@ -384,5 +385,6 @@
   "error.redact": "此版本是当前版本，或内容已经删除。",
   "error.ids": "最多填写20个描述，每个不超过200个字符。",
   "error.readings": "读音最多20项，每项不超过200字；释义最多20项，每项不超过500字。",
+  "error.links": "请检查各条目所对应的释义和读音，每条最多可选20项证据。",
   "error.tags": "最多30个标签，每个不超过40个字符。"
 }

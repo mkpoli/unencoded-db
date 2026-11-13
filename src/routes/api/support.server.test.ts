@@ -8,7 +8,7 @@ function fixture() {
   raw.exec(`INSERT INTO people(id,name,created_at) VALUES('a','anon','2026-01-01');
     INSERT INTO entries(id,script,ids,created_by,created_at,updated_at) VALUES(1,'han','⿰亻木','a','2026','2026'),(2,'han','⿰亻木','a','2026','2026');
     INSERT INTO sightings(entry_id,first_entry,place,created_by,created_at,updated_at) VALUES(1,1,'=formula','a','2026','2026');
-    INSERT INTO claims(entry_id,position,kind,value) VALUES(1,0,'ids','⿰亻木'),(2,0,'ids','⿰亻木');`)
+    INSERT INTO claims(entry_id,position,key,kind,value) VALUES(1,0,'ids00001','ids','⿰亻木'),(2,0,'ids00002','ids','⿰亻木');`)
   const event = (path: string) => ({ url: new URL(path, 'https://example.test'), platform: { env: { DB: db } } }) as any
   return { raw, event }
 }
@@ -24,10 +24,10 @@ test('match normalizes IDS and excludes hidden records', async () => {
 test('export pages JSON and escapes CSV cells', async () => {
   const { event, raw } = fixture()
   const data = { relationship: 'variant', difference: 'extra stroke', evidence: 'source' }
-  raw.prepare("INSERT INTO claims(entry_id, position, kind, value, data) VALUES (1, 1, 'relation', '木', ?)").run(JSON.stringify(data))
+  raw.prepare("INSERT INTO claims(entry_id, position, key, kind, value, data) VALUES (1, 1, 'rela0001', 'relation', '木', ?)").run(JSON.stringify(data))
   const response = await exportEntries(event('/api/entries?limit=1'))
   const body = await response.json() as { entries: { id: number; evidence: unknown[]; claims: unknown[] }[]; next: number | null }
-  expect(body.entries[0].claims).toEqual([{ kind: 'ids', value: '⿰亻木', data: null, sighting_id: null }, { kind: 'relation', value: '木', data, sighting_id: null }])
+  expect(body.entries[0].claims).toEqual([{ key: 'ids00001', kind: 'ids', value: '⿰亻木', data: null, sightings: [], under: [] }, { key: 'rela0001', kind: 'relation', value: '木', data, sightings: [], under: [] }])
   expect(body.entries).toHaveLength(1)
   expect(body.entries[0].evidence).toHaveLength(1)
   expect(body.next).toBe(1)

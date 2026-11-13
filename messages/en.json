@@ -207,6 +207,7 @@
   "entry.addSightingHint": "Each further source makes the record stronger.",
   "entry.firstAdded": "Added by {name}, {date}",
   "sighting.by": "Recorded by {name}",
+  "sighting.supports": "Supports",
   "sighting.edit": "Edit this evidence",
   "sighting.addAnother": "Add another character from here",
   "sighting.evidence": "Download for IRG",
@@ -384,5 +385,6 @@
   "error.redact": "This version is current or already redacted.",
   "error.ids": "Use up to 20 descriptions, each 200 characters or fewer.",
   "error.readings": "Use up to 20 readings of up to 200 characters, and 20 meanings of up to 500.",
+  "error.links": "Check the meanings and readings each row is tied to, and choose up to 20 pieces of evidence for each.",
   "error.tags": "Use up to 30 tags of up to 40 characters each."
 }

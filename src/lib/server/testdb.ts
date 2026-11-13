@@ -7,7 +7,12 @@ export function openTestDb() {
   const raw = new Database(':memory:')
   const migrations = join(import.meta.dir, '../../../migrations')
   for (const name of readdirSync(migrations).sort()) raw.exec(readFileSync(join(migrations, name), 'utf8'))
-  const db = {
+  return { db: d1Over(raw), raw }
+}
+
+/** The D1 interface the store uses, over a SQLite database that is already open. */
+export function d1Over(raw: Database) {
+  return {
     async batch(statements: { sync(): unknown[] }[]) {
       return raw.transaction(() => statements.map(statement => ({ results: statement.sync() })))()
     },
@@ -26,5 +31,4 @@ export function openTestDb() {
       return make([])
     },
   } as unknown as D1Database
-  return { db, raw }
 }

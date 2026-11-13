@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { newClaim } from '$lib/claims'
 import { createEntry, editEntry, globalHistoryStatement, HISTORY_PAGE, type EntryFields, type SightingFields } from '$lib/server/entries'
 import { createPerson } from '$lib/server/people'
 import { openTestDb } from '$lib/server/testdb'
@@ -48,7 +49,7 @@ test('global history hides private and merged targets and advances through bound
 test('global history carries the old version of every readable revision', async () => {
   const { db } = openTestDb()
   const person = await createPerson(db)
-  const fields: EntryFields = { script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims: [{ kind: 'ids', value: '⿰木木', data: null, sighting_id: null }] }
+  const fields: EntryFields = { script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims: [newClaim('ids', '⿰木木')] }
   const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
   const id = await createEntry(db, fields, sighting, [], { actor: person.id, ip: null })
   await editEntry(db, id, 1, { ...fields, description: 'Later' }, { actor: person.id, ip: null }, 'Corrected')

@@ -101,6 +101,52 @@ test('a record is saved with every sighting of the form', async () => {
   expect(raw.query('SELECT sightings, cover_place FROM entries').get()).toEqual({ sightings: 3, cover_place: 'Page 12' })
 })
 
+// A meaning, a reading under it and a related character under both, as the rows of the form send them.
+const linked = {
+  ids: '⿰山東',
+  meaning: 'east', meaning_key: 'mean0001',
+  reading: 'tung', reading_doculect: 'hak', reading_key: 'read0001', 'under.read0001': 'mean0001',
+  related_characters_present: '1', related_character: '東', related_relationship: 'usage', related_difference: '', related_evidence: '', related_key: 'rela0001',
+  'under.rela0001': ['mean0001', 'read0001'],
+}
+
+test('a claim names the evidence of the form by its place, and is saved with the ids', async () => {
+  const { event, raw } = fixture()
+  // An earlier record, so that a place and an id are different numbers.
+  await expect(actions.default(event(page([{ place: 'Elsewhere', url: 'https://example.test/0' }])))).rejects.toMatchObject({ status: 303 })
+  const form = page([{}, { place: 'Page 12', url: 'https://example.test/12' }, { place: 'Page 40', url: 'https://example.test/40' }],
+    { ...linked, 'sightings.mean0001': ['2', '3'], 'sightings.read0001': ['1', '3', '9'], 'sightings.rela0001': '2' })
+  await expect(actions.default(event(form))).rejects.toMatchObject({ status: 303, location: '/en/entry/2' })
+  expect(raw.query('SELECT id, place FROM sightings WHERE entry_id = 2 ORDER BY id').all()).toEqual([{ id: 2, place: 'Page 12' }, { id: 3, place: 'Page 40' }])
+  // The first section was left empty and the ninth does not exist, so neither is evidence of anything.
+  const stored = [
+    { key: 'read0001', kind: 'reading', sightings: '[3]', under: '["mean0001"]' },
+    { key: 'mean0001', kind: 'meaning', sightings: '[2,3]', under: '[]' },
+    { key: 'rela0001', kind: 'relation', sightings: '[2]', under: '["mean0001","read0001"]' },
+  ]
+  expect(raw.query("SELECT key, kind, sightings, under FROM claims WHERE entry_id = 2 AND kind != 'ids' ORDER BY position").all()).toEqual(stored)
+  const created = JSON.parse((raw.query("SELECT snapshot FROM revisions WHERE entry_id = 2 AND kind = 'create'").get() as { snapshot: string }).snapshot)
+  expect(created.claims.slice(1).map((claim: any) => ({ key: claim.key, kind: claim.kind, sightings: JSON.stringify(claim.sightings), under: JSON.stringify(claim.under) }))).toEqual(stored)
+})
+
+test('a form that is sent back keeps each claim on the evidence it named', async () => {
+  const { event, count } = fixture()
+  const form = page([{}, { place: 'Page 12', url: 'https://example.test/12' }, { place: 'Page 40', note: 'no picture' }], { ...linked, 'sightings.mean0001': ['1', '2', '3'], 'sightings.rela0001': '3' })
+  const result = await actions.default(event(form)) as any
+  expect(result).toMatchObject({ status: 400, data: { error: 'evidence', sighting: 2 } })
+  // The page shows the two sections that were filled in, and the claims name them by their new places.
+  expect(result.data.values.sightings).toHaveLength(2)
+  expect(result.data.values.claims.slice(1).map((claim: any) => [claim.key, claim.sightings, claim.under])).toEqual([['read0001', [], ['mean0001']], ['mean0001', [1, 2], []], ['rela0001', [2], ['mean0001', 'read0001']]])
+  expect(count('claims')).toBe(0)
+})
+
+test('a claim under something that is not in the form stops it', async () => {
+  const { event, count } = fixture()
+  const result = await actions.default(event(page([{ place: 'Page 12', url: 'https://example.test/12' }], { ...linked, 'under.rela0001': ['mean0001', 'nosuch00'] }))) as any
+  expect(result).toMatchObject({ status: 400, data: { error: 'links', sighting: 0 } })
+  expect(count('entries')).toBe(0)
+})
+
 test('a later sighting without a picture or a link stops the whole form', async () => {
   const { event, count, objects } = fixture()
   const form = page([{ place: 'Page 12', title: 'Zidian', pictures: [picture()] }, { place: 'Page 40', title: 'Zidian', note: 'no picture' }], { ids: '⿰山東' })
