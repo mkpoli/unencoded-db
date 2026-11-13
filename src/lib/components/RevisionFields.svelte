@@ -1,7 +1,8 @@
 <script lang="ts">
-  // A past version of a record or a sighting, as it read then. A record's claims are listed by kind.
+  // A past version of a record or a sighting, as it read then. A record's claims are listed by kind, each
+  // with the claims it held under and the sightings it rested on.
   import { doculectKey } from '$lib/doculects'
-  import { CLAIM_KINDS, claimsOf, compositionOf, type Claim, type ClaimKind } from '$lib/claims'
+  import { CLAIM_KINDS, claimsOf, compositionOf, scopesOf, type Claim, type ClaimKind } from '$lib/claims'
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { encodingSetLabel } from '$lib/encodings'
@@ -42,6 +43,11 @@
   }
 </script>
 
+{#snippet links(claim: Claim, claims: Claim[])}
+  {#each scopesOf(claims, claim) as scope (scope.key)}<span class="scope"><span class="kind">{t(KIND_LABELS[scope.kind])}</span><span class="text">{shown(scope, claims)}</span></span>{/each}
+  {#each claim.sightings as id (id)}<span class="basis">#{id}</span>{/each}
+{/snippet}
+
 {#if sighting}
   {@const source = fields as SightingFields}
   {@const types = parseSightingTypes(source.types)}
@@ -73,7 +79,7 @@
       {#each CLAIM_KINDS.filter(kind => kind !== 'relation') as kind}
         {@const items = claimsOf(entry.claims, kind)}
         {#if items.length}
-          <div class:wide={WIDE.includes(kind)}><dt>{t(KIND_LABELS[kind])}</dt><dd><ul class="claims" class:ids={kind === 'ids'}>{#each items as claim}<li>{shown(claim, entry.claims)}</li>{/each}</ul></dd></div>
+          <div class:wide={WIDE.includes(kind)}><dt>{t(KIND_LABELS[kind])}</dt><dd><ul class="claims" class:ids={kind === 'ids'}>{#each items as claim (claim.key)}<li>{shown(claim, entry.claims)}{@render links(claim, entry.claims)}</li>{/each}</ul></dd></div>
         {/if}
       {/each}
     </dl>
@@ -84,6 +90,7 @@
           <dl class="facts relation">
             <div><dt>{t('field.relatedCharacter')}</dt><dd class="relation-character">{relation.value}</dd></div>
             <div><dt>{t('field.relatedRelationship')}</dt><dd>{t(`relationship.${String(relation.data?.relationship ?? '')}`)}</dd></div>
+            {#if relation.under.length || relation.sightings.length}<div class="wide"><dd class="linked">{@render links(relation, entry.claims)}</dd></div>{/if}
             {#if relation.data?.difference}<div class="wide"><dt>{t('field.relatedDifference')}</dt><dd>{relation.data.difference}</dd></div>{/if}
             {#if relation.data?.evidence}<div class="wide"><dt>{t('field.relatedEvidence')}</dt><dd>{relation.data.evidence}</dd></div>{/if}
           </dl>
@@ -109,5 +116,10 @@
   .relations { display: flex; flex-direction: column; gap: 10px }
   .relation { grid-template-columns: 1fr; padding: 12px 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface) }
   .relation-character { font-size: 20px }
+  .claims li, .linked { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px }
+  .scope { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 100%; padding: 1px 9px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px }
+  .scope .kind { flex: none; color: var(--muted); font-size: 11.5px }
+  .scope .text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .basis { color: var(--muted); font-size: 11.5px; white-space: nowrap }
   .url { font-size: 12.5px; overflow-wrap: anywhere }
 </style>
