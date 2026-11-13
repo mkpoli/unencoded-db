@@ -32,7 +32,7 @@
         </div>
       {/if}
       <PictureList bind:this={pictures} max={room} onready={(working) => busy = working} />
-      <SightingFields values={form?.values ?? data.sighting} onphoto={file => pictures?.offer(file)} />
+      <SightingFields values={form?.values ?? data.sighting} onphotos={files => pictures?.offer(files)} />
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" value={form?.summary ?? ''} /></div>
     </section>
     {#if form?.error === 'conflict'}<button class="button" type="submit" disabled>{t('form.save')}</button>{:else}<SubmitBar {busy} cancel={href(`/entry/${data.id}`)} />{/if}

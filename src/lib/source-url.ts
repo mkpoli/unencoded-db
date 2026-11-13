@@ -1,7 +1,7 @@
-import { MAX_IMAGE_BYTES } from '$lib/limits'
+import { MAX_IMAGE_BYTES, MEDIA_MAX } from '$lib/limits'
 
 // X and Twitter links carry share tracking in `a` and `s`. A post link also names its author and
-// text, often a picture that can stand as the evidence image, and sometimes the book the picture is
+// text, often pictures that can stand as the evidence images, and sometimes the book the picture is
 // from, all read through the FxTwitter API's thread endpoint.
 
 const POST_HOSTS = new Set(['x.com', 'twitter.com', 'mobile.x.com', 'mobile.twitter.com'])
@@ -39,7 +39,11 @@ export function cleanSourceUrl(value: string): string {
 /** A work a post names, with the volume or part when the post gives one. */
 export type Work = { title: string; page: string | null }
 /** What a post contributes to the evidence fields. `work` is the book its author says the picture is from. */
-export type PostInfo = { place: string; author: string | null; title: string; url: string | null; date: string | null; work: Work | null }
+export type PostInfo = { place: string; publisher: string; author: string | null; title: string; url: string | null; date: string | null; work: Work | null }
+
+// Twitter took the name X on 24 July 2023, so a post is published by the service as it was named that day.
+const RENAMED = Date.UTC(2023, 6, 24)
+const serviceName = (posted: Date | null) => posted && posted.getTime() < RENAMED ? 'Twitter' : 'X'
 
 const NUMBER = '[0-9０-９〇一二三四五六七八九十百廿卅]+'
 const VOLUME = `(?:(?:巻|卷|第)[\\s　]*${NUMBER}[\\s　]*(?:巻|卷|冊|册)?|${NUMBER}[\\s　]*(?:巻|卷|冊|册))`
@@ -81,8 +85,10 @@ export function postInfo(payload: unknown): PostInfo | null {
   // The thread holds the author's own posts around this one; anyone else's reply is not read.
   const own = (Array.isArray(thread) ? thread : []).filter((item): item is Post => Boolean(item) && typeof item === 'object' && (item as Post).id !== post.id && handle !== null && handleOf(item as Post) === handle)
   const stamp = typeof post.created_timestamp === 'number' ? new Date(post.created_timestamp * 1000) : null
+  const service = serviceName(stamp && !Number.isNaN(stamp.getTime()) ? stamp : null)
   return {
-    place: 'X',
+    place: service,
+    publisher: service,
     author: handle ? `@${handle}` : null,
     title: titleFrom(postText(post)),
     url: handle && typeof post.id === 'string' && /^\d{1,20}$/.test(post.id) ? `https://x.com/${handle}/status/${post.id}` : null,
@@ -112,11 +118,12 @@ function titleFrom(text: string): string {
 
 type Photo = { url: string; width?: number; height?: number }
 
-/** The first photo in an FxTwitter response, limited to the image host the API reports. */
-export function firstPhoto(payload: unknown): Photo | null {
-  if (!payload || typeof payload !== 'object') return null
+/** The photos of the post in an FxTwitter response, in the post's order, limited to the image host the API reports. */
+export function postPhotos(payload: unknown): Photo[] {
+  const found: Photo[] = []
+  if (!payload || typeof payload !== 'object') return found
   const media = (payload as { status?: { media?: { photos?: unknown; all?: unknown } } }).status?.media
-  if (!media) return null
+  if (!media) return found
   const candidates = Array.isArray(media.photos) && media.photos.length ? media.photos : Array.isArray(media.all) ? media.all : []
   for (const candidate of candidates) {
     if (!candidate || typeof candidate !== 'object') continue
@@ -129,20 +136,21 @@ export function firstPhoto(payload: unknown): Photo | null {
       continue
     }
     if (url.protocol !== 'https:' || url.hostname !== PHOTO_HOST) continue
-    return {
+    found.push({
       url: url.toString(),
       width: typeof item.width === 'number' ? item.width : undefined,
       height: typeof item.height === 'number' ? item.height : undefined,
-    }
+    })
+    if (found.length >= MEDIA_MAX) break
   }
-  return null
+  return found
 }
 
-export type PostLookup = { info: PostInfo; photo: File | null }
+export type PostLookup = { info: PostInfo; photos: File[] }
 
 /**
- * A post's citation fields and, when it has one, its first photo as a file ready for the image
- * field. Answers null when the API cannot read the post.
+ * A post's citation fields and its photos as files ready for the image fields, in the post's order. A photo
+ * that cannot be fetched is left out. Answers null when the API cannot read the post.
  */
 export async function fetchPost(id: string, signal?: AbortSignal): Promise<PostLookup | null> {
   const response = await fetch(`${API_ORIGIN}/2/thread/${encodeURIComponent(id)}`, {
@@ -155,9 +163,8 @@ export async function fetchPost(id: string, signal?: AbortSignal): Promise<PostL
   const payload = await response.json()
   const info = postInfo(payload)
   if (!info) return null
-  const photo = firstPhoto(payload)
-  const image = photo ? await downloadPhoto(photo.url, signal) : null
-  return { info, photo: image ? photoFile(image, id) : null }
+  const images = await Promise.all(postPhotos(payload).map(photo => downloadPhoto(photo.url, signal).catch(() => null)))
+  return { info, photos: images.flatMap((image, index) => image ? [photoFile(image, `${id}-${index + 1}`)] : []) }
 }
 
 function photoFile(image: Blob, id: string): File {

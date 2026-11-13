@@ -18,7 +18,7 @@
   <form class="stack" method="POST" enctype="multipart/form-data">
     <section class="panel stack">
       <PictureList bind:this={pictures} max={MEDIA_MAX} onready={(working) => busy = working} />
-      <SightingFields values={form?.values ?? {}} onphoto={file => pictures?.offer(file)} />
+      <SightingFields values={form?.values ?? {}} onphotos={files => pictures?.offer(files)} />
     </section>
     <SubmitBar {busy} label={t('entry.addSighting')} cancel={href(`/entry/${data.id}`)} />
   </form>
