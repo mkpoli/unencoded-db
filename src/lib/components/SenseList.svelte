@@ -14,7 +14,7 @@
   const meanings = $derived(claimsOf(claims, 'meaning'))
   const readings = $derived(claimsOf(claims, 'reading'))
   const relations = $derived(claimsOf(claims, 'relation'))
-  const general = $derived(readings.filter(reading => !reading.under.length))
+  const general = $derived(readings.filter(reading => !meanings.some(meaning => reading.under.includes(meaning.key))))
   // A reading under several meanings is shown with each, and is the link's target where it is shown first.
   // A related character under a reading stands beside it, unless the meaning it is shown with lists it.
   const home = $derived(new Map(readings.map(reading => [reading.key, meanings.find(meaning => reading.under.includes(meaning.key))?.key])))
