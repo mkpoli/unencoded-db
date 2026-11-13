@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
-import { postInfo, workMention } from './source-url'
+import { MEDIA_MAX } from './limits'
+import { postInfo, postPhotos, workMention } from './source-url'
 
 test('a work is read from book-title brackets or from a line of title and volume', () => {
   expect(workMention(['『和名類聚抄』巻二十に見える字'])).toEqual({ title: '和名類聚抄', page: '巻二十' })
@@ -29,7 +30,7 @@ const status = { id: '2119717540968738934', text: 'どんな「器」見せて�
 test('a post whose author names the book in a reply gives the book', () => {
   const info = postInfo({ status, thread: [status, { id: '2119717622229110988', text: '和名類聚抄 20巻', author }] })
   expect(info).toEqual({
-    place: 'X', author: '@someone', title: 'どんな「器」見せてんだよ笑 ちなみにU外字です',
+    place: 'X', publisher: 'X', author: '@someone', title: 'どんな「器」見せてんだよ笑 ちなみにU外字です',
     url: 'https://x.com/someone/status/2119717540968738934', date: '2026-11-09', work: { title: '和名類聚抄', page: '20巻' },
   })
 })
@@ -42,4 +43,20 @@ test('a reply by someone else is not read', () => {
 test('a response without a post gives nothing', () => {
   expect(postInfo({ code: 404 })).toBeNull()
   expect(postInfo(null)).toBeNull()
+})
+
+test('every photo of the post is read, in order, from the image host only', () => {
+  const photo = (name: string, host = 'pbs.twimg.com') => ({ type: 'photo', url: `https://${host}/media/${name}.jpg?name=orig`, width: 10, height: 20 })
+  const payload = { status: { media: { photos: [photo('a'), photo('b', 'example.com'), { type: 'video', url: 'https://pbs.twimg.com/v.mp4' }, photo('c')] } } }
+  expect(postPhotos(payload).map(item => item.url)).toEqual(['https://pbs.twimg.com/media/a.jpg?name=orig', 'https://pbs.twimg.com/media/c.jpg?name=orig'])
+  expect(postPhotos({ status: { media: { photos: Array.from({ length: 30 }, (_, index) => photo(`p${index}`)) } } })).toHaveLength(MEDIA_MAX)
+  expect(postPhotos({ status: {} })).toEqual([])
+  expect(postPhotos(null)).toEqual([])
+})
+
+test('a post is published by Twitter before the rename and by X from it', () => {
+  const at = (date: string) => postInfo({ status: { ...status, created_timestamp: Date.parse(date) / 1000 }, thread: [] })
+  expect(at('2023-07-23T23:59:59Z')).toMatchObject({ publisher: 'Twitter', place: 'Twitter' })
+  expect(at('2023-07-24T00:00:00Z')).toMatchObject({ publisher: 'X', place: 'X' })
+  expect(postInfo({ status: { ...status, created_timestamp: undefined }, thread: [] })).toMatchObject({ publisher: 'X' })
 })

@@ -105,7 +105,7 @@
           {#if index > 0}<button type="button" class="text-button remove" aria-label={t('add.sightingRemove', { n: index + 1 })} onclick={() => remove(item.key)}>{t('form.remove')}</button>{/if}
           <input type="hidden" name={SIGHTING_START} />
           <PictureList bind:this={lists[item.key]} max={MEDIA_MAX} onready={working => preparing[item.key] = working} />
-          <SightingFields values={item.seen} onphoto={file => lists[item.key]?.offer(file)} />
+          <SightingFields values={item.seen} onphotos={files => lists[item.key]?.offer(files)} />
         </fieldset>
       {/each}
       {#if sightings.length < ADD_SIGHTINGS_MAX}<div><button type="button" class="text-button" onclick={add}>+ {t('entry.addSighting')}</button></div>{/if}

@@ -1,6 +1,6 @@
 <script lang="ts">
   // Where a character was seen. The place is the only line asked for; the reference IRG wants stays folded.
-  // A post link fills the place, title and author from the post, and hands its photo to `onphoto`. When the
+  // A post link fills the place, title and author from the post, and hands its photos to `onphotos`. When the
   // post's author names the book the picture is from, the book becomes the source and the post the via source.
   import { untrack } from 'svelte'
   import { CONTEXTS, SIGHTING_TYPES, STYLES, parseSightingTypes } from '$lib/scripts'
@@ -9,7 +9,7 @@
   import { t } from '$lib/t'
   import type { SightingFields } from '$lib/server/entries'
 
-  let { values = {}, requirePlace = true, onphoto }: { values?: Partial<SightingFields>; requirePlace?: boolean; onphoto?: (file: File | null) => void } = $props()
+  let { values = {}, requirePlace = true, onphotos }: { values?: Partial<SightingFields>; requirePlace?: boolean; onphotos?: (files: File[] | null) => void } = $props()
   const uid = $props.id()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
   const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.original_date || values.page || values.context || values.style || values.types || values.note))
@@ -24,24 +24,27 @@
   let fetching = $state(false), failed = $state(false)
 
   let page = $state(untrack(() => values.page ?? ''))
+  let publisher = $state(untrack(() => values.publisher ?? ''))
+  let viaPublisher = $state(untrack(() => values.via_publisher ?? ''))
   let viaUrl = $state(untrack(() => values.via_url ?? ''))
   let viaTitle = $state(untrack(() => values.via_title ?? ''))
   let viaAuthor = $state(untrack(() => values.via_author ?? ''))
   let viaDate = $state(untrack(() => values.via_report_date ?? ''))
 
   // The fields keep what someone typed; a value the last post gave is replaced by the next post's.
-  const blank = { place: '', title: '', author: '', page: '', viaUrl: '', viaTitle: '', viaAuthor: '', viaDate: '' }
+  const blank = { place: '', title: '', author: '', publisher: '', page: '', viaUrl: '', viaTitle: '', viaAuthor: '', viaPublisher: '', viaDate: '' }
   type Filled = typeof blank
   let posted: Filled | null = null
   function fill(info: PostInfo | null) {
-    const post = info ? { viaUrl: info.url ?? '', viaTitle: info.title, viaAuthor: info.author ?? '', viaDate: info.date ?? '' } : null
+    const post = info ? { viaUrl: info.url ?? '', viaTitle: info.title, viaAuthor: info.author ?? '', viaPublisher: info.publisher, viaDate: info.date ?? '' } : null
     const next: Filled | null = !info ? null
       : info.work && post ? { ...blank, ...post, place: [info.work.title, info.work.page].filter(Boolean).join(' '), title: info.work.title, page: info.work.page ?? '' }
-      : { ...blank, place: info.place, title: info.title, author: info.author ?? '' }
+      : { ...blank, place: info.place, title: info.title, author: info.author ?? '', publisher: info.publisher }
     const keep = (current: string, name: keyof Filled) => !current || current === posted?.[name] ? next?.[name] ?? '' : current
     place = keep(place, 'place'); title = keep(title, 'title'); author = keep(author, 'author'); page = keep(page, 'page')
+    publisher = keep(publisher, 'publisher'); viaPublisher = keep(viaPublisher, 'viaPublisher')
     viaUrl = keep(viaUrl, 'viaUrl'); viaTitle = keep(viaTitle, 'viaTitle'); viaAuthor = keep(viaAuthor, 'viaAuthor'); viaDate = keep(viaDate, 'viaDate')
-    if (title || author || page) open = true
+    if (title || author || publisher || page) open = true
     if (viaUrl) viaOpen = true
     // The post is where the character was found, so its link moves out of the source's own link.
     if (next?.viaUrl && viaUrl === next.viaUrl) { url = ''; lookedUp = '' }
@@ -55,7 +58,7 @@
     lookedUp = link
     fetching = false; failed = false
     const id = postId(link)
-    if (!id) { if (posted && !posted.viaUrl) { fill(null); onphoto?.(null) } return }
+    if (!id) { if (posted && !posted.viaUrl) { fill(null); onphotos?.(null) } return }
     const controller = new AbortController()
     const timer = setTimeout(async () => {
       fetching = true
@@ -63,8 +66,8 @@
         const found = await fetchPost(id, controller.signal)
         if (controller.signal.aborted) return
         fill(found?.info ?? null)
-        onphoto?.(found?.photo ?? null)
-        failed = !found?.photo
+        onphotos?.(found?.photos ?? null)
+        failed = !found?.photos.length
       } catch {
         if (!controller.signal.aborted) failed = true
       } finally { if (!controller.signal.aborted) fetching = false }
@@ -99,7 +102,7 @@
   <div class="grid-2">
     <div class="field"><label for="{uid}-title">{t('field.title')}</label><input id="{uid}-title" class="input" name="title" bind:value={title} maxlength="300" /></div>
     <div class="field"><label for="{uid}-author">{t('field.author')}</label><input id="{uid}-author" class="input" name="author" bind:value={author} maxlength="300" /></div>
-    <div class="field"><label for="{uid}-publisher">{t('field.publisher')}</label><input id="{uid}-publisher" class="input" name="publisher" value={values.publisher ?? ''} maxlength="300" /></div>
+    <div class="field"><label for="{uid}-publisher">{t('field.publisher')}</label><input id="{uid}-publisher" class="input" name="publisher" bind:value={publisher} maxlength="300" /></div>
     <div class="field"><label for="{uid}-page">{t('field.page')}</label><input id="{uid}-page" class="input" name="page" bind:value={page} maxlength="80" /></div>
     <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" value={values.report_date ?? ''} maxlength="40" /><p class="hint">{t('field.reportDateHint')}</p></div>
     <div class="field"><label for="{uid}-original_date">{t('field.originalDate')}</label><input id="{uid}-original_date" class="input" name="original_date" value={values.original_date ?? ''} maxlength="40" /><p class="hint">{t('field.originalDateHint')}</p></div>
@@ -117,7 +120,7 @@
   <div class="grid-2">
     <div class="field"><label for="{uid}-via_title">{t('field.title')}</label><input id="{uid}-via_title" class="input" name="via_title" bind:value={viaTitle} maxlength="300" /></div>
     <div class="field"><label for="{uid}-via_author">{t('field.author')}</label><input id="{uid}-via_author" class="input" name="via_author" bind:value={viaAuthor} maxlength="300" /></div>
-    <div class="field"><label for="{uid}-via_publisher">{t('field.publisher')}</label><input id="{uid}-via_publisher" class="input" name="via_publisher" value={values.via_publisher ?? ''} maxlength="300" /></div>
+    <div class="field"><label for="{uid}-via_publisher">{t('field.publisher')}</label><input id="{uid}-via_publisher" class="input" name="via_publisher" bind:value={viaPublisher} maxlength="300" /></div>
     <div class="field"><label for="{uid}-via_report_date">{t('field.reportDate')}</label><input id="{uid}-via_report_date" class="input" name="via_report_date" bind:value={viaDate} maxlength="40" /></div>
   </div>
 </details>

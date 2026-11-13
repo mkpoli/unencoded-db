@@ -1,6 +1,7 @@
 <script lang="ts">
   // The new pictures of a sighting, up to `max`. A pasted picture, or one held from another page, goes to
-  // the first empty picker; a source link's photo goes to the first picker unless someone chose its picture.
+  // the first empty picker. A source link's photos fill the empty pickers in order, each of which can be
+  // removed, and replace the photos an earlier link put there; pictures someone chose stay.
   // Where a form holds several sightings, each inside an element marked `data-sighting`, a pasted picture
   // goes to the sighting that has the focus, or to the first when none has.
   import { onMount, tick } from 'svelte'
@@ -20,18 +21,19 @@
 
   const free = () => visible.map(slot => pickers[slot]).find(picker => picker?.open())
 
-  /** Puts a photo from a source link in the first picker, or takes back the one it put there. */
-  export function offer(file: File | null) {
-    const first = pickers[visible[0]]
-    if (!first) return
-    if (file) { if (first.open(true)) void first.take(file, true) }
-    else if (first.fromPost()) first.clear()
+  /** Puts the photos of a source link in the empty pickers, or takes back the ones an earlier link put there. */
+  export async function offer(files: File[] | null) {
+    for (const slot of visible) if (pickers[slot]?.fromPost()) pickers[slot]!.clear()
+    const kept = slots.filter(slot => !pickers[slot]?.open())
+    slots = kept.length ? kept : [slots[0]]
+    await tick()
+    for (const file of files ?? []) await place(file, true)
   }
 
   /** Puts a picture in the first empty picker, adding one when all are taken. */
   export const add = (file: Blob) => place(file)
 
-  async function place(file: Blob) {
+  async function place(file: Blob, post = false) {
     let picker = free()
     if (!picker && visible.length < max) {
       const slot = next++
@@ -39,7 +41,7 @@
       await tick()
       picker = pickers[slot]
     }
-    await picker?.take(file)
+    await picker?.take(file, post)
   }
 
   const pasted = (event: ClipboardEvent) => {
