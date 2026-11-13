@@ -275,7 +275,7 @@ export type SightingDraft = { fields: SightingFields; media: StoredImage[] }
 export async function createEntry(db: D1Database, fields: EntryFields, sighting: SightingFields, media: StoredImage[], who: Who, more: SightingDraft[] = []) {
   const at = now()
   const drafts = [{ fields: sighting, media }, ...more]
-  const claims = mapSightings(fields.claims, place => place <= drafts.length ? place : null)
+  const claims = mapSightings(fields.claims, place => Number.isInteger(place) && place >= 1 && place <= drafts.length ? place : null)
   const sources = await Promise.all(drafts.map(draft => sourceOf(db, draft.fields)))
   const summary = summarize(drafts.map(draft => ({ ...draft.fields, media: draft.media })))
   const tags = [...new Set(tagsOf({ ...fields, merged_into: null, hidden_at: null } as unknown as Entry, claims, summary))]

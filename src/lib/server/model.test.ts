@@ -98,7 +98,8 @@ describe('claims', () => {
     const { db } = open()
     await createEntry(db, fields(), seen(), [], who)
     const sense = claim('meaning', 'east', null, { sightings: [1, 3] })
-    const claims = [claim('ids', '⿰山東'), claim('reading', 'tung', null, { sightings: [2], under: [sense.key] }), sense, claim('relation', '東', { relationship: 'usage' }, { sightings: [3, 4], under: [sense.key] })]
+    // A place is a whole number from 1: nothing else names a sighting of the form.
+    const claims = [claim('ids', '⿰山東'), claim('reading', 'tung', null, { sightings: [0, 2, 2.5], under: [sense.key] }), sense, claim('relation', '東', { relationship: 'usage' }, { sightings: [3, 4], under: [sense.key] })]
     const id = await createEntry(db, fields(claims), seen({ place: 'one' }), [], who, [{ fields: seen({ place: 'two' }), media: [] }, { fields: seen({ place: 'three' }), media: [] }])
     const found = (await getEntry(db, id))!
     const [one, two, three] = found.sightings.map(sighting => sighting.id)
