@@ -43,10 +43,8 @@
   }
 </script>
 
-{#snippet links(claim: Claim, claims: Claim[])}
-  {#each scopesOf(claims, claim) as scope (scope.key)}<span class="scope"><span class="kind">{t(KIND_LABELS[scope.kind])}</span><span class="text">{shown(scope, claims)}</span></span>{/each}
-  {#each claim.sightings as id (id)}<span class="basis">#{id}</span>{/each}
-{/snippet}
+{#snippet scopes(claim: Claim, claims: Claim[])}{#each scopesOf(claims, claim) as scope (scope.key)}<span class="scope"><span class="kind">{t(KIND_LABELS[scope.kind])}</span><span class="text">{shown(scope, claims)}</span></span>{/each}{/snippet}
+{#snippet bases(claim: Claim)}{#each claim.sightings as id (id)}<span class="basis">#{id}</span>{/each}{/snippet}
 
 {#if sighting}
   {@const source = fields as SightingFields}
@@ -79,7 +77,7 @@
       {#each CLAIM_KINDS.filter(kind => kind !== 'relation') as kind}
         {@const items = claimsOf(entry.claims, kind)}
         {#if items.length}
-          <div class:wide={WIDE.includes(kind)}><dt>{t(KIND_LABELS[kind])}</dt><dd><ul class="claims" class:ids={kind === 'ids'}>{#each items as claim (claim.key)}<li>{shown(claim, entry.claims)}{@render links(claim, entry.claims)}</li>{/each}</ul></dd></div>
+          <div class:wide={WIDE.includes(kind)}><dt>{t(KIND_LABELS[kind])}</dt><dd><ul class="claims" class:ids={kind === 'ids'}>{#each items as claim (claim.key)}<li>{shown(claim, entry.claims)}{@render scopes(claim, entry.claims)}{@render bases(claim)}</li>{/each}</ul></dd></div>
         {/if}
       {/each}
     </dl>
@@ -89,8 +87,8 @@
         {#each claimsOf(entry.claims, 'relation') as relation}
           <dl class="facts relation">
             <div><dt>{t('field.relatedCharacter')}</dt><dd class="relation-character">{relation.value}</dd></div>
-            <div><dt>{t('field.relatedRelationship')}</dt><dd>{t(`relationship.${String(relation.data?.relationship ?? '')}`)}</dd></div>
-            {#if relation.under.length || relation.sightings.length}<div class="wide"><dd class="linked">{@render links(relation, entry.claims)}</dd></div>{/if}
+            <div><dt>{t('field.relatedRelationship')}</dt><dd class="linked">{t(`relationship.${String(relation.data?.relationship ?? '')}`)}{@render scopes(relation, entry.claims)}</dd></div>
+            {#if relation.sightings.length}<div><dt>{t('field.basis')}</dt><dd class="linked">{@render bases(relation)}</dd></div>{/if}
             {#if relation.data?.difference}<div class="wide"><dt>{t('field.relatedDifference')}</dt><dd>{relation.data.difference}</dd></div>{/if}
             {#if relation.data?.evidence}<div class="wide"><dt>{t('field.relatedEvidence')}</dt><dd>{relation.data.evidence}</dd></div>{/if}
           </dl>
