@@ -1,4 +1,5 @@
 import { ENTRY_HISTORY_PAGE } from '$lib/server/entries'
+import { newClaim } from '$lib/claims'
 import { expect, test } from 'bun:test'
 import { createEntry, editEntry, redactRevision, editSighting, getEntry, setHidden, type EntryFields, type SightingFields } from '$lib/server/entries'
 import { createPerson } from '$lib/server/people'
@@ -140,9 +141,9 @@ test('snapshots expose only entry fields and ignore malformed snapshots', async 
 test('restoring an entry snapshot brings its claims back', async () => {
   const { db } = openTestDb()
   const person = await createPerson(db), who = { actor: person.id, ip: null }
-  const before = { ...fields, claims: [{ kind: 'ids' as const, value: '⿰亻木', data: null, sighting_id: null }, { kind: 'reading' as const, value: 'tung', data: null, sighting_id: null }] }
+  const before = { ...fields, claims: [newClaim('ids', '⿰亻木'), newClaim('reading', 'tung')] }
   const id = await createEntry(db, before, sighting, [], who)
-  await editEntry(db, id, 1, { ...fields, claims: [{ kind: 'meaning', value: 'east', data: null, sighting_id: null }] }, who, null)
+  await editEntry(db, id, 1, { ...fields, claims: [newClaim('meaning', 'east')] }, who, null)
   const rows = (await load({ params: { locale: 'en', id: String(id) }, platform: { env: { DB: db } } } as any) as any).rows
   expect(rows.find((row: any) => row.kind === 'create').fields.claims).toEqual(before.claims)
   const data = new FormData(); data.set('rev', '2'); data.set('revision', String(rows.find((row: any) => row.kind === 'create').id))

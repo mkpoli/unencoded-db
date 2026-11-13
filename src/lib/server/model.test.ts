@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { readClaims, type Claim } from '$lib/claims'
-import { addSighting, claimedBy, createEntry, editEntry, editSighting, exportPage, getEntry, getSighting, history, list, mediaVisible, redactRevision, restoreSighting, revertEntry, setHidden, sourcePage, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { newClaim, readClaims, type Claim } from '$lib/claims'
+import { addSighting, claimedBy, createEntry, editEntry, editSighting, exportPage, getEntry, getSighting, history, list, mediaVisible, mergeEntry, redactRevision, restoreSighting, revertEntry, setHidden, sourcePage, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { sightingSnapshot } from './revisions'
 import { openTestDb } from './testdb'
 
@@ -8,7 +8,7 @@ const who = { actor: 'p1', ip: null }
 const fields = (claims: Claim[] = []): EntryFields => ({ script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims })
 const seen = (extra: Partial<SightingFields> = {}): SightingFields => ({ place: 'a shop sign', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null, ...extra })
 const image = (name: string, box: string | null = null): StoredImage => ({ image_key: `${name}.jpg`, image_type: 'image/jpeg', image_w: 10, image_h: 10, thumb_key: `${name}-t.jpg`, box })
-const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null): Claim => ({ kind, value, data, sighting_id: null })
+const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null, links: Partial<Pick<Claim, 'sightings' | 'under'>> = {}): Claim => newClaim(kind, value, data, links)
 const book = { title: '字書', author: '某', publisher: '某社', report_date: '1900', url: null }
 
 function open() {
@@ -34,12 +34,13 @@ describe('claims', () => {
 
   test('an edit replaces the claims, a revert brings them back, and the journal holds both', async () => {
     const { db } = open()
-    const id = await createEntry(db, fields([claim('reading', 'tung')]), seen(), [], who)
+    const tung = claim('reading', 'tung')
+    const id = await createEntry(db, fields([tung]), seen(), [], who)
     expect(await editEntry(db, id, 1, fields([claim('reading', 'dong'), claim('meaning', 'east hill')]), who, null)).toEqual({ ok: true, rev: 2 })
     expect((await getEntry(db, id))!.claims.map(item => item.value)).toEqual(['dong', 'east hill'])
     const first = await db.prepare("SELECT id FROM revisions WHERE entry_id = ? AND kind = 'create'").bind(id).first<{ id: number }>()
     expect(await revertEntry(db, id, first!.id, who)).toEqual({ ok: true, rev: 3 })
-    expect((await getEntry(db, id))!.claims).toEqual([claim('reading', 'tung')])
+    expect((await getEntry(db, id))!.claims).toEqual([tung])
     expect((await list(db, { script: 'han', query: 'dong' }))!.tiles).toEqual([])
   })
 
@@ -48,8 +49,68 @@ describe('claims', () => {
     const id = await createEntry(db, fields(), seen(), [], who)
     const other = await createEntry(db, fields(), seen(), [], who)
     const own = (await getEntry(db, id))!.sightings[0].id, foreign = (await getEntry(db, other))!.sightings[0].id
-    await editEntry(db, id, 1, fields([{ ...claim('reading', 'a'), sighting_id: own }, { ...claim('reading', 'b'), sighting_id: foreign }]), who, null)
-    expect((await getEntry(db, id))!.claims.map(item => item.sighting_id)).toEqual([own, null])
+    const second = (await addSighting(db, id, seen({ place: 'a second sign' }), [], who))!
+    await editEntry(db, id, 1, fields([claim('reading', 'a', null, { sightings: [own, second] }), claim('reading', 'b', null, { sightings: [foreign] }), claim('meaning', 'c', null, { sightings: [own, foreign, 999] })]), who, null)
+    expect((await getEntry(db, id))!.claims.map(item => item.sightings)).toEqual([[own, second], [], [own]])
+  })
+
+  test('a record holds its claims with their keys, sightings and scopes, and gives them back as written', async () => {
+    const { db, raw } = open()
+    const id = await createEntry(db, fields(), seen(), [], who)
+    const own = (await getEntry(db, id))!.sightings[0].id
+    const second = (await addSighting(db, id, seen({ place: 'a second sign' }), [], who))!
+    const sense = claim('meaning', 'a boastful person', null, { sightings: [own, second] }), east = claim('meaning', 'east')
+    const reading = claim('reading', 'kua', { doculect: 'cmn' }, { sightings: [second], under: [sense.key] })
+    const claims = [claim('ids', '⿰山東'), reading, sense, east, claim('relation', '侉', { relationship: 'usage' }, { sightings: [own], under: [sense.key, reading.key] }), claim('relation', '東', { relationship: 'usage' }, { under: [east.key] })]
+    expect(await editEntry(db, id, 1, fields(claims), who, null)).toEqual({ ok: true, rev: 2 })
+    expect((await getEntry(db, id))!.claims).toEqual(claims)
+    expect(raw.query("SELECT key, sightings, under FROM claims WHERE kind = 'relation' ORDER BY position").all()).toEqual([
+      { key: claims[4].key, sightings: `[${own}]`, under: JSON.stringify([sense.key, reading.key]) },
+      { key: claims[5].key, sightings: '[]', under: JSON.stringify([east.key]) },
+    ])
+    expect(JSON.parse((await history(db, id))[0].snapshot).claims).toEqual(claims)
+    expect((await exportPage(db, 0, 10)).entries[0].claims).toEqual(claims)
+  })
+
+  test('a version with links comes back whole, without the sightings the record no longer has', async () => {
+    const { db } = open()
+    const id = await createEntry(db, fields(), seen(), [], who)
+    const other = await createEntry(db, fields(), seen(), [], who)
+    const own = (await getEntry(db, id))!.sightings[0].id
+    const moved = (await addSighting(db, id, seen({ place: 'a second sign' }), [], who))!
+    const sense = claim('meaning', 'east', null, { sightings: [own, moved] })
+    const linked = [claim('reading', 'tung', null, { sightings: [moved], under: [sense.key] }), sense, claim('relation', '東', { relationship: 'usage' }, { sightings: [own], under: [sense.key] })]
+    await editEntry(db, id, 1, fields(linked), who, null)
+    const version = (await history(db, id))[0].id
+    await editEntry(db, id, 2, fields([claim('meaning', 'something else')]), who, null)
+    expect(await revertEntry(db, id, version, who)).toEqual({ ok: true, rev: 4 })
+    expect((await getEntry(db, id))!.claims).toEqual(linked)
+    // The second sighting now belongs to another record, and the version is restored again.
+    await db.prepare('UPDATE sightings SET entry_id = ? WHERE id = ?').bind(other, moved).run()
+    await editEntry(db, id, 4, fields(), who, null)
+    expect(await revertEntry(db, id, version, who)).toEqual({ ok: true, rev: 6 })
+    const restored = (await getEntry(db, id))!.claims
+    expect(restored.map(item => [item.key, item.under])).toEqual(linked.map(item => [item.key, item.under]))
+    expect(restored.map(item => item.sightings)).toEqual([[], [own], [own]])
+  })
+
+  test('a new record names its sightings by place, and the claims and the first version take their ids', async () => {
+    const { db } = open()
+    await createEntry(db, fields(), seen(), [], who)
+    const sense = claim('meaning', 'east', null, { sightings: [1, 3] })
+    const claims = [claim('ids', '⿰山東'), claim('reading', 'tung', null, { sightings: [2], under: [sense.key] }), sense, claim('relation', '東', { relationship: 'usage' }, { sightings: [3, 4], under: [sense.key] })]
+    const id = await createEntry(db, fields(claims), seen({ place: 'one' }), [], who, [{ fields: seen({ place: 'two' }), media: [] }, { fields: seen({ place: 'three' }), media: [] }])
+    const found = (await getEntry(db, id))!
+    const [one, two, three] = found.sightings.map(sighting => sighting.id)
+    expect(found.sightings.map(sighting => sighting.place)).toEqual(['one', 'two', 'three'])
+    expect(one).toBeGreaterThan(1)
+    // The fourth place names no sighting of the form.
+    expect(found.claims.map(item => item.sightings)).toEqual([[], [two], [one, three], [three]])
+    expect(found.claims.map(item => [item.key, item.under])).toEqual(claims.map(item => [item.key, item.under]))
+    const created = (await history(db, id)).find(row => row.kind === 'create')!
+    expect(JSON.parse(created.snapshot).claims).toEqual(found.claims)
+    expect(await revertEntry(db, id, created.id, who)).toEqual({ ok: true, rev: 2 })
+    expect((await getEntry(db, id))!.claims).toEqual(found.claims)
   })
 
   test('a form replaces only the groups it carries', () => {
@@ -58,7 +119,65 @@ describe('claims', () => {
     form.set('ids', '⿰山东, ⿰山東')
     form.set('genres_present', '1')
     const read = readClaims(form, base)
-    expect(read.claims).toEqual([claim('ids', '⿰山东'), claim('ids', '⿰山東'), claim('reading', 'tung')])
+    expect(read.claims.map(item => [item.kind, item.value])).toEqual([['ids', '⿰山东'], ['ids', '⿰山東'], ['reading', 'tung']])
+    expect(read.claims.slice(1)).toEqual([base[0], base[2]])
+  })
+})
+
+// What becomes of the sightings a claim names when one of them is hidden, edited or moved.
+describe('the evidence a claim rests on', () => {
+  async function cited() {
+    const { db } = open()
+    const sense = claim('meaning', 'east', null, { sightings: [1, 2] })
+    const claims = [claim('reading', 'tung', null, { sightings: [2], under: [sense.key] }), sense, claim('relation', '東', { relationship: 'usage' }, { sightings: [1], under: [sense.key] })]
+    const id = await createEntry(db, fields(claims), seen({ place: 'one' }), [], who, [{ fields: seen({ place: 'two', ...book }), media: [image('p')] }])
+    const found = (await getEntry(db, id))!
+    const [one, two] = found.sightings.map(sighting => sighting.id)
+    expect(found.claims.map(item => item.sightings)).toEqual([[two], [one, two], [one]])
+    return { db, id, one, two, claims: found.claims }
+  }
+  const sightingsOf = async (db: D1Database, id: number) => (await getEntry(db, id))!.claims.map(item => item.sightings)
+
+  test('a hidden sighting stays named, through an edit of the record, and is there when it is shown again', async () => {
+    const { db, id, one, two, claims } = await cited()
+    expect(await setHidden(db, { entry: id, sighting: two }, true, who, null)).toBe(true)
+    expect((await getEntry(db, id))!.claims).toEqual(claims)
+    expect(await editEntry(db, id, 1, fields([...claims, claim('tag', 'IRG')]), who, null)).toEqual({ ok: true, rev: 2 })
+    expect(await sightingsOf(db, id)).toEqual([[two], [one, two], [one], []])
+    expect(await setHidden(db, { entry: id, sighting: two }, false, who, null)).toBe(true)
+    expect(await sightingsOf(db, id)).toEqual([[two], [one, two], [one], []])
+    expect((await getEntry(db, id))!.sightings.map(sighting => sighting.hidden_at)).toEqual([null, null])
+  })
+
+  test('an edited or restored sighting is the same evidence', async () => {
+    const { db, id, two, claims } = await cited()
+    expect(await editSighting(db, two, 1, seen({ place: 'two, corrected' }), [], who, null, id)).toEqual({ ok: true, rev: 2 })
+    expect((await getEntry(db, id))!.claims).toEqual(claims)
+    const first = sightingSnapshot((await history(db, id)).find(row => row.sighting_id === two && row.kind === 'sighting')!.snapshot)!
+    expect(await restoreSighting(db, id, two, 2, first, who, 1)).toEqual({ ok: true, rev: 3 })
+    expect((await getEntry(db, id))!.claims).toEqual(claims)
+    expect((await getSighting(db, two))!.place).toBe('two')
+  })
+
+  test('a merge moves the sightings and leaves each record its claims, which name them again once it is undone', async () => {
+    const { db, id, one, two, claims } = await cited()
+    const kept = claim('reading', 'dong')
+    const into = await createEntry(db, fields([kept]), seen({ place: 'three' }), [], who)
+    const three = (await getEntry(db, into))!.sightings[0].id
+    expect((await mergeEntry(db, id, into, who, null)).ok).toBe(true)
+    expect((await getEntry(db, id))!.claims).toEqual(claims)
+    expect((await getEntry(db, into))!.claims).toEqual([kept])
+    expect((await getEntry(db, into))!.sightings.map(sighting => sighting.id)).toEqual([one, two, three])
+    // The record the sightings moved to may rest its own claims on them.
+    const resting = [{ ...kept, sightings: [two, three] }]
+    expect(await editEntry(db, into, 1, fields(resting), who, null)).toEqual({ ok: true, rev: 2 })
+    expect(await sightingsOf(db, into)).toEqual([[two, three]])
+    expect(await unmergeEntry(db, id, who)).toBe(true)
+    expect((await getEntry(db, id))!.claims).toEqual(claims)
+    expect((await getEntry(db, id))!.sightings.map(sighting => sighting.id)).toEqual([one, two])
+    // A sighting that went back is no longer the other record's; its next edit stops naming it.
+    expect(await editEntry(db, into, 2, fields((await getEntry(db, into))!.claims), who, null)).toEqual({ ok: true, rev: 3 })
+    expect(await sightingsOf(db, into)).toEqual([[three]])
   })
 })
 

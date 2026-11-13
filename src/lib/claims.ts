@@ -1,17 +1,31 @@
 // What a record states about its character more than once. Each statement is a claim: a kind, the value
-// it is found by, what else that kind records, and the sighting it rests on. The kinds live here, so a
-// new one is an entry in this file and its form fields, and the database stays as it is.
+// it is found by and what else that kind records. A claim has a key of its own within the record, names
+// the sightings that support it, and may hold only under other claims of the record: a reading under a
+// meaning, a related character under a meaning or a reading. The kinds live here, so a new one is an
+// entry in this file and its form fields, and the database stays as it is.
 import { analyze, parseComposition, type Composition } from './composition'
 import { cleanEncodingCode, isEncodingSet } from './encodings'
 import { genreOf, isCollection } from './genres'
 import { IDS_LENGTH_MAX, IDS_MAX, splitIds } from './ids'
 import { ivdSequence } from './ivd'
 import { cleanDoculect } from './doculects'
-import { isRelationKind, type RelatedDraft } from './related'
+import { isRelationKind } from './related'
 
 export const CLAIM_KINDS = ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'genre', 'collection', 'tag'] as const
 export type ClaimKind = (typeof CLAIM_KINDS)[number]
-export type Claim = { kind: ClaimKind; value: string; data: Record<string, unknown> | null; sighting_id: number | null }
+export type Claim = { key: string; kind: ClaimKind; value: string; data: Record<string, unknown> | null; sightings: number[]; under: string[] }
+
+/** The kinds of claim under which a claim of each kind may hold. A reading goes with a meaning; a related
+ * character is related under a meaning, a reading or both. Every other kind states a fact of the whole record. */
+export const SCOPES: Record<ClaimKind, readonly ClaimKind[]> = { ids: [], composition: [], reading: ['meaning'], meaning: [], encoding: [], relation: ['meaning', 'reading'], ivd: [], genre: [], collection: [], tag: [] }
+/** How many sightings one claim names, and how many claims it holds under. */
+export const CLAIM_SIGHTINGS_MAX = 20
+export const CLAIM_SCOPES_MAX = 20
+
+const KEY = /^[0-9a-z]{8}$/
+export const isClaimKey = (value: unknown): value is string => typeof value === 'string' && KEY.test(value)
+/** A key for a claim that is being made. It stays with the claim through every edit. */
+export const newClaimKey = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), byte => (byte % 36).toString(36)).join('')
 
 /** How many claims of a kind one record holds, and how long each value runs. */
 export const CLAIM_LIMITS: Record<ClaimKind, { max: number; length: number }> = {
@@ -28,7 +42,7 @@ export const CLAIM_LIMITS: Record<ClaimKind, { max: number; length: number }> = 
 }
 export const CLAIMS_MAX = 200
 /** The most text one record's claims hold together, so a journal page of snapshots stays small. */
-export const CLAIMS_LENGTH_MAX = 60000
+export const CLAIMS_LENGTH_MAX = 70000
 
 const isKind = (value: unknown): value is ClaimKind => CLAIM_KINDS.includes(value as ClaimKind)
 const clean = (value: unknown) => (typeof value === 'string' ? value : '').normalize('NFC').trim()
@@ -49,7 +63,11 @@ export function splitCharacters(value: string): string[] {
   return characters
 }
 
-const one = (kind: ClaimKind, value: string, data: Record<string, unknown> | null = null, sighting_id: number | null = null): Claim => ({ kind, value, data, sighting_id })
+type Links = { key?: string; sightings?: number[]; under?: string[] }
+export const newClaim = (kind: ClaimKind, value: string, data: Record<string, unknown> | null = null, links: Links = {}): Claim => ({ key: links.key ?? newClaimKey(), kind, value, data, sightings: links.sightings ?? [], under: links.under ?? [] })
+const one = newClaim
+// A list of distinct references, no longer than a claim holds.
+const listed = (value: unknown, max: number, test: (item: unknown) => boolean): boolean => Array.isArray(value) && value.length <= max && value.every(test) && new Set(value).size === value.length
 
 /** Whether a stored or submitted claim is one this app writes. */
 export function validClaim(claim: unknown): claim is Claim {
@@ -57,7 +75,9 @@ export function validClaim(claim: unknown): claim is Claim {
   const { kind, value } = claim
   const data = claim.data ?? null
   if (data !== null && !plain(data)) return false
-  if (claim.sighting_id != null && !(Number.isSafeInteger(claim.sighting_id) && (claim.sighting_id as number) > 0)) return false
+  if (!isClaimKey(claim.key)) return false
+  if (!listed(claim.sightings, CLAIM_SIGHTINGS_MAX, item => Number.isSafeInteger(item) && (item as number) > 0)) return false
+  if (!listed(claim.under, SCOPES[kind].length ? CLAIM_SCOPES_MAX : 0, isClaimKey)) return false
   if (!value || value.length > CLAIM_LIMITS[kind].length || value !== value.normalize('NFC').trim()) return false
   switch (kind) {
     case 'ids': return splitIds(value).length === 1 && splitIds(value)[0] === value
@@ -78,7 +98,11 @@ export function parseClaims(raw: unknown): Claim[] | null {
   let value = raw
   if (typeof raw === 'string') { try { value = JSON.parse(raw) } catch { return null } }
   if (!Array.isArray(value) || value.length > CLAIMS_MAX || !value.every(validClaim)) return null
-  const claims = value.map(claim => one(claim.kind, claim.value, claim.data ?? null, claim.sighting_id ?? null))
+  const claims = value.map(claim => one(claim.kind, claim.value, claim.data ?? null, { key: claim.key, sightings: [...claim.sightings], under: [...claim.under] }))
+  // A key names one claim, and a claim holds only under claims of the same list whose kind can be its scope.
+  const kinds = new Map(claims.map(claim => [claim.key, claim.kind]))
+  if (kinds.size !== claims.length) return null
+  if (claims.some(claim => claim.under.some(key => !SCOPES[claim.kind].includes(kinds.get(key)!)))) return null
   for (const kind of CLAIM_KINDS) if (claims.filter(claim => claim.kind === kind).length > CLAIM_LIMITS[kind].max) return null
   if (JSON.stringify(claims).length > CLAIMS_LENGTH_MAX) return null
   return claims
@@ -98,20 +122,31 @@ export function compositionOf(claims: readonly Claim[]): Composition | null {
 export type Encoding = { charset: string; code: string }
 export const encodingsOf = (claims: readonly Claim[]): Encoding[] => claimsOf(claims, 'encoding').map(claim => ({ charset: String(claim.data?.charset), code: claim.value }))
 
-export const relationsOf = (claims: readonly Claim[]): (RelatedDraft & { sighting_id: number | null })[] => claimsOf(claims, 'relation').map(claim => ({
-  character: claim.value, relationship: String(claim.data?.relationship), difference: String(claim.data?.difference ?? ''), evidence: String(claim.data?.evidence ?? ''), sighting_id: claim.sighting_id,
-}))
+// The links of a record read from either side.
+/** The claims that hold under the claim with this key. */
+export const claimsUnder = (claims: readonly Claim[], key: string) => claims.filter(claim => claim.under.includes(key))
+/** The claims a claim holds under, in the order it names them. */
+export const scopesOf = (claims: readonly Claim[], claim: Claim) => claim.under.map(key => claims.find(scope => scope.key === key)).filter(scope => scope !== undefined)
+/** The claims a sighting supports. */
+export const supportedBy = (claims: readonly Claim[], sighting: number) => claims.filter(claim => claim.sightings.includes(sighting))
 
-export type ClaimError = 'ids' | 'encodings' | 'relatedCharacters' | 'ivd' | 'readings' | 'tags'
+/** The claims with each sighting named as `to` answers, and without the ones it answers null for. */
+export const mapSightings = (claims: readonly Claim[], to: (sighting: number) => number | null): Claim[] => claims.map(claim => {
+  if (!claim.sightings.length) return claim
+  return { ...claim, sightings: [...new Set(claim.sightings.map(to).filter(id => id !== null))].sort((a, b) => a - b) }
+})
+
+export type ClaimError = 'ids' | 'encodings' | 'relatedCharacters' | 'ivd' | 'readings' | 'tags' | 'links'
 
 // The form fields of each kind. A group is replaced when the form carries it, by its own field or by
 // the `<group>_present` marker a list of rows sends even when it is empty; otherwise the record keeps
 // what it has.
-const sightingRef = (value: unknown) => {
-  const text = clean(value)
-  return /^[1-9]\d{0,15}$/.test(text) ? Number(text) : null
-}
-
+//
+// A row of readings, meanings or related characters sends its claim's key in `<group>_key`, and the row's
+// links in fields named after that key: `sightings.<key>` once for each sighting that supports it and
+// `under.<key>` once for each claim it holds under. The key is made with the row, in the browser, so a row
+// can name another row of the same form. A row without a key, and every claim of the other kinds,
+// continues the claim of the record that states the same thing, and is a new claim otherwise.
 function rows(form: FormData, names: readonly string[], max: number): string[][] | null {
   const columns = names.map(name => form.getAll(name))
   const count = columns[0].length
@@ -119,30 +154,14 @@ function rows(form: FormData, names: readonly string[], max: number): string[][]
   return Array.from({ length: count }, (_, row) => columns.map(column => clean(column[row])))
 }
 
-// A reading may name its doculect in `reading_doculect`, which then runs parallel to `reading`.
-function texts(form: FormData, kind: 'reading' | 'meaning'): Claim[] | null {
-  const names = [kind, `${kind}_sighting`, `${kind}_doculect`].filter(name => name === kind || form.has(name))
-  const found = rows(form, names, CLAIM_LIMITS[kind].max * 2)
-  if (!found) return null
-  const column = (row: string[], name: string) => names.includes(name) ? row[names.indexOf(name)] : ''
-  const seen = new Set<string>()
-  const out: Claim[] = []
-  for (const row of found) {
-    const value = row[0], stated = column(row, `${kind}_doculect`)
-    const doculect = stated ? cleanDoculect(stated) : null
-    if (stated && !doculect) return null
-    if (!value || seen.has(`${doculect ?? ''}\n${value}`)) continue
-    if (value.length > CLAIM_LIMITS[kind].length) return null
-    seen.add(`${doculect ?? ''}\n${value}`)
-    out.push(one(kind, value, doculect ? { doculect } : null, sightingRef(column(row, `${kind}_sighting`))))
-  }
-  return out.length > CLAIM_LIMITS[kind].max ? null : out
-}
-
 function typed(form: FormData, names: readonly string[]): string[][] {
   const columns = names.map(name => form.getAll(name).map(value => typeof value === 'string' ? value : ''))
   return Array.from({ length: Math.max(...columns.map(column => column.length)) }, (_, row) => columns.map(column => column[row] ?? ''))
 }
+
+const KEY_FIELDS = ['reading_key', 'meaning_key', 'related_key']
+// What tells one claim of a kind from another when no key does: a kind a record holds once is one claim.
+const identity = (kind: ClaimKind, value: string, data: Claim['data']) => CLAIM_LIMITS[kind].max === 1 ? '' : `${value}\n${kind === 'reading' ? data?.doculect ?? '' : kind === 'encoding' ? data?.charset ?? '' : ''}`
 
 /**
  * The claims a form submits, over the ones the record holds for the groups the form leaves out. With
@@ -154,11 +173,33 @@ export function readClaims(form: FormData, base: readonly Claim[] = []): { claim
   const fail = (code: ClaimError) => { error ??= code }
   for (const kind of CLAIM_KINDS) next.set(kind, claimsOf(base, kind))
 
+  const kindOf = new Map(base.map(claim => [claim.key, claim.kind]))
+  // Every key a row of the form carries, whether or not the row is kept.
+  const submitted = new Set(KEY_FIELDS.flatMap(name => form.getAll(name)).filter(isClaimKey))
+  const taken = new Set<string>()
+  // A row left out as a repeat of another: what names it means the row that is kept.
+  const repeats = new Map<string, string>()
+  const linksOf = (key: string): Links => ({
+    key,
+    sightings: [...new Set(form.getAll(`sightings.${key}`).map(clean).filter(text => /^[1-9]\d{0,15}$/.test(text)).map(Number))].sort((a, b) => a - b),
+    under: [...new Set(form.getAll(`under.${key}`).map(clean))],
+  })
+  // The key and links of a claim the form states: its row's own, or those of the claim it continues.
+  const made = (kind: ClaimKind, value: string, data: Claim['data'] = null, given = ''): Claim => {
+    if (isClaimKey(given) && !taken.has(given) && (kindOf.get(given) ?? kind) === kind) { taken.add(given); return one(kind, value, data, linksOf(given)) }
+    const same = identity(kind, value, data)
+    const old = base.find(claim => claim.kind === kind && !taken.has(claim.key) && !submitted.has(claim.key) && identity(kind, claim.value, claim.data) === same)
+    const claim = one(kind, value, data, old ? { key: old.key, sightings: old.sightings, under: old.under } : {})
+    taken.add(claim.key)
+    return claim
+  }
+  const draft = (kind: ClaimKind, value: string, data: Claim['data'], given = '') => one(kind, value, data, isClaimKey(given) ? linksOf(given) : {})
+
   if (form.has('ids')) {
     const values = form.getAll('ids')
     const sequences = splitIds(values.filter(value => typeof value === 'string').join(' '))
     if (values.some(value => typeof value !== 'string') || sequences.length > IDS_MAX || sequences.some(sequence => sequence.length > IDS_LENGTH_MAX)) fail('ids')
-    next.set('ids', sequences.map(sequence => one('ids', sequence)))
+    next.set('ids', sequences.map(sequence => made('ids', sequence)))
   }
   const primary = next.get('ids')![0]?.value ?? null
 
@@ -167,14 +208,31 @@ export function readClaims(form: FormData, base: readonly Claim[] = []): { claim
     const parsed = parseComposition(form.get('composition'))
     const analysis = parsed && primary && parsed.ids === primary ? analyze(primary, parsed) : null
     const parts = analysis?.parts.map(part => part.part) ?? [], roles = analysis?.parts.map(part => part.role) ?? []
-    next.set('composition', analysis && parsed && (roles.some(Boolean) || parsed.formation) ? [one('composition', primary!, { parts, roles, formation: parsed.formation })] : [])
+    next.set('composition', analysis && parsed && (roles.some(Boolean) || parsed.formation) ? [made('composition', primary!, { parts, roles, formation: parsed.formation })] : [])
   } else if (next.get('composition')![0]?.value !== primary) next.set('composition', [])
 
+  // A reading may name its doculect in `reading_doculect`, which then runs parallel to `reading`.
   for (const kind of ['reading', 'meaning'] as const) {
     if (!form.has(kind) && !form.has(`${kind}s_present`)) continue
-    const found = texts(form, kind)
-    if (found) next.set(kind, found)
-    else { fail('readings'); next.set(kind, typed(form, [kind, `${kind}_doculect`]).filter(([value]) => value.trim()).map(([value, doculect]) => one(kind, value, doculect ? { doculect } : null))) }
+    const names = [kind, ...[`${kind}_doculect`, `${kind}_key`].filter(name => form.has(name))]
+    const column = (row: string[], name: string) => names.includes(name) ? row[names.indexOf(name)] : ''
+    const found = rows(form, names, CLAIM_LIMITS[kind].max * 2)
+    const seen = new Map<string, string>()
+    const out: Claim[] = []
+    let bad = !found
+    for (const row of found ?? []) {
+      const value = row[0], stated = column(row, `${kind}_doculect`), given = column(row, `${kind}_key`)
+      const doculect = stated ? cleanDoculect(stated) : null
+      if ((stated && !doculect) || value.length > CLAIM_LIMITS[kind].length) { bad = true; break }
+      if (!value) continue
+      const repeated = seen.get(`${doculect ?? ''}\n${value}`)
+      if (repeated) { if (isClaimKey(given)) repeats.set(given, repeated); continue }
+      const claim = made(kind, value, doculect ? { doculect } : null, given)
+      seen.set(`${doculect ?? ''}\n${value}`, claim.key)
+      out.push(claim)
+    }
+    if (bad || out.length > CLAIM_LIMITS[kind].max) { fail('readings'); next.set(kind, typed(form, [kind, `${kind}_doculect`, `${kind}_key`]).filter(([value]) => value.trim()).map(([value, doculect, given]) => draft(kind, value, doculect ? { doculect } : null, given))) }
+    else next.set(kind, out)
   }
 
   if (form.has('encodings_present') || form.has('encoding_code')) {
@@ -189,44 +247,59 @@ export function readClaims(form: FormData, base: readonly Claim[] = []): { claim
       if (!charset || value.length > CLAIM_LIMITS.encoding.length || charset.length > 40 || (!isEncodingSet(charset) && /[|]/.test(charset))) bad = true
       if (seen.has(`${charset}|${value}`)) continue
       seen.add(`${charset}|${value}`)
-      out.push(one('encoding', value, { charset }))
+      out.push(made('encoding', value, { charset }))
     }
     if (bad || out.length > CLAIM_LIMITS.encoding.max) { fail('encodings'); next.set('encoding', typed(form, ['encoding_charset', 'encoding_code']).map(([charset, code]) => one('encoding', code, { charset }))) }
     else next.set('encoding', out)
   }
 
   if (form.has('related_characters_present')) {
-    const names = ['related_character', 'related_relationship', 'related_difference', 'related_evidence', ...(form.has('related_sighting') ? ['related_sighting'] : [])]
+    const names = ['related_character', 'related_relationship', 'related_difference', 'related_evidence', ...(form.has('related_key') ? ['related_key'] : [])]
     const found = rows(form, names, CLAIM_LIMITS.relation.max)
     const valid = found?.every(([character, relationship, difference, evidence]) => character && character.length <= CLAIM_LIMITS.relation.length && isRelationKind(relationship) && difference.length <= 5000 && evidence.length <= 5000)
     if (!valid) fail('relatedCharacters')
-    next.set('relation', (valid ? found! : typed(form, names)).map(([character, relationship, difference, evidence, sighting]) =>
-      one('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) }, sightingRef(sighting))))
+    next.set('relation', (valid ? found! : typed(form, names)).map(([character, relationship, difference, evidence, given]) =>
+      (valid ? made : draft)('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) }, given)))
   }
 
   if (form.has('ivd_status')) {
     const status = clean(form.get('ivd_status')), sequence = clean(form.get('ivd_sequence'))
     const canonical = status === 'registered' ? ivdSequence(sequence) : null
     if (!['', 'none', 'registered'].includes(status) || (status === 'registered' ? !canonical : Boolean(sequence))) fail('ivd')
-    next.set('ivd', status === 'none' ? [one('ivd', 'none')] : canonical ? [one('ivd', canonical)] : sequence ? [one('ivd', sequence)] : [])
+    next.set('ivd', status === 'none' ? [made('ivd', 'none')] : canonical ? [made('ivd', canonical)] : sequence ? [made('ivd', sequence)] : [])
   }
 
   if (form.has('genres_present')) {
     const chosen = new Set(form.getAll('genre').map(clean))
-    next.set('genre', [...chosen].filter(slug => genreOf(slug)).slice(0, CLAIM_LIMITS.genre.max).map(slug => one('genre', slug)))
+    next.set('genre', [...chosen].filter(slug => genreOf(slug)).slice(0, CLAIM_LIMITS.genre.max).map(slug => made('genre', slug)))
   }
   if (form.has('collections_present')) {
     const chosen = new Set(form.getAll('collection').map(clean))
-    next.set('collection', [...chosen].filter(isCollection).map(slug => one('collection', slug)))
+    next.set('collection', [...chosen].filter(isCollection).map(slug => made('collection', slug)))
   }
 
   if (form.has('tags')) {
     const tags = [...new Set(form.getAll('tags').flatMap(value => clean(value).split(/[\s,，、|]+/u)).map(tag => tag.replace(/^#/, '')).filter(Boolean))]
     if (tags.length > CLAIM_LIMITS.tag.max || tags.some(tag => tag.length > CLAIM_LIMITS.tag.length)) fail('tags')
-    next.set('tag', tags.map(tag => one('tag', tag)))
+    next.set('tag', tags.map(tag => made('tag', tag)))
   }
 
-  const claims = CLAIM_KINDS.flatMap(kind => next.get(kind)!)
+  // A claim holds under claims that are still stated. One that was stated, in the record or in a row of
+  // this form, and is stated no longer takes its place in every scope with it; a name for anything else is
+  // not a scope.
+  const stated = new Map(CLAIM_KINDS.flatMap(kind => next.get(kind)!).map(claim => [claim.key, claim.kind]))
+  const claims = CLAIM_KINDS.flatMap(kind => next.get(kind)!).map(claim => {
+    if (claim.sightings.length > CLAIM_SIGHTINGS_MAX) fail('links')
+    if (!claim.under.length) return claim
+    const under: string[] = []
+    for (const key of new Set(claim.under.map(key => repeats.get(key) ?? key))) {
+      const kind = stated.get(key)
+      if (kind && SCOPES[claim.kind].includes(kind)) under.push(key)
+      else if (kind || !(kindOf.has(key) || submitted.has(key))) fail('links')
+    }
+    if (under.length > CLAIM_SCOPES_MAX) fail('links')
+    return { ...claim, under }
+  })
   if (JSON.stringify(claims).length > CLAIMS_LENGTH_MAX) fail('relatedCharacters')
   return { claims, error }
 }

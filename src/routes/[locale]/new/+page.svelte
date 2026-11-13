@@ -7,11 +7,10 @@
   import IdsField from '$lib/components/IdsField.svelte'
   import CompositionField from '$lib/components/CompositionField.svelte'
   import IdentityFields from '$lib/components/IdentityFields.svelte'
-  import TextClaims from '$lib/components/TextClaims.svelte'
-  import RelatedCharacters from '$lib/components/RelatedCharacters.svelte'
+  import SenseFields from '$lib/components/SenseFields.svelte'
   import CategoryFields from '$lib/components/CategoryFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
-  import { claimsOf, compositionOf, relationsOf, valuesOf } from '$lib/claims'
+  import { compositionOf, valuesOf } from '$lib/claims'
   import { ADD_SIGHTINGS_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
   import { SIGHTING_START } from '$lib/scripts'
   import { href, media, t } from '$lib/t'
@@ -32,6 +31,8 @@
   const sections: Record<number, HTMLElement | null> = {}
   let preparing = $state<Record<number, boolean>>({})
   const busy = $derived(sightings.some(item => preparing[item.key]))
+  // A claim names a sighting of this form by its place on the page, which changes when one is removed.
+  const evidence = $derived(sightings.map((item, index) => ({ token: String(item.key), value: String(index + 1), label: t('add.sighting', { n: index + 1 }) })))
 
   async function add() {
     const added = sighting()
@@ -90,14 +91,8 @@
         </div>
       </div>
     </section>
-    <section class="panel group">
-      <div class="titled"><label class="section-title" for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="3">{values?.description ?? ''}</textarea></div>
-      <div class="said">
-        <TextClaims kind="reading" values={claimsOf(claims, 'reading')} fill={filled?.readings} />
-        <TextClaims kind="meaning" values={claimsOf(claims, 'meaning')} fill={filled?.meaning ? [{ value: filled.meaning }] : []} />
-      </div>
-    </section>
-    <section class="panel"><RelatedCharacters values={relationsOf(claims)} fill={filled?.variants} /></section>
+    <section class="panel titled"><label class="section-title" for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="3">{values?.description ?? ''}</textarea></section>
+    <section class="panel"><SenseFields {claims} {evidence} fill={filled} /></section>
     <section class="group"><h2>{t('entry.sightings')}</h2>
       {#each sightings as item, index (item.key)}
         <fieldset class="panel sighting" bind:this={sections[item.key]} tabindex="-1" data-sighting>
@@ -128,7 +123,6 @@
   .titled { display:flex; flex-direction:column; gap:8px; min-width:0 }
   /* The drawing stays in view while the facts beside it are filled in. */
   .plate { position:sticky; inset-block-start:16px }
-  .said { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); align-items:start; gap:16px }
   .sighting { position:relative; margin:0 }
   .sighting:focus-visible { outline-offset:4px }
   legend { padding:0 6px; margin-inline-start:-6px; font-weight:600 }
@@ -140,6 +134,5 @@
     .panel { padding:16px }
     .character { grid-template-columns:minmax(0, 1fr); gap:16px }
     .plate { position:static; width:148px; justify-self:center }
-    .said { grid-template-columns:minmax(0, 1fr) }
   }
 </style>

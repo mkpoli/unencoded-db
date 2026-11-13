@@ -10,7 +10,7 @@ function fixture() {
   entry.run('⿰亻木', null)
   entry.run('⿰亻木', 'hidden')
   entry.run('⿰亻木', null)
-  raw.exec("INSERT INTO claims(entry_id, position, kind, value) SELECT id, 0, 'ids', ids FROM entries")
+  raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) SELECT id, 0, printf('ids%05d', id), 'ids', ids FROM entries")
   const sighting = raw.prepare("INSERT INTO sightings(entry_id, first_entry, place, created_by, created_at, updated_at, hidden_at) VALUES (?, ?, ?, 'p', '2026', '2026', ?)")
   for (let i = 0; i < 250; i++) sighting.run(1, 1, `source ${i}`, null)
   for (let i = 0; i < 250; i++) sighting.run(2, 2, 'hidden entry', null)
@@ -76,10 +76,13 @@ test('export links preserve the sighting cursor in JSON and CSV', async () => {
 
 test('export gives every claim kind a column and the pictures a cell', async () => {
   const { db, raw } = fixture()
-  raw.exec(`INSERT INTO claims(entry_id, position, kind, value, data) VALUES
-    (1, 1, 'ids', '⿱亻木', NULL), (1, 2, 'reading', 'tung', NULL), (1, 3, 'reading', 'dong', NULL), (1, 4, 'meaning', 'east hill', NULL),
-    (1, 5, 'encoding', 'U+5D20', '{"charset":"unicode"}'), (1, 6, 'relation', '崬', '{"relationship":"variant"}'),
-    (1, 7, 'genre', 'hakka', NULL), (1, 8, 'tag', 'IRG', NULL)`)
+  raw.exec(`INSERT INTO claims(entry_id, position, key, kind, value, data, sightings, under) VALUES
+    (1, 1, 'ids00002', 'ids', '⿱亻木', NULL, '[]', '[]'), (1, 2, 'read0001', 'reading', 'tung', '{"doculect":"hak"}', '[2]', '["mean0001"]'), (1, 3, 'read0002', 'reading', 'dong', NULL, '[]', '[]'),
+    (1, 4, 'mean0001', 'meaning', 'east hill', NULL, '[1,2]', '[]'), (1, 5, 'mean0002', 'meaning', 'a pile', NULL, '[]', '[]'),
+    (1, 6, 'code0001', 'encoding', 'U+5D20', '{"charset":"unicode"}', '[]', '[]'),
+    (1, 7, 'rela0001', 'relation', '崬', '{"relationship":"variant"}', '[1]', '["mean0001","read0001"]'), (1, 8, 'rela0002', 'relation', '堆', '{"relationship":"usage"}', '[]', '["mean0002"]'),
+    (1, 9, 'rela0003', 'relation', '東', '{"relationship":"similar"}', '[]', '[]'),
+    (1, 10, 'genr0001', 'genre', 'hakka', NULL, '[]', '[]'), (1, 11, 'tag00001', 'tag', 'IRG', NULL, '[]', '[]')`)
   raw.exec("INSERT INTO sighting_media(sighting_id, position, image_key, image_type, image_w, image_h, thumb_key) SELECT id, p, k, 'image/png', 1, 1, k FROM sightings, (SELECT 0 AS p, 'one.png' AS k UNION SELECT 1, 'two.png') WHERE place = 'source 0'")
   const response = await exportGet({ url: new URL('https://example.test/api/entries?limit=2&format=csv'), platform: { env: { DB: db } } } as any)
   const [head, first] = (await response.text()).split('\r\n')
@@ -88,10 +91,10 @@ test('export gives every claim kind a column and the pictures a cell', async () 
   for (const kind of ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'genre', 'collection', 'tag', 'images']) expect(columns).toContain(kind)
   const cell = (name: string) => cells[columns.indexOf(name)]
   expect(cell('ids')).toBe('⿰亻木; ⿱亻木')
-  expect(cell('reading')).toBe('tung; dong')
-  expect(cell('meaning')).toBe('east hill')
+  expect(cell('reading')).toBe('hak:tung; dong')
+  expect(cell('meaning')).toBe('east hill; a pile')
   expect(cell('encoding')).toBe('unicode:U+5D20')
-  expect(cell('relation')).toBe('崬 (variant)')
+  expect(cell('relation')).toBe('崬 (variant); 堆 (usage); 東 (similar)')
   expect(cell('genre')).toBe('hakka')
   expect(cell('tag')).toBe('IRG')
   expect(cell('images')).toBe('one.png; two.png')
@@ -99,10 +102,17 @@ test('export gives every claim kind a column and the pictures a cell', async () 
 
 test('export carries claims and pictures in JSON', async () => {
   const { db, raw } = fixture()
-  raw.exec("INSERT INTO claims(entry_id, position, kind, value, data) VALUES (1, 1, 'encoding', 'U+5D20', '{\"charset\":\"unicode\"}')")
+  raw.exec("INSERT INTO claims(entry_id, position, key, kind, value, data, sightings, under) VALUES (1, 1, 'code0001', 'encoding', 'U+5D20', '{\"charset\":\"unicode\"}', '[]', '[]'), (1, 2, 'mean0001', 'meaning', 'east', NULL, '[1,3]', '[]'), (1, 3, 'rela0001', 'relation', '東', '{\"relationship\":\"usage\"}', '[3]', '[\"mean0001\"]')")
   raw.exec("INSERT INTO sighting_media(sighting_id, position, image_key, image_type, image_w, image_h, thumb_key) SELECT id, 0, 'one.png', 'image/png', 1, 1, 'one-t.png' FROM sightings WHERE place = 'source 0'")
   const page = await exportPage(db, 0, 2)
-  expect(page.entries[0].claims).toEqual([{ kind: 'ids', value: '⿰亻木', data: null, sighting_id: null }, { kind: 'encoding', value: 'U+5D20', data: { charset: 'unicode' }, sighting_id: null }])
+  expect(page.entries[0].claims).toEqual([
+    { key: 'ids00001', kind: 'ids', value: '⿰亻木', data: null, sightings: [], under: [] },
+    { key: 'code0001', kind: 'encoding', value: 'U+5D20', data: { charset: 'unicode' }, sightings: [], under: [] },
+    { key: 'mean0001', kind: 'meaning', value: 'east', data: null, sightings: [1, 3], under: [] },
+    { key: 'rela0001', kind: 'relation', value: '東', data: { relationship: 'usage' }, sightings: [3], under: ['mean0001'] },
+  ])
+  const body = await (await exportGet({ url: new URL('https://example.test/api/entries?limit=2&format=json'), platform: { env: { DB: db } } } as any)).json() as any
+  expect(body.entries[0].claims[3]).toEqual({ key: 'rela0001', kind: 'relation', value: '東', data: { relationship: 'usage' }, sightings: [3], under: ['mean0001'] })
   expect(page.entries[0].evidence[0].media).toEqual([{ image_key: 'one.png', image_type: 'image/png', image_w: 1, image_h: 1, thumb_key: 'one-t.png', box: null }])
   expect(page.entries[0].evidence[1].media).toEqual([])
 })
