@@ -58,7 +58,6 @@
   const descriptions = untrack(() => valuesOf(form?.values.claims ?? [], 'ids'))
   let primary = $state(descriptions[0] ?? '')
   const composition = $derived.by(() => { const found = compositionOf(claims); return found ? JSON.stringify(found) : '' })
-  const filed = $derived(claims.some(claim => claim.kind === 'genre' || claim.kind === 'collection' || claim.kind === 'tag'))
 
   // A form heavier than the server takes is stopped here, where what was typed is still on the page.
   let heavy = $state(false)
@@ -110,7 +109,7 @@
       {/each}
       {#if sightings.length < ADD_SIGHTINGS_MAX}<div><button type="button" class="text-button" onclick={add}>+ {t('entry.addSighting')}</button></div>{/if}
     </section>
-    <details class="panel filing" open={filed}>
+    <details class="panel filing" open>
       <summary class="section-title">{t('field.filing')}</summary>
       <div class="group filed"><CategoryFields genres={valuesOf(claims, 'genre')} collections={valuesOf(claims, 'collection')} tags={valuesOf(claims, 'tag')} /></div>
     </details>

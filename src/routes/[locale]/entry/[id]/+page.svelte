@@ -149,7 +149,7 @@
         <TextClaims kind="meaning" values={claimsOf(editValues.claims, 'meaning')} sightings={options} fill={filled?.meaning ? [filled.meaning] : []} />
         <RelatedCharacters values={relationsOf(editValues.claims)} sightings={options} fill={filled?.variants} />
         <div class="field"><label for="status">{t('field.status')}</label><select id="status" class="input" name="status" value={editValues.status ?? 'unchecked'}>{#each STATUSES as status}<option value={status}>{t(`status.${status}`)}</option>{/each}</select><p class="hint">{t('field.statusHint')}</p></div>
-        <details class="filing" open={editValues.claims.some(claim => claim.kind === 'genre' || claim.kind === 'collection' || claim.kind === 'tag')}>
+        <details class="filing" open>
           <summary class="section-title">{t('field.filing')}</summary>
           <div class="stack filed"><CategoryFields genres={valuesOf(editValues.claims, 'genre')} collections={valuesOf(editValues.claims, 'collection')} tags={valuesOf(editValues.claims, 'tag')} /></div>
         </details>
