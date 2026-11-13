@@ -42,6 +42,18 @@ Without client credentials, the site offers anonymous contributions. Signing in 
 
 A claim is a row of `kind`, `value` and JSON `data`; the kinds and their form fields are in `src/lib/claims.ts`, and a new kind needs no migration. Categories and collections are listed in `src/lib/genres.ts`.
 
+Each claim also carries three links, all inside its own record:
+
+| Column | Holds |
+|---|---|
+| `key` | Eight lowercase letters and digits that name the claim within its record. It is made once, with the claim, and stays through every edit; forms, other claims and past versions refer to the claim by it |
+| `sightings` | A JSON array of the ids of the sightings that support the claim: none, one or several, each a sighting of the same record, at most 20 |
+| `under` | A JSON array of the keys of the claims under which this one holds |
+
+Only a meaning or a reading can be a scope. A reading may hold under meanings, and a related character under meanings, readings or both; a meaning and every other kind (descriptions, composition, codes, IVD, categories, collections, tags) state a fact of the whole record and have no scope. A reference to a key that names no claim, or a claim that cannot be a scope, is refused, and removing a meaning or a reading removes it from every scope in the same save. A revision's snapshot repeats the claims with their keys and links, so a restored version brings its links back, without the sightings the record no longer has.
+
+The CSV export has one column for each kind of claim, and a claim names its links after its value: `東 (usage) [under: east | cmn:dōng] [evidence: #3 #7]`, where the numbers are values of `sighting_id`. The JSON export carries `key`, `sightings` and `under` as stored.
+
 ## Search index
 
 Each entry indexes at most 400 distinct terms, drawn from its fields, its claims and its visible sightings. Terms beyond that limit are not searchable; changing this limit requires reindexing existing entries.
