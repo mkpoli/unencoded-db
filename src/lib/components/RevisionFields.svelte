@@ -23,7 +23,7 @@
     ids: 'field.ids', composition: 'field.formation', reading: 'field.reading', meaning: 'field.meaning', encoding: 'field.encodings',
     relation: 'field.relatedCharacters', ivd: 'field.ivd', genre: 'field.genre', collection: 'field.collection', tag: 'field.tags',
   }
-  const WIDE: ClaimKind[] = ['meaning', 'relation', 'composition']
+  const WIDE: ClaimKind[] = ['reading', 'meaning', 'relation', 'composition']
   const at = locale()
 
   function shown(claim: Claim, claims: Claim[]): string {
