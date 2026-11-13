@@ -65,8 +65,8 @@ CREATE INDEX claims_by_value ON claims(kind, value, entry_id);
 CREATE UNIQUE INDEX claims_by_key ON claims(entry_id, key);
 
 -- The past versions of a record repeat its claims, so they take the same form, each claim with the key
--- its statement has in `claim_keys`.
-UPDATE revisions SET snapshot = json_set(snapshot, '$.claims', (
+-- its statement has in `claim_keys`. `json()` hands the list to `json_set` as an array, not as its text.
+UPDATE revisions SET snapshot = json_set(snapshot, '$.claims', json((
   SELECT json_group_array(json(item)) FROM (
     SELECT json_remove(json_set(c.claim, '$.key', printf('%08x', (k.id * 2654435761) % 4294967296),
       '$.sightings', json(CASE WHEN json_extract(c.claim, '$.sighting_id') IS NULL THEN '[]' ELSE json_array(json_extract(c.claim, '$.sighting_id')) END),
@@ -82,7 +82,7 @@ UPDATE revisions SET snapshot = json_set(snapshot, '$.claims', (
     JOIN claim_keys k ON k.entry_id = revisions.entry_id AND k.identity = c.identity AND k.n = c.n
     ORDER BY c.position
   )
-))
+)))
 WHERE sighting_id IS NULL AND redacted_at IS NULL AND json_valid(snapshot) AND json_type(snapshot, '$.claims') = 'array';
 
 DROP TABLE claim_keys;
