@@ -116,6 +116,33 @@ describe('variation sequences', () => {
   })
 })
 
+describe('doculects', () => {
+  const doculect = (code: string, value: string) => claim('reading', value, { doculect: code })
+
+  test('a reading keeps the doculect given beside it', () => {
+    expect(read([['reading', 'ê'], ['reading_doculect', 'nan'], ['reading', 'tung'], ['reading_doculect', ''], ['reading', 'e5'], ['reading_doculect', '潮州話']]))
+      .toEqual({ claims: [doculect('nan', 'ê'), claim('reading', 'tung'), doculect('潮州話', 'e5')] })
+  })
+
+  test('the same reading in two doculects is two readings', () => {
+    expect(read([['reading', 'ki'], ['reading_doculect', 'ja'], ['reading', 'ki'], ['reading_doculect', 'ko'], ['reading', 'ki'], ['reading_doculect', 'ja']]))
+      .toEqual({ claims: [doculect('ja', 'ki'), doculect('ko', 'ki')] })
+  })
+
+  test('a doculect list out of step, a long name or a control character is refused', () => {
+    expect(read([['reading', 'a'], ['reading', 'b'], ['reading_doculect', 'nan']])).toMatchObject({ error: 'readings' })
+    expect(read([['reading', 'a'], ['reading_doculect', 'x'.repeat(41)]])).toMatchObject({ error: 'readings' })
+    expect(read([['reading', 'a'], ['reading_doculect', 'a\u0007b']])).toMatchObject({ error: 'readings' })
+  })
+
+  test('a stored reading carries only a doculect', () => {
+    expect(validClaim(doculect('nan', 'ê'))).toBe(true)
+    expect(validClaim(claim('reading', 'ê', { doculect: ' nan' }))).toBe(false)
+    expect(validClaim(claim('reading', 'ê', { doculect: 'nan', extra: 1 }))).toBe(false)
+    expect(validClaim(claim('reading', 'ê', { language: 'nan' }))).toBe(false)
+  })
+})
+
 describe('readings, meanings and tags', () => {
   test('texts are deduplicated and limited', () => {
     expect(read([['reading', 'tung'], ['reading', ' tung '], ['reading', 'dong'], ['meaning', 'east']])).toEqual({ claims: [claim('reading', 'tung'), claim('reading', 'dong'), claim('meaning', 'east')] })

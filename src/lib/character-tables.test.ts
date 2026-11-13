@@ -10,7 +10,7 @@ const unihan = new Map(['56', '5d', '7e', '200'].flatMap(block => [...parseUniha
 test('an encoded character gives its description, code, radical and strokes', () => {
   expect(factsOf('噐', descriptions, unihan)).toEqual({
     char: '噐', code: 'U+5650', ids: '⿳吅工吅', radical: '口', strokes: 15, meaning: 'receptacle, vessel; instrument',
-    readings: ['cmn: qì', 'yue: hei3', 'ja: キ うつわ'], variants: [{ character: '器', field: 'kSemanticVariant' }],
+    readings: [{ doculect: 'cmn', value: 'qì' }, { doculect: 'yue', value: 'hei3' }, { doculect: 'ja', value: 'キ うつわ' }], variants: [{ character: '器', field: 'kSemanticVariant' }],
   })
   expect(factsOf('崠', descriptions, unihan)).toMatchObject({ char: '崠', code: 'U+5D20', ids: '⿰山東', radical: '山', strokes: 11 })
   expect(factsOf('红', descriptions, unihan)).toMatchObject({ radical: '糸', variants: [{ character: '紅', field: 'kTraditionalVariant' }] })

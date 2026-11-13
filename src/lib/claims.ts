@@ -6,6 +6,7 @@ import { cleanEncodingCode, isEncodingSet } from './encodings'
 import { genreOf, isCollection } from './genres'
 import { IDS_LENGTH_MAX, IDS_MAX, splitIds } from './ids'
 import { ivdSequence } from './ivd'
+import { cleanDoculect } from './doculects'
 import { isRelationKind, type RelatedDraft } from './related'
 
 export const CLAIM_KINDS = ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'genre', 'collection', 'tag'] as const
@@ -67,6 +68,7 @@ export function validClaim(claim: unknown): claim is Claim {
     case 'genre': return Boolean(genreOf(value))
     case 'collection': return isCollection(value)
     case 'tag': return !/[\s,，、|]/u.test(value)
+    case 'reading': return data === null || (Object.keys(data).length === 1 && cleanDoculect(data.doculect) === data.doculect)
     default: return true
   }
 }
@@ -117,21 +119,26 @@ function rows(form: FormData, names: readonly string[], max: number): string[][]
   return Array.from({ length: count }, (_, row) => columns.map(column => clean(column[row])))
 }
 
+// A reading may name its doculect in `reading_doculect`, which then runs parallel to `reading`.
 function texts(form: FormData, kind: 'reading' | 'meaning'): Claim[] | null {
-  const found = rows(form, [kind, `${kind}_sighting`].filter(name => name === kind || form.has(name)), CLAIM_LIMITS[kind].max * 2)
+  const names = [kind, `${kind}_sighting`, `${kind}_doculect`].filter(name => name === kind || form.has(name))
+  const found = rows(form, names, CLAIM_LIMITS[kind].max * 2)
   if (!found) return null
+  const column = (row: string[], name: string) => names.includes(name) ? row[names.indexOf(name)] : ''
   const seen = new Set<string>()
   const out: Claim[] = []
-  for (const [value, sighting] of found) {
-    if (!value || seen.has(value)) continue
+  for (const row of found) {
+    const value = row[0], stated = column(row, `${kind}_doculect`)
+    const doculect = stated ? cleanDoculect(stated) : null
+    if (stated && !doculect) return null
+    if (!value || seen.has(`${doculect ?? ''}\n${value}`)) continue
     if (value.length > CLAIM_LIMITS[kind].length) return null
-    seen.add(value)
-    out.push(one(kind, value, null, sightingRef(sighting)))
+    seen.add(`${doculect ?? ''}\n${value}`)
+    out.push(one(kind, value, doculect ? { doculect } : null, sightingRef(column(row, `${kind}_sighting`))))
   }
   return out.length > CLAIM_LIMITS[kind].max ? null : out
 }
 
-// The rows as they were typed, for a form that is handed back.
 function typed(form: FormData, names: readonly string[]): string[][] {
   const columns = names.map(name => form.getAll(name).map(value => typeof value === 'string' ? value : ''))
   return Array.from({ length: Math.max(...columns.map(column => column.length)) }, (_, row) => columns.map(column => column[row] ?? ''))
@@ -167,7 +174,7 @@ export function readClaims(form: FormData, base: readonly Claim[] = []): { claim
     if (!form.has(kind) && !form.has(`${kind}s_present`)) continue
     const found = texts(form, kind)
     if (found) next.set(kind, found)
-    else { fail('readings'); next.set(kind, typed(form, [kind]).filter(([value]) => value.trim()).map(([value]) => one(kind, value))) }
+    else { fail('readings'); next.set(kind, typed(form, [kind, `${kind}_doculect`]).filter(([value]) => value.trim()).map(([value, doculect]) => one(kind, value, doculect ? { doculect } : null))) }
   }
 
   if (form.has('encodings_present') || form.has('encoding_code')) {
