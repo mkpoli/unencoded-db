@@ -44,7 +44,7 @@ export const GET: RequestHandler = async (event) => {
   const columns = ['entry_id', ...ENTRY_FIELDS, ...CLAIM_KINDS, 'sighting_id', ...SIGHTING_FIELDS, 'images'] as const
   const rows = result.entries.flatMap(({ evidence, claims, ...entry }) => {
     const sightings = evidence.length ? evidence : [null]
-    const stated = CLAIM_KINDS.map(kind => claimsOf(claims, kind).map(claim => kind === 'encoding' ? `${claim.data?.charset}:${claim.value}` : kind === 'relation' ? `${claim.value} (${claim.data?.relationship})` : claim.value).join('; '))
+    const stated = CLAIM_KINDS.map(kind => claimsOf(claims, kind).map(claim => kind === 'encoding' ? `${claim.data?.charset}:${claim.value}` : kind === 'relation' ? `${claim.value} (${claim.data?.relationship})` : kind === 'reading' && claim.data?.doculect ? `${claim.data.doculect}:${claim.value}` : claim.value).join('; '))
     return sightings.map(sighting => [entry.id, ...ENTRY_FIELDS.map(field => entry[field]), ...stated, sighting?.id, ...SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : sighting?.[field]), sighting?.media.map(image => image.image_key).join('; ')])
   })
   headers.set('Content-Type', 'text/csv; charset=utf-8')

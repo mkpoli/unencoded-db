@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state'
+  import { doculectKey } from '$lib/doculects'
   import { untrack } from 'svelte'
   import Seo from '$lib/components/Seo.svelte'
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
@@ -72,7 +73,7 @@
 </script>
 
 {#snippet basis(claim: { sighting_id: number | null })}{#if claim.sighting_id}<a class="basis" href="#sighting-{claim.sighting_id}">#{claim.sighting_id}</a>{/if}{/snippet}
-{#snippet texts(items: Claim[])}<ul class="claims">{#each items as claim}<li>{claim.value}{@render basis(claim)}</li>{/each}</ul>{/snippet}
+{#snippet texts(items: Claim[])}<ul class="claims">{#each items as claim}{@const doculect = typeof claim.data?.doculect === 'string' ? claim.data.doculect : ''}<li>{#if doculect}<span class="badge doculect" title={doculect}>{doculectKey(doculect) ? t(doculectKey(doculect)!) : doculect}</span> {/if}{claim.value}{@render basis(claim)}</li>{/each}</ul>{/snippet}
 
 <Seo title={t('entry.record', { id: entry.id })} image={entry.cover_key ? media(entry.cover_key) : null} />
 <div class="page narrow stack">
@@ -146,7 +147,7 @@
         </div>
         <div class="field"><label for="description">{t('field.description')}</label><textarea id="description" class="input" name="description">{editValues.description ?? ''}</textarea></div>
         <TextClaims kind="reading" values={claimsOf(editValues.claims, 'reading')} sightings={options} fill={filled?.readings} />
-        <TextClaims kind="meaning" values={claimsOf(editValues.claims, 'meaning')} sightings={options} fill={filled?.meaning ? [filled.meaning] : []} />
+        <TextClaims kind="meaning" values={claimsOf(editValues.claims, 'meaning')} sightings={options} fill={filled?.meaning ? [{ value: filled.meaning }] : []} />
         <RelatedCharacters values={relationsOf(editValues.claims)} sightings={options} fill={filled?.variants} />
         <div class="field"><label for="status">{t('field.status')}</label><select id="status" class="input" name="status" value={editValues.status ?? 'unchecked'}>{#each STATUSES as status}<option value={status}>{t(`status.${status}`)}</option>{/each}</select><p class="hint">{t('field.statusHint')}</p></div>
         <details class="filing" open={editValues.claims.some(claim => claim.kind === 'genre' || claim.kind === 'collection' || claim.kind === 'tag')}>

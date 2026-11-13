@@ -7,8 +7,8 @@ export type CharacterFacts = {
   char: string; code: string; ids: string | null; radical: string | null; strokes: number | null
   /** Unihan's English definition. */
   meaning: string | null
-  /** Readings written `language: reading`, the language as its ISO 639 code. */
-  readings: string[]
+  /** Readings, each with the ISO 639 code of its language. */
+  readings: { doculect: string; value: string }[]
   /** The characters Unihan names as variants, each with the field that names it. */
   variants: { character: string; field: string }[]
 }
@@ -68,7 +68,7 @@ export function factsOf(char: string, descriptions: Descriptions, unihan: Map<st
     radical: row?.radical ? radicalCharacter(Number(row.radical)) : null,
     strokes: row?.strokes ? Number(row.strokes) : null,
     meaning: row?.definition || null,
-    readings: READING_LANGUAGES.filter(language => row?.[language]).map(language => `${language}: ${row![language]}`),
+    readings: READING_LANGUAGES.filter(language => row?.[language]).map(language => ({ doculect: language, value: row![language] })),
     variants: [...variants].map(([character, field]) => ({ character, field })),
   }
 }

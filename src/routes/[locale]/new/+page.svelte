@@ -94,7 +94,7 @@
       <div class="titled"><label class="section-title" for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="3">{values?.description ?? ''}</textarea></div>
       <div class="said">
         <TextClaims kind="reading" values={claimsOf(claims, 'reading')} fill={filled?.readings} />
-        <TextClaims kind="meaning" values={claimsOf(claims, 'meaning')} fill={filled?.meaning ? [filled.meaning] : []} />
+        <TextClaims kind="meaning" values={claimsOf(claims, 'meaning')} fill={filled?.meaning ? [{ value: filled.meaning }] : []} />
       </div>
     </section>
     <section class="panel"><RelatedCharacters values={relationsOf(claims)} fill={filled?.variants} /></section>

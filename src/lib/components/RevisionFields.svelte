@@ -1,5 +1,6 @@
 <script lang="ts">
   // A past version of a record or a sighting, as it read then. A record's claims are listed by kind.
+  import { doculectKey } from '$lib/doculects'
   import { CLAIM_KINDS, claimsOf, compositionOf, type Claim, type ClaimKind } from '$lib/claims'
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
@@ -31,6 +32,7 @@
       case 'genre': return genreOf(claim.value)?.label ?? claim.value
       case 'collection': return COLLECTIONS.find(item => item.slug === claim.value)?.label ?? claim.value
       case 'tag': return `#${claim.value}`
+      case 'reading': { const doculect = typeof claim.data?.doculect === 'string' ? claim.data.doculect : ''; const key = doculectKey(doculect); return doculect ? `${key ? t(key) : doculect} ${claim.value}` : claim.value }
       case 'composition': {
         const analysis = analyze(claim.value, compositionOf(claims))
         return analysis ? [formationLabel(at, analysis.formation), ...analysis.parts.filter(part => part.role).map(part => `${part.part} · ${roleLabel(at, part.role)}`)].join(', ') : claim.value
