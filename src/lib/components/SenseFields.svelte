@@ -35,9 +35,9 @@
 
   // The row a list opens with has no key until the page runs here, where the server's row and this one
   // are the same row.
-  const blank: Links = { key: '', evidence: [], under: [] }
-  let meanings = $state<Meaning[]>(untrack(() => { const found = claimsOf(claims, 'meaning').map(claim => ({ ...links(claim), value: claim.value })); return found.length ? found : [{ ...blank, value: '' }] }))
-  let readings = $state<Reading[]>(untrack(() => { const found = claimsOf(claims, 'reading').map(claim => ({ ...links(claim), value: claim.value, ...stated(claim.data?.doculect) })); return found.length ? found : [{ ...blank, value: '', doculect: '', other: '' }] }))
+  const blank = (): Links => ({ key: '', evidence: [], under: [] })
+  let meanings = $state<Meaning[]>(untrack(() => { const found = claimsOf(claims, 'meaning').map(claim => ({ ...links(claim), value: claim.value })); return found.length ? found : [{ ...blank(), value: '' }] }))
+  let readings = $state<Reading[]>(untrack(() => { const found = claimsOf(claims, 'reading').map(claim => ({ ...links(claim), value: claim.value, ...stated(claim.data?.doculect) })); return found.length ? found : [{ ...blank(), value: '', doculect: '', other: '' }] }))
   let relations = $state<Relation[]>(untrack(() => claimsOf(claims, 'relation').map(claim => ({ ...links(claim), character: claim.value, relationship: String(claim.data?.relationship ?? 'uncertain'), difference: String(claim.data?.difference ?? ''), note: String(claim.data?.evidence ?? '') }))))
   onMount(() => { for (const row of [...meanings, ...readings, ...relations]) row.key ||= newClaimKey() })
 
@@ -74,7 +74,7 @@
   <fieldset class="group">
     <legend class="section-title">{t('field.meaning')}</legend>
     <input type="hidden" name="meanings_present" value="1" />
-    {#each meanings as row, index}
+    {#each meanings as row, index (row)}
       <div class="item" data-row={row.key}>
         <input type="hidden" name="meaning_key" value={row.key} />
         <div class="line">
@@ -96,7 +96,7 @@
   <fieldset class="group">
     <legend class="section-title">{t('field.reading')}</legend>
     <input type="hidden" name="readings_present" value="1" />
-    {#each readings as row, index}
+    {#each readings as row, index (row)}
       <div class="item" data-row={row.key}>
         <input type="hidden" name="reading_key" value={row.key} />
         <div class="line reading">
@@ -121,7 +121,7 @@
   <fieldset class="group">
     <legend class="section-title">{t('field.relatedCharacters')}</legend>
     <input type="hidden" name="related_characters_present" value="1" />
-    {#each relations as row, index}
+    {#each relations as row, index (row)}
       <div class="item" data-row={row.key}>
         <input type="hidden" name="related_key" value={row.key} />
         <div class="grid-2">
@@ -135,7 +135,7 @@
           <div class="field"><label for="{uid}-note-{index}">{t('field.relatedEvidence')}</label><textarea class="input" id="{uid}-note-{index}" name="related_evidence" rows="2" maxlength="5000" bind:value={row.note}></textarea></div>
         </div>
         <ChoiceGroup legend={t('field.basis')} name={row.key ? `sightings.${row.key}` : undefined} options={sightings} bind:chosen={row.evidence} />
-        <div><button class="text-button" type="button" onclick={() => relations.splice(index, 1)}>{t('form.removeRelated')}</button></div>
+        <div><button class="text-button" type="button" aria-label="{t('form.removeRelated')} {index + 1}" onclick={() => relations.splice(index, 1)}>{t('form.removeRelated')}</button></div>
       </div>
     {/each}
     {#if relations.length < CLAIM_LIMITS.relation.max}<div><button class="text-button" type="button" onclick={() => addRelation()}>+ {t('form.addRelated')}</button></div>{/if}
