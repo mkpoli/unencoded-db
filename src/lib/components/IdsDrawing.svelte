@@ -19,10 +19,10 @@
 
   // ids-input's preview and layer documents, with its catalogue for the page's language.
   async function tools(locale: string) {
-    const [{ IdsPreview, translator }, { createDocumentSession }, { documentLayout, layoutDocument }, messages] = await Promise.all([
+    const [{ IdsPreview, translator }, { createDocumentSession }, { chosenPath, documentLayout, layoutDocument }, messages] = await Promise.all([
       import('ids-input/svelte'), import('ids-input/document'), import('$lib/layout-document'), idsMessages(locale),
     ])
-    return { IdsPreview, createDocumentSession, documentLayout, layoutDocument, messages, say: translator(messages, locale) }
+    return { IdsPreview, createDocumentSession, chosenPath, documentLayout, layoutDocument, messages, say: translator(messages, locale) }
   }
   type Tools = Awaited<ReturnType<typeof tools>>
   const asked = new Map<string, Promise<Tools>>()
@@ -38,13 +38,13 @@
 
 <script lang="ts">
   // A description drawn by han-compose as it is typed, on a plate beside its field, and the layout that
-  // moves its parts. The composer runs in the browser and is loaded when the plate first appears. While
-  // the layout is being adjusted the plate is larger, and a part is dragged, scaled and turned on it.
-  // The layout is sent as `layout`; a description nobody adjusted sends it empty.
+  // moves its parts. The composer runs in the browser and is loaded when the plate first comes into
+  // view. While the layout is being adjusted the plate is larger, and a part is dragged, scaled and
+  // turned on it. The layout is sent as `layout` with the description it was drawn over as `layout_ids`.
   import { onMount, untrack } from 'svelte'
   import { parse } from 'ids-input'
   import { cleanIds } from '$lib/ids'
-  import { layoutText, type Layout } from '$lib/layout'
+  import { carryLayout, layoutText, placeOf, type Layout } from '$lib/layout'
   import { locale } from '$lib/t'
 
   let { ids, layout = null, adjusting = $bindable(false) }: { ids: string; layout?: Layout | null; adjusting?: boolean } = $props()
@@ -54,19 +54,36 @@
   const tree = $derived(parse(sequence).tree)
   const whole = $derived(tree !== undefined)
 
+  let host = $state<HTMLElement>()
+  let near = $state(false)
   let kit = $state.raw<Tools | null>(null)
-  let preview = $state.raw<ComposerPreview | null>(null)
+  // The composer that last loaded, and whether it draws parts one by one: the plate adjusts only what such a one drew.
+  let preview = $state.raw<{ draw: ComposerPreview; separate: boolean } | null>(null)
   let session = $state.raw<DocumentSession | null>(null)
   // The session's document changes in place; its version tells the preview to read it again.
   let version = $state(0)
+  // The layout, and the description it is a layout of: the record's own until the description changes.
   let stated = $state.raw(untrack(() => layout))
-  let chosen = $state.raw<number[] | null>(null)
+  let statedFor = $state(untrack(() => cleanIds(ids)))
+  let picked = $state.raw<number[] | null>(null)
   let undoable = $state(false)
   const moved = $derived(Boolean(stated))
   const separate = $derived(adjusting || moved)
-  const chosenMoved = $derived(Boolean(chosen && stated?.[chosen.join('.')]))
+  const parted = $derived(separate && preview?.separate === true)
+  const pickedMoved = $derived(Boolean(picked && stated?.[placeOf(picked)]))
 
+  // A plate in a folded form asks for nothing until the form is opened.
   onMount(() => {
+    if (!host) return
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) { near = true; observer.disconnect() }
+    }, { rootMargin: '400px' })
+    observer.observe(host)
+    return () => observer.disconnect()
+  })
+
+  $effect(() => {
+    if (!near) return
     let live = true
     load(at).then(found => { if (live) kit = found }, () => {})
     return () => { live = false }
@@ -74,35 +91,39 @@
 
   // The export's manifest and layout are read while the first description is still being typed.
   $effect(() => {
+    if (!near) return
     let live = true
-    composer(separate).then(found => { found.warm(); if (live) preview = found }, () => {})
+    const kind = separate
+    composer(kind).then(found => { found.warm(); if (live) preview = { draw: found, separate: kind } }, () => {})
     return () => { live = false }
   })
 
-  // The document follows the description: a part that was moved stays moved while its place holds a
-  // part, and an emptied field starts again.
+  // The document follows the description. A move stays with its part: a description that keeps the
+  // part at its place keeps the move, and one that replaces the part does not. Text that is no
+  // description yet leaves the layout with the last one that was.
   $effect(() => {
-    const found = kit, text = sequence, parts = tree
+    const found = kit, text = sequence
     if (!found) return
     untrack(() => {
-      if (parts === undefined) {
-        if (!text) { session = null; stated = null; chosen = null; adjusting = false; undoable = false }
-        return
-      }
-      if (session) {
-        try { session.sync(parts) } catch { return }
-      } else {
-        const document = found.layoutDocument(text, stated)
-        if (!document) return
-        session = found.createDocumentSession(document)
-      }
-      read()
+      if (session && text === statedFor) return
+      const carried = carryLayout(stated, statedFor, text)
+      const document = found.layoutDocument(text, carried)
+      if (!document) { session = null; picked = null; undoable = false; return }
+      if (session) session.open(document)
+      else session = found.createDocumentSession(document)
+      stated = carried
+      statedFor = text
+      picked = null
+      undoable = false
+      version++
     })
   })
 
+  // After a move, an undo or a reset: what the session now holds.
   function read() {
     if (!kit || !session) return
-    stated = kit.documentLayout(session.document, sequence)
+    stated = kit.documentLayout(session.document, statedFor)
+    picked = kit.chosenPath(session)
     undoable = session.canUndo
     version++
   }
@@ -117,11 +138,11 @@
   $effect(() => { if (!whole) adjusting = false })
 </script>
 
-<div class="drawing" class:adjusting>
-  {#if kit && preview && whole && tree !== undefined}
+<div class="drawing" class:adjusting bind:this={host}>
+  {#if kit && preview && tree !== undefined}
     <div class="stage">
-      <kit.IdsPreview adapter={{ preview }} {tree} {chosen} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
-        session={separate ? session : null} {version} editable={adjusting} onchoose={path => chosen = path} onedit={read} />
+      <kit.IdsPreview adapter={{ preview: preview.draw }} {tree} chosen={picked} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
+        session={parted ? session : null} {version} editable={adjusting && parted} onchoose={path => picked = path} onedit={read} />
     </div>
   {:else}
     <div class="plate" class:empty={!whole} role={whole ? 'img' : undefined} aria-label={whole ? sequence : undefined} aria-hidden={whole ? undefined : 'true'}>
@@ -133,11 +154,12 @@
       <button type="button" class="tool" aria-pressed={adjusting} title={kit.say('ids.adjust.hint')} onclick={() => adjusting = !adjusting}>{kit.say('ids.adjust.title')}</button>
       {#if adjusting}
         <button type="button" class="tool" disabled={!undoable} onclick={undo}>{kit.say('ids.undo.label')}</button>
-        <button type="button" class="tool" disabled={!chosenMoved} onclick={reset}>{kit.say('ids.adjust.reset')}</button>
+        <button type="button" class="tool" disabled={!pickedMoved} onclick={reset}>{kit.say('ids.adjust.reset')}</button>
       {/if}
     </div>
   {/if}
   <input type="hidden" name="layout" value={layoutText(stated)} />
+  <input type="hidden" name="layout_ids" value={statedFor} />
 </div>
 
 <style>
