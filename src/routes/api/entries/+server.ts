@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit'
 import { CLAIM_KINDS, claimsOf, scopesOf, type Claim } from '$lib/claims'
-import { ENTRY_FIELDS, SIGHTING_FIELDS, EXPORT_PAGE_MAX, exportPage } from '$lib/server/entries'
+import { parseMarks, ENTRY_FIELDS, SIGHTING_FIELDS, EXPORT_PAGE_MAX, exportPage } from '$lib/server/entries'
 import { parseSightingTypes } from '$lib/scripts'
 import { env } from '$lib/server/guard'
 import { positiveId } from '../../_submission.server'
@@ -37,6 +37,7 @@ export const GET: RequestHandler = async (event) => {
     entries: result.entries.map(entry => ({
       ...entry,
       types: parseSightingTypes(entry.types),
+      marks: parseMarks(entry.marks),
       evidence: entry.evidence.map(sighting => ({ ...sighting, types: parseSightingTypes(sighting.types) })),
     })),
   }, { headers })

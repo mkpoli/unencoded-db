@@ -180,6 +180,7 @@ test('0005 gives every claim a key, a list of sightings and a scope, in claims a
   expect(journal.filter(row => !versions.some(version => version.id === row.id)).map(row => row.snapshot)).toEqual([sighting, '{}', '{"revision":4}', '{}', '{"from":3}'])
 
   // An old version is restored through the store, with its keys and the sighting it rested on.
+  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql']) raw.exec(migration(name))
   const db = d1Over(raw)
   expect(await revertEntry(db, 1, 1, { actor: 'p', ip: null })).toEqual({ ok: true, rev: 5 })
   expect((await getEntry(db, 1))!.claims).toEqual(first)
@@ -217,5 +218,19 @@ test('0006 counts every listed record in or out of each marked work, as the app 
   expect(written.tags).toHaveLength((codes.length - 1) * 5)
   raw.exec("DELETE FROM entry_tags WHERE tag GLOB 'r:*' OR tag GLOB 'x:*'; DELETE FROM tag_counts WHERE tag GLOB 'r:*' OR tag GLOB 'x:*'")
   raw.exec(migration('0006_registry_tags.sql'))
+  expect(marks()).toEqual(written)
+})
+
+test('0007 gives each record the marked works it is in, as the app writes them', async () => {
+  const { db, raw } = openTestDb()
+  const who = { actor: (await createPerson(db)).id, ip: null }
+  const seen = { place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
+  const codes = [[['unicode', 'U+2D6DD'], ['mj', 'MJ059588']], [['mj', 'MJ059588'], ['glyphwiki', 'irg2021-03300'], ['zitools', '⿰魚它']], [['unicode', 'U+3042']], [['big5', 'A140']], []]
+  for (const rows of codes) await createEntry(db, { script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims: rows.map(([charset, code]) => newClaim('encoding', code, { charset })) }, seen, [], who)
+  const marks = () => (raw.query('SELECT marks FROM entries ORDER BY id').all() as { marks: string | null }[]).map(row => row.marks)
+  const written = marks()
+  expect(written).toEqual(['["unicode","zitools","yedict","glyphwiki","mj"]', '["zitools","glyphwiki","mj"]', '["unicode"]', null, null])
+  raw.exec('ALTER TABLE entries DROP COLUMN marks')
+  raw.exec(migration('0007_entry_marks.sql'))
   expect(marks()).toEqual(written)
 })

@@ -17,7 +17,7 @@ export type EntryFields = { script: string; script_other: string | null; descrip
 export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; via_url: string | null; via_title: string | null; via_author: string | null; via_publisher: string | null; via_report_date: string | null; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
-export type Entry = Omit<EntryFields, 'claims'> & { id: number; rev: number; ids: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
+export type Entry = Omit<EntryFields, 'claims'> & { id: number; rev: number; ids: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
 export type Sighting = SightingFields & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; via_id: number | null; media: StoredImage[]; hidden_at: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
 
 // What an entry has one of. What it has several of is in `claims`.
@@ -121,6 +121,16 @@ export function terms(value: string) {
   return (value.normalize('NFKC').toLowerCase().match(WORD) ?? []).filter(term => !/^[⿰-⿿]$/.test(term))
 }
 
+/** The marked works a record is in, in the order of the list. */
+const marksHeld = (claims: readonly Claim[]) => { const held = registeredIn(encodingsOf(claims)); return MARKED.map(registry => registry.id).filter(id => held.has(id)) }
+/** The marked works a stored summary names. */
+export function parseMarks(raw: string | null | undefined): string[] {
+  try {
+    const value: unknown = JSON.parse(raw || '[]')
+    return Array.isArray(value) ? MARKED.map(registry => registry.id).filter(id => value.includes(id)) : []
+  } catch { return [] }
+}
+
 type TagInput = Pick<Entry, 'script' | 'status' | 'description' | 'script_other'>
 export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key'>, hasSource: boolean, claims: readonly Claim[] = []) {
   const filters = [`f:${entry.status}`]
@@ -134,8 +144,8 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
     else if (claim.kind === 'tag') own.add(`t:${claim.value}`)
   }
   // A record is counted in or out of every marked work, so a list of either is one range.
-  const held = registeredIn(encodingsOf(claims))
-  const marks = MARKED.map(registry => `${held.has(registry.id) ? 'r' : 'x'}:${registry.id}`)
+  const held = marksHeld(claims)
+  const marks = MARKED.map(registry => `${held.includes(registry.id) ? 'r' : 'x'}:${registry.id}`)
   return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks]
 }
 
@@ -188,8 +198,8 @@ function summarize(sightings: SightingState[]) {
 const tagsOf = (entry: Entry, claims: readonly Claim[], summary: ReturnType<typeof summarize>) =>
   [...facetTags({ ...entry, ids: primaryIdsOf(claims), cover_key: summary.cover_key }, summary.hasSource, claims), ...wordTags(entry, claims, summary.visible)]
 const facet = (tag: string) => !tag.startsWith('w:')
-const SUMMARY_SET = 'ids = ?, cover_key = ?, cover_place = ?, sightings = ?, types = ?, first_year = ?, first_year_kind = ?'
-const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summarize>) => [primaryIdsOf(claims), summary.cover_key, summary.cover_place, summary.visible.length, summary.types, summary.first_year, summary.first_year_kind]
+const SUMMARY_SET = 'ids = ?, cover_key = ?, cover_place = ?, sightings = ?, types = ?, first_year = ?, first_year_kind = ?, marks = ?'
+const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summarize>) => [primaryIdsOf(claims), summary.cover_key, summary.cover_place, summary.visible.length, summary.types, summary.first_year, summary.first_year_kind, marksHeld(claims).length ? JSON.stringify(marksHeld(claims)) : null]
 
 // Brings a record's tags, counts and summary up to date. It answers the statements, to run with the
 // write they belong to.
@@ -665,7 +675,7 @@ function listRead(plan: NonNullable<ReturnType<typeof listPlan>>, range = plan.k
   return { tag: range, tests, searching: Boolean(plan.exact) || tests.length > 0 }
 }
 
-const TILE_COLUMNS = 'e.id, e.ids, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind'
+const TILE_COLUMNS = 'e.id, e.ids, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind, e.marks'
 
 // `range` names the key to read; without it the first key is read.
 export function listStatement(db: D1Database, listing: Listing, range?: string) {
@@ -682,9 +692,9 @@ export function listStatement(db: D1Database, listing: Listing, range?: string) 
     .bind(...(plan.exact ? [plan.exact] : []), ...read.tests, read.tag, listing.before ?? Number.MAX_SAFE_INTEGER, (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1)
 }
 
-type TileRow = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind'>
-export type Tile = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings' | 'status'> & { types: SightingType[]; firstYear: string | null; firstYearKind: YearKind | null }
-const toTile = ({ types, first_year, first_year_kind, ...row }: TileRow): Tile => ({ ...row, types: parseSightingTypes(types), firstYear: first_year, firstYearKind: first_year_kind })
+type TileRow = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind' | 'marks'>
+export type Tile = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings' | 'status'> & { types: SightingType[]; firstYear: string | null; firstYearKind: YearKind | null; marks: string[] }
+const toTile = ({ types, first_year, first_year_kind, marks, ...row }: TileRow): Tile => ({ ...row, types: parseSightingTypes(types), firstYear: first_year, firstYearKind: first_year_kind, marks: parseMarks(marks) })
 
 export async function list(db: D1Database, listing: Listing) {
   const plan = listPlan(listing)
