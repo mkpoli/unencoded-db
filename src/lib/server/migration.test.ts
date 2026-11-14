@@ -2,10 +2,11 @@ import { Database } from 'bun:sqlite'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
-import { isClaimKey, parseClaims, type Claim } from '$lib/claims'
-import { getEntry, revertEntry } from './entries'
+import { isClaimKey, newClaim, parseClaims, type Claim } from '$lib/claims'
+import { createEntry, getEntry, revertEntry, setHidden } from './entries'
 import { entrySnapshot, sightingSnapshot } from './revisions'
-import { d1Over } from './testdb'
+import { createPerson } from './people'
+import { d1Over, openTestDb } from './testdb'
 
 const migration = (name: string) => readFileSync(join(import.meta.dir, '../../../migrations', name), 'utf8')
 
@@ -194,4 +195,26 @@ test('0005 leaves a database without claims with the new table', () => {
   expect(() => raw.exec("INSERT INTO claims(entry_id, position, key, kind, value, sightings) VALUES (1, 0, 'abcd1234', 'tag', 'a', '7')")).toThrow(/CHECK/)
   raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) VALUES (1, 0, 'abcd1234', 'tag', 'a')")
   expect(raw.query('SELECT sightings, under FROM claims').get()).toEqual({ sightings: '[]', under: '[]' })
+})
+
+test('0006 counts every listed record in or out of each marked work, as the app does', async () => {
+  const { db, raw } = openTestDb()
+  const who = { actor: (await createPerson(db)).id, ip: null }
+  const seen = { place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
+  const codes = [
+    [['unicode', 'U+2D6DD']], [['unicode', 'u+5d20']], [['unicode', 'U+004E00']], [['unicode', 'U+FA0E']], [['unicode', 'U+3042']], [['unicode', 'U+1B000']], [['unicode', 'pending']],
+    [['zitools', '⿰魚它'], ['mj', 'MJ059588']], [['glyphwiki', 'irg2021-03300'], ['big5', 'A140']], [['unicode', 'U+3042'], ['unicode', 'U+4E00'], ['yedict', 'U04E00']], [],
+  ]
+  let last = 0
+  for (const rows of codes) last = await createEntry(db, { script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims: rows.map(([charset, code]) => newClaim('encoding', code, { charset })) }, seen, [], who)
+  await setHidden(db, { entry: last }, true, who, null)
+  const marks = () => ({
+    tags: raw.query("SELECT tag, entry_id FROM entry_tags WHERE tag GLOB 'r:*' OR tag GLOB 'x:*' ORDER BY tag, entry_id").all(),
+    counts: raw.query("SELECT tag, n FROM tag_counts WHERE (tag GLOB 'r:*' OR tag GLOB 'x:*') AND n > 0 ORDER BY tag").all(),
+  })
+  const written = marks()
+  expect(written.tags).toHaveLength((codes.length - 1) * 5)
+  raw.exec("DELETE FROM entry_tags WHERE tag GLOB 'r:*' OR tag GLOB 'x:*'; DELETE FROM tag_counts WHERE tag GLOB 'r:*' OR tag GLOB 'x:*'")
+  raw.exec(migration('0006_registry_tags.sql'))
+  expect(marks()).toEqual(written)
 })

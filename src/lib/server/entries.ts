@@ -6,7 +6,8 @@ import { CONTEXTS, isScript, isStatus, NEEDS, parseSightingTypes, SIGHTING_TYPES
 import { cleanIds, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
-import { mapSightings, parseClaims, primaryIdsOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
+import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
+import { MARKED, registeredIn } from '$lib/registries'
 import { genreOf } from '$lib/genres'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
@@ -132,7 +133,10 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
     else if (claim.kind === 'collection') own.add(`c:${claim.value}`)
     else if (claim.kind === 'tag') own.add(`t:${claim.value}`)
   }
-  return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own]
+  // A record is counted in or out of every marked work, so a list of either is one range.
+  const held = registeredIn(encodingsOf(claims))
+  const marks = MARKED.map(registry => `${held.has(registry.id) ? 'r' : 'x'}:${registry.id}`)
+  return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks]
 }
 
 const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'tag']
@@ -613,7 +617,7 @@ export async function mediaVisible(db: D1Database, key: string) {
   return Boolean(await db.prepare(`SELECT 1 FROM sighting_media x INDEXED BY sighting_media_by_image ${live} AND x.image_key = ?1 UNION ALL SELECT 1 FROM sighting_media x INDEXED BY sighting_media_by_thumb ${live} AND x.thumb_key = ?1 LIMIT 1`).bind(key).first())
 }
 
-export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; query?: string | null; before?: number | null; limit?: number }
+export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; before?: number | null; limit?: number }
 export const PAGE = 48
 export const SEARCH_WINDOW = 256
 
@@ -631,21 +635,30 @@ export function facetTag(facet?: string | null) {
   return match ? `${match[1]}:${match[2]}` : undefined
 }
 
+// The marked works a list keeps to (`r:`) and leaves out (`x:`), as the keys they are listed under, or
+// null for a name that is no marked work.
+export function markTags(within: readonly string[] = [], without: readonly string[] = []) {
+  if (![...within, ...without].every(id => MARKED.some(registry => registry.id === id))) return null
+  return [...new Set([...within.map(id => `r:${id}`), ...without.map(id => `x:${id}`)])]
+}
+
 export function exactSearchIds(query: string) {
   const ids = cleanIds(query)
   return isDescription(ids) ? ids : null
 }
 
 // The range a listing reads and the tests each row must pass. Null names a listing that is not one.
-function listPlan({ script, filter, facet, query }: Listing) {
-  const base = listTag(script, filter), own = facetTag(facet)
-  if (!base || own === undefined) return null
+function listPlan({ script, filter, facet, within, without, query }: Listing) {
+  const base = listTag(script, filter), own = facetTag(facet), marks = markTags(within, without)
+  if (!base || own === undefined || !marks) return null
   if ((query?.trim().length ?? 0) > SEARCH_LENGTH_MAX) return null
   const exact = exactSearchIds(query ?? '')
   const words = exact ? [] : [...new Set(terms(query ?? ''))]
   if (!exact && (words.length > SEARCH_TERMS_MAX || (query?.trim() && !words.length))) return null
-  const tests = [...words.map(word => `w:${word}`), ...(own && base !== 'all' ? [base] : [])]
-  return { tag: own ?? base, exact, tests, searching: Boolean(exact) || tests.length > 0 }
+  // The first key that narrows the list is the range read; the others are tested on each row of it.
+  const [tag = base, ...rest] = [...(own ? [own] : []), ...marks]
+  const tests = [...words.map(word => `w:${word}`), ...rest, ...(tag !== base && base !== 'all' ? [base] : [])]
+  return { tag, exact, tests, searching: Boolean(exact) || tests.length > 0 }
 }
 
 const TILE_COLUMNS = 'e.id, e.ids, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind'
