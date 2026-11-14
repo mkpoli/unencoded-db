@@ -1,6 +1,7 @@
 <script lang="ts" module>
   // The tables ids-input ships, each read when a part is first looked up in it.
   import { babelStoneAdapter } from 'ids-input/adapter'
+  import { provideTables } from '$lib/ids-tables'
   import ids from 'ids-input/data/babelstone-ids.tsv.gz?url'
   import projectIds from 'ids-input/data/ids-project.tsv.gz?url'
   import overwriteIds from 'ids-input/data/ids-overwrites.tsv?url'
@@ -13,6 +14,7 @@
   import characters from 'ids-input/data/character-vocabulary.tsv.gz?url'
 
   export const adapter = babelStoneAdapter({ ids, project: projectIds, overwrite: overwriteIds, components, parts, forms, names, folds, characters, characterInfo })
+  provideTables(adapter)
 </script>
 
 <script lang="ts">
@@ -23,25 +25,37 @@
   // ids-input loads a font shard for each rare character a panel shows; its entry point does not export the watcher.
   import { watchFallback } from '../../../node_modules/ids-input/src/svelte/fallback-font.js'
 
-  let { editor, messages, locale = 'en' }: { editor: IdsEditor; messages?: Record<string, string>; locale?: string } = $props()
+  let { editor, scope = null, messages, locale = 'en' }: {
+    editor: IdsEditor
+    /** What holds the field and these tools: a character anywhere in it opens its card. */
+    scope?: HTMLElement | null
+    messages?: Record<string, string>; locale?: string
+  } = $props()
   let root = $state<HTMLElement | null>(null)
   let slot = $state<HTMLInputElement | null>(null)
   const say = $derived(editor.t)
   $effect(() => { if (root) return watchFallback(root) })
+
+  function keydown(event: KeyboardEvent) {
+    editor.keydown(event, { root, slot })
+    // Enter in one of the tools' own inputs is theirs, and never sends the form the tools stand in.
+    const target = event.target
+    if (event.key === 'Enter' && target instanceof HTMLInputElement && !(target.form && root?.contains(target.form))) event.preventDefault()
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="builder" bind:this={root} onkeydown={event => editor.keydown(event, { root, slot })}>
+<div class="builder" bind:this={root} onkeydown={keydown}>
   <IdsOperators {editor} />
   <IdsTree {editor} />
-  <IdsPartTools {editor} bind:slot status={false} />
+  <IdsPartTools {editor} bind:slot />
   <IdsPicker {editor} recentKey="ug.recentParts" />
   <div class="history">
     <button type="button" class="button" disabled={!editor.canUndo} onclick={() => editor.undo()}>{say('ids.undo.label')}</button>
     <button type="button" class="button" disabled={!editor.canRedo} onclick={() => editor.redo()}>{say('ids.redo.label')}</button>
   </div>
 </div>
-<IdsCharacterInfo {root} {adapter} {messages} {locale} onpick={(part, path) => editor.take(part, path)} />
+<IdsCharacterInfo root={scope ?? root} {adapter} {messages} {locale} onpick={(part, path) => editor.take(part, path)} />
 
 <style>
   .builder {
