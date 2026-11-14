@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import { preloadData } from '$app/navigation'
+  import { afterNavigate, preloadData } from '$app/navigation'
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
   import Tile from '$lib/components/Tile.svelte'
@@ -18,8 +18,10 @@
   const fresh = (from: typeof data): Shown => ({ for: from, tiles: from.tiles, glyphs: from.glyphs ?? {}, next: from.next, partial: from.partial })
   let loaded = $state.raw<Shown | null>(null)
   const shown = $derived(loaded?.for === data ? loaded : fresh(data))
+  const REACH = 1200
   let sentinel = $state<HTMLElement>()
-  let near = $state(false), busy = $state(false), failed = $state(false)
+  let near = $state(false), busy = $state(false)
+  let failedFor = $state.raw<typeof data | null>(null)
   const more = $derived.by(() => {
     const params = new URLSearchParams(page.url.searchParams)
     params.set('before', String(shown.next))
@@ -31,33 +33,47 @@
     busy = true
     try {
       const result = await preloadData(target)
-      if (result.type !== 'loaded' || result.status !== 200) throw new Error(String(result.type))
       if (from !== data) return
+      if (result.type !== 'loaded' || result.status !== 200) { failedFor = from; return }
       const next = result.data as typeof data
       loaded = { for: from, tiles: [...base.tiles, ...next.tiles], glyphs: { ...base.glyphs, ...next.glyphs }, next: next.next, partial: next.partial }
-      failed = false
+      failedFor = null
+      // The observer reports the moved sentinel a frame later; until then it is measured here.
+      await tick()
+      near = sentinel ? sentinel.getBoundingClientRect().top < innerHeight + REACH : false
     } catch {
-      failed = true
+      if (from === data) failedFor = from
     } finally {
       busy = false
     }
   }
   $effect(() => {
     if (!sentinel) return
-    const observer = new IntersectionObserver(([entry]) => { near = entry.isIntersecting }, { rootMargin: '0px 0px 1200px 0px' })
+    void data
+    const observer = new IntersectionObserver(([entry]) => { near = entry.isIntersecting }, { rootMargin: `0px 0px ${REACH}px 0px` })
     observer.observe(sentinel)
-    return () => observer.disconnect()
+    return () => { observer.disconnect(); near = false }
   })
   // A search reads the records a window at a time and may find nothing in one, so it continues only when asked.
-  $effect(() => { if (near && !busy && !failed && !shown.partial && shown.next !== null) grow() })
-  // Returning to the list brings back the pages read so far. SvelteKit scrolls before it restores them,
-  // so the place is set again once they are drawn.
-  export const snapshot: Snapshot<(Omit<Shown, 'for'> & { y: number }) | null> = {
-    capture: () => loaded?.for === data ? { tiles: loaded.tiles, glyphs: loaded.glyphs, next: loaded.next, partial: loaded.partial, y: scrollY } : null,
+  $effect(() => { if (near && !busy && failedFor !== data && !shown.partial && shown.next !== null) grow() })
+  const appendOnClick = (event: MouseEvent) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    failedFor = null
+    grow()
+  }
+  // Returning to the list brings back the pages read so far; a reload starts again from the first.
+  // SvelteKit scrolls before it restores them, so the place is set again once they are drawn. Drawings
+  // are asked for again as tiles come into view.
+  let arrival = ''
+  afterNavigate(navigation => { arrival = navigation.type })
+  const reloaded = () => (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'reload'
+  export const snapshot: Snapshot<{ tiles: Shown['tiles']; next: number | null; partial: boolean; y: number } | null> = {
+    capture: () => loaded?.for === data ? { tiles: loaded.tiles, next: loaded.next, partial: loaded.partial, y: scrollY } : null,
     restore: value => {
-      if (!value) return
+      if (!value || (arrival === 'enter' && reloaded())) return
       const { y, ...pages } = value
-      loaded = { ...pages, for: data }
+      loaded = { ...pages, glyphs: data.glyphs ?? {}, for: data }
       tick().then(() => scrollTo(scrollX, y))
     }
   }
@@ -132,7 +148,7 @@
     <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.filter || data.genre || data.collection || data.tag || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
   {/if}
   {#if shown.partial}<p class="muted">{t('browse.searchContinues')}</p>{/if}
-  {#if shown.next !== null}<div bind:this={sentinel}><a class="button" href={more} aria-busy={busy} onclick={event => { event.preventDefault(); failed = false; grow() }}>{t(shown.partial ? 'browse.continueSearch' : 'browse.more')}</a></div>{/if}
+  {#if shown.next !== null}<div bind:this={sentinel}><a class="button" href={more} aria-busy={busy} onclick={appendOnClick}>{t(shown.partial ? 'browse.continueSearch' : 'browse.more')}</a></div>{/if}
 </div>
 <style>
   .heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:start; gap:20px }
