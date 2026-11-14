@@ -169,7 +169,6 @@
   "form.summary": "What changed",
   "form.as": "Recorded under {name} with today's date.",
   "form.terms": "Your text is released under CC BY-SA 4.0. Upload only what may be quoted as evidence.",
-  "error.place": "Say where you found it, or give a link.",
   "error.evidence": "Add a picture or a link.",
   "error.sightingLimit": "This record has reached its limit of 200 pieces of evidence.",
   "error.sightingsMax": "A new record takes up to {max} pieces of evidence.",

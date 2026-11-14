@@ -49,7 +49,7 @@
     <ol class="reports">
       {#each data.hiddenSightings as sighting (sighting.id)}
         <li>
-          <div>{sighting.ids || t('entry.record', { id: sighting.entry_id })} · #{sighting.entry_id} · {t('entry.sightings')} #{sighting.id} · {sighting.place} · <time datetime={sighting.hidden_at}>{when(sighting.hidden_at)}</time></div>
+          <div>{sighting.ids || t('entry.record', { id: sighting.entry_id })} · #{sighting.entry_id} · {t('entry.sightings')} #{sighting.id} · {#if sighting.place}{sighting.place} · {/if}<time datetime={sighting.hidden_at}>{when(sighting.hidden_at)}</time></div>
           <form method="POST" action="?/restoreSighting"><input type="hidden" name="id" value={sighting.id} /><button class="button" type="submit">{t('moderate.unhideSighting')}</button></form>
         </li>
       {/each}

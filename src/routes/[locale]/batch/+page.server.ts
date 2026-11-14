@@ -29,7 +29,6 @@ export const actions: Actions = {
     // A row with nothing in it is skipped, so a spare row costs nothing.
     const chosen = typed.map((row, index) => ({ ...row, index, picture: filled(files[index]) })).filter(row => row.ids.trim() || row.note.trim() || row.picture)
     if (!chosen.length) return reject(400, 'batchRows', values)
-    if (!shared.place) return reject(400, 'place', values)
 
     const rows = []
     for (const row of chosen) {
@@ -39,7 +38,7 @@ export const actions: Actions = {
       entry.set('ids', row.ids)
       const { fields, error } = readEntryFields(entry)
       if (error) return reject(400, error, values, row.index + 1)
-      if (!row.picture && !shared.url) return reject(400, 'evidence', values, row.index + 1)
+      if (!row.picture && !shared.url && !shared.via_url) return reject(400, 'evidence', values, row.index + 1)
       rows.push({ ...row, fields })
     }
     if (!(await chargeWrites(event, 'ADDS', rows.length - 1))) return reject(429, 'slow', values)

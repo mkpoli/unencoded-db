@@ -23,8 +23,7 @@ export const load: PageServerLoad = async (event) => {
 const filled = (form: FormData, fields: SightingFields) => Object.values(fields).some(Boolean) || form.getAll('image').some(file => file instanceof File && file.size > 0)
 
 export const actions: Actions = {
-  // A record and the sightings it starts with. Each sighting needs where it was found and a picture or a
-  // link, and all of them are read and checked before a picture is stored or a row written; the record
+  // A record and the sightings it starts with. Each sighting needs a picture or a link, and all of them are read and checked before a picture is stored or a row written; the record
   // and its sightings are then saved together by `createEntry`, which gives each claim the ids of the
   // sightings it names. A sighting left empty is passed over.
   //
@@ -44,12 +43,11 @@ export const actions: Actions = {
     // `sighting` numbers the one an error is about; 0 names none.
     const reject = (status: 400 | 429, error: string, sighting = 0) => fail(status, { error, sighting, values: { ...entry, sightings } })
     if (claimError) return reject(400, claimError)
-    if (!sections.length) return reject(400, 'place', 1)
+    if (!sections.length) return reject(400, 'evidence', 1)
     if (sections.length > ADD_SIGHTINGS_MAX) return reject(400, 'sightingsMax')
 
     const pictures: ReadImage[][] = []
     for (const [index, section] of sections.entries()) {
-      if (!section.fields.place) return reject(400, 'place', index + 1)
       const images = await readImages(section.form)
       if (images === 'invalid') return reject(400, 'image', index + 1)
       if (!images.length && !section.fields.url && !section.fields.via_url) return reject(400, 'evidence', index + 1)

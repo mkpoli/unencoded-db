@@ -119,11 +119,11 @@ test('browse explains invalid search terms without showing unfiltered entries', 
   expect(await browseLoad(event('a'.repeat(200)))).toMatchObject({ searchError: null })
 })
 
-test('submission rejects missing place and missing evidence', async () => {
+test('submission needs a picture or a link', async () => {
   const { db } = openTestDb()
   const form = new FormData()
   const event = { request: { formData: async () => form }, url: new URL('https://example.test/en'), locals: {}, platform: { env: { DB: db, MEDIA: {} } }, getClientAddress: () => '127.0.0.1' } as any
-  expect((await createActions.default(event) as any).data.error).toBe('place')
+  expect((await createActions.default(event) as any).data.error).toBe('evidence')
   form.set('place', 'A book')
   expect((await createActions.default(event) as any).data.error).toBe('evidence')
 })

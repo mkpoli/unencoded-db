@@ -169,7 +169,6 @@
   "form.summary": "更改内容",
   "form.as": "将以{name}的名义和今天的日期记录。",
   "form.terms": "你的文字以CC BY-SA 4.0许可发布。请只上传可作为证据引用的材料。",
-  "error.place": "请说明出处或提供链接。",
   "error.evidence": "请添加图片或链接。",
   "error.sightingLimit": "此记录已达到200项证据的上限。",
   "error.sightingsMax": "新记录最多可附{max}项证据。",

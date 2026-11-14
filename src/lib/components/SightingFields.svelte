@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Where a character was seen. The place is the only line asked for; the reference IRG wants stays folded.
+  // Where a character was seen. A picture or a link is enough; the reference IRG wants stays folded.
   // A post link fills the place, title and author from the post, and hands its photos to `onphotos`. When the
   // post's author names the book the picture is from, the book becomes the source and the post the via source.
   import { untrack } from 'svelte'
@@ -9,7 +9,7 @@
   import { t } from '$lib/t'
   import type { SightingFields } from '$lib/server/entries'
 
-  let { values = {}, requirePlace = true, onphotos }: { values?: Partial<SightingFields>; requirePlace?: boolean; onphotos?: (files: File[] | null) => void } = $props()
+  let { values = {}, onphotos }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void } = $props()
   const uid = $props.id()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
   const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.original_date || values.page || values.context || values.style || values.types || values.note))
@@ -82,7 +82,7 @@
   {#if fetching}<p class="hint" role="status">{t('field.linkImageWorking')}</p>{:else if failed}<p class="hint" role="status">{t('field.linkImageFailed')}</p>{/if}
 </div>
 <div class="field">
-  <label for="{uid}-place" class:required={requirePlace}>{t('field.place')}</label>
+  <label for="{uid}-place">{t('field.place')}</label>
   <input id="{uid}-place" class="input" name="place" bind:value={place} maxlength="500" />
   <p class="hint">{t('field.placeHint')}</p>
 </div>
