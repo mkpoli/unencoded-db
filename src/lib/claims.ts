@@ -7,7 +7,7 @@ import { analyze, parseComposition, type Composition } from './composition'
 import { cleanCode, isRegistry, type Encoding } from './registries'
 import { genreOf, isCollection } from './genres'
 import { IDS_LENGTH_MAX, IDS_MAX, splitIds } from './ids'
-import { cleanLayout, validLayout, type Layout } from './layout'
+import { carryLayout, cleanLayout, validLayout, type Layout } from './layout'
 import { ivdSequence } from './ivd'
 import { cleanDoculect } from './doculects'
 import { isRelationKind } from './related'
@@ -203,10 +203,14 @@ export function readClaims(form: FormData, base: readonly Claim[] = []): { claim
     const values = form.getAll('ids')
     const sequences = splitIds(values.filter(value => typeof value === 'string').join(' '))
     if (values.some(value => typeof value !== 'string') || sequences.length > IDS_MAX || sequences.some(sequence => sequence.length > IDS_LENGTH_MAX)) fail('ids')
-    // A layout belongs to the description it was drawn over. The form states the first one's; a description
-    // the form does not speak for keeps its own.
+    // A layout belongs to the description it was drawn over, which the form names in `layout_ids`. It is
+    // the first description's when that is the one named; when the first is a new description, the moves
+    // of the parts it kept from the named one go with it. A description the record already holds, and
+    // every description the form does not speak for, keeps its own.
     const kept = new Map(claimsOf(base, 'ids').map(claim => [claim.value, claim.data]))
-    const stated = form.has('layout') && sequences.length ? cleanLayout(clean(form.get('layout')), sequences[0]) : undefined
+    const drawn = splitIds(clean(form.get('layout_ids')))[0]
+    const spoken = form.has('layout') && drawn && sequences.length > 0 && (drawn === sequences[0] || !kept.has(sequences[0]))
+    const stated = spoken ? carryLayout(cleanLayout(clean(form.get('layout')), drawn), drawn, sequences[0]) : undefined
     next.set('ids', sequences.map((sequence, index) => made('ids', sequence, index === 0 && stated !== undefined ? stated && { layout: stated } : kept.get(sequence) ?? null)))
   }
   const primary = next.get('ids')![0]?.value ?? null

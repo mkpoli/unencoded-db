@@ -80,13 +80,15 @@ declare module 'ids-input/document' {
   }
   export function fromSequence(sequence: string): IdsDocument
   export function layerAtPath(root: IdsLayer, path: number[]): IdsLayer | null
+  /** The place of the layer with this id, or null. */
+  export function pathOfLayer(root: IdsLayer, id: string): number[] | null
   export function affineForChain(chain: IdsOperation[]): number[] | null
   export function createDocumentSession(initial?: IdsDocument): DocumentSession
-  export function scopesMarkup(drawing: ScopeTree, options?: { ink?: string; idPrefix?: string }): { defs: string; body: string }
+  export function scopesMarkup(drawing: ScopeTree, options?: { ink?: string; idPrefix?: string; emoji?: unknown[] | null; cut?: string | null; cutLeaf?: number | null }): { defs: string; body: string }
 }
 
 declare module 'ids-input/composer' {
-  export type Drawing = { d: string; parts?: unknown[]; slots?: unknown[]; cut?: string; emoji?: unknown[] }
+  export type Drawing = { d: string; parts?: { leaf?: number; cut?: boolean }[]; slots?: unknown[]; cut?: string; emoji?: unknown[] }
   export type SketchLeaf = { index: number; box: number[]; empty: boolean }
   export type ComposerPreview = ((sequence: string, options?: { signal?: AbortSignal }) => Promise<Drawing>) & { warm(sequence?: string): void }
   export type ComposerSource = {
