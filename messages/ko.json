@@ -169,7 +169,6 @@
   "form.summary": "변경 내용",
   "form.as": "{name} 이름으로 오늘 날짜에 기록됩니다.",
   "form.terms": "작성한 텍스트는 CC BY-SA 4.0으로 공개됩니다. 증거로 인용할 수 있는 자료만 올려 주세요.",
-  "error.place": "발견한 곳을 적거나 링크를 입력해 주세요.",
   "error.evidence": "사진이나 링크를 추가해 주세요.",
   "error.sightingLimit": "이 기록은 증거 한도인 200건에 도달했습니다.",
   "error.sightingsMax": "새 기록에는 증거를 {max}건까지 넣을 수 있습니다.",

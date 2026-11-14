@@ -179,3 +179,17 @@ test('a moderator redacts a past version, and it can no longer be restored or re
   expect(raw.query('SELECT snapshot, redacted_by FROM revisions WHERE id = ?').get(create.id)).toEqual({ snapshot: '{}', redacted_by: person.id })
   expect(await redactRevision(db, id, create.id, who, null)).toBe(false)
 })
+
+test('a restore that would leave evidence with no picture, link or place is refused', async () => {
+  const { db } = openTestDb()
+  const person = await createPerson(db), who = { actor: person.id, ip: null }
+  const picture = { image_key: 'page', image_type: 'image/png', image_w: 20, image_h: 20, thumb_key: 'page-thumb', box: null }
+  const id = await createEntry(db, fields, { ...sighting, place: '' }, [picture], who)
+  const seen = (await getEntry(db, id))!.sightings[0]
+  await editSighting(db, seen.id, 1, { ...sighting, place: '', url: 'https://example.test/page' }, [], who, null, id)
+  const loadEvent = { params: { locale: 'en', id: String(id) }, platform: { env: { DB: db } } } as any
+  const first = (await load(loadEvent) as any).rows.find((r: any) => r.kind === 'sighting')
+  const data = new FormData(); data.set('rev', '2'); data.set('revision', String(first.id)); data.set('sighting', String(seen.id))
+  const restore = actions.restore as (event: any) => Promise<any>
+  expect(await restore({ ...loadEvent, locals: { person }, request: new Request('http://localhost', { method: 'POST', body: data }) })).toMatchObject({ status: 400, data: { error: 'evidence' } })
+})

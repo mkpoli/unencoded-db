@@ -159,10 +159,10 @@ test('a later sighting without a picture or a link stops the whole form', async 
   expect(objects.size).toBe(0)
 })
 
-test('a later sighting needs its place and readable pictures before anything is stored', async () => {
+test('a later sighting needs a picture or a link, and readable pictures, before anything is stored', async () => {
   const { event, count, objects } = fixture()
-  const nowhere = page([{ place: 'Page 12', pictures: [picture()] }, { title: 'Zidian', pictures: [picture(11)] }])
-  expect(await actions.default(event(nowhere))).toMatchObject({ status: 400, data: { error: 'place', sighting: 2 } })
+  const bare = page([{ place: 'Page 12', pictures: [picture()] }, { place: 'Page 40', title: 'Zidian' }])
+  expect(await actions.default(event(bare))).toMatchObject({ status: 400, data: { error: 'evidence', sighting: 2 } })
   const unreadable = page([{ place: 'Page 12', pictures: [picture()] }, { place: 'Page 40', pictures: [new File(['not a picture'], 'page.png', { type: 'image/png' })] }])
   expect(await actions.default(event(unreadable))).toMatchObject({ status: 400, data: { error: 'image', sighting: 2 } })
   expect(count('entries')).toBe(0)
@@ -172,8 +172,8 @@ test('a later sighting needs its place and readable pictures before anything is 
 test('a sighting left empty is passed over, and a form needs one', async () => {
   const { event, count } = fixture()
   const bare = await actions.default(event(page([{}, {}], { ids: '⿰山東' }))) as any
-  expect(bare).toMatchObject({ status: 400, data: { error: 'place', sighting: 1, values: { sightings: [] } } })
-  expect(await actions.default(event(new FormData()))).toMatchObject({ status: 400, data: { error: 'place', sighting: 1 } })
+  expect(bare).toMatchObject({ status: 400, data: { error: 'evidence', sighting: 1, values: { sightings: [] } } })
+  expect(await actions.default(event(new FormData()))).toMatchObject({ status: 400, data: { error: 'evidence', sighting: 1 } })
   const flat = new FormData(); flat.set('place', 'A sign'); flat.set('url', 'https://example.test/flat')
   await expect(actions.default(event(flat))).rejects.toMatchObject({ status: 303 })
   await expect(actions.default(event(page([{}, { place: 'A sign', url: 'https://example.test/sign' }, {}])))).rejects.toMatchObject({ status: 303 })
@@ -213,4 +213,11 @@ test('a form holds a limited number of sightings', async () => {
   expect(count('entries')).toBe(0)
   await expect(actions.default(event(page(sightings.slice(1))))).rejects.toMatchObject({ status: 303 })
   expect(count('sightings')).toBe(ADD_SIGHTINGS_MAX)
+})
+
+test('a picture alone is enough for a sighting', async () => {
+  const { event, count } = fixture()
+  await expect(actions.default(event(page([{ pictures: [picture()] }], { ids: '⿰山東' })))).rejects.toMatchObject({ status: 303 })
+  expect(count('sightings')).toBe(1)
+  expect(count('sighting_media')).toBe(1)
 })

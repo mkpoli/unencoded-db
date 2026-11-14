@@ -121,3 +121,67 @@ test('write guard rejects paused and rate-limited edits', async () => {
   await expect(actions.default(limited)).rejects.toMatchObject({ status: 429 })
   expect(raw.query('SELECT rev FROM sightings WHERE id = 1').get()).toEqual({ rev: 1 })
 })
+
+test('a sighting with a picture keeps no place, and one with nothing is refused', async () => {
+  const { raw, event } = await fixture()
+  picture(raw, 0, 'original')
+  await expect(actions.default(event(form('1', '')))).rejects.toMatchObject({ status: 303 })
+  expect(raw.query('SELECT place FROM sightings WHERE id = 1').get()).toEqual({ place: '' })
+  const bare = form('2', ''); bare.append('remove_media', '0')
+  expect(await actions.default(event(bare))).toMatchObject({ status: 400, data: { error: 'evidence' } })
+})
+
+const marked = (boxes: string[], thumbs: (typeof png | null)[] = []) => {
+  const data = form()
+  for (const [index, box] of boxes.entries()) {
+    data.append('media_box', box)
+    data.append('media_thumb', thumbs[index] ? new File([thumbs[index]!], 'thumb.png', { type: 'image/png' }) : new File([], ''))
+  }
+  return data
+}
+
+test('marks a stored picture again, with a new thumbnail', async () => {
+  const { raw, event } = await fixture()
+  picture(raw, 0, 'original'); picture(raw, 1, 'second')
+  const keys: string[] = []
+  const withMedia = event(marked(['[[1,2,10,10]]', '[[20,30,40,20],[5,5,8,8]]'], [null, png]))
+  withMedia.platform.env.MEDIA = { put: async (key: string) => { keys.push(key) } }
+  await expect(actions.default(withMedia)).rejects.toMatchObject({ status: 303 })
+  const [first, second] = media(raw) as { position: number; image_key: string; thumb_key: string; box: string }[]
+  expect(first).toEqual({ position: 0, image_key: 'original', thumb_key: 'original-thumb', box: '[[1,2,10,10]]' })
+  expect(second).toMatchObject({ position: 1, image_key: 'second', box: '[[20,30,40,20],[5,5,8,8]]' })
+  expect(second.thumb_key).not.toBe('second-thumb')
+  expect(keys).toEqual([second.thumb_key])
+})
+
+test('clears the marks of a stored picture, and leaves unchanged ones alone', async () => {
+  const { raw, event } = await fixture()
+  picture(raw, 0, 'original')
+  await expect(actions.default(event(marked(['[[1,2,10,10]]'])))).rejects.toMatchObject({ status: 303 })
+  expect(media(raw)).toEqual([{ position: 0, image_key: 'original', thumb_key: 'original-thumb', box: '[[1,2,10,10]]' }])
+  const data = marked([''], [png]); data.set('rev', '2')
+  await expect(actions.default(stored(event(data)))).rejects.toMatchObject({ status: 303 })
+  expect(media(raw)).toMatchObject([{ position: 0, image_key: 'original', box: null }])
+})
+
+test('refuses marks that do not fit the stored pictures, and stores nothing for a removed one', async () => {
+  const { raw, event } = await fixture()
+  picture(raw, 0, 'original'); picture(raw, 1, 'second')
+  expect(await actions.default(event(marked(['[[1,2,10,10]]'])))).toMatchObject({ status: 400, data: { error: 'image' } })
+  expect(await actions.default(event(marked(['[[1,2,10,10]]', 'not json'])))).toMatchObject({ status: 400, data: { error: 'image' } })
+  const keys: string[] = []
+  const data = marked(['[[1,2,10,10]]', '[[20,30,40,20]]'], [null, png]); data.append('remove_media', '1')
+  const removing = event(data); removing.platform.env.MEDIA = { put: async (key: string) => { keys.push(key) } }
+  await expect(actions.default(removing)).rejects.toMatchObject({ status: 303 })
+  expect(keys).toEqual([])
+  expect(media(raw)).toEqual([{ position: 0, image_key: 'original', thumb_key: 'original-thumb', box: '[[1,2,10,10]]' }])
+})
+
+test('changed marks need their thumbnail, and come back with a refused form', async () => {
+  const { raw, event } = await fixture()
+  picture(raw, 0, 'original')
+  expect(await actions.default(stored(event(marked(['[[3,4,10,10]]']))))).toMatchObject({ status: 400, data: { error: 'image', marks: ['[[3,4,10,10]]'] } })
+  const unreadable = marked(['[[3,4,10,10]]'], [png]); upload(unreadable, new Uint8Array([1, 2, 3]))
+  expect(await actions.default(stored(event(unreadable)))).toMatchObject({ status: 400, data: { error: 'image', marks: ['[[3,4,10,10]]'] } })
+  expect(media(raw)).toEqual([{ position: 0, image_key: 'original', thumb_key: 'original-thumb', box: '[[1,2,10,10]]' }])
+})

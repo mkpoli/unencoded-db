@@ -169,7 +169,6 @@
   "form.summary": "変更内容",
   "form.as": "{name}の名前と今日の日付で記録されます。",
   "form.terms": "入力した文章はCC BY-SA 4.0で公開されます。証拠として引用できるものだけをアップロードしてください。",
-  "error.place": "見つけた場所またはリンクを記入してください。",
   "error.evidence": "画像またはリンクを追加してください。",
   "error.sightingLimit": "この記録の証拠は上限の200件に達しました。",
   "error.sightingsMax": "新しい記録に付けられる証拠は{max}件までです。",

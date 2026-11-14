@@ -46,7 +46,7 @@
   const collections = $derived(COLLECTIONS.filter(collection => valuesOf(claims, 'collection').includes(collection.slug)))
   const tags = $derived(valuesOf(claims, 'tag'))
   const brief = (text: string) => [...text].length > 40 ? [...text].slice(0, 39).join('') + '…' : text
-  const options = $derived(data.sightings.map(sighting => ({ token: String(sighting.id), value: String(sighting.id), label: `#${sighting.id} ${brief(sighting.place)}` })))
+  const options = $derived(data.sightings.map(sighting => ({ token: String(sighting.id), value: String(sighting.id), label: `#${sighting.id} ${brief(sighting.place || sighting.title || sighting.url || '')}` })))
   const ready = $derived(readiness({ ids: entry.ids, radical: entry.radical, strokes: entry.strokes }, data.sightings))
 
   const sourceFields = [
@@ -162,7 +162,7 @@
             {/each}
           </div>
         {/if}
-        <h3>{sighting.place}</h3>
+        {#if sighting.place}<h3>{sighting.place}</h3>{/if}
         {#if types.length}<div class="row badges">{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
         {#if sighting.via_id}

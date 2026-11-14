@@ -169,7 +169,6 @@
   "form.summary": "更改內容",
   "form.as": "將以{name}的名義和今天的日期記錄。",
   "form.terms": "你的文字以CC BY-SA 4.0授權發布。請只上傳可作為證據引用的材料。",
-  "error.place": "請說明出處或提供連結。",
   "error.evidence": "請新增圖片或連結。",
   "error.sightingLimit": "此記錄已達到200項證據的上限。",
   "error.sightingsMax": "新記錄最多可附{max}項證據。",

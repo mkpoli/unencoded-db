@@ -58,8 +58,12 @@ test('a rejected batch returns the typed rows and saves nothing', async () => {
   expect(count('entries')).toBe(0)
   const bare = await actions.default(event(form([{}, {}]))) as any
   expect(bare.data.error).toBe('batchRows')
-  const nowhere = await actions.default(event(form([{ ids: '⿰山東', picture: true }], {}))) as any
-  expect(nowhere.data.error).toBe('place')
+})
+
+test('a row with a picture needs no place', async () => {
+  const { event, count } = fixture()
+  await expect(actions.default(event(form([{ ids: '⿰山東', picture: true }], {})))).rejects.toMatchObject({ status: 303 })
+  expect(count('sightings')).toBe(1)
 })
 
 test('caps the rows', async () => {

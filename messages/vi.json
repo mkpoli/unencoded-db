@@ -169,7 +169,6 @@
   "form.summary": "Nội dung thay đổi",
   "form.as": "Được ghi dưới tên {name} với ngày hôm nay.",
   "form.terms": "Văn bản của bạn được chia sẻ theo giấy phép CC BY-SA 4.0. Chỉ tải lên tài liệu được phép trích dẫn làm bằng chứng.",
-  "error.place": "Cho biết nơi bạn tìm thấy hoặc cung cấp liên kết.",
   "error.evidence": "Thêm hình ảnh hoặc liên kết.",
   "error.sightingLimit": "Mục từ này đã đạt giới hạn 200 bằng chứng.",
   "error.sightingsMax": "Mỗi mục từ mới nhận tối đa {max} bằng chứng.",
