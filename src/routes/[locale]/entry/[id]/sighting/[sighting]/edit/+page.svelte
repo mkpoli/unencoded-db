@@ -7,12 +7,13 @@
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { MEDIA_MAX } from '$lib/limits'
   import { href, t } from '$lib/t'
+  import { recordCode } from '$lib/code'
   let { data, form } = $props()
   let adding = $state(false)
   let marking = $state<Record<number, boolean>>({})
   const busy = $derived(adding || Object.values(marking).some(Boolean))
   let pictures = $state<PictureList>()
-  const title = $derived(t('sighting.editTitle', { id: data.id }))
+  const title = $derived(t('sighting.editTitle', { id: recordCode(data.id) }))
   let removed = $state<string[]>(untrack(() => form?.removeMedia ?? []))
   const drawn = $derived(form?.marks?.length === data.sighting.media.length ? form.marks : null)
   const room = $derived(MEDIA_MAX - data.sighting.media.length + removed.length)

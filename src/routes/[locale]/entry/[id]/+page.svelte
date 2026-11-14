@@ -27,6 +27,7 @@
   import { parseSightingTypes } from '$lib/scripts'
   import type { Sighting, StoredImage } from '$lib/server/entries'
   import { href, locale, media, t, day } from '$lib/t'
+  import { recordCode, recordName } from '$lib/code'
   let { data, form } = $props()
   const entry = $derived(data.entry)
   const claims = $derived(data.claims)
@@ -73,12 +74,12 @@
   }
 </script>
 
-<Seo title={t('entry.record', { id: entry.id })} image={entry.cover_key ? media(entry.cover_key) : null} />
+<Seo title={`${recordCode(entry.id)} ${recordName(entry.id)}`} image={entry.cover_key ? media(entry.cover_key) : null} />
 <div class="page narrow stack">
   <div class="row"><a class="text-link back" href={href()}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
-  <div class="heading"><div class="stack title"><h1>{t('entry.record', { id: entry.id })}</h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span><span class="badge {entry.status}">{t(`status.${entry.status}`)}</span></div></div></div>
+  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span><span class="badge {entry.status}">{t(`status.${entry.status}`)}</span></div></div></div>
   {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
-  {#if entry.merged_into}<p class="notice quiet"><a class="text-link" href={href(`/entry/${entry.merged_into}`)}>{t('entry.mergedInto', { id: entry.merged_into })}</a></p>{/if}
+  {#if entry.merged_into}<p class="notice quiet"><a class="text-link" href={href(`/entry/${entry.merged_into}`)}>{t('entry.mergedInto', { id: recordCode(entry.merged_into) })}</a></p>{/if}
   <section class="panel stack">
     <h2>{t('entry.about')}</h2>
     {#if sequences.length}
@@ -196,7 +197,7 @@
 <style>
   summary { cursor:pointer; font-weight:600 } .form { margin-top:18px }
   .sheet { display:flex; flex-direction:column; gap:10px; padding-top:10px; border-top:1px dashed var(--line) } .filed { margin-top:14px }
-  .back { align-self:start; color:var(--muted) } .title { gap:8px } .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
+  .back { align-self:start; color:var(--muted) } .title { gap:8px } .code { font-variant-numeric:tabular-nums } .code-name { margin-inline-start:6px; font-weight:400; color:var(--muted) } .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
   h3 { font-size:14px; font-weight:600 }
   .identity { display:flex; align-items:center; gap:18px; min-width:0 }
   .plate { flex:none; display:grid; place-items:center; width:96px; height:96px; border-radius:8px; background:var(--surface-tile) }
