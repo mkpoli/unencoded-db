@@ -12,6 +12,7 @@
   import { idsMessages } from '$lib/ids-messages'
   import { characterFacts, encodedMatch, type CharacterFacts } from '$lib/encoded'
   import { href, locale, t } from '$lib/t'
+  import { recordCode } from '$lib/code'
   import { browser } from '$app/environment'
   import IdsLine from './IdsLine.svelte'
 
@@ -111,7 +112,7 @@
     <button type="button" class="button build" onclick={open}>{t('field.idsBuild')}</button>
   </div>
   {#if encoded}<p class="found" data-testid="encoded-hint">{t('field.idsEncoded', { char: encoded, code: codePoints(encoded) })}{#if onfill} <button type="button" class="text-button" onclick={() => fill(encoded!)}>{t('field.idsFill')}</button>{/if}</p>{/if}
-  {#if same.length}<p class="found">{t('field.idsSame')} <span>{#each same as record, i}{i ? ', ' : ''}<a class="text-link" href={href(`/entry/${record.id}`)} target="_blank">#{record.id}</a>{/each}</span></p>{/if}
+  {#if same.length}<p class="found">{t('field.idsSame')} <span>{#each same as record, i}{i ? ', ' : ''}<a class="text-link" href={href(`/entry/${record.id}`)} target="_blank">{recordCode(record.id)}</a>{/each}</span></p>{/if}
   {#if rest.length}
     <div class="more" role="group" aria-labelledby="{uid}-more">
       <span class="label" id="{uid}-more">{t('field.idsMore')}</span>
