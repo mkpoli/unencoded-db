@@ -778,7 +778,13 @@ describe('scripts outside the list', () => {
     expect(readEntryFields(new FormData(), fields({ script: 'other', script_other: '方音符號' })).fields).toMatchObject({ script: 'other', script_other: '方音符號' })
   })
 
-  test('the names of visible records are offered once each, in name order, from their index', async () => {
+  test('a revision keeps a name only for `other`', () => {
+    const snapshot = (script: string) => JSON.stringify({ ...fields({ script, script_other: '方音符號' }) })
+    expect(entryFieldsOf(snapshot('han'))).toMatchObject({ script: 'han', script_other: null })
+    expect(entryFieldsOf(snapshot('other'))).toMatchObject({ script: 'other', script_other: '方音符號' })
+  })
+
+  test('the names of visible records are offered once each, in name order, one index seek each', async () => {
     const ids = []
     for (const name of ['乙', '甲', '乙', '丙']) ids.push(await createEntry(db, fields({ script: 'other', script_other: name }), seen(), [], who))
     await createEntry(db, fields(), seen(), [], who)
@@ -786,7 +792,7 @@ describe('scripts outside the list', () => {
     expect(await customScripts(db)).toEqual(['乙', '甲'].sort())
     const statement = customScriptsStatement(db) as unknown as { sql: string; values: unknown[] }
     const details = (raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')
-    expect(details).not.toMatch(/TEMP B-TREE/)
-    expect(details).toMatch(/USING (COVERING )?INDEX entries_custom_scripts/)
+    expect(details).not.toMatch(/TEMP B-TREE|SCAN entries/)
+    expect(details.match(/SEARCH entries USING (COVERING )?INDEX entries_custom_scripts \(script_other>\?\)/g)).toHaveLength(2)
   })
 })

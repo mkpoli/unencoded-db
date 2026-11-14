@@ -6,8 +6,9 @@
   // A text field with a list to choose from: the list narrows to what is typed, and whatever is typed is kept
   // when nothing in it fits. It is a plain input until scripts run. The pattern is the ARIA editable combobox
   // with list autocomplete: arrow keys move through the list, Enter takes an option, Escape folds the list.
-  let { id, name, value = $bindable(''), options, labelledby, maxlength, onopen }: {
-    id: string; name: string; value?: string; options: readonly ComboOption[]; labelledby?: string; maxlength?: number; onopen?: () => void
+  // `onchange` hears the value once it is settled: an option taken, or the field left.
+  let { id, name, value = $bindable(''), options, labelledby, maxlength, onopen, onchange }: {
+    id: string; name: string; value?: string; options: readonly ComboOption[]; labelledby?: string; maxlength?: number; onopen?: () => void; onchange?: (value: string) => void
   } = $props()
 
   const fold = (text: string) => text.normalize('NFKC').toLowerCase().trim()
@@ -32,6 +33,7 @@
     value = option.label
     open = false
     active = -1
+    onchange?.(value)
   }
   function move(step: number) {
     show()
@@ -42,7 +44,7 @@
   function keydown(event: KeyboardEvent) {
     if (event.isComposing) return
     if (event.key === 'ArrowDown') { event.preventDefault(); if (event.altKey) show(); else move(1) }
-    else if (event.key === 'ArrowUp') { event.preventDefault(); move(-1) }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); if (event.altKey) { open = false; active = -1 } else move(-1) }
     else if (event.key === 'Enter' && expanded && active >= 0) { event.preventDefault(); take(shown[active]) }
     else if (event.key === 'Escape' && open) { event.preventDefault(); open = false; active = -1 }
   }
@@ -53,7 +55,7 @@
     {id} {name} {maxlength} class="input" type="text" role="combobox" autocomplete="off" spellcheck="false"
     aria-autocomplete="list" aria-expanded={expanded} aria-controls="{id}-list" aria-labelledby={labelledby}
     aria-activedescendant={expanded && active >= 0 ? optionId(active) : undefined}
-    bind:value onclick={show} onkeydown={keydown} oninput={() => { show(); active = -1 }} onblur={() => { open = false; active = -1 }}
+    bind:value onclick={show} onkeydown={keydown} oninput={() => { show(); active = -1 }} onblur={() => { open = false; active = -1; onchange?.(value) }}
   />
   <span class="chevron" aria-hidden="true">⌄</span>
   <ul bind:this={list} id="{id}-list" role="listbox" aria-labelledby={labelledby} hidden={!expanded}>

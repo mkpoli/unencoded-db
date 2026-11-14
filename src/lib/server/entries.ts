@@ -468,7 +468,7 @@ export function entryFieldsOf(raw: string): EntryFields | null {
     if (value.strokes != null && (!Number.isInteger(value.strokes) || value.strokes < 0 || value.strokes >= 200)) return null
     const claims = parseClaims(value.claims ?? [])
     if (!claims) return null
-    return { script: value.script, script_other: value.script_other ?? null, description: value.description ?? null, radical: value.radical ?? null, strokes: value.strokes ?? null, claims }
+    return { script: value.script, script_other: value.script === 'other' ? value.script_other ?? null : null, description: value.description ?? null, radical: value.radical ?? null, strokes: value.strokes ?? null, claims }
   } catch { return null }
 }
 
@@ -854,7 +854,14 @@ export async function exportPage(db: D1Database, after: number, limit: number, s
 }
 
 export const CUSTOM_SCRIPTS_MAX = 100
-export const customScriptsStatement = (db: D1Database) => db.prepare(`SELECT DISTINCT script_other AS name FROM entries WHERE script = 'other' AND script_other IS NOT NULL AND merged_into IS NULL AND hidden_at IS NULL ORDER BY script_other LIMIT ?`).bind(CUSTOM_SCRIPTS_MAX)
+// Each name is one seek in `entries_custom_scripts` for the least name after the one before, so the list
+// reads at most CUSTOM_SCRIPTS_MAX index entries however many records share a name.
+const CUSTOM = `script = 'other' AND script_other IS NOT NULL AND merged_into IS NULL AND hidden_at IS NULL`
+export const customScriptsStatement = (db: D1Database) => db.prepare(`WITH RECURSIVE names(name, n) AS (
+  SELECT (SELECT MIN(script_other) FROM entries WHERE ${CUSTOM}), 1
+  UNION ALL
+  SELECT (SELECT MIN(script_other) FROM entries WHERE ${CUSTOM} AND script_other > names.name), n + 1 FROM names WHERE name IS NOT NULL AND n < ?
+) SELECT name FROM names WHERE name IS NOT NULL`).bind(CUSTOM_SCRIPTS_MAX)
 
 /** The names visible records give scripts outside the list. */
 export async function customScripts(db: D1Database) {
