@@ -74,9 +74,12 @@ export const cleanCode = (value: string) => value.normalize('NFC').trim()
 /** The page of a stated code, or null where the work has none for it. */
 export const codePage = ({ charset, code }: Encoding) => registryOf(charset)?.page?.(code) ?? null
 
-const IDEOGRAPH = /^\p{Script=Han}$/u
+// The blocks of unified and compatibility ideographs and the two ideographic planes, by number, so that
+// a character counts the same whatever version of Unicode the runtime knows.
+const IDEOGRAPHS = [[0x3400, 0x4DBF], [0x4E00, 0x9FFF], [0xF900, 0xFAFF], [0x20000, 0x3FFFF]]
+export const isIdeograph = (char: string) => { const point = char.codePointAt(0) ?? 0; return IDEOGRAPHS.some(([from, to]) => point >= from && point <= to) }
 // The encoded ideograph a record names, which the works that hold every one of them hold too.
-const ideographOf = (encodings: readonly Encoding[]) => encodings.filter(encoding => encoding.charset === 'unicode').map(encoding => encodedCharacter(encoding.code)).find(char => IDEOGRAPH.test(char)) ?? null
+const ideographOf = (encodings: readonly Encoding[]) => encodings.filter(encoding => encoding.charset === 'unicode').map(encoding => encodedCharacter(encoding.code)).find(char => char && isIdeograph(char)) ?? null
 
 export type Mark = { registry: Registry & { mark: string }; code: string | null; href: string | null }
 
