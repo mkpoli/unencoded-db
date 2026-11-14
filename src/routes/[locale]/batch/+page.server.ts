@@ -29,7 +29,6 @@ export const actions: Actions = {
     // A row with nothing in it is skipped, so a spare row costs nothing.
     const chosen = typed.map((row, index) => ({ ...row, index, picture: filled(files[index]) })).filter(row => row.ids.trim() || row.note.trim() || row.picture)
     if (!chosen.length) return reject(400, 'batchRows', values)
-    if (!shared.place) return reject(400, 'place', values)
 
     const rows = []
     for (const row of chosen) {

@@ -31,11 +31,11 @@ export const actions: Actions = {
     const removeMedia = [...removed]
     const rev = positiveId(String(form.get('rev') ?? ''))
     if (!rev || rev !== sighting.rev) return fail(409, { error: 'conflict', values, summary, removeMedia })
-    if (!values.place) return fail(400, { error: 'place', values, summary, removeMedia })
     const { DB, MEDIA } = env(event)
     const added = await uploadedImages(form, MEDIA)
     const kept = sighting.media.filter((_, position) => !removed.has(String(position)))
     if (added === 'invalid' || kept.length + added.length > MEDIA_MAX) return fail(400, { error: 'image', values, summary, removeMedia })
+    if (!kept.length && !added.length && !values.url && !values.via_url && !values.place) return fail(400, { error: 'evidence', values, summary, removeMedia })
     const media = added.length || kept.length !== sighting.media.length ? [...kept, ...added] : null
     const person = await writer(event, DB)
     const result = await editSighting(DB, sighting.id, rev, values, media, { actor: person.id, ip: await ipHash(event) }, summary || null, id)

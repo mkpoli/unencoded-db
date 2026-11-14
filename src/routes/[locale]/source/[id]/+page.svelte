@@ -42,11 +42,11 @@
         <div class="stack body">
           {#if sighting.media.length}
             <div class="pictures" class:single={sighting.media.length === 1}>
-              {#each sighting.media as picture, position (picture.image_key)}<MarkedPicture {picture} alt="{sighting.place} {position + 1}" />{/each}
+              {#each sighting.media as picture, position (picture.image_key)}<MarkedPicture {picture} alt="{sighting.place || t('field.image')} {position + 1}" />{/each}
             </div>
           {/if}
           {#if sighting.via}<span class="badge via">{t('source.foundVia')}</span>{/if}
-          <h3>{sighting.place}</h3>
+          {#if sighting.place}<h3>{sighting.place}</h3>{/if}
           {#if sighting.types.length}<div class="row badges">{#each sighting.types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
           <dl class="facts">{#each seenFacts as fact}{#if sighting[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{sighting[fact.key]}</dd></div>{/if}{/each}
             {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}

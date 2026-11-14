@@ -23,7 +23,6 @@ export const actions: Actions = {
     if (!found || found.entry.hidden_at || found.entry.merged_into) error(404)
     const form = await event.request.formData()
     const values = readSightingFields(form)
-    if (!values.place) return fail(400, { error: 'place', values })
     if (found.sightings.length >= SIGHTINGS_MAX) return fail(400, { error: 'sightingLimit', values })
     const media = await uploadedImages(form, MEDIA)
     if (media === 'invalid') return fail(400, { error: 'image', values })

@@ -121,3 +121,12 @@ test('write guard rejects paused and rate-limited edits', async () => {
   await expect(actions.default(limited)).rejects.toMatchObject({ status: 429 })
   expect(raw.query('SELECT rev FROM sightings WHERE id = 1').get()).toEqual({ rev: 1 })
 })
+
+test('a sighting with a picture keeps no place, and one with nothing is refused', async () => {
+  const { raw, event } = await fixture()
+  picture(raw, 0, 'original')
+  await expect(actions.default(event(form('1', '')))).rejects.toMatchObject({ status: 303 })
+  expect(raw.query('SELECT place FROM sightings WHERE id = 1').get()).toEqual({ place: '' })
+  const bare = form('2', ''); bare.append('remove_media', '0')
+  expect(await actions.default(event(bare))).toMatchObject({ status: 400, data: { error: 'evidence' } })
+})
