@@ -64,7 +64,7 @@
   async function download(sighting: Sighting, picture: StoredImage, position: number) {
     preparing = picture.image_key
     try {
-      const file = await evidenceFile(media(picture.image_key), boxesOf(picture.box), `record-${entry.id}-${sighting.id}-${position + 1}`)
+      const file = await evidenceFile(media(picture.image_key), boxesOf(picture.box), `${recordCode(entry.id)}-${sighting.id}-${position + 1}`)
       const link = document.createElement('a')
       link.href = URL.createObjectURL(file)
       link.download = file.name
