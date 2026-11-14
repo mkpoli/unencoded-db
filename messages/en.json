@@ -106,6 +106,7 @@
   "field.idsNth": "Description {n}",
   "field.idsAdd": "Add another description",
   "field.idsRemove": "Remove description {n}",
+  "field.layoutAdjusted": "Layout adjusted",
   "field.source": "Source details",
   "field.via": "Found via",
   "field.viaHint": "Where you came across it, such as a post showing a page of the book.",

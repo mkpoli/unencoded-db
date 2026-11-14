@@ -106,6 +106,7 @@
   "field.idsNth": "描述{n}",
   "field.idsAdd": "添加描述",
   "field.idsRemove": "移除描述{n}",
+  "field.layoutAdjusted": "已调整布局",
   "field.source": "出处详情",
   "field.via": "经由的资料",
   "field.viaHint": "发现它的途径，例如拍下书页的帖子。",

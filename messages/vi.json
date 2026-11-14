@@ -106,6 +106,7 @@
   "field.idsNth": "Mô tả {n}",
   "field.idsAdd": "Thêm mô tả",
   "field.idsRemove": "Xóa mô tả {n}",
+  "field.layoutAdjusted": "Đã điều chỉnh bố cục",
   "field.source": "Thông tin nguồn",
   "field.via": "Tìm thấy qua",
   "field.viaHint": "Nơi bạn gặp nó, ví dụ bài đăng chụp một trang sách.",
