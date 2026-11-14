@@ -5,7 +5,7 @@
   import { CLAIM_KINDS, claimsOf, compositionOf, scopesOf, type Claim, type ClaimKind } from '$lib/claims'
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
-  import { encodingSetLabel } from '$lib/encodings'
+  import { registryLabel } from '$lib/registries'
   import { COLLECTIONS, genreOf } from '$lib/genres'
   import { parseSightingTypes } from '$lib/scripts'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
@@ -28,7 +28,7 @@
 
   function shown(claim: Claim, claims: Claim[]): string {
     switch (claim.kind) {
-      case 'encoding': return `${encodingSetLabel(String(claim.data?.charset ?? ''))} ${claim.value}`
+      case 'encoding': return `${registryLabel(String(claim.data?.charset ?? ''))} ${claim.value}`
       case 'ivd': return claim.value === 'none' ? t('field.ivdNone') : claim.value
       case 'genre': return genreOf(claim.value)?.label ?? claim.value
       case 'collection': return COLLECTIONS.find(item => item.slug === claim.value)?.label ?? claim.value

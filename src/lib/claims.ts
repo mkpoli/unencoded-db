@@ -4,7 +4,7 @@
 // meaning, a related character under a meaning or a reading. The kinds live here, so a new one is an
 // entry in this file and its form fields, and the database stays as it is.
 import { analyze, parseComposition, type Composition } from './composition'
-import { cleanEncodingCode, isEncodingSet } from './encodings'
+import { cleanCode, isRegistry, type Encoding } from './registries'
 import { genreOf, isCollection } from './genres'
 import { IDS_LENGTH_MAX, IDS_MAX, splitIds } from './ids'
 import { ivdSequence } from './ivd'
@@ -119,7 +119,7 @@ export function compositionOf(claims: readonly Claim[]): Composition | null {
   return claim ? parseComposition(JSON.stringify({ ...claim.data, ids: claim.value })) : null
 }
 
-export type Encoding = { charset: string; code: string }
+export type { Encoding }
 export const encodingsOf = (claims: readonly Claim[]): Encoding[] => claimsOf(claims, 'encoding').map(claim => ({ charset: String(claim.data?.charset), code: claim.value }))
 
 // The links of a record read from either side.
@@ -241,10 +241,10 @@ export function readClaims(form: FormData, base: readonly Claim[] = []): { claim
     const out: Claim[] = []
     let bad = !found
     for (const [set, code] of found ?? []) {
-      const value = cleanEncodingCode(code)
+      const value = cleanCode(code)
       if (!value) continue
       const charset = set
-      if (!charset || value.length > CLAIM_LIMITS.encoding.length || charset.length > 40 || (!isEncodingSet(charset) && /[|]/.test(charset))) bad = true
+      if (!charset || value.length > CLAIM_LIMITS.encoding.length || charset.length > 40 || (!isRegistry(charset) && /[|]/.test(charset))) bad = true
       if (seen.has(`${charset}|${value}`)) continue
       seen.add(`${charset}|${value}`)
       out.push(made('encoding', value, { charset }))

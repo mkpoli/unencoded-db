@@ -20,7 +20,7 @@
   import { compositionOf, encodingsOf, supportedBy, valuesOf } from '$lib/claims'
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
-  import { encodingSetLabel } from '$lib/encodings'
+  import { codePage, marksOf, registryLabel } from '$lib/registries'
   import { COLLECTIONS, genreOf } from '$lib/genres'
   import { boxesOf, evidenceFile } from '$lib/picture'
   import { CHECKS, readiness } from '$lib/readiness'
@@ -41,6 +41,7 @@
   const analysis = $derived(sequences[0] ? analyze(sequences[0], compositionOf(claims)) : null)
   const ivd = $derived(valuesOf(claims, 'ivd')[0] ?? null)
   const encodings = $derived(encodingsOf(claims))
+  const marks = $derived(marksOf(encodings))
   const genres = $derived(valuesOf(claims, 'genre').map(genreOf).filter(genre => genre !== null))
   const collections = $derived(COLLECTIONS.filter(collection => valuesOf(claims, 'collection').includes(collection.slug)))
   const tags = $derived(valuesOf(claims, 'tag'))
@@ -98,8 +99,19 @@
         {#each tags as tag}<a class="chip-link tag" href={href(`?tag=${encodeURIComponent(tag)}`)}>#{tag}</a>{/each}
       </p>
     {/if}
+    <ul class="marks" aria-label={t('field.encodings')}>
+      {#each marks as mark (mark.registry.id)}
+        {@const name = t(`registry.${mark.registry.id}`)}
+        {@const text = mark.code === null ? t('registry.out', { name }) : mark.since ? t('registry.since', { version: mark.since }) : t('registry.in', { name })}
+        <li>{#if mark.href}<a class="badge encoded" href={mark.href} target="_blank" rel="noopener" title={mark.registry.label}>{text}</a>{:else}<span class="badge" class:encoded={mark.code !== null} title={mark.registry.label}>{text}</span>{/if}</li>
+      {/each}
+    </ul>
     <dl class="facts">
-      {#each encodings as encoding (encoding.charset + '|' + encoding.code)}{@const character = encoding.charset === 'unicode' ? encodedCharacter(encoding.code) : ''}<div><dt>{encodingSetLabel(encoding.charset)}</dt><dd>{#if character}<span class="character encoded">{character}</span><CopyButton text={character} /> {/if}<span class="mono">{encoding.code}</span>{#if character}<span class="sites">{#each characterLinks(character, at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</span>{/if}</dd></div>{/each}
+      {#each encodings as encoding (encoding.charset + '|' + encoding.code)}
+        {@const character = encoding.charset === 'unicode' ? encodedCharacter(encoding.code) : ''}
+        {@const page = character ? null : codePage(encoding)}
+        <div><dt>{registryLabel(encoding.charset)}</dt><dd>{#if character}<span class="character encoded">{character}</span><CopyButton text={character} /> {/if}{#if page}<a class="mono text-link" href={page} target="_blank" rel="noopener">{encoding.code} ↗</a>{:else}<span class="mono">{encoding.code}</span>{/if}{#if character}<span class="sites">{#each characterLinks(character, at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</span>{/if}</dd></div>
+      {/each}
       {#if ivd}<div><dt>{t('field.ivd')}</dt><dd class:mono={ivd !== 'none'}>{ivd === 'none' ? t('field.ivdNone') : ivd}</dd></div>{/if}
       {#if entry.radical}<div><dt>{t('field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
       {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
@@ -196,6 +208,7 @@
   .method { font-weight:600 } .part { padding:1px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12.5px }
   .description { white-space:pre-wrap; overflow-wrap:anywhere } .badges { gap:6px }
   .chips { display:flex; flex-wrap:wrap; gap:6px } .chip-link { padding:2px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px } .chip-link:hover { border-color:var(--accent); color:var(--accent) } .chip-link.tag { color:var(--muted) }
+  .marks { display:flex; flex-wrap:wrap; gap:6px; margin:0; padding:0; list-style:none } .marks a:hover { text-decoration:underline }
   .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:12px; margin:0 } .facts:empty { display:none }
   dt { color:var(--muted); font-size:12px } dd { margin:2px 0 0; overflow-wrap:anywhere }
   .character { font-size:20px; line-height:1.3 } .character.encoded { font-family:inherit; vertical-align:middle }
