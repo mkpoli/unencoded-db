@@ -15,7 +15,7 @@
 
 <a class="tile" href={href(`/entry/${tile.id}`)}>
   <span class="plate">
-    {#if tile.ids}<IdsGlyph ids={tile.ids} path={glyph} />
+    {#if tile.ids}<IdsGlyph ids={tile.ids} layout={tile.layout} path={glyph} />
     {:else if tile.cover_key}<img src={media(tile.cover_key)} alt={t('entry.record', { id: tile.id })} loading="lazy" decoding="async" />
     {:else}<span class="blank"><span class="small">{t('browse.noImage')}</span></span>{/if}
   </span>

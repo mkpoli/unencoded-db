@@ -106,6 +106,7 @@
   "field.idsNth": "記述{n}",
   "field.idsAdd": "記述を追加",
   "field.idsRemove": "記述{n}を削除",
+  "field.layoutAdjusted": "配置調整済み",
   "field.source": "出典の詳細",
   "field.via": "経由した資料",
   "field.viaHint": "書物の頁を写した投稿など、見つけた経路。",

@@ -1,5 +1,5 @@
 import { error, json } from '@sveltejs/kit'
-import { CLAIM_KINDS, claimsOf, scopesOf, type Claim } from '$lib/claims'
+import { CLAIM_KINDS, claimsOf, primaryLayoutOf, scopesOf, type Claim } from '$lib/claims'
 import { parseMarks, SIGHTING_FIELDS, EXPORT_PAGE_MAX, exportPage } from '$lib/server/entries'
 import { parseSightingTypes } from '$lib/scripts'
 import { env } from '$lib/server/guard'
@@ -38,6 +38,7 @@ export const GET: RequestHandler = async (event) => {
       ...entry,
       types: parseSightingTypes(entry.types),
       marks: parseMarks(entry.marks),
+      layout: primaryLayoutOf(entry.claims),
       evidence: entry.evidence.map(sighting => ({ ...sighting, types: parseSightingTypes(sighting.types) })),
     })),
   }, { headers })

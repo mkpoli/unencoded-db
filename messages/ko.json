@@ -106,6 +106,7 @@
   "field.idsNth": "설명 {n}",
   "field.idsAdd": "설명 추가",
   "field.idsRemove": "설명 {n} 삭제",
+  "field.layoutAdjusted": "배치 조정됨",
   "field.source": "출처 상세 정보",
   "field.via": "거쳐 찾은 자료",
   "field.viaHint": "책의 한 면을 실은 게시물 등, 찾게 된 경로.",
