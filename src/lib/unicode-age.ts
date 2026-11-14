@@ -32,10 +32,8 @@ export const UNICODE_AGES: readonly (readonly [from: number, to: number, version
   [0x2CEB0, 0x2EBE0, '10.0'],
   [0x2EBF0, 0x2EE5D, '15.1'],
   [0x2F800, 0x2FA1D, '3.1'],
-  [0x2FFFE, 0x2FFFF, '2.0'],
   [0x30000, 0x3134A, '13.0'],
   [0x31350, 0x323AF, '15.0'],
   [0x323B0, 0x33479, '17.0'],
   [0x3D000, 0x3FC3F, '18.0'],
-  [0x3FFFE, 0x3FFFF, '2.0'],
 ]

@@ -56,6 +56,7 @@ test('the Unicode mark carries the version that assigned an ideograph', () => {
   expect(since('U+323B0')).toBe('17.0')
   expect(since('U+3042')).toBeNull()
   expect(since('U+2FFFD')).toBeNull()
+  expect(since('U+2FFFE')).toBeNull()
   expect(marksOf([])[0].since).toBeNull()
   expect(unicodeAge('一')).toBe('1.1')
 })
