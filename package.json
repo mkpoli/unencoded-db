@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "bun run build && wrangler dev --local --infer-origin-from-routes=false",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "test": "svelte-kit sync && bun test src",
+    "test": "svelte-kit sync && bun test ./src",
     "db:local": "wrangler d1 migrations apply DB --local",
     "postinstall": "node scripts/prepare-composer.mjs"
   },
