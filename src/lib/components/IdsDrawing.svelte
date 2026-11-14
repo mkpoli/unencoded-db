@@ -40,19 +40,22 @@
   // A description drawn by han-compose as it is typed, on a plate beside its field, and the layout that
   // moves its parts. The composer runs in the browser and is loaded when the plate first appears. While
   // the layout is being adjusted the plate is larger, and a part is dragged, scaled and turned on it.
-  // The layout is sent as `layout`; a description nobody adjusted sends it empty.
+  // The layout is sent as `layout`; a description nobody adjusted sends it empty. A description still
+  // being built is drawn with its empty places, and `chosen` marks the one being filled.
   import { onMount, untrack } from 'svelte'
   import { parse } from 'ids-input'
   import { cleanIds } from '$lib/ids'
   import { layoutText, type Layout } from '$lib/layout'
   import { locale } from '$lib/t'
 
-  let { ids, layout = null, adjusting = $bindable(false) }: { ids: string; layout?: Layout | null; adjusting?: boolean } = $props()
+  let { ids, layout = null, chosen = null, adjusting = $bindable(false) }: { ids: string; layout?: Layout | null; chosen?: number[] | null; adjusting?: boolean } = $props()
 
   const at = locale()
   const sequence = $derived(cleanIds(ids))
-  const tree = $derived(parse(sequence).tree)
-  const whole = $derived(tree !== undefined)
+  // Empty places are parts of a description that is being built; an empty field is no description.
+  const tree = $derived(sequence ? parse(sequence, { open: true }).tree : undefined)
+  const drawn = $derived(tree !== undefined)
+  const whole = $derived(parse(sequence).tree !== undefined)
 
   let kit = $state.raw<Tools | null>(null)
   let preview = $state.raw<ComposerPreview | null>(null)
@@ -60,11 +63,11 @@
   // The session's document changes in place; its version tells the preview to read it again.
   let version = $state(0)
   let stated = $state.raw(untrack(() => layout))
-  let chosen = $state.raw<number[] | null>(null)
+  let picked = $state.raw<number[] | null>(null)
   let undoable = $state(false)
   const moved = $derived(Boolean(stated))
   const separate = $derived(adjusting || moved)
-  const chosenMoved = $derived(Boolean(chosen && stated?.[chosen.join('.')]))
+  const pickedMoved = $derived(Boolean(picked && stated?.[picked.join('.')]))
 
   onMount(() => {
     let live = true
@@ -86,7 +89,7 @@
     if (!found) return
     untrack(() => {
       if (parts === undefined) {
-        if (!text) { session = null; stated = null; chosen = null; adjusting = false; undoable = false }
+        if (!text) { session = null; stated = null; picked = null; adjusting = false; undoable = false }
         return
       }
       if (session) {
@@ -118,14 +121,14 @@
 </script>
 
 <div class="drawing" class:adjusting>
-  {#if kit && preview && whole && tree !== undefined}
+  {#if kit && preview && tree !== undefined}
     <div class="stage">
-      <kit.IdsPreview adapter={{ preview }} {tree} {chosen} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
-        session={separate ? session : null} {version} editable={adjusting} onchoose={path => chosen = path} onedit={read} />
+      <kit.IdsPreview adapter={{ preview }} {tree} chosen={adjusting ? picked : chosen} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
+        session={separate ? session : null} {version} editable={adjusting} onchoose={path => picked = path} onedit={read} />
     </div>
   {:else}
-    <div class="plate" class:empty={!whole} role={whole ? 'img' : undefined} aria-label={whole ? sequence : undefined} aria-hidden={whole ? undefined : 'true'}>
-      {#if whole}<span class="sequence">{sequence}</span>{/if}
+    <div class="plate" class:empty={!drawn} role={drawn ? 'img' : undefined} aria-label={drawn ? sequence : undefined} aria-hidden={drawn ? undefined : 'true'}>
+      {#if drawn}<span class="sequence">{sequence}</span>{/if}
     </div>
   {/if}
   {#if kit && whole}
@@ -133,7 +136,7 @@
       <button type="button" class="tool" aria-pressed={adjusting} title={kit.say('ids.adjust.hint')} onclick={() => adjusting = !adjusting}>{kit.say('ids.adjust.title')}</button>
       {#if adjusting}
         <button type="button" class="tool" disabled={!undoable} onclick={undo}>{kit.say('ids.undo.label')}</button>
-        <button type="button" class="tool" disabled={!chosenMoved} onclick={reset}>{kit.say('ids.adjust.reset')}</button>
+        <button type="button" class="tool" disabled={!pickedMoved} onclick={reset}>{kit.say('ids.adjust.reset')}</button>
       {/if}
     </div>
   {/if}

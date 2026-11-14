@@ -1,7 +1,7 @@
 <script lang="ts">
   // A character as its form describes it: the drawing of the first description on a plate, and beside it
-  // the descriptions and whatever the form states next to them. While the drawing's layout is adjusted
-  // the plate takes the width of the form.
+  // the descriptions and whatever the form states next to them. The plate marks the part the description's
+  // tools are working on. While the drawing's layout is adjusted the plate takes the width of the form.
   import type { Snippet } from 'svelte'
   import type { CharacterFacts } from '$lib/encoded'
   import type { Layout } from '$lib/layout'
@@ -12,12 +12,13 @@
     values?: string[]; layout?: Layout | null; primary?: string; onfill?: (facts: CharacterFacts) => void; children?: Snippet
   } = $props()
   let adjusting = $state(false)
+  let chosen = $state.raw<number[] | null>(null)
 </script>
 
 <div class="character" class:adjusting>
-  <div class="plate"><IdsDrawing ids={primary} {layout} bind:adjusting /></div>
+  <div class="plate"><IdsDrawing ids={primary} {layout} {chosen} bind:adjusting /></div>
   <div class="described">
-    <IdsField {values} bind:primary {onfill} />
+    <IdsField {values} bind:primary bind:chosen {onfill} />
     {@render children?.()}
   </div>
 </div>
