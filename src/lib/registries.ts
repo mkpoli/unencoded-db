@@ -15,6 +15,8 @@ export type Registry = {
   mark?: string
   /** A code as the work writes it. */
   example?: string
+  /** Whether a stated code names a place in the work; any code does where this is left out. */
+  names?: (code: string) => boolean
   /** The page of a code, or null for a code that names none. */
   page?: (code: string) => string | null
   /** The code of an encoded ideograph, in a work that holds every one of them. */
@@ -25,7 +27,8 @@ const hex = (char: string) => char.codePointAt(0)!.toString(16)
 
 export const REGISTRIES: readonly Registry[] = [
   {
-    id: 'unicode', label: 'Unicode', mark: 'U', example: 'U+2D6DD',
+    // A note in place of a code, such as `pending`, is no code point.
+    id: 'unicode', label: 'Unicode', mark: 'U', example: 'U+2D6DD', names: code => Boolean(encodedCharacter(code)),
     page: code => { const char = encodedCharacter(code); return char ? `https://util.unicode.org/UnicodeJsps/character.jsp?a=${hex(char).toUpperCase()}` : null },
   },
   {
@@ -88,7 +91,7 @@ export type Mark = { registry: Registry & { mark: string }; code: string | null;
 export function marksOf(encodings: readonly Encoding[]): Mark[] {
   const ideograph = ideographOf(encodings)
   return MARKED.map(registry => {
-    const code = encodings.find(encoding => encoding.charset === registry.id)?.code ?? (ideograph && registry.encoded ? registry.encoded(ideograph) : null)
+    const code = encodings.find(encoding => encoding.charset === registry.id && (registry.names?.(encoding.code) ?? true))?.code ?? (ideograph && registry.encoded ? registry.encoded(ideograph) : null)
     return { registry, code, href: code === null ? null : registry.page?.(code) ?? null }
   })
 }
