@@ -51,7 +51,7 @@
   {@const types = parseSightingTypes(source.types)}
   <div class="snapshot">
     <div class="source-head">
-      <h3>{source.place || t('field.place')}</h3>
+      {#if source.place}<h3>{source.place}</h3>{/if}
       {#if source.url}<a class="text-link url" href={source.url} target="_blank" rel="noopener noreferrer">{source.url} ↗</a>{/if}
     </div>
     <dl class="facts">

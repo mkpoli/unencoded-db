@@ -38,7 +38,7 @@ export const actions: Actions = {
       entry.set('ids', row.ids)
       const { fields, error } = readEntryFields(entry)
       if (error) return reject(400, error, values, row.index + 1)
-      if (!row.picture && !shared.url) return reject(400, 'evidence', values, row.index + 1)
+      if (!row.picture && !shared.url && !shared.via_url) return reject(400, 'evidence', values, row.index + 1)
       rows.push({ ...row, fields })
     }
     if (!(await chargeWrites(event, 'ADDS', rows.length - 1))) return reject(429, 'slow', values)
