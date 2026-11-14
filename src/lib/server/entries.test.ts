@@ -90,6 +90,13 @@ describe('marked works', () => {
     expect((await counts(db))['r:unicode'] ?? 0).toBe(0)
   })
 
+  test('a short list is read by its own key, however long the others are', async () => {
+    const rare = await createEntry(db, fields({ status: 'doubtful' }), seen(), [], who)
+    for (let i = 0; i < SEARCH_WINDOW + 10; i++) await createEntry(db, fields(), seen(), [], who)
+    expect(await list(db, { script: 'han', filter: 'doubtful', without: ['mj'] })).toEqual({ tiles: [expect.objectContaining({ id: rare })], next: null, partial: false })
+    expect(await list(db, { script: 'han', filter: 'doubtful', within: ['mj'] })).toEqual({ tiles: [], next: null, partial: false })
+  })
+
   test('a work that is not marked names no list', async () => {
     expect(await list(db, { within: ['big5'] })).toBeNull()
     expect(await list(db, { without: ['nowhere'] })).toBeNull()

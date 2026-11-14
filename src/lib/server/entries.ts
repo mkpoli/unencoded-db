@@ -647,7 +647,7 @@ export function exactSearchIds(query: string) {
   return isDescription(ids) ? ids : null
 }
 
-// The range a listing reads and the tests each row must pass. Null names a listing that is not one.
+// The keys every row of a listing holds and the words it is searched for. Null names a listing that is not one.
 function listPlan({ script, filter, facet, within, without, query }: Listing) {
   const base = listTag(script, filter), own = facetTag(facet), marks = markTags(within, without)
   if (!base || own === undefined || !marks) return null
@@ -655,25 +655,31 @@ function listPlan({ script, filter, facet, within, without, query }: Listing) {
   const exact = exactSearchIds(query ?? '')
   const words = exact ? [] : [...new Set(terms(query ?? ''))]
   if (!exact && (words.length > SEARCH_TERMS_MAX || (query?.trim() && !words.length))) return null
-  // The first key that narrows the list is the range read; the others are tested on each row of it.
-  const [tag = base, ...rest] = [...(own ? [own] : []), ...marks]
-  const tests = [...words.map(word => `w:${word}`), ...rest, ...(tag !== base && base !== 'all' ? [base] : [])]
-  return { tag, exact, tests, searching: Boolean(exact) || tests.length > 0 }
+  const keys = [...(own ? [own] : []), ...marks, ...(base !== 'all' ? [base] : [])]
+  return { keys, exact, words: words.map(word => `w:${word}`) }
+}
+
+// One key is the range read and the others are tested on each row of it, with the words.
+function listRead(plan: NonNullable<ReturnType<typeof listPlan>>, range = plan.keys[0] ?? 'all') {
+  const tests = [...plan.words, ...plan.keys.filter(key => key !== range)]
+  return { tag: range, tests, searching: Boolean(plan.exact) || tests.length > 0 }
 }
 
 const TILE_COLUMNS = 'e.id, e.ids, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind'
 
-export function listStatement(db: D1Database, listing: Listing) {
+// `range` names the key to read; without it the first key is read.
+export function listStatement(db: D1Database, listing: Listing, range?: string) {
   const plan = listPlan(listing)
   if (!plan) return null
-  // The facet range drives the query. Word tests are projections, not filters:
-  // LIMIT therefore bounds candidates read even when no word matches.
+  const read = listRead(plan, range)
+  // The range drives the query. Tests are projections, not filters:
+  // LIMIT therefore bounds candidates read even when no row passes.
   const tests = [
     ...(plan.exact ? ["EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value = ? AND k.entry_id = t.entry_id)"] : []),
-    ...plan.tests.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = t.entry_id)'),
+    ...read.tests.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = t.entry_id)'),
   ].join(' AND ') || '1'
   return db.prepare(`SELECT ${TILE_COLUMNS}, (${tests}) AS matches FROM entry_tags t CROSS JOIN entries e ON e.id = t.entry_id WHERE t.tag = ? AND t.entry_id < ? ORDER BY t.entry_id DESC LIMIT ?`)
-    .bind(...(plan.exact ? [plan.exact] : []), ...plan.tests, plan.tag, listing.before ?? Number.MAX_SAFE_INTEGER, (plan.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1)
+    .bind(...(plan.exact ? [plan.exact] : []), ...read.tests, read.tag, listing.before ?? Number.MAX_SAFE_INTEGER, (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1)
 }
 
 type TileRow = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind'>
@@ -681,11 +687,19 @@ export type Tile = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings' | 'statu
 const toTile = ({ types, first_year, first_year_kind, ...row }: TileRow): Tile => ({ ...row, types: parseSightingTypes(types), firstYear: first_year, firstYearKind: first_year_kind })
 
 export async function list(db: D1Database, listing: Listing) {
-  const plan = listPlan(listing), statement = listStatement(db, listing)
-  if (!plan || !statement) return null
+  const plan = listPlan(listing)
+  if (!plan) return null
+  // Of several keys the one with the fewest records is read, so a short list is not sought in a long one.
+  let range: string | undefined
+  if (plan.keys.length > 1) {
+    const { results } = await db.prepare('SELECT tag, n FROM tag_counts WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(plan.keys)).all<{ tag: string; n: number }>()
+    const sizes = new Map(results.map(row => [row.tag, row.n]))
+    range = plan.keys.reduce((least, key) => (sizes.get(key) ?? 0) < (sizes.get(least) ?? 0) ? key : least)
+  }
+  const read = listRead(plan, range), statement = listStatement(db, listing, range)!
   const limit = listing.limit ?? PAGE
   const { results } = await statement.all<TileRow & { matches: number }>()
-  const window = plan.searching ? SEARCH_WINDOW : limit
+  const window = read.searching ? SEARCH_WINDOW : limit
   const tiles: Tile[] = []
   let consumed = 0
   for (const { matches, ...row } of results.slice(0, window)) {
@@ -694,7 +708,7 @@ export async function list(db: D1Database, listing: Listing) {
     if (tiles.length === limit) break
   }
   const next = consumed < results.length ? results[consumed - 1].id : null
-  return { tiles, next, partial: plan.searching && next !== null && tiles.length < limit }
+  return { tiles, next, partial: read.searching && next !== null && tiles.length < limit }
 }
 
 // The counts a page shows beside its filters. Tags are counted too, and read where they are listed.

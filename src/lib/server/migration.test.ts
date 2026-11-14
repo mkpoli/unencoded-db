@@ -203,6 +203,7 @@ test('0006 counts every listed record in or out of each marked work, as the app 
   const seen = { place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
   const codes = [
     [['unicode', 'U+2D6DD']], [['unicode', 'u+5d20']], [['unicode', 'U+004E00']], [['unicode', 'U+FA0E']], [['unicode', 'U+3042']], [['unicode', 'U+1B000']], [['unicode', 'pending']],
+    [['unicode', 'U+4E00 U+E0100']], [['unicode', 'U+5650 (compat)']], [['unicode', 'U+2A6D6,U+2A6D7']], [['unicode', 'U+4E00g']], [['unicode', 'U+4E00000']], [['unicode', 'U+0000']], [['unicode', 'U+D800']], [['unicode', 'U+110000']], [['unicode', 'U+10FFFF']], [['unicode', 'U+001F']], [['unicode', 'U+0020']], [['unicode', 'U+2FFFD']],
     [['zitools', '⿰魚它'], ['mj', 'MJ059588']], [['glyphwiki', 'irg2021-03300'], ['big5', 'A140']], [['unicode', 'U+3042'], ['unicode', 'U+4E00'], ['yedict', 'U04E00']], [],
   ]
   let last = 0
