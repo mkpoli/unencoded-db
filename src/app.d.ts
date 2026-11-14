@@ -8,6 +8,7 @@ declare global {
       env: {
         DB: D1Database
         MEDIA: R2Bucket
+        ASSETS: Fetcher
         ADDS?: RateLimit
         EDITS?: RateLimit
         ATLAS_ISSUER?: string

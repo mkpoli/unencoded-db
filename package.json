@@ -9,7 +9,8 @@
     "preview": "bun run build && wrangler dev --local --infer-origin-from-routes=false",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "svelte-kit sync && bun test src",
-    "db:local": "wrangler d1 migrations apply DB --local"
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "postinstall": "node scripts/prepare-composer.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260819.1",
@@ -24,7 +25,8 @@
     "wrangler": "^4.158.0"
   },
   "dependencies": {
-    "ids-input": "github:mkpoli/ids-input#f02f8faf",
+    "@han-compose/composer": "github:mkpoli/han-compose#f71e9de",
+    "ids-input": "github:mkpoli/ids-input#3e0c0e0f",
     "jose": "^6.2.15"
   }
 }

@@ -60,7 +60,7 @@ Each entry indexes at most 400 distinct terms, drawn from its fields, its claims
 
 ## Character drawings
 
-The gallery draws each record's IDS with [han-compose](https://github.com/mkpoli/han-compose), from the composer export Glyph Atlas publishes at `https://glyphatlas.org/atlas/composer/`. The export's files and the drawn paths stay in the `MEDIA` bucket under `composer/` and `glyphs/`. A missing drawing is composed in the background, and `/api/glyph?ids=…` answers one the page did not have. Only descriptions on visible records are drawn.
+The gallery draws each record's IDS with [han-compose](https://github.com/mkpoli/han-compose), from the composer export at `https://ids-input-composer.mkpoli.workers.dev/`. The export's files and the drawn paths stay in the `MEDIA` bucket under `composer/` and `glyphs/`. A missing drawing is composed in the background, and `/api/glyph?ids=…` answers one the page did not have. Only descriptions on visible records are drawn.
 
 ## Third-party materials
 
