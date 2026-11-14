@@ -51,16 +51,18 @@ async function read(bucket: Bucket, name: string) {
   return stored ? stored.text() : null
 }
 
-// The parts drawn one by one and moved as the layout says. A description whose parts the composer
-// cannot tell apart is drawn as it stands.
+// The parts drawn one by one and moved as the layout says. Null for a description whose parts the
+// composer cannot tell apart, which is then drawn as it stands; a drawing that failed is thrown, so
+// that nothing is kept in its place.
 async function adjusted(from: Source, ids: string, layout: string, name: string) {
   const document = layoutDocument(ids, cleanLayout(layout, ids))
   if (!document) return null
-  const [drawn, leaves] = await Promise.all([compose(from, ids, { separate: true }), sketch(from, ids)])
-  if (drawn.cut || drawn.emoji?.length) return null
+  const drawn = await compose(from, ids, { separate: true })
+  const leaves = await sketch(from, ids)
   const view = documentView(document, drawn, leaves)
   if (!view.scopes || !view.complete) return null
-  const { defs, body } = scopesMarkup(view.scopes, { ink: 'currentColor', idPrefix: `g${(await hashHex(name)).slice(0, 12)}` })
+  // What a part takes away and the emoji among the parts are drawn as the form's own plate draws them.
+  const { defs, body } = scopesMarkup(view.scopes, { ink: 'currentColor', idPrefix: `g${(await hashHex(name)).slice(0, 12)}`, emoji: drawn.emoji, cut: drawn.cut, cutLeaf: drawn.parts?.find(part => part.cut)?.leaf ?? null })
   return defs + body
 }
 
@@ -73,7 +75,7 @@ export function drawGlyph(bucket: Bucket, glyph: Glyph): Promise<string | null> 
       const stored = await read(bucket, name)
       if (stored) return stored
       const [ids, layout] = name.split('\n')
-      const drawn = (layout ? await adjusted(sourceFor(bucket), ids, layout, name).catch(() => null) : null) ?? (await compose(sourceFor(bucket), ids)).d
+      const drawn = (layout ? await adjusted(sourceFor(bucket), ids, layout, name) : null) ?? (await compose(sourceFor(bucket), ids)).d
       if (!drawn) return null
       await bucket.put(`${DRAWINGS}/${await hashHex(name)}.txt`, drawn, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
       return drawn
