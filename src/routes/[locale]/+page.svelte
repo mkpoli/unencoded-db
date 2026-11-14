@@ -69,9 +69,11 @@
   </nav>
   <nav class="marks" aria-label={t('field.encodings')}>
     {#each MARKED as registry (registry.id)}
-      <span class="pair" title={registry.label}>
-        <a class="chip" class:on={data.within.includes(registry.id)} href={withMark(registry.id, 'in')}>入{registry.mark} <span class="n">{count(`r:${registry.id}`)}</span></a>
-        <a class="chip" class:on={data.without.includes(registry.id)} href={withMark(registry.id, 'out')}>未入{registry.mark} <span class="n">{count(`x:${registry.id}`)}</span></a>
+      {@const name = t(`registry.${registry.id}`)}
+      <span class="pair" role="group" aria-label={name} title={registry.label}>
+        <span class="work">{name}</span>
+        <a class="chip" class:on={data.within.includes(registry.id)} href={withMark(registry.id, 'in')} aria-label={t('registry.in', { name })}>{t('registry.held')} <span class="n">{count(`r:${registry.id}`)}</span></a>
+        <a class="chip" class:on={data.without.includes(registry.id)} href={withMark(registry.id, 'out')} aria-label={t('registry.out', { name })}>{t('registry.absent')} <span class="n">{count(`x:${registry.id}`)}</span></a>
       </span>
     {/each}
   </nav>
@@ -91,7 +93,7 @@
   .filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:16px; border:1px solid var(--line); border-radius:9px; background:var(--surface) }
   .filters .field { flex:1 1 180px } .filters .search { flex:2 1 260px }
   .states, .marks { display:flex; flex-wrap:wrap; gap:4px } .marks { gap:8px }
-  .pair { display:inline-flex; border:1px solid var(--line); border-radius:8px }
+  .pair { display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:8px } .work { padding-inline:12px 4px; font-size:13px; font-weight:500; white-space:nowrap }
   .states .n, .marks .n { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums }
   .pinned { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:42px; padding:9px 12px; border:1px solid var(--accent); border-radius:7px; background:var(--accent-light); color:var(--accent); font-weight:500 }
   .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:22px 16px }

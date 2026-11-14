@@ -335,6 +335,8 @@
   "registry.in": "Có trong {name}",
   "registry.out": "Không có trong {name}",
   "registry.since": "Có trong Unicode từ {version}",
+  "registry.held": "Có",
+  "registry.absent": "Không có",
   "relationship.erroneous": "Ngoa thể",
   "relationship.sound": "Âm",
   "relationship.meaning": "Nghĩa",

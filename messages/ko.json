@@ -335,6 +335,8 @@
   "registry.in": "{name}에 수록",
   "registry.out": "{name}에 미수록",
   "registry.since": "Unicode {version}부터 수록",
+  "registry.held": "수록",
+  "registry.absent": "미수록",
   "relationship.erroneous": "와체",
   "relationship.sound": "자음",
   "relationship.meaning": "의미",

@@ -335,6 +335,8 @@
   "registry.in": "In {name}",
   "registry.out": "Not in {name}",
   "registry.since": "In Unicode since {version}",
+  "registry.held": "In",
+  "registry.absent": "Not in",
   "relationship.erroneous": "Erroneous variant",
   "relationship.sound": "Sound",
   "relationship.meaning": "Meaning",
