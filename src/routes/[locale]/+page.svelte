@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { tick } from 'svelte'
+  import { afterNavigate, preloadData } from '$app/navigation'
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
   import Tile from '$lib/components/Tile.svelte'
@@ -7,13 +9,74 @@
   import { MARKED } from '$lib/registries'
   import { STATUSES, NEEDS } from '$lib/scripts'
   import { href, t } from '$lib/t'
+  import type { Snapshot } from './$types'
   let { data } = $props()
   const { standalone, groups } = groupGenres()
+  // Further pages are appended as the list nears its end. They belong to the listing they were read for,
+  // and a new listing starts again from its own first page.
+  type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: number | null; partial: boolean }
+  const fresh = (from: typeof data): Shown => ({ for: from, tiles: from.tiles, glyphs: from.glyphs ?? {}, next: from.next, partial: from.partial })
+  let loaded = $state.raw<Shown | null>(null)
+  const shown = $derived(loaded?.for === data ? loaded : fresh(data))
+  const REACH = 1200
+  let sentinel = $state<HTMLElement>()
+  let near = $state(false), busy = $state(false)
+  let failedFor = $state.raw<typeof data | null>(null)
   const more = $derived.by(() => {
     const params = new URLSearchParams(page.url.searchParams)
-    params.set('before', String(data.next))
+    params.set('before', String(shown.next))
     return `?${params}`
   })
+  async function grow() {
+    if (busy || shown.next === null) return
+    const from = data, base = shown, target = more
+    busy = true
+    try {
+      const result = await preloadData(target)
+      if (from !== data) return
+      if (result.type !== 'loaded' || result.status !== 200) { failedFor = from; return }
+      const next = result.data as typeof data
+      loaded = { for: from, tiles: [...base.tiles, ...next.tiles], glyphs: { ...base.glyphs, ...next.glyphs }, next: next.next, partial: next.partial }
+      failedFor = null
+      // The observer reports the moved sentinel a frame later; until then it is measured here.
+      await tick()
+      near = sentinel ? sentinel.getBoundingClientRect().top < innerHeight + REACH : false
+    } catch {
+      if (from === data) failedFor = from
+    } finally {
+      busy = false
+    }
+  }
+  $effect(() => {
+    if (!sentinel) return
+    void data
+    const observer = new IntersectionObserver(([entry]) => { near = entry.isIntersecting }, { rootMargin: `0px 0px ${REACH}px 0px` })
+    observer.observe(sentinel)
+    return () => { observer.disconnect(); near = false }
+  })
+  // A search reads the records a window at a time and may find nothing in one, so it continues only when asked.
+  $effect(() => { if (near && !busy && failedFor !== data && !shown.partial && shown.next !== null) grow() })
+  const appendOnClick = (event: MouseEvent) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    failedFor = null
+    grow()
+  }
+  // Returning to the list brings back the pages read so far; a reload starts again from the first.
+  // SvelteKit scrolls before it restores them, so the place is set again once they are drawn. Drawings
+  // are asked for again as tiles come into view.
+  let arrival = ''
+  afterNavigate(navigation => { arrival = navigation.type })
+  const reloaded = () => (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'reload'
+  export const snapshot: Snapshot<{ tiles: Shown['tiles']; next: number | null; partial: boolean; y: number } | null> = {
+    capture: () => loaded?.for === data ? { tiles: loaded.tiles, next: loaded.next, partial: loaded.partial, y: scrollY } : null,
+    restore: value => {
+      if (!value || (arrival === 'enter' && reloaded())) return
+      const { y, ...pages } = value
+      loaded = { ...pages, glyphs: data.glyphs ?? {}, for: data }
+      tick().then(() => scrollTo(scrollX, y))
+    }
+  }
   const count = (key: string) => data.counts?.[key] ?? 0
   // A collection or a tag is chosen by following a link, and stays until it is cleared.
   const pinned = $derived(data.genre ? null : data.collection ? { name: 'collection', value: data.collection, label: COLLECTIONS.find(item => item.slug === data.collection)?.label ?? data.collection } : data.tag ? { name: 'tag', value: data.tag, label: `#${data.tag}` } : null)
@@ -79,13 +142,13 @@
   </nav>
   {#if data.searchError}
     <p class="muted" role="alert">{t(`browse.${data.searchError}`)}</p>
-  {:else if data.tiles.length}
-    <div class="tiles">{#each data.tiles as tile (tile.id)}<Tile {tile} glyph={data.glyphs?.[cleanIds(tile.ids ?? '')]} />{/each}</div>
-  {:else if !data.partial}
+  {:else if shown.tiles.length}
+    <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[cleanIds(tile.ids ?? '')]} />{/each}</div>
+  {:else if !shown.partial}
     <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.filter || data.genre || data.collection || data.tag || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
   {/if}
-  {#if data.partial}<p class="muted">{t('browse.searchContinues')}</p>{/if}
-  {#if data.next}<div><a class="button" href={more}>{t(data.partial ? 'browse.continueSearch' : 'browse.more')}</a></div>{/if}
+  {#if shown.partial}<p class="muted">{t('browse.searchContinues')}</p>{/if}
+  {#if shown.next !== null}<div bind:this={sentinel}><a class="button" href={more} aria-busy={busy} onclick={appendOnClick}>{t(shown.partial ? 'browse.continueSearch' : 'browse.more')}</a></div>{/if}
 </div>
 <style>
   .heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:start; gap:20px }
