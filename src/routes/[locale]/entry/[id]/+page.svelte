@@ -4,7 +4,7 @@
   import { untrack } from 'svelte'
   import Seo from '$lib/components/Seo.svelte'
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
-  import IdsField from '$lib/components/IdsField.svelte'
+  import CharacterFields from '$lib/components/CharacterFields.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
   import CopyButton from '$lib/components/CopyButton.svelte'
@@ -17,7 +17,7 @@
   import CategoryFields from '$lib/components/CategoryFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import type { CharacterFacts } from '$lib/encoded'
-  import { compositionOf, encodingsOf, supportedBy, valuesOf } from '$lib/claims'
+  import { compositionOf, encodingsOf, primaryLayoutOf, supportedBy, valuesOf } from '$lib/claims'
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { codePage, marksOf, registryLabel } from '$lib/registries'
@@ -83,7 +83,7 @@
     <h2>{t('entry.about')}</h2>
     {#if sequences.length}
       <div class="identity">
-        <span class="plate"><IdsGlyph ids={sequences[0]} /></span>
+        <span class="plate"><IdsGlyph ids={sequences[0]} layout={entry.layout} /></span>
         <ul class="sequences">{#each sequences as sequence}<li><span class="ids">{sequence}</span><CopyButton text={sequence} /></li>{/each}</ul>
       </div>
       <p class="sites">{#each descriptionLinks(sequences[0], at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</p>
@@ -132,12 +132,13 @@
       {#if editing}<p class="notice bad" role="alert">{t(`error.${form?.error}`)}</p>{/if}
       <input type="hidden" name="rev" value={entry.rev} />
       {#key `${entry.id}:${entry.rev}:${editing}`}
-        <IdsField values={editIds} bind:primary onfill={facts => filled = facts} />
-        <div class="sheet">
-          <CompositionField ids={primary} value={editComposition} />
-          <ScriptPicker value={editValues.script} other={editValues.script_other} />
-          <IdentityFields claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} fill={filled} />
-        </div>
+        <CharacterFields values={editIds} layout={primaryLayoutOf(editValues.claims)} bind:primary onfill={facts => filled = facts}>
+          <div class="sheet">
+            <CompositionField ids={primary} value={editComposition} />
+            <ScriptPicker value={editValues.script} other={editValues.script_other} />
+            <IdentityFields claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} fill={filled} />
+          </div>
+        </CharacterFields>
         <div class="field"><label for="description">{t('field.description')}</label><textarea id="description" class="input" name="description">{editValues.description ?? ''}</textarea></div>
         <SenseFields claims={editValues.claims} evidence={options} fill={filled} />
         <details class="filing" open>
