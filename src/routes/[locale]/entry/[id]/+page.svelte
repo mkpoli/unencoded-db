@@ -101,7 +101,9 @@
     {/if}
     <ul class="marks" aria-label={t('field.encodings')}>
       {#each marks as mark (mark.registry.id)}
-        <li>{#if mark.href}<a class="badge encoded" href={mark.href} target="_blank" rel="noopener" title={mark.registry.label}>入{mark.registry.mark}</a>{:else}<span class="badge" class:encoded={mark.code !== null} title={mark.registry.label}>{mark.code === null ? '未入' : '入'}{mark.registry.mark}</span>{/if}</li>
+        {@const name = t(`registry.${mark.registry.id}`)}
+        {@const text = mark.code === null ? t('registry.out', { name }) : mark.since ? t('registry.since', { version: mark.since }) : t('registry.in', { name })}
+        <li>{#if mark.href}<a class="badge encoded" href={mark.href} target="_blank" rel="noopener" title={mark.registry.label}>{text}</a>{:else}<span class="badge" class:encoded={mark.code !== null} title={mark.registry.label}>{text}</span>{/if}</li>
       {/each}
     </ul>
     <dl class="facts">
