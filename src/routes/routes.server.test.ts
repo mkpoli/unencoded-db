@@ -152,9 +152,16 @@ test('browse narrows by category, collection or tag and rejects a malformed one'
 
 test('a record code typed into search opens its record', async () => {
   const { db, raw } = openTestDb()
-  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, script, created_by, created_at, updated_at, hidden_at) VALUES (34, 'han', 'p', '2026', '2026', NULL), (35, 'han', 'p', '2026', '2026', 'hidden')")
-  const event = (q: string) => ({ url: new URL(`https://example.test/ja?q=${encodeURIComponent(q)}`), params: { locale: 'ja' }, locals: { person: null }, platform: { env: { DB: db } } }) as any
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, script, created_by, created_at, updated_at, hidden_at, merged_into) VALUES (34, 'han', 'p', '2026', '2026', NULL, NULL), (35, 'han', 'p', '2026', '2026', 'hidden', NULL), (36, 'han', 'p', '2026', '2026', NULL, 34), (37, 'han', 'p', '2026', '2026', NULL, 35)")
+  const at = (search: string) => ({ url: new URL(`https://example.test/ja?${search}`), params: { locale: 'ja' }, locals: { person: null }, platform: { env: { DB: db } } }) as any
+  const event = (q: string) => at(`q=${encodeURIComponent(q)}`)
   for (const q of ['R+0022', 'r+0022', '天天玄玄']) await expect(browseLoad(event(q))).rejects.toMatchObject({ status: 303, location: '/ja/entry/34' })
-  // A code of a hidden record, or of none, is searched as text.
-  for (const q of ['R+0023', '天天玄黃', 'R+0999']) expect(await browseLoad(event(q))).toMatchObject({ tiles: [] })
+  // A plus sign left bare in the address arrives as a space.
+  await expect(browseLoad(at('q=R+0022'))).rejects.toMatchObject({ status: 303, location: '/ja/entry/34' })
+  // A merged record opens the record it was merged into.
+  await expect(browseLoad(event('R+0024'))).rejects.toMatchObject({ status: 303, location: '/ja/entry/34' })
+  // A code of a hidden record, of one merged into a hidden record, or of none, is searched as text.
+  for (const q of ['R+0023', '天天玄黃', 'R+0025', 'R+0999']) expect(await browseLoad(event(q))).toMatchObject({ tiles: [] })
+  // A later page of results is never left for a record.
+  expect(await browseLoad(at('q=R%2B0022&before=100'))).toMatchObject({ tiles: [] })
 })

@@ -28,7 +28,9 @@ export const load: PageServerLoad = async (event) => {
   const db = env(event).DB
   // A record's code typed whole, R+0022 or 天天玄玄, opens the record it names.
   const coded = before === null ? parseRecordCode(query) : null
-  if (coded && await db.prepare('SELECT 1 FROM entries WHERE id = ? AND hidden_at IS NULL').bind(coded).first()) redirect(303, `/${event.params.locale}/entry/${coded}`)
+  // A merged record opens the one it was merged into, and neither may be hidden.
+  const named = coded ? await db.prepare('SELECT COALESCE(m.id, e.id) AS id FROM entries e LEFT JOIN entries m ON m.id = e.merged_into WHERE e.id = ? AND e.hidden_at IS NULL AND (e.merged_into IS NULL OR m.hidden_at IS NULL)').bind(coded).first<{ id: number }>() : null
+  if (named) redirect(303, `/${event.params.locale}/entry/${named.id}`)
   const [page, totals] = await Promise.all([searchError ? null : list(db, { script, filter, facet, within, without, query, before }), counts(db)])
   if (!page && !searchError) error(404)
   const media = event.platform?.env?.MEDIA
