@@ -41,7 +41,7 @@
   .tags { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0 }
   .tag { max-width: 100%; padding: 0 5px; border-radius: 4px; background: var(--surface-sunken); font-size: 10.5px; line-height: 1.6; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
   .tag.state { flex: none; background: var(--surface-selected); color: var(--ink); font-weight: 550 }
-  .tag.unencoded { background: var(--accent-light); color: var(--accent) }
+  .tag.unifiable { background: var(--accent-light); color: var(--accent) }
   .meta { display: flex; align-items: baseline; gap: 5px; min-width: 0; min-height: 18px; font-size: 12px; color: var(--muted) }
   .meta time { flex: none; font-variant-numeric: tabular-nums }
   .sightings { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
