@@ -28,7 +28,7 @@
     </span>
   {/if}
   {#if works.length}
-    <span class="tags works">{#each works as registry (registry.id)}<span class="tag work" title={t('registry.in', { name: t(`registry.${registry.id}`) })}>{registry.mark}</span>{/each}</span>
+    <span class="tags works">{#each works as registry (registry.id)}{@const phrase = t('registry.in', { name: t(`registry.${registry.id}`) })}<span class="tag work" title={phrase}><span aria-hidden="true">{registry.mark}</span><span class="sr-only">{phrase}</span></span>{/each}</span>
   {/if}
   <span class="meta">
     {#if tile.firstYear}<time datetime={tile.firstYear} title={t(tile.firstYearKind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{tile.firstYear}</time><span aria-hidden="true">·</span>{/if}
