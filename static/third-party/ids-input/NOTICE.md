@@ -1,10 +1,11 @@
 # ids-input third-party notices
 
-This notice covers the installed `ids-input` revision `e7b69691`, its imported data and the fonts referenced by its stylesheet. The [upstream data notes](data/README.md), [font notes](fonts/README.md), and license files alongside them give the source notices. Some links in those copied notes refer to files in the upstream package.
+This notice covers the installed `ids-input` revision `3e0c0e0f`, its imported data and the fonts referenced by its stylesheet, and the installed `@han-compose/composer` revision `f71e9de` with the outlines it carries. The [upstream data notes](data/README.md), [font notes](fonts/README.md), and license files alongside them give the source notices. Some links in those copied notes refer to files in the upstream package.
 
 ## Code and data
 
 - `ids-input` code: Copyright (c) 2026 mkpoli, [MIT license](LICENSE). Data and fonts have separate terms.
+- `@han-compose/composer` code: Copyright (c) 2026 mkpoli, [MIT license](https://github.com/mkpoli/han-compose/blob/f71e9de/js/LICENSE). The app serves its bundled script outlines from `src/lib/composer-data.ts`; their sources and terms are in the [upstream data notes](https://github.com/mkpoli/han-compose/blob/f71e9de/data/README.md) and the [font notices](fonts/README.md).
 - BabelStone IDS by Andrew West: the upstream notes describe its IDS data as public domain; the source is [IDS.TXT](https://www.babelstone.co.uk/CJK/IDS.TXT). The installed data also includes BabelStone Tangut IDS.
 - `ids-parts.json`: the first-stroke column derives from [Rime's five-stroke dictionary](https://github.com/rime/rime-stroke), attributed to 四季的風, 雪齋, Kunki Chou and 宋天. It is LGPL-3.0; the [author notice](data/licences/rime-stroke-AUTHORS.txt), [LGPL](data/licences/rime-stroke-LGPL-3.0.txt) and [GPL](data/licences/GPL-3.0.txt) texts are included. Other palette sources include BabelStone, Henry Chan's MIT-licensed [ids](https://github.com/hfhchan/ids), and Unihan under [Unicode License v3](data/licences/Unicode-3.0.txt).
 - Component forms derive from [han-compose](https://github.com/mkpoli/han-compose) (MIT), Unicode's EquivalentUnifiedIdeograph data (Unicode License v3), and [cjkvi-variants](https://github.com/cjkvi/cjkvi-variants) (public domain), according to the data notes.

@@ -15,7 +15,7 @@ export const GET: RequestHandler = async (event) => {
   const bindings = env(event)
   const visible = await bindings.DB.prepare('SELECT 1 FROM entries WHERE ids = ? AND hidden_at IS NULL AND merged_into IS NULL LIMIT 1').bind(ids).first()
   if (!visible) return new Response(null, { status: 404 })
-  const path = await drawGlyph(bindings.MEDIA, ids)
+  const path = await drawGlyph(bindings.MEDIA, ids, { assets: bindings.ASSETS, origin: event.url.origin })
   if (!path) return new Response(null, { status: 404 })
   return json({ d: path }, { headers: { 'cache-control': 'public, max-age=31536000, immutable' } })
 }

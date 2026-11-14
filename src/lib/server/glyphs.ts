@@ -1,36 +1,65 @@
 // The drawing of each description, composed with han-compose and kept beside the composer's own
 // files. A page reads what is already drawn; a miss is drawn beside it, so a rare part never holds
 // up the page.
-import { compose, createSource } from 'ids-input/composer'
-import { COMPOSER_VERSION } from '$lib/composer'
+import { compose } from '@han-compose/composer/loader'
+import { sourceFor, traitKey, traitsOf } from '@han-compose/composer/source'
+import { COMPOSER_URL, COMPOSER_VERSION } from '$lib/composer'
+import { composerData } from '$lib/composer-data'
 import { cleanIds } from '$lib/ids'
 import { hashHex } from './image'
 
 type Bucket = Pick<R2Bucket, 'get' | 'put'>
-type Source = ReturnType<typeof createSource>
+type Source = ReturnType<typeof sourceFor>
 
-const UPSTREAM = `https://glyphatlas.org/atlas/composer/${COMPOSER_VERSION}`
 const FOLDER = `composer/${COMPOSER_VERSION}`
 const DRAWINGS = `glyphs/${COMPOSER_VERSION}`
 const IMMUTABLE = 'public, max-age=31536000, immutable'
 
-let source: Source | null = null
+const sources = new WeakMap<Bucket, Map<string, Source>>()
 const pending = new Map<string, Promise<string | null>>()
 
-// The composer reads the export through this bucket as well: a shard fetched once stays here.
-function sourceFor(bucket: Bucket) {
-  if (source) return source
-  source = createSource(async name => {
+const typeOf = (name: string) => /^[gp]\//.test(name) ? 'application/octet-stream' : 'application/json'
+
+// The export's files pass through the bucket, so a shard fetched once stays here.
+function reader(bucket: Bucket) {
+  return async (input: RequestInfo | URL): Promise<Response> => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
+    const name = url.pathname.split(`/${COMPOSER_VERSION}/`)[1] ?? ''
+    if (!name) throw new Error(`${url} is not a composer export file.`)
     const key = `${FOLDER}/${name}`
     const stored = await bucket.get(key)
-    if (stored) return stored.arrayBuffer()
-    const response = await fetch(`${UPSTREAM}/${name}`)
-    if (response.status === 404 && /^[gp]\//.test(name)) return null
+    if (stored) return new Response(await stored.arrayBuffer(), { headers: { 'content-type': typeOf(name) } })
+    const response = await fetch(url)
+    if (response.status === 404 && /^[gp]\//.test(name)) return response
     if (!response.ok) throw new Error(`${name}: ${response.status}`)
     const bytes = await response.arrayBuffer()
-    await bucket.put(key, bytes, { httpMetadata: { contentType: /^[gp]\//.test(name) ? 'application/octet-stream' : 'application/json' } })
-    return bytes
-  })
+    await bucket.put(key, bytes, { httpMetadata: { contentType: typeOf(name) } })
+    return new Response(bytes, { headers: { 'content-type': typeOf(name) } })
+  }
+}
+
+export type ComposerAssets = { fetch(input: RequestInfo | URL): Promise<Response> }
+type Context = { assets?: ComposerAssets; origin?: string }
+
+// The outlines the export lacks are files of this build; the asset binding answers them by URL.
+function bundled(context: Context) {
+  return async (path: string, url?: string): Promise<Response> => {
+    if (url && context.assets && context.origin) return context.assets.fetch(new URL(url, context.origin))
+    return new Response(null, { status: 404 })
+  }
+}
+
+// A source is chosen by what the description calls for, and reads the export through one bucket.
+function sourceOf(bucket: Bucket, sequence: string, context: Context) {
+  let byTrait = sources.get(bucket)
+  if (!byTrait) sources.set(bucket, byTrait = new Map())
+  const traits = traitsOf(sequence)
+  const key = `${traitKey(traits)}:${context.assets ? 1 : 0}`
+  let source = byTrait.get(key)
+  if (!source) {
+    source = sourceFor(sequence, { base: COMPOSER_URL, traits, fetch: reader(bucket), loaders: composerData, read: bundled(context) })
+    byTrait.set(key, source)
+  }
   return source
 }
 
@@ -39,7 +68,7 @@ async function read(bucket: Bucket, sequence: string) {
   return stored ? stored.text() : null
 }
 
-export function drawGlyph(bucket: Bucket, sequence: string): Promise<string | null> {
+export function drawGlyph(bucket: Bucket, sequence: string, context: Context = {}): Promise<string | null> {
   const ids = cleanIds(sequence)
   if (!ids) return Promise.resolve(null)
   let run = pending.get(ids)
@@ -47,7 +76,7 @@ export function drawGlyph(bucket: Bucket, sequence: string): Promise<string | nu
     run = (async () => {
       const stored = await read(bucket, ids)
       if (stored) return stored
-      const drawn = await compose(sourceFor(bucket), ids)
+      const drawn = await compose(sourceOf(bucket, ids, context), ids)
       if (!drawn.d) return null
       await bucket.put(`${DRAWINGS}/${await hashHex(ids)}.txt`, drawn.d, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
       return drawn.d
@@ -74,11 +103,11 @@ export async function glyphPaths(bucket: Bucket | undefined, sequences: (string 
 }
 
 // Draw the sequences a page did not have, a few at a time, after its response.
-export async function warmGlyphs(bucket: Bucket | undefined, sequences: string[]) {
+export async function warmGlyphs(bucket: Bucket | undefined, sequences: string[], context: Context = {}) {
   if (!bucket?.get) return
   let next = 0
   const worker = async () => {
-    while (next < sequences.length) await drawGlyph(bucket, sequences[next++])
+    while (next < sequences.length) await drawGlyph(bucket, sequences[next++], context)
   }
   await Promise.all(Array.from({ length: Math.min(2, sequences.length) }, worker))
 }

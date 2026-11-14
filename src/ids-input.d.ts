@@ -6,8 +6,6 @@ declare module 'ids-input' {
   export function parse(ids: string | null | undefined, options?: { open?: boolean }): { tree?: IdsPart; problem?: IdsProblem }
   export function isNode(part: IdsPart | undefined): part is IdsNode
   export function write(tree: IdsPart): string
-  /** A composer's drawing as an SVG document, 1000 units a side. */
-  export function drawingSvg(drawing: import('ids-input/composer').Drawing, options?: { background?: string | null; ink?: string; padding?: number; size?: number; placeholders?: boolean; idPrefix?: string }): string
 }
 
 declare module 'ids-input/adapter' {
@@ -30,7 +28,7 @@ declare module 'ids-input/svelte' {
   export function createEditor(options: () => { adapter: { structure(char: string): Promise<unknown[]> }; messages?: Record<string, string>; locale?: string; disabled?: boolean; tintMode?: 'hover' | 'on' | 'off' }): IdsEditor
 }
 
-declare module 'ids-input/composer' {
+declare module '@han-compose/composer' {
   export type Drawing = { d: string; parts?: unknown[]; slots?: unknown[] }
   export type ComposerSource = {
     ready(): Promise<void>
@@ -38,8 +36,36 @@ declare module 'ids-input/composer' {
     filesOf(keys: Iterable<string>): Set<string>
     store(): unknown
   }
-  export function createSource(read: (name: string) => Promise<ArrayBuffer | null>, options?: { concurrency?: number }): ComposerSource
-  export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'kaisho' }): Promise<Drawing>
+  export const dataUrls: Record<string, string>
+  export function drawingSvg(drawing: Drawing, options?: { background?: string | null; ink?: string; padding?: number; size?: number; placeholders?: boolean; idPrefix?: string }): string
+  export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho' }): Promise<Drawing>
   /** The composer in a Web Worker, reading han-compose's export at `base`. */
-  export function composerPreview(options: { base: string; separate?: boolean; fontStyle?: 'sans' | 'serif' | 'kaisho' }): ((sequence: string, options?: { signal?: AbortSignal }) => Promise<Drawing>) & { warm(sequence?: string): void }
+  export function composerPreview(options: { base: string; separate?: boolean; fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho'; loaders?: Record<string, string> }): ((sequence: string, options?: { signal?: AbortSignal }) => Promise<Drawing>) & { warm(): void }
+}
+
+declare module '@han-compose/composer/source' {
+  import type { ComposerSource } from '@han-compose/composer'
+  export function traitsOf(sequence: string): Record<string, boolean>
+  export function traitKey(traits: Record<string, boolean>): string
+  export function sourceFor(sequence: string, options?: {
+    base?: string
+    fontStyle?: string
+    separate?: boolean
+    bundled?: boolean
+    remote?: boolean
+    loaders?: Record<string, string>
+    traits?: Record<string, boolean>
+    fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    read?: (path: string, url?: string) => Promise<Response | object>
+  }): ComposerSource
+}
+
+declare module '@han-compose/composer/loader' {
+  import type { ComposerSource, Drawing } from '@han-compose/composer'
+  export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho' }): Promise<Drawing>
+}
+
+declare module '@han-compose/composer/drawing-svg' {
+  import type { Drawing } from '@han-compose/composer'
+  export function drawingSvg(drawing: Drawing, options?: { background?: string | null; ink?: string; padding?: number; size?: number; placeholders?: boolean; idPrefix?: string }): string
 }

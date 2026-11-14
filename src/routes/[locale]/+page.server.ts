@@ -31,6 +31,6 @@ export const load: PageServerLoad = async (event) => {
   const ids = (page?.tiles.map(tile => tile.ids).filter((id): id is string => Boolean(id)) ?? []).map(cleanIds)
   const glyphs = await glyphPaths(media, ids)
   const missing = [...new Set(ids.filter(id => !glyphs[id]))]
-  if (missing.length) event.platform?.ctx?.waitUntil(warmGlyphs(media, missing))
+  if (missing.length) event.platform?.ctx?.waitUntil(warmGlyphs(media, missing, { assets: event.platform?.env?.ASSETS, origin: event.url.origin }))
   return { ...(page ?? { tiles: [], next: null, partial: false }), counts: totals, glyphs, filter, genre, collection, tag, within, without, query, searchError, continued: before !== null && query.length > 0 }
 }

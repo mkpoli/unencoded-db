@@ -1,12 +1,16 @@
 <script lang="ts" module>
   // One composer for the page visit: a reader who leaves the form and comes back reuses its worker and the
   // export files it has already read.
-  import type { Drawing } from 'ids-input/composer'
-  import { COMPOSER_VERSION } from '$lib/composer'
-  type Preview = ReturnType<typeof import('ids-input/composer').composerPreview>
+  import type { Drawing } from '@han-compose/composer'
+  import { COMPOSER_URL } from '$lib/composer'
+  import { composerData } from '$lib/composer-data'
+  type Preview = ReturnType<typeof import('@han-compose/composer').composerPreview>
   let shared: Promise<Preview> | null = null
   function load() {
-    shared ??= import('ids-input/composer').then(({ composerPreview }) => composerPreview({ base: `https://glyphatlas.org/atlas/composer/${COMPOSER_VERSION}` }))
+    shared ??= import('@han-compose/composer').then(({ composerPreview, dataUrls }) => composerPreview({
+      base: COMPOSER_URL,
+      loaders: { ...dataUrls, ...composerData },
+    }))
     shared.catch(() => { shared = null })
     return shared
   }
@@ -17,7 +21,8 @@
   // the browser and is loaded when the plate first appears; each new description replaces the one before,
   // so the field never waits on a drawing that has been superseded. The description is the plate's text.
   import { onMount } from 'svelte'
-  import { drawingSvg, isDescription } from 'ids-input'
+  import { drawingSvg } from '@han-compose/composer/drawing-svg'
+  import { isDescription } from 'ids-input'
   import { cleanIds } from '$lib/ids'
 
   let { ids }: { ids: string } = $props()
