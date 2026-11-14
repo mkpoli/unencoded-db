@@ -8,8 +8,14 @@
   let { ids, layout = null, path: given = null }: { ids: string; layout?: string | null; path?: string | null } = $props()
   let host = $state<HTMLElement>()
   let visible = $state(false)
-  let fetched = $state<string | null>(null)
-  const path = $derived(given ?? fetched)
+  const uid = $props.id()
+  const wanted = $derived(ids ? `/api/glyph?ids=${encodeURIComponent(ids)}${layout ? `&layout=${encodeURIComponent(layout)}` : ''}` : '')
+  // What was fetched belongs to the drawing it was asked for, so a glyph given another description starts again.
+  let fetched = $state.raw<{ of: string; d: string } | null>(null)
+  const path = $derived(given ?? (fetched?.of === wanted ? fetched.d : null))
+  // The server names a drawing's clips and masks after the drawing. Here they are named after this glyph,
+  // so two tiles of one drawing do not share them.
+  const markup = $derived(path?.startsWith('<') ? path.replace(/\bg[0-9a-f]{12}(?=-)/g, `g${uid}`) : null)
 
   onMount(() => {
     if (!host) { visible = true; return }
@@ -22,14 +28,14 @@
 
   let asking = ''
   $effect(() => {
-    const wanted = `/api/glyph?ids=${encodeURIComponent(ids)}${layout ? `&layout=${encodeURIComponent(layout)}` : ''}`
-    if (path || !visible || !ids || asking === wanted) return
-    asking = wanted
+    const url = wanted
+    if (path || !visible || !url || asking === url) return
+    asking = url
     let live = true
-    fetch(wanted)
+    fetch(url)
       .then(response => response.ok ? response.json() : null)
       .then((answer: unknown) => {
-        if (live && answer && typeof answer === 'object' && 'd' in answer && typeof answer.d === 'string') fetched = answer.d
+        if (live && answer && typeof answer === 'object' && 'd' in answer && typeof answer.d === 'string') fetched = { of: url, d: answer.d }
       })
       .catch(() => {})
     return () => { live = false }
@@ -38,7 +44,7 @@
 
 <span class="glyph" bind:this={host} aria-hidden="true">
   {#if path}
-    <svg viewBox="0 0 1000 1000">{#if path.startsWith('<')}{@html path}{:else}<path d={path} />{/if}</svg>
+    <svg viewBox="0 0 1000 1000">{#if markup}{@html markup}{:else}<path d={path} />{/if}</svg>
   {:else}
     <span class="sequence">{ids}</span>
   {/if}
