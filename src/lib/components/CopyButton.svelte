@@ -26,5 +26,4 @@
   .copy { display:inline-grid; place-items:center; flex:none; width:28px; height:28px; padding:0; border:1px solid transparent; border-radius:6px; background:none; color:var(--muted); cursor:pointer; vertical-align:middle }
   .copy:hover, .copy:focus-visible { border-color:var(--line); color:var(--text) }
   .copy.copied { color:var(--good, var(--text)) }
-  .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap }
 </style>
