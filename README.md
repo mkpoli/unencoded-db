@@ -40,7 +40,7 @@ Without client credentials, the site offers anonymous contributions. Signing in 
 | `entry_tags`, `tag_counts` | The index behind lists, filters and search |
 | `reports`, `people`, `sessions` | Moderation and identity |
 
-A claim is a row of `kind`, `value` and JSON `data`; the kinds and their form fields are in `src/lib/claims.ts`, and a new kind needs no migration. Categories and collections are listed in `src/lib/genres.ts`.
+A claim is a row of `kind`, `value` and JSON `data`; the kinds and their form fields are in `src/lib/claims.ts`, and a new kind needs no migration. Categories and collections are listed in `src/lib/genres.ts`. The character sets, dictionaries and glyph registries a record can state a code in are listed in `src/lib/registries.ts`; a record with a Unicode code for an ideograph also counts as registered in zi.tools, yedict and GlyphWiki.
 
 Each claim also carries three links, all inside its own record:
 
