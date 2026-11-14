@@ -29,6 +29,7 @@ export const GENRES: readonly Genre[] = [
   { slug: 'buddhism', label: '佛教', parent: null },
   { slug: 'qieshen', label: '切身', parent: null },
   { slug: 'transliteration', label: '音譯', parent: null },
+  { slug: 'homograph', label: '同形字', parent: null },
   { slug: 'names', label: '人名', parent: null },
   { slug: 'places', label: '地名', parent: null },
   { slug: 'flora-fauna', label: '動植物', parent: null },
