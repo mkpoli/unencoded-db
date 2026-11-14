@@ -71,9 +71,9 @@
     {#each MARKED as registry (registry.id)}
       {@const name = t(`registry.${registry.id}`)}
       <span class="pair" role="group" aria-label={name} title={registry.label}>
-        <span class="work">{name}</span>
-        <a class="chip" class:on={data.within.includes(registry.id)} href={withMark(registry.id, 'in')} aria-label={t('registry.in', { name })}>{t('registry.held')} <span class="n">{count(`r:${registry.id}`)}</span></a>
-        <a class="chip" class:on={data.without.includes(registry.id)} href={withMark(registry.id, 'out')} aria-label={t('registry.out', { name })}>{t('registry.absent')} <span class="n">{count(`x:${registry.id}`)}</span></a>
+        <span class="work" aria-hidden="true">{name}</span>
+        <a class="chip" class:on={data.within.includes(registry.id)} aria-current={data.within.includes(registry.id) ? 'true' : undefined} href={withMark(registry.id, 'in')}><span class="sr-only">{name}</span>{t('registry.held')} <span class="n">{count(`r:${registry.id}`)}</span></a>
+        <a class="chip" class:on={data.without.includes(registry.id)} aria-current={data.without.includes(registry.id) ? 'true' : undefined} href={withMark(registry.id, 'out')}><span class="sr-only">{name}</span>{t('registry.absent')} <span class="n">{count(`x:${registry.id}`)}</span></a>
       </span>
     {/each}
   </nav>
