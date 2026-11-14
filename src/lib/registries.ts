@@ -1,18 +1,19 @@
 // The works a character can be registered in: character sets, online dictionaries and glyph registries.
 // A record states a registration as the work and the code the character has there. The works with a mark,
-// the short tag a gallery tile prints, are the ones every record is counted in or out of, and a record that states
+// a short tag of their own, are the ones every record is counted in or out of, and a record that states
 // a Unicode code is in each work that holds every encoded ideograph. A new work is an entry in this list.
 // The page addresses of zi.tools, yedict, GlyphWiki and Unicode follow Han Input's list of sites; the MJ
 // address is the character page of the Moji Jōhō Kiban search at moji.or.jp.
 import { isDescription } from 'ids-input'
 import { encodedCharacter } from './ids'
+import { isIdeograph } from './ideographs'
 import { UNICODE_AGES } from './unicode-age'
 
 export type Encoding = { charset: string; code: string }
 export type Registry = {
   id: string
   label: string
-  /** The short tag that names the work on a gallery tile. Its name in each language is the message `registry.<id>`. */
+  /** A short tag for the work where there is no room for its name, which is the message `registry.<id>` in each language. */
   mark?: string
   /** A code as the work writes it. */
   example?: string
@@ -78,10 +79,6 @@ export const cleanCode = (value: string) => value.normalize('NFC').trim()
 /** The page of a stated code, or null where the work has none for it. */
 export const codePage = ({ charset, code }: Encoding) => registryOf(charset)?.page?.(code) ?? null
 
-// The blocks of unified and compatibility ideographs and the two ideographic planes, by number, so that
-// a character counts the same whatever version of Unicode the runtime knows.
-export const IDEOGRAPHS = [[0x3400, 0x4DBF], [0x4E00, 0x9FFF], [0xF900, 0xFAFF], [0x20000, 0x3FFFF]]
-export const isIdeograph = (char: string) => { const point = char.codePointAt(0) ?? 0; return IDEOGRAPHS.some(([from, to]) => point >= from && point <= to) }
 // The encoded ideograph a record names, which the works that hold every one of them hold too.
 const ideographOf = (encodings: readonly Encoding[]) => encodings.filter(encoding => encoding.charset === 'unicode').map(encoding => encodedCharacter(encoding.code)).find(char => char && isIdeograph(char)) ?? null
 

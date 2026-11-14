@@ -7,7 +7,7 @@
 // (sha256 58b04334e3a31f9612694bbc3f6bff4a302b7d424565bca9c47e30aa74f8dbac).
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { IDEOGRAPHS } from '../src/lib/registries'
+import { IDEOGRAPHS } from '../src/lib/ideographs'
 
 const [file] = process.argv.slice(2)
 if (!file) throw new Error('usage: bun scripts/build-unicode-age.ts <DerivedAge.txt>')
@@ -15,6 +15,8 @@ const runs: [number, number, string][] = []
 for (const line of readFileSync(file, 'utf8').split('\n')) {
   const found = /^([0-9A-F]+)(?:\.\.([0-9A-F]+))?\s*;\s*([\d.]+)/.exec(line)
   if (!found) continue
+  // The last two code points of a plane are noncharacters, which no version assigned a character to.
+  if (line.includes('<noncharacter')) continue
   const from = parseInt(found[1], 16), to = parseInt(found[2] ?? found[1], 16)
   for (const [first, last] of IDEOGRAPHS) if (from <= last && to >= first) runs.push([Math.max(from, first), Math.min(to, last), found[3]])
 }
