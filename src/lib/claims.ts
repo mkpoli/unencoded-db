@@ -7,6 +7,7 @@ import { analyze, parseComposition, type Composition } from './composition'
 import { cleanCode, isRegistry, type Encoding } from './registries'
 import { genreOf, isCollection } from './genres'
 import { IDS_LENGTH_MAX, IDS_MAX, splitIds } from './ids'
+import { cleanLayout, validLayout, type Layout } from './layout'
 import { ivdSequence } from './ivd'
 import { cleanDoculect } from './doculects'
 import { isRelationKind } from './related'
@@ -80,7 +81,7 @@ export function validClaim(claim: unknown): claim is Claim {
   if (!listed(claim.under, SCOPES[kind].length ? CLAIM_SCOPES_MAX : 0, isClaimKey)) return false
   if (!value || value.length > CLAIM_LIMITS[kind].length || value !== value.normalize('NFC').trim()) return false
   switch (kind) {
-    case 'ids': return splitIds(value).length === 1 && splitIds(value)[0] === value
+    case 'ids': return splitIds(value).length === 1 && splitIds(value)[0] === value && (data === null || (Object.keys(data).length === 1 && validLayout(data.layout, value)))
     case 'composition': return Boolean(data && parseComposition(JSON.stringify({ ...data, ids: value })))
     case 'encoding': return Boolean(data && typeof data.charset === 'string' && data.charset.length > 0 && data.charset.length <= 40)
     case 'relation': return Boolean(data && isRelationKind(data.relationship) && short(data.difference ?? '', 5000) && short(data.evidence ?? '', 5000))
@@ -113,6 +114,9 @@ export const valuesOf = (claims: readonly Claim[], kind: ClaimKind) => claimsOf(
 
 /** The description whose glyph the record draws. */
 export const primaryIdsOf = (claims: readonly Claim[]) => claims.find(claim => claim.kind === 'ids')?.value ?? null
+/** How the parts of a description are moved in its drawing, or null when they stand where the composer put them. */
+export const layoutOf = (claim: Claim | undefined): Layout | null => (claim?.kind === 'ids' && claim.data?.layout ? claim.data.layout as Layout : null)
+export const primaryLayoutOf = (claims: readonly Claim[]) => layoutOf(claims.find(claim => claim.kind === 'ids'))
 
 export function compositionOf(claims: readonly Claim[]): Composition | null {
   const claim = claims.find(item => item.kind === 'composition')
@@ -199,7 +203,11 @@ export function readClaims(form: FormData, base: readonly Claim[] = []): { claim
     const values = form.getAll('ids')
     const sequences = splitIds(values.filter(value => typeof value === 'string').join(' '))
     if (values.some(value => typeof value !== 'string') || sequences.length > IDS_MAX || sequences.some(sequence => sequence.length > IDS_LENGTH_MAX)) fail('ids')
-    next.set('ids', sequences.map(sequence => made('ids', sequence)))
+    // A layout belongs to the description it was drawn over. The form states the first one's; a description
+    // the form does not speak for keeps its own.
+    const kept = new Map(claimsOf(base, 'ids').map(claim => [claim.value, claim.data]))
+    const stated = form.has('layout') && sequences.length ? cleanLayout(clean(form.get('layout')), sequences[0]) : undefined
+    next.set('ids', sequences.map((sequence, index) => made('ids', sequence, index === 0 && stated !== undefined ? stated && { layout: stated } : kept.get(sequence) ?? null)))
   }
   const primary = next.get('ids')![0]?.value ?? null
 

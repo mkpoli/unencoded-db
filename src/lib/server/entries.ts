@@ -7,7 +7,8 @@ import { cleanIds, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
-import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
+import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
+import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { genreOf } from '$lib/genres'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
@@ -18,7 +19,7 @@ export type EntryFields = { script: string; script_other: string | null; descrip
 export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; via_url: string | null; via_title: string | null; via_author: string | null; via_publisher: string | null; via_report_date: string | null; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
-export type Entry = Omit<EntryFields, 'claims'> & { status: string; id: number; rev: number; ids: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
+export type Entry = Omit<EntryFields, 'claims'> & { status: string; id: number; rev: number; ids: string | null; layout: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
 export type Sighting = SightingFields & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; via_id: number | null; media: StoredImage[]; hidden_at: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
 
 // What an entry has one of. What it has several of is in `claims`.
@@ -194,8 +195,8 @@ function summarize(sightings: SightingState[]) {
 const tagsOf = (entry: Entry, claims: readonly Claim[], summary: ReturnType<typeof summarize>) =>
   [...facetTags({ ...entry, status: statusOf(claims), ids: primaryIdsOf(claims), cover_key: summary.cover_key }, summary.hasSource, claims), ...wordTags(entry, claims, summary.visible)]
 const facet = (tag: string) => !tag.startsWith('w:')
-const SUMMARY_SET = 'ids = ?, cover_key = ?, cover_place = ?, sightings = ?, types = ?, first_year = ?, first_year_kind = ?, marks = ?, status = ?'
-const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summarize>) => [primaryIdsOf(claims), summary.cover_key, summary.cover_place, summary.visible.length, summary.types, summary.first_year, summary.first_year_kind, marksHeld(claims).length ? JSON.stringify(marksHeld(claims)) : null, statusOf(claims)]
+const SUMMARY_SET = 'ids = ?, layout = ?, cover_key = ?, cover_place = ?, sightings = ?, types = ?, first_year = ?, first_year_kind = ?, marks = ?, status = ?'
+const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summarize>) => [primaryIdsOf(claims), layoutText(primaryLayoutOf(claims)) || null, summary.cover_key, summary.cover_place, summary.visible.length, summary.types, summary.first_year, summary.first_year_kind, marksHeld(claims).length ? JSON.stringify(marksHeld(claims)) : null, statusOf(claims)]
 
 // Brings a record's tags, counts and summary up to date. It answers the statements, to run with the
 // write they belong to.
@@ -671,7 +672,7 @@ function listRead(plan: NonNullable<ReturnType<typeof listPlan>>, range = plan.k
   return { tag: range, tests, searching: Boolean(plan.exact) || tests.length > 0 }
 }
 
-const TILE_COLUMNS = 'e.id, e.ids, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind, e.marks'
+const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind, e.marks'
 
 // `range` names the key to read; without it the first key is read.
 export function listStatement(db: D1Database, listing: Listing, range?: string) {
@@ -688,8 +689,8 @@ export function listStatement(db: D1Database, listing: Listing, range?: string) 
     .bind(...(plan.exact ? [plan.exact] : []), ...read.tests, read.tag, listing.before ?? Number.MAX_SAFE_INTEGER, (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1)
 }
 
-type TileRow = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind' | 'marks'>
-export type Tile = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings' | 'status'> & { types: SightingType[]; firstYear: string | null; firstYearKind: YearKind | null; marks: string[] }
+type TileRow = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind' | 'marks'>
+export type Tile = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status'> & { types: SightingType[]; firstYear: string | null; firstYearKind: YearKind | null; marks: string[] }
 const toTile = ({ types, first_year, first_year_kind, marks, ...row }: TileRow): Tile => ({ ...row, types: parseSightingTypes(types), firstYear: first_year, firstYearKind: first_year_kind, marks: parseMarks(marks) })
 
 export async function list(db: D1Database, listing: Listing) {

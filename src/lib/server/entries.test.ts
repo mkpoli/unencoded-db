@@ -768,3 +768,17 @@ describe('status', () => {
     expect(entryFieldsOf(raw)).toEqual({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] })
   })
 })
+
+test('a record repeats the layout of its first description for its tile, through edits and restores', async () => {
+  const layout = { '0': [1, 0, 0, 1, -40, 12] }
+  const moved = fields({ claims: [claim('ids', '⿰亻⿱七木', { layout }), claim('ids', '⿰亻桼')] })
+  const id = await createEntry(db, moved, seen(), [], who)
+  const original = (await history(db, id)).find(row => row.kind === 'create')!
+  expect((await getEntry(db, id))!.entry.layout).toBe(JSON.stringify(layout))
+  expect((await list(db, {}))!.tiles[0]).toMatchObject({ ids: '⿰亻⿱七木', layout: JSON.stringify(layout) })
+  await editEntry(db, id, 1, { ...moved, claims: [claim('ids', '⿰亻⿱七木'), claim('ids', '⿰亻桼')] }, who, null)
+  expect((await getEntry(db, id))!.entry.layout).toBeNull()
+  await revertEntry(db, id, original.id, who)
+  expect((await getEntry(db, id))!.entry.layout).toBe(JSON.stringify(layout))
+  expect((await getEntry(db, id))!.claims[0].data).toEqual({ layout })
+})
