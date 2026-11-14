@@ -8,7 +8,7 @@
   const label = (type: SightingType) => t(`evidence.type.${type}`)
   const shown = $derived(tile.types.slice(0, 1))
   const hidden = $derived(tile.types.length - shown.length)
-  const marked = $derived(tile.status === 'encoded' || tile.status === 'unencoded' || tile.status === 'variant')
+  const marked = $derived(tile.status !== 'unchecked')
 </script>
 
 <a class="tile" href={href(`/entry/${tile.id}`)}>

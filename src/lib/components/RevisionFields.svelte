@@ -8,6 +8,7 @@
   import { encodingSetLabel } from '$lib/encodings'
   import { COLLECTIONS, genreOf } from '$lib/genres'
   import { parseSightingTypes } from '$lib/scripts'
+  import { statusOf } from '$lib/status'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
   import { locale, t } from '$lib/t'
   let { fields, sighting = false }: { fields: EntryFields | SightingFields; sighting?: boolean } = $props()
@@ -65,10 +66,11 @@
   </div>
 {:else}
   {@const entry = fields as EntryFields}
+  {@const status = statusOf(entry.claims)}
   <div class="snapshot">
     <div class="row">
       <span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>
-      <span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>
+      <span class="badge {status}">{t(`status.${status}`)}</span>
     </div>
     <p class:muted={!entry.description} class="description">{entry.description || t('entry.noDescription')}</p>
     <dl class="facts">

@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit'
 import { CLAIM_KINDS, claimsOf, scopesOf, type Claim } from '$lib/claims'
-import { ENTRY_FIELDS, SIGHTING_FIELDS, EXPORT_PAGE_MAX, exportPage } from '$lib/server/entries'
+import { SIGHTING_FIELDS, EXPORT_PAGE_MAX, exportPage } from '$lib/server/entries'
 import { parseSightingTypes } from '$lib/scripts'
 import { env } from '$lib/server/guard'
 import { positiveId } from '../../_submission.server'
@@ -43,7 +43,8 @@ export const GET: RequestHandler = async (event) => {
   // One column for each kind of claim, its values in order. A claim that holds under others names them
   // after its value, and one that rests on evidence names the rows by their `sighting_id`:
   // `東 (usage) [under: east | cmn:dōng] [evidence: #3 #7]`. The JSON form carries what else a claim holds.
-  const columns = ['entry_id', ...ENTRY_FIELDS, ...CLAIM_KINDS, 'sighting_id', ...SIGHTING_FIELDS, 'images'] as const
+  const entryColumns = ['script', 'script_other', 'description', 'status', 'radical', 'strokes'] as const
+  const columns = ['entry_id', ...entryColumns, ...CLAIM_KINDS, 'sighting_id', ...SIGHTING_FIELDS, 'images'] as const
   const said = (claim: Claim) => claim.kind === 'encoding' ? `${claim.data?.charset}:${claim.value}` : claim.kind === 'relation' ? `${claim.value} (${claim.data?.relationship})` : claim.kind === 'reading' && claim.data?.doculect ? `${claim.data.doculect}:${claim.value}` : claim.value
   const rows = result.entries.flatMap(({ evidence, claims, ...entry }) => {
     const sightings = evidence.length ? evidence : [null]
@@ -52,7 +53,7 @@ export const GET: RequestHandler = async (event) => {
       ...(claim.under.length ? [`[under: ${scopesOf(claims, claim).map(said).join(' | ')}]`] : []),
       ...(claim.sightings.length ? [`[evidence: ${claim.sightings.map(id => `#${id}`).join(' ')}]`] : []),
     ].join(' ')).join('; '))
-    return sightings.map(sighting => [entry.id, ...ENTRY_FIELDS.map(field => entry[field]), ...stated, sighting?.id, ...SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : sighting?.[field]), sighting?.media.map(image => image.image_key).join('; ')])
+    return sightings.map(sighting => [entry.id, ...entryColumns.map(field => entry[field]), ...stated, sighting?.id, ...SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : sighting?.[field]), sighting?.media.map(image => image.image_key).join('; ')])
   })
   headers.set('Content-Type', 'text/csv; charset=utf-8')
   return new Response([columns.map(csvCell).join(','), ...rows.map(row => row.map(csvCell).join(','))].join('\r\n') + '\r\n', { headers })

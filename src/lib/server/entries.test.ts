@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
-import { addSighting, claimedBy, counts, createEntry, editEntry, editSighting, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, claimedBy, counts, createEntry, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
-const fields = (over: Partial<EntryFields> = {}): EntryFields => ({ script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims: [], ...over })
+const fields = (over: Partial<EntryFields> = {}): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [], ...over })
 const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null, links: Partial<Pick<Claim, 'sightings' | 'under'>> = {}): Claim => newClaim(kind, value, data, links)
 const described = (...sequences: string[]) => fields({ claims: sequences.map(sequence => claim('ids', sequence)) })
 const relation = (character: string, relationship: string, difference = '', evidence = ''): Claim => claim('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) })
@@ -273,14 +273,24 @@ describe('the wiki', () => {
     expect((await history(db, id)).filter(row => !row.sighting_id).map(row => row.kind)).toEqual(['revert', 'edit', 'create'])
   })
 
-  test('changing the status moves the record between lists and keeps the counts', async () => {
+  test('adding a Unicode encoding claim moves the record to the encoded list and keeps the counts', async () => {
     const id = await createEntry(db, fields(), seen(), [], who)
-    await editEntry(db, id, 1, { ...described('⿰亻木'), status: 'variant' }, who, null)
+    await editEntry(db, id, 1, fields({ claims: [claim('encoding', 'U+5650', { charset: 'unicode' })] }), who, null)
+    expect(raw.query('SELECT status FROM entries WHERE id = ?').get(id)).toEqual({ status: 'encoded' })
+    expect(raw.query("SELECT tag FROM entry_tags WHERE entry_id = ? AND tag LIKE '%f:%' ORDER BY tag").all(id)).toEqual([{ tag: 'f:encoded' }, { tag: 's:han|f:encoded' }])
     expect((await list(db, { filter: 'unchecked' }))!.tiles).toEqual([])
-    expect((await list(db, { filter: 'variant' }))!.tiles).toHaveLength(1)
-    expect((await list(db, { filter: 'ids' }))!.tiles).toEqual([])
-    expect(await counts(db)).toMatchObject({ 'f:variant': 1 })
+    expect((await list(db, { filter: 'encoded' }))!.tiles).toHaveLength(1)
+    expect(await counts(db)).toMatchObject({ 'f:encoded': 1 })
     expect((await counts(db))['f:unchecked']).toBeUndefined()
+    await revertEntry(db, id, (await history(db, id)).find(row => row.kind === 'create')!.id, who)
+    expect(raw.query('SELECT status FROM entries WHERE id = ?').get(id)).toEqual({ status: 'unchecked' })
+    expect(await counts(db)).toMatchObject({ 'f:unchecked': 1 })
+  })
+
+  test('a record created with a relation to an encoded character takes its status from it', async () => {
+    const id = await createEntry(db, fields({ claims: [relation('哦', 'homograph')] }), seen(), [], who)
+    expect(raw.query('SELECT status FROM entries WHERE id = ?').get(id)).toEqual({ status: 'homograph' })
+    expect((await list(db, { filter: 'homograph' }))!.tiles.map(tile => tile.id)).toEqual([id])
   })
 
   test('concurrent additions cannot exceed the sighting limit', async () => {
@@ -710,13 +720,12 @@ describe('status', () => {
   const form = (pairs: [string, string][]) => { const data = new FormData(); for (const [name, value] of pairs) data.append(name, value); return data }
   const unicode: [string, string][] = [['encodings_present', '1'], ['encoding_charset', 'unicode'], ['encoding_code', 'U+5650']]
 
-  test('an unchecked record that states a Unicode code is encoded', () => {
-    expect(readEntryFields(form(unicode)).fields.status).toBe('encoded')
-    expect(readEntryFields(form([['encodings_present', '1'], ['encoding_charset', 'big5'], ['encoding_code', 'A140']])).fields.status).toBe('unchecked')
-    expect(readEntryFields(form([])).fields.status).toBe('unchecked')
+  test('a posted status is ignored', () => {
+    expect(readEntryFields(form([...unicode, ['status', 'variant']])).fields).not.toHaveProperty('status')
   })
 
-  test('a status someone chose is kept', () => {
-    expect(readEntryFields(form([...unicode, ['status', 'variant']])).fields.status).toBe('variant')
+  test('an old snapshot that holds a status still reads', () => {
+    const raw = JSON.stringify({ script: 'han', script_other: null, description: null, status: 'doubtful', radical: null, strokes: null, claims: [] })
+    expect(entryFieldsOf(raw)).toEqual({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] })
   })
 })

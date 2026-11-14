@@ -22,9 +22,8 @@ export const SCRIPTS = [
 export type ScriptId = (typeof SCRIPTS)[number]['id']
 export const isScript = (value: unknown): value is ScriptId => SCRIPTS.some(script => script.id === value)
 
-export const STATUSES = ['unchecked', 'unencoded', 'variant', 'encoded', 'doubtful'] as const
+export const STATUSES = ['unchecked', 'encoded', 'unifiable', 'homograph', 'variant'] as const
 export type Status = (typeof STATUSES)[number]
-export const isStatus = (value: unknown): value is Status => STATUSES.includes(value as Status)
 
 export const CONTEXTS = ['running_text', 'heading', 'logo', 'handwriting', 'other'] as const
 export const STYLES = ['regular', 'semi_cursive', 'seal', 'clerical', 'other'] as const

@@ -5,7 +5,7 @@ import { sightingSnapshot } from './revisions'
 import { openTestDb } from './testdb'
 
 const who = { actor: 'p1', ip: null }
-const fields = (claims: Claim[] = []): EntryFields => ({ script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims })
+const fields = (claims: Claim[] = []): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims })
 const seen = (extra: Partial<SightingFields> = {}): SightingFields => ({ place: 'a shop sign', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null, ...extra })
 const image = (name: string, box: string | null = null): StoredImage => ({ image_key: `${name}.jpg`, image_type: 'image/jpeg', image_w: 10, image_h: 10, thumb_key: `${name}-t.jpg`, box })
 const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null, links: Partial<Pick<Claim, 'sightings' | 'under'>> = {}): Claim => newClaim(kind, value, data, links)
