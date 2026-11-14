@@ -90,7 +90,6 @@
   "field.markClear": "Clear all boxes",
   "field.markRemove": "Remove box {n}",
   "field.script": "Script",
-  "field.scriptOther": "Name of the script",
   "field.place": "Where you found it",
   "field.placeHint": "A book and page, a street, a website: whatever would help someone find it again.",
   "field.url": "Link",

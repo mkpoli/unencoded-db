@@ -90,7 +90,6 @@
   "field.markClear": "清除所有方框",
   "field.markRemove": "刪除方框{n}",
   "field.script": "文字",
-  "field.scriptOther": "文字名稱",
   "field.place": "發現地點或出處",
   "field.placeHint": "書名和頁碼、街道、網站等，能幫助他人再次找到即可。",
   "field.url": "連結",

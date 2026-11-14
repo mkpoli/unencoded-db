@@ -1,3 +1,5 @@
+import { catalogues, translate } from './i18n'
+
 // The scripts a record can name. Each name is the script's own or its usual Chinese-character name, and
 // `other` takes a name in the visitor's words.
 export const SCRIPTS = [
@@ -22,6 +24,27 @@ export const SCRIPTS = [
 
 export type ScriptId = (typeof SCRIPTS)[number]['id']
 export const isScript = (value: unknown): value is ScriptId => SCRIPTS.some(script => script.id === value)
+
+export const SCRIPT_NAME_MAX = 80
+const fold = (text: string) => text.normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ').trim()
+let known: Map<string, ScriptId> | null = null
+function knownNames() {
+  if (known) return known
+  known = new Map()
+  for (const { id, own } of SCRIPTS) for (const name of [id, own, ...Object.values(catalogues).map(catalogue => catalogue[`script.${id}`])]) if (name) known.set(fold(name), id)
+  return known
+}
+
+// The script a form names: a script of the list by its id, its own name or its name in any language, or
+// else `other` with the name as typed. Nothing typed is `other` without a name.
+export function resolveScript(raw: string): { script: ScriptId; script_other: string | null } {
+  const text = raw.normalize('NFC').replace(/\s+/gu, ' ').trim().slice(0, SCRIPT_NAME_MAX)
+  const script = knownNames().get(fold(text))
+  return script ? { script, script_other: null } : { script: 'other', script_other: text || null }
+}
+
+/** The script of a record as a reader sees it, and as the form's field holds it. */
+export const scriptName = (locale: string, script: string, other?: string | null) => script === 'other' && other ? other : translate(locale, `script.${script}`)
 
 export const STATUSES = ['unchecked', 'encoded', 'unifiable', 'homograph', 'variant'] as const
 export type Status = (typeof STATUSES)[number]
