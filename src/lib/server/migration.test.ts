@@ -2,10 +2,11 @@ import { Database } from 'bun:sqlite'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
-import { isClaimKey, parseClaims, type Claim } from '$lib/claims'
-import { getEntry, revertEntry } from './entries'
+import { isClaimKey, newClaim, parseClaims, type Claim } from '$lib/claims'
+import { createEntry, getEntry, revertEntry, setHidden } from './entries'
 import { entrySnapshot, sightingSnapshot } from './revisions'
-import { d1Over } from './testdb'
+import { createPerson } from './people'
+import { d1Over, openTestDb } from './testdb'
 
 const migration = (name: string) => readFileSync(join(import.meta.dir, '../../../migrations', name), 'utf8')
 
@@ -179,6 +180,7 @@ test('0005 gives every claim a key, a list of sightings and a scope, in claims a
   expect(journal.filter(row => !versions.some(version => version.id === row.id)).map(row => row.snapshot)).toEqual([sighting, '{}', '{"revision":4}', '{}', '{"from":3}'])
 
   // An old version is restored through the store, with its keys and the sighting it rested on.
+  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql']) raw.exec(migration(name))
   const db = d1Over(raw)
   expect(await revertEntry(db, 1, 1, { actor: 'p', ip: null })).toEqual({ ok: true, rev: 5 })
   expect((await getEntry(db, 1))!.claims).toEqual(first)
@@ -196,9 +198,46 @@ test('0005 leaves a database without claims with the new table', () => {
   expect(raw.query('SELECT sightings, under FROM claims').get()).toEqual({ sightings: '[]', under: '[]' })
 })
 
-test('0006 derives every record\'s status from its claims, with its tags, counts and past versions', () => {
+test('0006 counts every listed record in or out of each marked work, as the app does', async () => {
+  const { db, raw } = openTestDb()
+  const who = { actor: (await createPerson(db)).id, ip: null }
+  const seen = { place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
+  const codes = [
+    [['unicode', 'U+2D6DD']], [['unicode', 'u+5d20']], [['unicode', 'U+004E00']], [['unicode', 'U+FA0E']], [['unicode', 'U+3042']], [['unicode', 'U+1B000']], [['unicode', 'pending']],
+    [['unicode', 'U+4E00 U+E0100']], [['unicode', 'U+5650 (compat)']], [['unicode', 'U+2A6D6,U+2A6D7']], [['unicode', 'U+4E00g']], [['unicode', 'U+4E00000']], [['unicode', 'U+0000']], [['unicode', 'U+D800']], [['unicode', 'U+110000']], [['unicode', 'U+10FFFF']], [['unicode', 'U+001F']], [['unicode', 'U+0020']], [['unicode', 'U+2FFFD']],
+    [['zitools', '⿰魚它'], ['mj', 'MJ059588']], [['glyphwiki', 'irg2021-03300'], ['big5', 'A140']], [['unicode', 'U+3042'], ['unicode', 'U+4E00'], ['yedict', 'U04E00']], [],
+  ]
+  let last = 0
+  for (const rows of codes) last = await createEntry(db, { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: rows.map(([charset, code]) => newClaim('encoding', code, { charset })) }, seen, [], who)
+  await setHidden(db, { entry: last }, true, who, null)
+  const marks = () => ({
+    tags: raw.query("SELECT tag, entry_id FROM entry_tags WHERE tag GLOB 'r:*' OR tag GLOB 'x:*' ORDER BY tag, entry_id").all(),
+    counts: raw.query("SELECT tag, n FROM tag_counts WHERE (tag GLOB 'r:*' OR tag GLOB 'x:*') AND n > 0 ORDER BY tag").all(),
+  })
+  const written = marks()
+  expect(written.tags).toHaveLength((codes.length - 1) * 5)
+  raw.exec("DELETE FROM entry_tags WHERE tag GLOB 'r:*' OR tag GLOB 'x:*'; DELETE FROM tag_counts WHERE tag GLOB 'r:*' OR tag GLOB 'x:*'")
+  raw.exec(migration('0006_registry_tags.sql'))
+  expect(marks()).toEqual(written)
+})
+
+test('0007 gives each record the marked works it is in, as the app writes them', async () => {
+  const { db, raw } = openTestDb()
+  const who = { actor: (await createPerson(db)).id, ip: null }
+  const seen = { place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
+  const codes = [[['unicode', 'U+2D6DD'], ['mj', 'MJ059588']], [['mj', 'MJ059588'], ['glyphwiki', 'irg2021-03300'], ['zitools', '⿰魚它']], [['unicode', 'U+3042']], [['big5', 'A140']], []]
+  for (const rows of codes) await createEntry(db, { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: rows.map(([charset, code]) => newClaim('encoding', code, { charset })) }, seen, [], who)
+  const marks = () => (raw.query('SELECT marks FROM entries ORDER BY id').all() as { marks: string | null }[]).map(row => row.marks)
+  const written = marks()
+  expect(written).toEqual(['["unicode","zitools","yedict","glyphwiki","mj"]', '["zitools","glyphwiki","mj"]', '["unicode"]', null, null])
+  raw.exec('ALTER TABLE entries DROP COLUMN marks')
+  raw.exec(migration('0007_entry_marks.sql'))
+  expect(marks()).toEqual(written)
+})
+
+test('0008 derives every record\'s status from its claims, with its tags, counts and past versions', () => {
   const raw = new Database(':memory:')
-  for (const name of ['0001_init.sql', '0002_sighting_via.sql', '0003_media_boxes.sql', '0004_unify_relation.sql', '0005_claim_links.sql']) raw.exec(migration(name))
+  for (const name of ['0001_init.sql', '0002_sighting_via.sql', '0003_media_boxes.sql', '0004_unify_relation.sql', '0005_claim_links.sql', '0006_registry_tags.sql', '0007_entry_marks.sql']) raw.exec(migration(name))
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
   const entry = raw.prepare("INSERT INTO entries(script, status, hidden_at, created_by, created_at, updated_at) VALUES ('han', ?, ?, 'p', '2026', '2026')")
   // Encoded, homograph, an IDS relation, a private use relation, none, and one that is hidden.
@@ -218,7 +257,7 @@ test('0006 derives every record\'s status from its claims, with its tags, counts
   revision.run(null, 'create', snapshot('unencoded'))
   revision.run(null, 'hide', '{}')
 
-  raw.exec(migration('0006_derived_status.sql'))
+  raw.exec(migration('0008_derived_status.sql'))
 
   expect(raw.query('SELECT id, status FROM entries ORDER BY id').all()).toEqual([
     { id: 1, status: 'encoded' }, { id: 2, status: 'homograph' }, { id: 3, status: 'unchecked' }, { id: 4, status: 'unchecked' }, { id: 5, status: 'unchecked' }, { id: 6, status: 'encoded' },

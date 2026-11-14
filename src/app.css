@@ -46,6 +46,7 @@ h2, .section-title { font-size: 16px; font-weight: 600 }
 .text-link { text-decoration: underline; text-underline-offset: 3px }
 .text-link:hover { color: var(--accent) }
 .muted { color: var(--muted) }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap }
 .small { font-size: 12px }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace }
 

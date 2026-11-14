@@ -3,11 +3,13 @@
   import { href, media, t } from '$lib/t'
   import type { Tile } from '$lib/server/entries'
   import type { SightingType } from '$lib/scripts'
+  import { MARKED } from '$lib/registries'
 
   let { tile, glyph = null }: { tile: Tile; glyph?: string | null } = $props()
   const label = (type: SightingType) => t(`evidence.type.${type}`)
   const shown = $derived(tile.types.slice(0, 1))
   const hidden = $derived(tile.types.length - shown.length)
+  const works = $derived(MARKED.filter(registry => tile.marks.includes(registry.id)))
   const marked = $derived(tile.status !== 'unchecked')
 </script>
 
@@ -25,6 +27,9 @@
       {#if hidden > 0}<span class="tag" title={tile.types.map(label).join(' · ')}>+{hidden}</span>{/if}
     </span>
   {/if}
+  {#if works.length}
+    <span class="tags works">{#each works as registry (registry.id)}{@const phrase = t('registry.in', { name: t(`registry.${registry.id}`) })}<span class="tag work" title={phrase}><span aria-hidden="true">{registry.mark}</span><span class="sr-only">{phrase}</span></span>{/each}</span>
+  {/if}
   <span class="meta">
     {#if tile.firstYear}<time datetime={tile.firstYear} title={t(tile.firstYearKind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{tile.firstYear}</time><span aria-hidden="true">·</span>{/if}
     <span class="sightings">{t(tile.sightings === 1 ? 'browse.sighting' : 'browse.sightings', { n: tile.sightings })}</span>
@@ -41,6 +46,7 @@
   .tags { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0 }
   .tag { max-width: 100%; padding: 0 5px; border-radius: 4px; background: var(--surface-sunken); font-size: 10.5px; line-height: 1.6; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
   .tag.state { flex: none; background: var(--surface-selected); color: var(--ink); font-weight: 550 }
+  .tag.work { flex: none; background: var(--good-light); color: var(--good) }
   .tag.unifiable { background: var(--accent-light); color: var(--accent) }
   .meta { display: flex; align-items: baseline; gap: 5px; min-width: 0; min-height: 18px; font-size: 12px; color: var(--muted) }
   .meta time { flex: none; font-variant-numeric: tabular-nums }

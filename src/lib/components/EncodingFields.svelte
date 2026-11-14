@@ -1,8 +1,8 @@
 <script lang="ts">
-  // The codes the character has in character sets. A set outside the list is named in its own field,
-  // which then carries the row's `encoding_charset`, so the two lists the form sends stay in step.
+  // The codes the character has in the works it is registered in. A work outside the list is named in its
+  // own field, which then carries the row's `encoding_charset`, so the two lists the form sends stay in step.
   import { untrack } from 'svelte'
-  import { ENCODING_SETS, OTHER_ENCODING, encodingSetLabel, isEncodingSet, type Encoding } from '$lib/encodings'
+  import { REGISTRIES, OTHER_REGISTRY, isRegistry, registryLabel, registryOf, type Encoding } from '$lib/registries'
   import { CLAIM_LIMITS } from '$lib/claims'
   import { t } from '$lib/t'
 
@@ -12,9 +12,9 @@
   let { values = [], code = '', stated = $bindable([]) }: { values?: Encoding[]; code?: string; stated?: string[] } = $props()
 
   const uid = $props.id()
-  const row = (encoding: Encoding): Row => isEncodingSet(encoding.charset)
+  const row = (encoding: Encoding): Row => isRegistry(encoding.charset)
     ? { charset: encoding.charset, code: encoding.code, other: '' }
-    : { charset: OTHER_ENCODING, code: encoding.code, other: encoding.charset }
+    : { charset: OTHER_REGISTRY, code: encoding.code, other: encoding.charset }
   let rows = $state<Row[]>(untrack(() => values.length ? values.map(row) : [{ charset: 'unicode', code: '', other: '' }]))
 
   $effect(() => {
@@ -27,7 +27,7 @@
     })
   })
   $effect.pre(() => {
-    stated = rows.filter(item => item.code.trim()).map(item => `${item.charset === OTHER_ENCODING ? item.other.trim() : encodingSetLabel(item.charset)} ${item.code.trim()}`.trim())
+    stated = rows.filter(item => item.code.trim()).map(item => `${item.charset === OTHER_REGISTRY ? item.other.trim() : registryLabel(item.charset)} ${item.code.trim()}`.trim())
   })
 </script>
 
@@ -37,15 +37,15 @@
   {#each rows as item, index}
     <div class="encoding">
       <div class="set">
-        <select id="{uid}-set-{index}" class="input" name={item.charset === OTHER_ENCODING ? undefined : 'encoding_charset'} bind:value={item.charset} aria-label="{t('field.encodingCharset')} {index + 1}">
-          {#each ENCODING_SETS as set (set.id)}<option value={set.id}>{set.label}</option>{/each}
-          <option value={OTHER_ENCODING}>{t('field.encodingOther')}</option>
+        <select id="{uid}-set-{index}" class="input" name={item.charset === OTHER_REGISTRY ? undefined : 'encoding_charset'} bind:value={item.charset} aria-label="{t('field.encodingCharset')} {index + 1}">
+          {#each REGISTRIES as set (set.id)}<option value={set.id}>{set.label}</option>{/each}
+          <option value={OTHER_REGISTRY}>{t('field.encodingOther')}</option>
         </select>
-        {#if item.charset === OTHER_ENCODING}
+        {#if item.charset === OTHER_REGISTRY}
           <input class="input" name="encoding_charset" maxlength="40" bind:value={item.other} required={Boolean(item.code.trim())} aria-label={t('field.encodingOther')} placeholder={t('field.encodingOther')} />
         {/if}
       </div>
-      <input id="{uid}-code-{index}" class="input mono" name="encoding_code" maxlength={CLAIM_LIMITS.encoding.length} bind:value={item.code} placeholder={item.charset === 'unicode' ? 'U+2D6DD' : ''} aria-label="{t('field.encodingCode')} {index + 1}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
+      <input id="{uid}-code-{index}" class="input mono" name="encoding_code" maxlength={CLAIM_LIMITS.encoding.length} bind:value={item.code} placeholder={registryOf(item.charset)?.example ?? ''} aria-label="{t('field.encodingCode')} {index + 1}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
       {#if rows.length > 1 || item.code}<button class="remove" type="button" aria-label="{t('field.encodingRemove')} {index + 1}" title={t('field.encodingRemove')} onclick={() => rows.splice(index, 1)}><span aria-hidden="true">×</span></button>{/if}
     </div>
   {/each}

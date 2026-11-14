@@ -7,7 +7,8 @@ import { cleanIds, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
-import { mapSightings, parseClaims, primaryIdsOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
+import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
+import { MARKED, registeredIn } from '$lib/registries'
 import { genreOf } from '$lib/genres'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
@@ -17,7 +18,7 @@ export type EntryFields = { script: string; script_other: string | null; descrip
 export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; via_url: string | null; via_title: string | null; via_author: string | null; via_publisher: string | null; via_report_date: string | null; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
-export type Entry = Omit<EntryFields, 'claims'> & { status: string; id: number; rev: number; ids: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
+export type Entry = Omit<EntryFields, 'claims'> & { status: string; id: number; rev: number; ids: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
 export type Sighting = SightingFields & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; via_id: number | null; media: StoredImage[]; hidden_at: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
 
 // What an entry has one of. What it has several of is in `claims`.
@@ -116,6 +117,16 @@ export function terms(value: string) {
   return (value.normalize('NFKC').toLowerCase().match(WORD) ?? []).filter(term => !/^[⿰-⿿]$/.test(term))
 }
 
+/** The marked works a record is in, in the order of the list. */
+const marksHeld = (claims: readonly Claim[]) => { const held = registeredIn(encodingsOf(claims)); return MARKED.map(registry => registry.id).filter(id => held.has(id)) }
+/** The marked works a stored summary names. */
+export function parseMarks(raw: string | null | undefined): string[] {
+  try {
+    const value: unknown = JSON.parse(raw || '[]')
+    return Array.isArray(value) ? MARKED.map(registry => registry.id).filter(id => value.includes(id)) : []
+  } catch { return [] }
+}
+
 type TagInput = Pick<Entry, 'script' | 'status' | 'description' | 'script_other'>
 export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key'>, hasSource: boolean, claims: readonly Claim[] = []) {
   const filters = [`f:${entry.status}`]
@@ -128,7 +139,10 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
     else if (claim.kind === 'collection') own.add(`c:${claim.value}`)
     else if (claim.kind === 'tag') own.add(`t:${claim.value}`)
   }
-  return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own]
+  // A record is counted in or out of every marked work, so a list of either is one range.
+  const held = marksHeld(claims)
+  const marks = MARKED.map(registry => `${held.includes(registry.id) ? 'r' : 'x'}:${registry.id}`)
+  return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks]
 }
 
 const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'tag']
@@ -180,8 +194,8 @@ function summarize(sightings: SightingState[]) {
 const tagsOf = (entry: Entry, claims: readonly Claim[], summary: ReturnType<typeof summarize>) =>
   [...facetTags({ ...entry, status: statusOf(claims), ids: primaryIdsOf(claims), cover_key: summary.cover_key }, summary.hasSource, claims), ...wordTags(entry, claims, summary.visible)]
 const facet = (tag: string) => !tag.startsWith('w:')
-const SUMMARY_SET = 'ids = ?, cover_key = ?, cover_place = ?, sightings = ?, types = ?, first_year = ?, first_year_kind = ?, status = ?'
-const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summarize>) => [primaryIdsOf(claims), summary.cover_key, summary.cover_place, summary.visible.length, summary.types, summary.first_year, summary.first_year_kind, statusOf(claims)]
+const SUMMARY_SET = 'ids = ?, cover_key = ?, cover_place = ?, sightings = ?, types = ?, first_year = ?, first_year_kind = ?, marks = ?, status = ?'
+const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summarize>) => [primaryIdsOf(claims), summary.cover_key, summary.cover_place, summary.visible.length, summary.types, summary.first_year, summary.first_year_kind, marksHeld(claims).length ? JSON.stringify(marksHeld(claims)) : null, statusOf(claims)]
 
 // Brings a record's tags, counts and summary up to date. It answers the statements, to run with the
 // write they belong to.
@@ -609,7 +623,7 @@ export async function mediaVisible(db: D1Database, key: string) {
   return Boolean(await db.prepare(`SELECT 1 FROM sighting_media x INDEXED BY sighting_media_by_image ${live} AND x.image_key = ?1 UNION ALL SELECT 1 FROM sighting_media x INDEXED BY sighting_media_by_thumb ${live} AND x.thumb_key = ?1 LIMIT 1`).bind(key).first())
 }
 
-export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; query?: string | null; before?: number | null; limit?: number }
+export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; before?: number | null; limit?: number }
 export const PAGE = 48
 export const SEARCH_WINDOW = 256
 
@@ -627,48 +641,71 @@ export function facetTag(facet?: string | null) {
   return match ? `${match[1]}:${match[2]}` : undefined
 }
 
+// The marked works a list keeps to (`r:`) and leaves out (`x:`), as the keys they are listed under, or
+// null for a name that is no marked work.
+export function markTags(within: readonly string[] = [], without: readonly string[] = []) {
+  if (![...within, ...without].every(id => MARKED.some(registry => registry.id === id))) return null
+  return [...new Set([...within.map(id => `r:${id}`), ...without.map(id => `x:${id}`)])]
+}
+
 export function exactSearchIds(query: string) {
   const ids = cleanIds(query)
   return isDescription(ids) ? ids : null
 }
 
-// The range a listing reads and the tests each row must pass. Null names a listing that is not one.
-function listPlan({ script, filter, facet, query }: Listing) {
-  const base = listTag(script, filter), own = facetTag(facet)
-  if (!base || own === undefined) return null
+// The keys every row of a listing holds and the words it is searched for. Null names a listing that is not one.
+function listPlan({ script, filter, facet, within, without, query }: Listing) {
+  const base = listTag(script, filter), own = facetTag(facet), marks = markTags(within, without)
+  if (!base || own === undefined || !marks) return null
   if ((query?.trim().length ?? 0) > SEARCH_LENGTH_MAX) return null
   const exact = exactSearchIds(query ?? '')
   const words = exact ? [] : [...new Set(terms(query ?? ''))]
   if (!exact && (words.length > SEARCH_TERMS_MAX || (query?.trim() && !words.length))) return null
-  const tests = [...words.map(word => `w:${word}`), ...(own && base !== 'all' ? [base] : [])]
-  return { tag: own ?? base, exact, tests, searching: Boolean(exact) || tests.length > 0 }
+  const keys = [...(own ? [own] : []), ...marks, ...(base !== 'all' ? [base] : [])]
+  return { keys, exact, words: words.map(word => `w:${word}`) }
 }
 
-const TILE_COLUMNS = 'e.id, e.ids, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind'
+// One key is the range read and the others are tested on each row of it, with the words.
+function listRead(plan: NonNullable<ReturnType<typeof listPlan>>, range = plan.keys[0] ?? 'all') {
+  const tests = [...plan.words, ...plan.keys.filter(key => key !== range)]
+  return { tag: range, tests, searching: Boolean(plan.exact) || tests.length > 0 }
+}
 
-export function listStatement(db: D1Database, listing: Listing) {
+const TILE_COLUMNS = 'e.id, e.ids, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind, e.marks'
+
+// `range` names the key to read; without it the first key is read.
+export function listStatement(db: D1Database, listing: Listing, range?: string) {
   const plan = listPlan(listing)
   if (!plan) return null
-  // The facet range drives the query. Word tests are projections, not filters:
-  // LIMIT therefore bounds candidates read even when no word matches.
+  const read = listRead(plan, range)
+  // The range drives the query. Tests are projections, not filters:
+  // LIMIT therefore bounds candidates read even when no row passes.
   const tests = [
     ...(plan.exact ? ["EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value = ? AND k.entry_id = t.entry_id)"] : []),
-    ...plan.tests.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = t.entry_id)'),
+    ...read.tests.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = t.entry_id)'),
   ].join(' AND ') || '1'
   return db.prepare(`SELECT ${TILE_COLUMNS}, (${tests}) AS matches FROM entry_tags t CROSS JOIN entries e ON e.id = t.entry_id WHERE t.tag = ? AND t.entry_id < ? ORDER BY t.entry_id DESC LIMIT ?`)
-    .bind(...(plan.exact ? [plan.exact] : []), ...plan.tests, plan.tag, listing.before ?? Number.MAX_SAFE_INTEGER, (plan.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1)
+    .bind(...(plan.exact ? [plan.exact] : []), ...read.tests, read.tag, listing.before ?? Number.MAX_SAFE_INTEGER, (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1)
 }
 
-type TileRow = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind'>
-export type Tile = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings' | 'status'> & { types: SightingType[]; firstYear: string | null; firstYearKind: YearKind | null }
-const toTile = ({ types, first_year, first_year_kind, ...row }: TileRow): Tile => ({ ...row, types: parseSightingTypes(types), firstYear: first_year, firstYearKind: first_year_kind })
+type TileRow = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind' | 'marks'>
+export type Tile = Pick<Entry, 'id' | 'ids' | 'cover_key' | 'sightings' | 'status'> & { types: SightingType[]; firstYear: string | null; firstYearKind: YearKind | null; marks: string[] }
+const toTile = ({ types, first_year, first_year_kind, marks, ...row }: TileRow): Tile => ({ ...row, types: parseSightingTypes(types), firstYear: first_year, firstYearKind: first_year_kind, marks: parseMarks(marks) })
 
 export async function list(db: D1Database, listing: Listing) {
-  const plan = listPlan(listing), statement = listStatement(db, listing)
-  if (!plan || !statement) return null
+  const plan = listPlan(listing)
+  if (!plan) return null
+  // Of several keys the one with the fewest records is read, so a short list is not sought in a long one.
+  let range: string | undefined
+  if (plan.keys.length > 1) {
+    const { results } = await db.prepare('SELECT tag, n FROM tag_counts WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(plan.keys)).all<{ tag: string; n: number }>()
+    const sizes = new Map(results.map(row => [row.tag, row.n]))
+    range = plan.keys.reduce((least, key) => (sizes.get(key) ?? 0) < (sizes.get(least) ?? 0) ? key : least)
+  }
+  const read = listRead(plan, range), statement = listStatement(db, listing, range)!
   const limit = listing.limit ?? PAGE
   const { results } = await statement.all<TileRow & { matches: number }>()
-  const window = plan.searching ? SEARCH_WINDOW : limit
+  const window = read.searching ? SEARCH_WINDOW : limit
   const tiles: Tile[] = []
   let consumed = 0
   for (const { matches, ...row } of results.slice(0, window)) {
@@ -677,7 +714,7 @@ export async function list(db: D1Database, listing: Listing) {
     if (tiles.length === limit) break
   }
   const next = consumed < results.length ? results[consumed - 1].id : null
-  return { tiles, next, partial: plan.searching && next !== null && tiles.length < limit }
+  return { tiles, next, partial: read.searching && next !== null && tiles.length < limit }
 }
 
 // The counts a page shows beside its filters. Tags are counted too, and read where they are listed.
