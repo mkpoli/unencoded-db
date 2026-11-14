@@ -29,21 +29,23 @@ export const actions: Actions = {
     // The positions of the pictures the form takes away; new ones follow those that stay.
     const removed = new Set(form.getAll('remove_media').map(String))
     const removeMedia = [...removed]
+    // The marks drawn on the stored pictures come back with a refused form, to be drawn again.
+    const marks = form.getAll('media_box').map(String)
     const rev = positiveId(String(form.get('rev') ?? ''))
-    if (!rev || rev !== sighting.rev) return fail(409, { error: 'conflict', values, summary, removeMedia })
+    if (!rev || rev !== sighting.rev) return fail(409, { error: 'conflict', values, summary, removeMedia, marks: null })
     const { DB, MEDIA } = env(event)
-    const marks = await readMarks(form, sighting.media)
+    const read = await readMarks(form, sighting.media)
     const gone = new Set(sighting.media.map((_, position) => position).filter(position => removed.has(String(position))))
     const keptCount = sighting.media.length - gone.size
-    if (marks === 'invalid') return fail(400, { error: 'image', values, summary, removeMedia })
+    if (read === 'invalid') return fail(400, { error: 'image', values, summary, removeMedia, marks })
     const added = await uploadedImages(form, MEDIA)
-    if (added === 'invalid' || keptCount + added.length > MEDIA_MAX) return fail(400, { error: 'image', values, summary, removeMedia })
-    if (!keptCount && !added.length && !values.url && !values.via_url && !values.place) return fail(400, { error: 'evidence', values, summary, removeMedia })
-    const kept = await keptPictures(MEDIA, sighting.media, marks, gone)
-    const media = marks || added.length || kept.length !== sighting.media.length ? [...kept, ...added] : null
+    if (added === 'invalid' || keptCount + added.length > MEDIA_MAX) return fail(400, { error: 'image', values, summary, removeMedia, marks })
+    if (!keptCount && !added.length && !values.url && !values.via_url && !values.place) return fail(400, { error: 'evidence', values, summary, removeMedia, marks })
+    const kept = await keptPictures(MEDIA, sighting.media, read, gone)
+    const media = read || added.length || kept.length !== sighting.media.length ? [...kept, ...added] : null
     const person = await writer(event, DB)
     const result = await editSighting(DB, sighting.id, rev, values, media, { actor: person.id, ip: await ipHash(event) }, summary || null, id)
-    if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code, values, summary, removeMedia })
+    if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code, values, summary, removeMedia, marks: null })
     redirect(303, `/${event.params.locale}/entry/${id}`)
   },
 }

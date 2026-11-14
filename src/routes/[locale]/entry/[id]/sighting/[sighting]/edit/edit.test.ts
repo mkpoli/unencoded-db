@@ -159,9 +159,9 @@ test('clears the marks of a stored picture, and leaves unchanged ones alone', as
   picture(raw, 0, 'original')
   await expect(actions.default(event(marked(['[[1,2,10,10]]'])))).rejects.toMatchObject({ status: 303 })
   expect(media(raw)).toEqual([{ position: 0, image_key: 'original', thumb_key: 'original-thumb', box: '[[1,2,10,10]]' }])
-  const data = marked(['']); data.set('rev', '2')
-  await expect(actions.default(event(data))).rejects.toMatchObject({ status: 303 })
-  expect(media(raw)).toEqual([{ position: 0, image_key: 'original', thumb_key: 'original-thumb', box: null }])
+  const data = marked([''], [png]); data.set('rev', '2')
+  await expect(actions.default(stored(event(data)))).rejects.toMatchObject({ status: 303 })
+  expect(media(raw)).toMatchObject([{ position: 0, image_key: 'original', box: null }])
 })
 
 test('refuses marks that do not fit the stored pictures, and stores nothing for a removed one', async () => {
@@ -174,5 +174,14 @@ test('refuses marks that do not fit the stored pictures, and stores nothing for 
   const removing = event(data); removing.platform.env.MEDIA = { put: async (key: string) => { keys.push(key) } }
   await expect(actions.default(removing)).rejects.toMatchObject({ status: 303 })
   expect(keys).toEqual([])
+  expect(media(raw)).toEqual([{ position: 0, image_key: 'original', thumb_key: 'original-thumb', box: '[[1,2,10,10]]' }])
+})
+
+test('changed marks need their thumbnail, and come back with a refused form', async () => {
+  const { raw, event } = await fixture()
+  picture(raw, 0, 'original')
+  expect(await actions.default(stored(event(marked(['[[3,4,10,10]]']))))).toMatchObject({ status: 400, data: { error: 'image', marks: ['[[3,4,10,10]]'] } })
+  const unreadable = marked(['[[3,4,10,10]]'], [png]); upload(unreadable, new Uint8Array([1, 2, 3]))
+  expect(await actions.default(stored(event(unreadable)))).toMatchObject({ status: 400, data: { error: 'image', marks: ['[[3,4,10,10]]'] } })
   expect(media(raw)).toEqual([{ position: 0, image_key: 'original', thumb_key: 'original-thumb', box: '[[1,2,10,10]]' }])
 })

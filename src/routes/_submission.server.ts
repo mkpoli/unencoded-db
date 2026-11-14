@@ -63,26 +63,25 @@ export async function uploadedImages(form: FormData, media: R2Bucket): Promise<S
   return images === 'invalid' ? images : storeImages(media, images)
 }
 
-export type Mark = { box: string | null; thumb: Prepared | null }
+export type Mark = { box: string | null; thumb: Prepared }
 
 // The marks a form sends for the pictures a sighting already holds: `media_box` and `media_thumb` once per
-// picture, in their order. Null when no mark changed. A thumbnail is read only for a picture whose marks
-// changed, and nothing is stored here.
-export async function readMarks(form: FormData, stored: StoredImage[]): Promise<Mark[] | null | 'invalid'> {
+// picture, in their order. Null when no mark changed. A picture whose marks changed needs a thumbnail of
+// the new first box, and nothing is stored here.
+export async function readMarks(form: FormData, stored: StoredImage[]): Promise<(Mark | null)[] | null | 'invalid'> {
   const boxes = form.getAll('media_box'), thumbs = form.getAll('media_thumb')
   if (!boxes.length) return thumbs.some(thumb => thumb instanceof File && thumb.size) ? 'invalid' : null
   if (boxes.length !== stored.length || (thumbs.length && thumbs.length !== stored.length)) return 'invalid'
-  const marks: Mark[] = []
+  const marks: (Mark | null)[] = []
   let changed = false
   for (const [index, picture] of stored.entries()) {
     const raw = String(boxes[index])
     const box = raw ? readBoxes(raw, picture.image_w, picture.image_h) : null
     if (raw && !box) return 'invalid'
-    if (box === picture.box) { marks.push({ box, thumb: null }); continue }
+    if (box === picture.box) { marks.push(null); continue }
     changed = true
     const file = thumbs[index]
-    if (!(file instanceof File) || !file.size) { marks.push({ box, thumb: null }); continue }
-    const thumb = file.size <= MAX_THUMB ? await prepareImage(file, MAX_THUMB) : null
+    const thumb = file instanceof File && file.size && file.size <= MAX_THUMB ? await prepareImage(file, MAX_THUMB) : null
     if (!thumb) return 'invalid'
     marks.push({ box, thumb })
   }
@@ -90,14 +89,15 @@ export async function readMarks(form: FormData, stored: StoredImage[]): Promise<
 }
 
 // The pictures a sighting keeps, with their new marks, storing the thumbnail of each one marked anew.
-export async function keptPictures(media: R2Bucket, stored: StoredImage[], marks: Mark[] | null, removed: Set<number>): Promise<StoredImage[]> {
+export async function keptPictures(media: R2Bucket, stored: StoredImage[], marks: (Mark | null)[] | null, removed: Set<number>): Promise<StoredImage[]> {
   const marked: StoredImage[] = []
   for (const [index, picture] of stored.entries()) {
     if (removed.has(index)) continue
     if (!marks) { marked.push(picture); continue }
-    const { box, thumb } = marks[index]
-    if (thumb) await storeImage(media, thumb)
-    marked.push({ ...picture, box, thumb_key: thumb?.key ?? picture.thumb_key })
+    const mark = marks[index]
+    if (!mark) { marked.push(picture); continue }
+    await storeImage(media, mark.thumb)
+    marked.push({ ...picture, box: mark.box, thumb_key: mark.thumb.key })
   }
   return marked
 }

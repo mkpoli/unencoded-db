@@ -14,6 +14,7 @@
   let pictures = $state<PictureList>()
   const title = $derived(t('sighting.editTitle', { id: data.id }))
   let removed = $state<string[]>(untrack(() => form?.removeMedia ?? []))
+  const drawn = $derived(form?.marks?.length === data.sighting.media.length ? form.marks : null)
   const room = $derived(MEDIA_MAX - data.sighting.media.length + removed.length)
 </script>
 
@@ -27,7 +28,7 @@
       {#if data.sighting.media.length}
         <div class="current">
           {#each data.sighting.media as picture, position (picture.image_key)}
-            <StoredPicture {picture} {position} bind:removed onready={(working) => marking[position] = working} />
+            <StoredPicture {picture} {position} drawn={drawn?.[position] ?? null} bind:removed onready={(working) => marking[position] = working} />
           {/each}
         </div>
       {/if}

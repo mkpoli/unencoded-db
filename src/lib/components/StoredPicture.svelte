@@ -1,16 +1,18 @@
 <script lang="ts">
   // A picture a sighting already holds, on its edit form: its marks can be redrawn, and it can be removed.
   // It sends `media_box` and `media_thumb` once each, so the lists line up with the stored pictures; the
-  // thumbnail is made again from the first box only when the marks change.
-  import { untrack } from 'svelte'
+  // thumbnail is made again from the first box only when the marks change. `drawn` holds the marks a refused
+  // form sent, so they are drawn again.
+  import { onMount, untrack } from 'svelte'
   import { boxesOf, thumbnail, type Box } from '$lib/picture'
   import { media, t } from '$lib/t'
   import type { StoredImage } from '$lib/server/entries'
   import MarkStage from './MarkStage.svelte'
 
-  let { picture, position, removed = $bindable([]), onready }: { picture: StoredImage; position: number; removed?: string[]; onready?: (busy: boolean) => void } = $props()
+  let { picture, position, drawn = null, removed = $bindable([]), onready }: { picture: StoredImage; position: number; drawn?: string | null; removed?: string[]; onready?: (busy: boolean) => void } = $props()
 
-  let boxes = $state<Box[]>(untrack(() => boxesOf(picture.box)))
+  let boxes = $state<Box[]>(untrack(() => boxesOf(drawn ?? picture.box)))
+  let bad = $state(false)
   let thumbInput = $state<HTMLInputElement>()
   let bitmap: Promise<ImageBitmap> | null = null
   let pending = 0
@@ -19,6 +21,8 @@
   async function refreshThumb(marks: Box[]) {
     const turn = ++pending
     onready?.(true)
+    bad = false
+    if (thumbInput) thumbInput.files = new DataTransfer().files
     try {
       bitmap ??= fetch(media(picture.image_key)).then(response => response.blob()).then(blob => createImageBitmap(blob))
       const file = await thumbnail(await bitmap, marks[0] ?? null)
@@ -28,8 +32,11 @@
       thumbInput.files = transfer.files
     } catch {
       bitmap = null
+      if (turn === pending) bad = true
     } finally { if (turn === pending) onready?.(false) }
   }
+
+  onMount(() => { if (JSON.stringify(boxes) !== JSON.stringify(boxesOf(picture.box))) void refreshThumb(boxes) })
 </script>
 
 <div class="stored" class:gone>
@@ -40,6 +47,7 @@
       <label class="remove"><input type="checkbox" name="remove_media" value={String(position)} bind:group={removed} /> {t('sighting.removePicture')}</label>
     {/snippet}
   </MarkStage>
+  {#if bad}<p class="notice bad small">{t('field.imageBad')}</p>{/if}
 </div>
 
 <style>
