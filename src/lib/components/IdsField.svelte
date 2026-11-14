@@ -1,6 +1,7 @@
 <script lang="ts">
   // The descriptions of a character. The first draws the glyph: it is typed in ids-input's sequence field
-  // or built in its editor, and `primary` follows it. Further descriptions of the same character are rows
+  // or built from parts with the tools that open under it, and `primary` follows it. `chosen` is the part
+  // of it those tools are working on. Further descriptions of the same character are rows
   // under it, offered once the first is whole. Each is sent as an `ids` value of its own.
   //
   // While the first is whole, the field says whether an encoded character or another record has the same
@@ -13,9 +14,12 @@
   import { characterFacts, encodedMatch, type CharacterFacts } from '$lib/encoded'
   import { href, locale, t } from '$lib/t'
   import { browser } from '$app/environment'
+  import type { IdsAdapter, IdsEditor } from 'ids-input/svelte'
   import IdsLine from './IdsLine.svelte'
 
-  let { values = [], primary = $bindable(''), onfill }: { values?: string[]; primary?: string; onfill?: (facts: CharacterFacts) => void } = $props()
+  let { values = [], primary = $bindable(''), chosen = $bindable(null), onfill }: {
+    values?: string[]; primary?: string; chosen?: number[] | null; onfill?: (facts: CharacterFacts) => void
+  } = $props()
 
   const uid = $props.id()
   let next = 0
@@ -56,21 +60,18 @@
     ;(at > 0 ? lines[rest[at - 1].key] : main)?.focus()
   }
 
-  let dialog = $state<HTMLDialogElement>()
-  let editor = $state.raw<{ Editor: typeof import('./IdsEditor.svelte').default; messages: Record<string, string> | undefined } | null>(null)
-  let draft = $state('')
-  async function open() {
-    draft = sequence
-    dialog?.showModal()
-    if (!editor) {
-      const [found, messages] = await Promise.all([import('./IdsEditor.svelte'), idsMessages(locale())])
-      editor = { Editor: found.default, messages }
-    }
+  // The tools work on the editor of the first field. They are fetched when first opened, and hand that
+  // editor the tables it looks parts up in.
+  let editor = $state.raw<IdsEditor | null>(null)
+  let tools = $state.raw<{ Builder: typeof import('./IdsBuilder.svelte').default; adapter: IdsAdapter; messages: Record<string, string> | undefined } | null>(null)
+  let building = $state(false)
+  async function build() {
+    building = !building
+    if (!building || tools) return
+    const [found, messages] = await Promise.all([import('./IdsBuilder.svelte'), idsMessages(locale())])
+    tools = { Builder: found.default, adapter: found.adapter, messages }
   }
-  function use(built: string) {
-    first = built
-    dialog?.close()
-  }
+  $effect.pre(() => { chosen = building ? editor?.chosen ?? null : null })
 
   let encoded = $state<string | null>(null)
   let same = $state<{ id: number }[]>([])
@@ -107,9 +108,14 @@
 
 <div class="descriptions">
   <div class="main">
-    <IdsLine bind:this={main} bind:value={first} label={t('field.ids')} titled />
-    <button type="button" class="button build" onclick={open}>{t('field.idsBuild')}</button>
+    <IdsLine bind:this={main} bind:value={first} label={t('field.ids')} titled adapter={tools?.adapter} oneditor={found => editor = found} />
+    <button type="button" class="button build" aria-expanded={building} aria-controls="{uid}-tools" disabled={!hydrated} onclick={build}>{t('field.idsBuild')}<span class="chevron" aria-hidden="true">⌄</span></button>
   </div>
+  {#if building}
+    <div class="tools" id="{uid}-tools">
+      {#if tools && editor}<tools.Builder {editor} messages={tools.messages} locale={locale()} />{:else}<p class="muted">{t('field.idsLoading')}</p>{/if}
+    </div>
+  {/if}
   {#if encoded}<p class="found" data-testid="encoded-hint">{t('field.idsEncoded', { char: encoded, code: codePoints(encoded) })}{#if onfill} <button type="button" class="text-button" onclick={() => fill(encoded!)}>{t('field.idsFill')}</button>{/if}</p>{/if}
   {#if same.length}<p class="found">{t('field.idsSame')} <span>{#each same as record, i}{i ? ', ' : ''}<a class="text-link" href={href(`/entry/${record.id}`)} target="_blank">#{record.id}</a>{/each}</span></p>{/if}
   {#if rest.length}
@@ -126,16 +132,6 @@
   {#if hydrated && whole && rest.length < IDS_MAX - 1}<div><button type="button" class="text-button" onclick={add}>+ {t('field.idsAdd')}</button></div>{/if}
 </div>
 
-<dialog bind:this={dialog} class="ids-dialog" aria-label={t('field.idsBuild')} closedby="any">
-  <div class="ids-dialog-body">
-    {#if editor}<editor.Editor bind:value={draft} locale={locale()} messages={editor.messages} onuse={use} />{:else}<p class="muted">{t('field.idsLoading')}</p>{/if}
-  </div>
-  <div class="row ids-dialog-foot">
-    <button type="button" class="button primary" disabled={!draft} onclick={() => use(draft)}>{t('field.idsUse')}</button>
-    <button type="button" class="button" onclick={() => dialog?.close()}>{t('field.idsClose')}</button>
-  </div>
-</dialog>
-
 <style>
   /* One grid for the first description and the rows under it, so their fields share an edge. */
   .descriptions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 10px; min-width: 0 }
@@ -148,10 +144,11 @@
   .more { margin-top: 4px }
   .remove { justify-self: start; width: 36px; height: 41px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer }
   .remove:hover { color: var(--wrong) }
-  .ids-dialog { width: min(980px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: hidden }
-  .ids-dialog[open] { display: flex; flex-direction: column }
-  .ids-dialog-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 16px }
-  .ids-dialog-foot { flex: none; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid var(--line) }
+  .build[aria-expanded='true'] { border-color: var(--accent); background: var(--accent-light); color: var(--accent) }
+  .chevron { display: inline-block; margin-inline-start: 6px; transition: transform 120ms ease }
+  .build[aria-expanded='true'] .chevron { transform: rotate(180deg) }
+  @media (prefers-reduced-motion: reduce) { .chevron { transition: none } }
+  .tools { padding-top: 4px }
   @media (max-width: 700px) {
     .descriptions { grid-template-columns: minmax(0, 1fr) 36px }
     .main > :global(*) { grid-column: 1 / -1 }

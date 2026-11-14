@@ -11,12 +11,11 @@ declare module 'ids-input' {
 }
 
 declare module 'ids-input/adapter' {
-  export function babelStoneAdapter(options: Record<string, string>): unknown
+  export function babelStoneAdapter(options: Record<string, string>): import('ids-input/svelte').IdsAdapter
 }
 
 declare module 'ids-input/svelte' {
   import type { Component } from 'svelte'
-  export const IdsInput: Component<any>
   export const IdsSequence: Component<{ editor: IdsEditor; label?: boolean; placeholder?: string; onenter?: () => void }>
   /** What a host needs of the editor behind a sequence field. */
   export type IdsEditor = {
@@ -24,10 +23,28 @@ declare module 'ids-input/svelte' {
     readonly draft: string
     /** What is wrong with the text, in the editor's language, or '' when nothing is. */
     readonly problem: string
+    /** The part the tools are working on, by its place in the description, or null. */
+    readonly chosen: number[] | null
+    readonly canUndo: boolean
+    readonly canRedo: boolean
+    /** The text of a message in the editor's language. */
+    readonly t: (key: string, params?: Record<string, string | number>) => string
     reset(text: string): void
+    undo(): void
+    redo(): void
+    /** Put `part` at `path`, or at the chosen part. */
+    take(part: string, path?: number[]): void
+    keydown(event: KeyboardEvent, where?: { root?: HTMLElement | null; slot?: HTMLInputElement | null }): void
     listen(heard: (text: string, whole: boolean) => void): () => void
   }
-  export function createEditor(options: () => { adapter: { structure(char: string): Promise<unknown[]> }; messages?: Record<string, string>; locale?: string; disabled?: boolean; tintMode?: 'hover' | 'on' | 'off' }): IdsEditor
+  /** The tables an editor looks parts up in. The sequence field alone needs none. */
+  export type IdsAdapter = { structure(char: string): Promise<unknown[]> }
+  export function createEditor(options: () => { adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; disabled?: boolean; tintMode?: 'hover' | 'on' | 'off' }): IdsEditor
+  export const IdsOperators: Component<{ editor: IdsEditor; keyHints?: boolean }>
+  export const IdsTree: Component<{ editor: IdsEditor; keyHints?: boolean }>
+  export const IdsPartTools: Component<{ editor: IdsEditor; keyHints?: boolean; slot?: HTMLInputElement | null; status?: boolean }, {}, 'slot'>
+  export const IdsPicker: Component<{ editor: IdsEditor; pickers?: ('find' | 'parts' | 'from' | 'templates')[]; recentKey?: string | null }>
+  export const IdsCharacterInfo: Component<{ root: HTMLElement | null; adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; onpick?: (part: string, path?: number[]) => void }>
   /** A description drawn by the adapter's `preview`. With a `session` and `editable`, its parts are moved, scaled and turned on the drawing. */
   export const IdsPreview: Component<{
     adapter: { preview?: import('ids-input/composer').ComposerPreview }; tree: import('ids-input').IdsPart; chosen?: number[] | null
@@ -86,4 +103,9 @@ declare module 'ids-input/composer' {
   export function sketch(source: ComposerSource, sequence: string): Promise<SketchLeaf[]>
   /** A document over a drawing made with `separate`: `scopes` is its drawing once every part has its own ink. */
   export function documentView(document: import('ids-input/document').IdsDocument, drawing: Drawing, sketch: SketchLeaf[] | null): { scopes: import('ids-input/document').ScopeTree | null; complete: boolean }
+}
+
+declare module '*/ids-input/src/svelte/fallback-font.js' {
+  /** Loads the font shard of each rare character shown under `root`, now and as it re-renders. Answers how to stop. */
+  export function watchFallback(root: Element | null | undefined): () => void
 }
