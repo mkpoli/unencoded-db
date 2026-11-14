@@ -99,6 +99,10 @@ describe('unification', () => {
     const result = read([['related_characters_present', '1'], ['related_character', '木'], ['related_relationship', 'unifiable'], ['related_difference', ''], ['related_evidence', '']])
     expect(result).toEqual({ claims: [claim('relation', '木', { relationship: 'unifiable' })] })
   })
+  test('an encoded character of the same shape and another origin is a homograph', () => {
+    const result = read([['related_characters_present', '1'], ['related_character', '哦'], ['related_relationship', 'homograph'], ['related_difference', ''], ['related_evidence', '']])
+    expect(result).toEqual({ claims: [claim('relation', '哦', { relationship: 'homograph' })] })
+  })
 
   test('the former field is not read', () => {
     expect(read([['normalizes_to', '木']])).toEqual({ claims: [] })
