@@ -58,6 +58,8 @@ The CSV export has one column for each kind of claim, and a claim names its link
 
 A record's id is stored as an integer and shown in hexadecimal as `R+A1C2`, beside the same digits spelled with the first sixteen characters of the 千字文 (天 = 0 … 張 = F): 盈地辰玄. The 千字文 digits were proposed by NGWU YOH (chat message, 2026-11-14, unpublished).
 
+A code typed whole into search, in either spelling, opens its record.
+
 ## Search index
 
 Each entry indexes at most 400 distinct terms, drawn from its fields, its claims and its visible sightings. Terms beyond that limit are not searchable; changing this limit requires reindexing existing entries.

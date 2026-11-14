@@ -149,3 +149,12 @@ test('browse narrows by category, collection or tag and rejects a malformed one'
   expect(await browseLoad(event('genre=music'))).toMatchObject({ tiles: [] })
   await expect(browseLoad(event('genre=a%7Cb'))).rejects.toMatchObject({ status: 404 })
 })
+
+test('a record code typed into search opens its record', async () => {
+  const { db, raw } = openTestDb()
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, script, created_by, created_at, updated_at, hidden_at) VALUES (34, 'han', 'p', '2026', '2026', NULL), (35, 'han', 'p', '2026', '2026', 'hidden')")
+  const event = (q: string) => ({ url: new URL(`https://example.test/ja?q=${encodeURIComponent(q)}`), params: { locale: 'ja' }, locals: { person: null }, platform: { env: { DB: db } } }) as any
+  for (const q of ['R+0022', 'r+0022', '天天玄玄']) await expect(browseLoad(event(q))).rejects.toMatchObject({ status: 303, location: '/ja/entry/34' })
+  // A code of a hidden record, or of none, is searched as text.
+  for (const q of ['R+0023', '天天玄黃', 'R+0999']) expect(await browseLoad(event(q))).toMatchObject({ tiles: [] })
+})

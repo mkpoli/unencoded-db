@@ -1,8 +1,9 @@
-import { error } from '@sveltejs/kit'
+import { error, redirect } from '@sveltejs/kit'
 import { counts, exactSearchIds, facetTag, list, listTag, markTags, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, terms } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
 import { glyphPaths, warmGlyphs } from '$lib/server/glyphs'
 import { cleanIds } from '$lib/ids'
+import { parseRecordCode } from '$lib/code'
 import { positiveId } from '../_submission.server'
 import type { PageServerLoad } from './$types'
 
@@ -25,6 +26,9 @@ export const load: PageServerLoad = async (event) => {
   const words = query.length <= SEARCH_LENGTH_MAX && !exact ? new Set(terms(query)) : new Set<string>()
   const searchError = query.length > SEARCH_LENGTH_MAX ? 'queryTooLong' : !exact && query && words.size === 0 ? 'noSearchTerms' : words.size > SEARCH_TERMS_MAX ? 'tooManyTerms' : null
   const db = env(event).DB
+  // A record's code typed whole, R+0022 or 天天玄玄, opens the record it names.
+  const coded = before === null ? parseRecordCode(query) : null
+  if (coded && await db.prepare('SELECT 1 FROM entries WHERE id = ? AND hidden_at IS NULL').bind(coded).first()) redirect(303, `/${event.params.locale}/entry/${coded}`)
   const [page, totals] = await Promise.all([searchError ? null : list(db, { script, filter, facet, within, without, query, before }), counts(db)])
   if (!page && !searchError) error(404)
   const media = event.platform?.env?.MEDIA
