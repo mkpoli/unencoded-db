@@ -24,7 +24,8 @@ test('an encoded ideograph is in the works that hold every one of them', () => {
 
 test('a Unicode code that names no ideograph brings no other work', () => {
   expect(marks([{ charset: 'unicode', code: 'U+3042' }])).toEqual({ U: 'U+3042', 統: null, 葉: null, 維: null, 基: null })
-  expect(marks([{ charset: 'unicode', code: 'pending' }])).toEqual({ U: 'pending', 統: null, 葉: null, 維: null, 基: null })
+  expect(marks([{ charset: 'unicode', code: 'pending' }])).toEqual({ U: null, 統: null, 葉: null, 維: null, 基: null })
+  expect(marks([{ charset: 'unicode', code: 'pending' }, { charset: 'unicode', code: 'U+4E00 U+E0100' }])).toMatchObject({ U: 'U+4E00 U+E0100', 統: '一' })
 })
 
 test('a stated code stands over the one a Unicode code brings', () => {
