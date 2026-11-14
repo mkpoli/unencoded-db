@@ -6,6 +6,7 @@ export const SCRIPTS = [
   { id: 'sawndip', own: '方塊壯字' },
   { id: 'gugyeol', own: '口訣字' },
   { id: 'kana', own: '仮名' },
+  { id: 'bopomofo', own: '注音符號' },
   { id: 'bai', own: '白文' },
   { id: 'miao', own: '方塊苗文' },
   { id: 'yao', own: '方塊瑤文' },
