@@ -75,8 +75,8 @@ textarea.input { min-height: 96px; resize: vertical; line-height: 1.55 }
 .notice.bad { background: var(--wrong-light); color: var(--wrong) }
 .notice.quiet { background: var(--surface-sunken); color: var(--muted) }
 .badge { display: inline-flex; align-items: center; min-height: 22px; padding: 1px 8px; border-radius: 5px; background: var(--surface-sunken); font-size: 12px; color: var(--muted); white-space: nowrap }
-.badge.unencoded { background: var(--accent-light); color: var(--accent) }
-.badge.variant, .badge.doubtful { background: var(--uncertain-badge); color: var(--uncertain-ink) }
+.badge.unifiable { background: var(--accent-light); color: var(--accent) }
+.badge.homograph, .badge.variant { background: var(--uncertain-badge); color: var(--uncertain-ink) }
 .badge.encoded { background: var(--good-light); color: var(--good) }
 .page { width: 100%; max-width: 1280px; margin: 0 auto; padding: 28px var(--page-gutter) 72px }
 .page.narrow { max-width: 800px }

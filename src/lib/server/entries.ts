@@ -2,10 +2,11 @@
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
-import { CONTEXTS, isScript, isStatus, NEEDS, parseSightingTypes, SIGHTING_TYPES, STATUSES, STYLES, type Need, type SightingType } from '$lib/scripts'
+import { CONTEXTS, isScript, NEEDS, parseSightingTypes, SIGHTING_TYPES, STATUSES, STYLES, type Need, type SightingType } from '$lib/scripts'
 import { cleanIds, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
+import { statusOf } from '$lib/status'
 import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
 import { MARKED, registeredIn } from '$lib/registries'
 import { genreOf } from '$lib/genres'
@@ -13,15 +14,15 @@ import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
 import { hashHex } from './image'
 
-export type EntryFields = { script: string; script_other: string | null; description: string | null; status: string; radical: string | null; strokes: number | null; claims: Claim[] }
+export type EntryFields = { script: string; script_other: string | null; description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
 export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; via_url: string | null; via_title: string | null; via_author: string | null; via_publisher: string | null; via_report_date: string | null; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
-export type Entry = Omit<EntryFields, 'claims'> & { id: number; rev: number; ids: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
+export type Entry = Omit<EntryFields, 'claims'> & { status: string; id: number; rev: number; ids: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
 export type Sighting = SightingFields & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; via_id: number | null; media: StoredImage[]; hidden_at: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
 
 // What an entry has one of. What it has several of is in `claims`.
-export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'status', 'radical', 'strokes'] as const
+export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical', 'strokes'] as const
 // A sighting's citation is its source; the other fields are the sighting's own. A second source, `via_*`,
 // is where the contributor found it: a post that shows a page of the cited work, say.
 export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date'] as const
@@ -42,12 +43,8 @@ const link = (form: FormData, name: string) => {
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
 const now = () => new Date().toISOString()
 
-// A record nobody has checked that states a Unicode code is an encoded character.
-const stated = (status: string, claims: readonly Claim[]) => status === 'unchecked' && claims.some(claim => claim.kind === 'encoding' && claim.data?.charset === 'unicode') ? 'encoded' : status
-
 export function readEntryFields(form: FormData, base?: Partial<EntryFields>): { fields: EntryFields; error: ClaimError | null } {
   const script = text(form, 'script', 20)
-  const status = text(form, 'status', 20)
   const strokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
   const field = (name: 'script_other' | 'description' | 'radical', max: number) => form.has(name) ? text(form, name, max) : base?.[name] ?? null
   const read = readClaims(form, base?.claims)
@@ -57,7 +54,6 @@ export function readEntryFields(form: FormData, base?: Partial<EntryFields>): { 
       script: isScript(script) ? script : base?.script ?? 'han',
       script_other: field('script_other', 80),
       description: field('description', 20000),
-      status: stated(isStatus(status) ? status : base?.status ?? 'unchecked', read.claims),
       radical: field('radical', 20),
       strokes: form.has('strokes') ? (Number.isInteger(strokes) && strokes >= 0 && strokes < 200 ? strokes : null) : base?.strokes ?? null,
       claims: read.claims,
@@ -196,10 +192,10 @@ function summarize(sightings: SightingState[]) {
 }
 
 const tagsOf = (entry: Entry, claims: readonly Claim[], summary: ReturnType<typeof summarize>) =>
-  [...facetTags({ ...entry, ids: primaryIdsOf(claims), cover_key: summary.cover_key }, summary.hasSource, claims), ...wordTags(entry, claims, summary.visible)]
+  [...facetTags({ ...entry, status: statusOf(claims), ids: primaryIdsOf(claims), cover_key: summary.cover_key }, summary.hasSource, claims), ...wordTags(entry, claims, summary.visible)]
 const facet = (tag: string) => !tag.startsWith('w:')
-const SUMMARY_SET = 'ids = ?, cover_key = ?, cover_place = ?, sightings = ?, types = ?, first_year = ?, first_year_kind = ?, marks = ?'
-const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summarize>) => [primaryIdsOf(claims), summary.cover_key, summary.cover_place, summary.visible.length, summary.types, summary.first_year, summary.first_year_kind, marksHeld(claims).length ? JSON.stringify(marksHeld(claims)) : null]
+const SUMMARY_SET = 'ids = ?, cover_key = ?, cover_place = ?, sightings = ?, types = ?, first_year = ?, first_year_kind = ?, marks = ?, status = ?'
+const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summarize>) => [primaryIdsOf(claims), summary.cover_key, summary.cover_place, summary.visible.length, summary.types, summary.first_year, summary.first_year_kind, marksHeld(claims).length ? JSON.stringify(marksHeld(claims)) : null, statusOf(claims)]
 
 // Brings a record's tags, counts and summary up to date. It answers the statements, to run with the
 // write they belong to.
@@ -468,12 +464,12 @@ async function writeSighting(db: D1Database, id: number, baseRev: number, fields
 export function entryFieldsOf(raw: string): EntryFields | null {
   try {
     const value = JSON.parse(raw)
-    if (!value || typeof value !== 'object' || Array.isArray(value) || !isScript(value.script) || !isStatus(value.status)) return null
+    if (!value || typeof value !== 'object' || Array.isArray(value) || !isScript(value.script)) return null
     for (const field of ['script_other', 'description', 'radical'] as const) if (typeof value[field] !== 'string' && value[field] != null) return null
     if (value.strokes != null && (!Number.isInteger(value.strokes) || value.strokes < 0 || value.strokes >= 200)) return null
     const claims = parseClaims(value.claims ?? [])
     if (!claims) return null
-    return { script: value.script, script_other: value.script_other ?? null, description: value.description ?? null, status: value.status, radical: value.radical ?? null, strokes: value.strokes ?? null, claims }
+    return { script: value.script, script_other: value.script_other ?? null, description: value.description ?? null, radical: value.radical ?? null, strokes: value.strokes ?? null, claims }
   } catch { return null }
 }
 

@@ -6,7 +6,7 @@ import { createPerson } from '$lib/server/people'
 import { openTestDb } from '$lib/server/testdb'
 import { actions, load } from './+page.server'
 
-const fields: EntryFields = { script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims: [] }
+const fields: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] }
 const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
 
 test('malformed sighting types are ignored', async () => {

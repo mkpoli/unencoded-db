@@ -208,7 +208,7 @@ test('0006 counts every listed record in or out of each marked work, as the app 
     [['zitools', '⿰魚它'], ['mj', 'MJ059588']], [['glyphwiki', 'irg2021-03300'], ['big5', 'A140']], [['unicode', 'U+3042'], ['unicode', 'U+4E00'], ['yedict', 'U04E00']], [],
   ]
   let last = 0
-  for (const rows of codes) last = await createEntry(db, { script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims: rows.map(([charset, code]) => newClaim('encoding', code, { charset })) }, seen, [], who)
+  for (const rows of codes) last = await createEntry(db, { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: rows.map(([charset, code]) => newClaim('encoding', code, { charset })) }, seen, [], who)
   await setHidden(db, { entry: last }, true, who, null)
   const marks = () => ({
     tags: raw.query("SELECT tag, entry_id FROM entry_tags WHERE tag GLOB 'r:*' OR tag GLOB 'x:*' ORDER BY tag, entry_id").all(),
@@ -226,11 +226,58 @@ test('0007 gives each record the marked works it is in, as the app writes them',
   const who = { actor: (await createPerson(db)).id, ip: null }
   const seen = { place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
   const codes = [[['unicode', 'U+2D6DD'], ['mj', 'MJ059588']], [['mj', 'MJ059588'], ['glyphwiki', 'irg2021-03300'], ['zitools', '⿰魚它']], [['unicode', 'U+3042']], [['big5', 'A140']], []]
-  for (const rows of codes) await createEntry(db, { script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims: rows.map(([charset, code]) => newClaim('encoding', code, { charset })) }, seen, [], who)
+  for (const rows of codes) await createEntry(db, { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: rows.map(([charset, code]) => newClaim('encoding', code, { charset })) }, seen, [], who)
   const marks = () => (raw.query('SELECT marks FROM entries ORDER BY id').all() as { marks: string | null }[]).map(row => row.marks)
   const written = marks()
   expect(written).toEqual(['["unicode","zitools","yedict","glyphwiki","mj"]', '["zitools","glyphwiki","mj"]', '["unicode"]', null, null])
   raw.exec('ALTER TABLE entries DROP COLUMN marks')
   raw.exec(migration('0007_entry_marks.sql'))
   expect(marks()).toEqual(written)
+})
+
+test('0008 derives every record\'s status from its claims, with its tags, counts and past versions', () => {
+  const raw = new Database(':memory:')
+  for (const name of ['0001_init.sql', '0002_sighting_via.sql', '0003_media_boxes.sql', '0004_unify_relation.sql', '0005_claim_links.sql', '0006_registry_tags.sql', '0007_entry_marks.sql']) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  const entry = raw.prepare("INSERT INTO entries(script, status, hidden_at, created_by, created_at, updated_at) VALUES ('han', ?, ?, 'p', '2026', '2026')")
+  // Encoded, homograph, an IDS relation, a private use relation, none, and one that is hidden.
+  for (const [status, hidden] of [['unencoded', null], ['doubtful', null], ['unchecked', null], ['variant', null], ['unchecked', null], ['encoded', '2026']] as const) entry.run(status, hidden)
+  const claim = raw.prepare('INSERT INTO claims(entry_id, position, key, kind, value, data) VALUES (?, 0, ?, ?, ?, ?)')
+  claim.run(1, 'aaaaaaaa', 'encoding', 'U+4E00', '{"charset":"unicode"}')
+  claim.run(2, 'bbbbbbbb', 'relation', '哦', '{"relationship":"homograph"}')
+  claim.run(3, 'cccccccc', 'relation', '⿰乂也', '{"relationship":"variant"}')
+  claim.run(4, 'dddddddd', 'relation', '', '{"relationship":"homograph"}')
+  claim.run(6, 'ffffffff', 'encoding', 'U+4E00', '{"charset":"unicode"}')
+  const tag = raw.prepare('INSERT INTO entry_tags(tag, entry_id) VALUES (?, ?)')
+  for (const [id, status] of [[1, 'unencoded'], [2, 'doubtful'], [3, 'unchecked'], [4, 'variant'], [5, 'unchecked']] as const) for (const t of [`f:${status}`, `s:han|f:${status}`, 'n:image', 's:han|n:image', 'all', 's:han', 'w:一']) tag.run(t, id)
+  const count = raw.prepare('INSERT INTO tag_counts(tag, n) VALUES (?, ?)')
+  for (const [t, n] of [['f:unencoded', 1], ['s:han|f:unencoded', 1], ['f:doubtful', 1], ['f:unchecked', 2], ['s:han|f:unchecked', 2], ['f:variant', 1], ['n:image', 5], ['s:han|n:image', 5], ['all', 5]] as const) count.run(t, n)
+  const snapshot = (status?: string) => JSON.stringify({ script: 'han', script_other: null, description: null, ...(status ? { status } : {}), radical: null, strokes: null, claims: [] })
+  const revision = raw.prepare("INSERT INTO revisions(entry_id, sighting_id, kind, rev, snapshot, actor, at) VALUES (1, ?, ?, 1, ?, 'p', '2026')")
+  revision.run(null, 'create', snapshot('unencoded'))
+  revision.run(null, 'hide', '{}')
+
+  raw.exec(migration('0008_derived_status.sql'))
+
+  expect(raw.query('SELECT id, status FROM entries ORDER BY id').all()).toEqual([
+    { id: 1, status: 'encoded' }, { id: 2, status: 'homograph' }, { id: 3, status: 'unchecked' }, { id: 4, status: 'unchecked' }, { id: 5, status: 'unchecked' }, { id: 6, status: 'encoded' },
+  ])
+  expect(() => raw.exec("UPDATE entries SET status = 'doubtful' WHERE id = 1")).toThrow(/CHECK/)
+  const facets = raw.query("SELECT entry_id, tag FROM entry_tags WHERE tag LIKE '%f:%' ORDER BY entry_id, tag").all()
+  expect(facets).toEqual([
+    { entry_id: 1, tag: 'f:encoded' }, { entry_id: 1, tag: 's:han|f:encoded' },
+    { entry_id: 2, tag: 'f:homograph' }, { entry_id: 2, tag: 's:han|f:homograph' },
+    { entry_id: 3, tag: 'f:unchecked' }, { entry_id: 3, tag: 's:han|f:unchecked' },
+    { entry_id: 4, tag: 'f:unchecked' }, { entry_id: 4, tag: 's:han|f:unchecked' },
+    { entry_id: 5, tag: 'f:unchecked' }, { entry_id: 5, tag: 's:han|f:unchecked' },
+  ])
+  // The other tags stay.
+  expect(raw.query("SELECT count(*) AS n FROM entry_tags WHERE tag NOT LIKE '%f:%'").get()).toEqual({ n: 25 })
+  expect(raw.query('SELECT tag, n FROM tag_counts ORDER BY tag').all()).toEqual([
+    { tag: 'all', n: 5 }, { tag: 'f:encoded', n: 1 }, { tag: 'f:homograph', n: 1 }, { tag: 'f:unchecked', n: 3 }, { tag: 'n:image', n: 5 },
+    { tag: 's:han|f:encoded', n: 1 }, { tag: 's:han|f:homograph', n: 1 }, { tag: 's:han|f:unchecked', n: 3 }, { tag: 's:han|n:image', n: 5 },
+  ])
+  const rows = raw.query('SELECT snapshot FROM revisions ORDER BY id').all() as { snapshot: string }[]
+  expect(JSON.parse(rows[0].snapshot)).not.toHaveProperty('status')
+  expect(rows[1].snapshot).toBe('{}')
 })
