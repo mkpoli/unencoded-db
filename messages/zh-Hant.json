@@ -155,6 +155,7 @@
   "relationship.variant": "異體字",
   "relationship.similar": "相似",
   "relationship.not_variant": "不是異體字",
+  "relationship.homograph": "同形異字",
   "error.relatedCharacters": "請檢查每項比較，最多可填寫50項。",
   "relationship.uncertain": "不確定",
   "form.addRelated": "新增比較",

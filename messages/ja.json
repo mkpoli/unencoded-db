@@ -155,6 +155,7 @@
   "relationship.variant": "異体字",
   "relationship.similar": "類似",
   "relationship.not_variant": "異体字ではない",
+  "relationship.homograph": "同形異字",
   "error.relatedCharacters": "各比較の内容を確認してください。比較は50件まで登録できます。",
   "relationship.uncertain": "不明",
   "form.addRelated": "比較を追加",
