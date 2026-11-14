@@ -1,13 +1,18 @@
 // The drawing of each description, composed with han-compose and kept beside the composer's own
 // files. A page reads what is already drawn; a miss is drawn beside it, so a rare part never holds
-// up the page.
-import { compose, createSource } from 'ids-input/composer'
+// up the page. A drawing is one path, or SVG markup when a layout moves its parts.
+import { compose, createSource, documentView, sketch } from 'ids-input/composer'
+import { scopesMarkup } from 'ids-input/document'
 import { COMPOSER_VERSION } from '$lib/composer'
 import { cleanIds } from '$lib/ids'
+import { cleanLayout, layoutText } from '$lib/layout'
+import { layoutDocument } from '$lib/layout-document'
 import { hashHex } from './image'
 
 type Bucket = Pick<R2Bucket, 'get' | 'put'>
 type Source = ReturnType<typeof createSource>
+/** A description and, as its stored text, the layout it is drawn with. */
+export type Glyph = { ids: string | null; layout?: string | null }
 
 const UPSTREAM = `https://glyphatlas.org/atlas/composer/${COMPOSER_VERSION}`
 const FOLDER = `composer/${COMPOSER_VERSION}`
@@ -34,38 +39,59 @@ function sourceFor(bucket: Bucket) {
   return source
 }
 
-async function read(bucket: Bucket, sequence: string) {
-  const stored = await bucket.get(`${DRAWINGS}/${await hashHex(sequence)}.txt`)
+/** What tells one drawing from another: the description, and its layout when it has one. */
+export function glyphName(glyph: Glyph) {
+  const ids = cleanIds(glyph.ids ?? '')
+  const layout = ids ? layoutText(cleanLayout(glyph.layout, ids)) : ''
+  return layout ? `${ids}\n${layout}` : ids
+}
+
+async function read(bucket: Bucket, name: string) {
+  const stored = await bucket.get(`${DRAWINGS}/${await hashHex(name)}.txt`)
   return stored ? stored.text() : null
 }
 
-export function drawGlyph(bucket: Bucket, sequence: string): Promise<string | null> {
-  const ids = cleanIds(sequence)
-  if (!ids) return Promise.resolve(null)
-  let run = pending.get(ids)
+// The parts drawn one by one and moved as the layout says. A description whose parts the composer
+// cannot tell apart is drawn as it stands.
+async function adjusted(from: Source, ids: string, layout: string, name: string) {
+  const document = layoutDocument(ids, cleanLayout(layout, ids))
+  if (!document) return null
+  const [drawn, leaves] = await Promise.all([compose(from, ids, { separate: true }), sketch(from, ids)])
+  if (drawn.cut || drawn.emoji?.length) return null
+  const view = documentView(document, drawn, leaves)
+  if (!view.scopes || !view.complete) return null
+  const { defs, body } = scopesMarkup(view.scopes, { ink: 'currentColor', idPrefix: `g${(await hashHex(name)).slice(0, 12)}` })
+  return defs + body
+}
+
+export function drawGlyph(bucket: Bucket, glyph: Glyph): Promise<string | null> {
+  const name = glyphName(glyph)
+  if (!name) return Promise.resolve(null)
+  let run = pending.get(name)
   if (!run) {
     run = (async () => {
-      const stored = await read(bucket, ids)
+      const stored = await read(bucket, name)
       if (stored) return stored
-      const drawn = await compose(sourceFor(bucket), ids)
-      if (!drawn.d) return null
-      await bucket.put(`${DRAWINGS}/${await hashHex(ids)}.txt`, drawn.d, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
-      return drawn.d
-    })().catch(() => null).finally(() => pending.delete(ids))
-    pending.set(ids, run)
+      const [ids, layout] = name.split('\n')
+      const drawn = (layout ? await adjusted(sourceFor(bucket), ids, layout, name).catch(() => null) : null) ?? (await compose(sourceFor(bucket), ids)).d
+      if (!drawn) return null
+      await bucket.put(`${DRAWINGS}/${await hashHex(name)}.txt`, drawn, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
+      return drawn
+    })().catch(() => null).finally(() => pending.delete(name))
+    pending.set(name, run)
   }
   return run
 }
 
-// The drawings a page already has. A sequence without one keeps its description until it is drawn.
-export async function glyphPaths(bucket: Bucket | undefined, sequences: (string | null | undefined)[]) {
-  const wanted = [...new Set(sequences.filter((sequence): sequence is string => Boolean(sequence)).map(cleanIds))]
+// The drawings a page already has, by `glyphName`. A glyph without one keeps its description until it is drawn.
+export async function glyphPaths(bucket: Bucket | undefined, glyphs: Glyph[]) {
+  const wanted = [...new Set(glyphs.map(glyphName).filter(Boolean))]
   const paths: Record<string, string> = {}
   if (!bucket?.get) return paths
-  await Promise.all(wanted.map(async sequence => {
+  await Promise.all(wanted.map(async name => {
     try {
-      const path = await read(bucket, sequence)
-      if (path) paths[sequence] = path
+      const path = await read(bucket, name)
+      if (path) paths[name] = path
     } catch {
       // A cache that cannot be read leaves the description on the page.
     }
@@ -73,12 +99,22 @@ export async function glyphPaths(bucket: Bucket | undefined, sequences: (string 
   return paths
 }
 
-// Draw the sequences a page did not have, a few at a time, after its response.
-export async function warmGlyphs(bucket: Bucket | undefined, sequences: string[]) {
+// Draw the glyphs a page did not have, a few at a time, after its response.
+export async function warmGlyphs(bucket: Bucket | undefined, glyphs: Glyph[]) {
   if (!bucket?.get) return
   let next = 0
   const worker = async () => {
-    while (next < sequences.length) await drawGlyph(bucket, sequences[next++])
+    while (next < glyphs.length) await drawGlyph(bucket, glyphs[next++])
   }
-  await Promise.all(Array.from({ length: Math.min(2, sequences.length) }, worker))
+  await Promise.all(Array.from({ length: Math.min(2, glyphs.length) }, worker))
+}
+
+/** The drawings of a page's tiles, by record; the ones not drawn yet are drawn after the response. */
+export async function tileGlyphs(platform: App.Platform | undefined, tiles: (Glyph & { id: number })[]) {
+  const bucket = platform?.env?.MEDIA
+  const shown = tiles.filter(tile => tile.ids)
+  const paths = await glyphPaths(bucket, shown)
+  const missing = new Map(shown.map(tile => [glyphName(tile), tile]).filter(([name]) => !paths[name as string]) as [string, Glyph][])
+  if (missing.size) platform?.ctx?.waitUntil(warmGlyphs(bucket, [...missing.values()]))
+  return Object.fromEntries(shown.flatMap(tile => { const path = paths[glyphName(tile)]; return path ? [[tile.id, path]] : [] })) as Record<number, string>
 }
