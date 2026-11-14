@@ -41,18 +41,21 @@
   // moves its parts. The composer runs in the browser and is loaded when the plate first comes into
   // view. While the layout is being adjusted the plate is larger, and a part is dragged, scaled and
   // turned on it. The layout is sent as `layout` with the description it was drawn over as `layout_ids`.
+  // A description still being built is drawn with its empty places, and `chosen` marks the one being filled.
   import { onMount, untrack } from 'svelte'
   import { parse } from 'ids-input'
   import { cleanIds } from '$lib/ids'
   import { carryLayout, layoutText, placeOf, type Layout } from '$lib/layout'
   import { locale } from '$lib/t'
 
-  let { ids, layout = null, adjusting = $bindable(false) }: { ids: string; layout?: Layout | null; adjusting?: boolean } = $props()
+  let { ids, layout = null, chosen = null, adjusting = $bindable(false) }: { ids: string; layout?: Layout | null; chosen?: number[] | null; adjusting?: boolean } = $props()
 
   const at = locale()
   const sequence = $derived(cleanIds(ids))
-  const tree = $derived(parse(sequence).tree)
-  const whole = $derived(tree !== undefined)
+  // Empty places are parts of a description that is being built; an empty field is no description.
+  const tree = $derived(sequence ? parse(sequence, { open: true }).tree : undefined)
+  const drawn = $derived(tree !== undefined)
+  const whole = $derived(parse(sequence).tree !== undefined)
 
   let host = $state<HTMLElement>()
   let near = $state(false)
@@ -141,12 +144,12 @@
 <div class="drawing" class:adjusting bind:this={host}>
   {#if kit && preview && tree !== undefined}
     <div class="stage">
-      <kit.IdsPreview adapter={{ preview: preview.draw }} {tree} chosen={picked} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
+      <kit.IdsPreview adapter={{ preview: preview.draw }} {tree} chosen={adjusting ? picked : chosen} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
         session={parted ? session : null} {version} editable={adjusting && parted} onchoose={path => picked = path} onedit={read} />
     </div>
   {:else}
-    <div class="plate" class:empty={!whole} role={whole ? 'img' : undefined} aria-label={whole ? sequence : undefined} aria-hidden={whole ? undefined : 'true'}>
-      {#if whole}<span class="sequence">{sequence}</span>{/if}
+    <div class="plate" class:empty={!drawn} role={drawn ? 'img' : undefined} aria-label={drawn ? sequence : undefined} aria-hidden={drawn ? undefined : 'true'}>
+      {#if drawn}<span class="sequence">{sequence}</span>{/if}
     </div>
   {/if}
   {#if kit && whole}

@@ -3,15 +3,18 @@
   // reach of each operator drawn under them, ASCII operator names (LR, ud) read as operators, and undo.
   // What is wrong with the text shows once the field is left, never while it is typed in.
   import { untrack } from 'svelte'
-  import { IdsSequence, createEditor } from 'ids-input/svelte'
+  import { IdsSequence, createEditor, type IdsAdapter, type IdsEditor } from 'ids-input/svelte'
+  import { awaitedTables } from '$lib/ids-tables'
 
-  let { value = $bindable(''), label, titled = false, compact = false, messages, locale = 'en', placeholder }: {
+  let { value = $bindable(''), label, titled = false, compact = false, messages, locale = 'en', placeholder, adapter = awaitedTables, oneditor }: {
     value?: string; label: string; titled?: boolean; compact?: boolean; messages?: Record<string, string>; locale?: string; placeholder?: string
+    adapter?: IdsAdapter; oneditor?: (editor: IdsEditor) => void
   } = $props()
 
-  // The field reads no tables: a part's own descriptions belong to the full editor.
-  const adapter = { structure: async () => [] }
+  // The field reads no tables: what it asks of them waits until the tools that look parts up are opened
+  // over it and hand it theirs.
   const editor = createEditor(() => ({ adapter, messages: { ...messages, 'ids.label': label }, locale, tintMode: 'on' }))
+  untrack(() => oneditor?.(editor))
 
   // The text the editor last handed out, so a `value` set from outside is told from its own.
   let seen = untrack(() => value)
