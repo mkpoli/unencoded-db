@@ -2,7 +2,7 @@
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
-import { CONTEXTS, isScript, NEEDS, parseSightingTypes, SIGHTING_TYPES, STATUSES, STYLES, type Need, type SightingType } from '$lib/scripts'
+import { CONTEXTS, isScript, NEEDS, resolveScript, parseSightingTypes, SIGHTING_TYPES, STATUSES, STYLES, type Need, type SightingType } from '$lib/scripts'
 import { cleanIds, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
@@ -44,15 +44,14 @@ const oneOf = (value: string | null, allowed: readonly string[]) => (value && al
 const now = () => new Date().toISOString()
 
 export function readEntryFields(form: FormData, base?: Partial<EntryFields>): { fields: EntryFields; error: ClaimError | null } {
-  const script = text(form, 'script', 20)
+  const named = form.has('script') ? resolveScript(String(form.get('script'))) : { script: base?.script ?? 'han', script_other: base?.script_other ?? null }
   const strokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
-  const field = (name: 'script_other' | 'description' | 'radical', max: number) => form.has(name) ? text(form, name, max) : base?.[name] ?? null
+  const field = (name: 'description' | 'radical', max: number) => form.has(name) ? text(form, name, max) : base?.[name] ?? null
   const read = readClaims(form, base?.claims)
   return {
     error: read.error,
     fields: {
-      script: isScript(script) ? script : base?.script ?? 'han',
-      script_other: field('script_other', 80),
+      ...named,
       description: field('description', 20000),
       radical: field('radical', 20),
       strokes: form.has('strokes') ? (Number.isInteger(strokes) && strokes >= 0 && strokes < 200 ? strokes : null) : base?.strokes ?? null,
@@ -852,4 +851,12 @@ export async function exportPage(db: D1Database, after: number, limit: number, s
     for (const row of results) found.get(row.entry_id)?.push(toClaim(row))
   }
   return { entries: page, next: rows.length > limit ? page.at(-1)!.id : null, next_sighting: rows.length > limit ? lastSighting : null }
+}
+
+export const CUSTOM_SCRIPTS_MAX = 100
+export const customScriptsStatement = (db: D1Database) => db.prepare(`SELECT DISTINCT script_other AS name FROM entries WHERE script = 'other' AND script_other IS NOT NULL AND merged_into IS NULL AND hidden_at IS NULL ORDER BY script_other LIMIT ?`).bind(CUSTOM_SCRIPTS_MAX)
+
+/** The names visible records give scripts outside the list. */
+export async function customScripts(db: D1Database) {
+  return (await customScriptsStatement(db).all<{ name: string }>()).results.map(row => row.name)
 }

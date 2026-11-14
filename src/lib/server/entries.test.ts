@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
-import { addSighting, claimedBy, counts, createEntry, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, claimedBy, counts, createEntry, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -766,5 +766,27 @@ describe('status', () => {
   test('an old snapshot that holds a status still reads', () => {
     const raw = JSON.stringify({ script: 'han', script_other: null, description: null, status: 'doubtful', radical: null, strokes: null, claims: [] })
     expect(entryFieldsOf(raw)).toEqual({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] })
+  })
+})
+
+describe('scripts outside the list', () => {
+  const named = (script: string) => { const form = new FormData(); form.set('script', script); return readEntryFields(form).fields }
+
+  test('the form names a script, and only `other` keeps a name', () => {
+    expect(named('漢字')).toMatchObject({ script: 'han', script_other: null })
+    expect(named('方音符號')).toMatchObject({ script: 'other', script_other: '方音符號' })
+    expect(readEntryFields(new FormData(), fields({ script: 'other', script_other: '方音符號' })).fields).toMatchObject({ script: 'other', script_other: '方音符號' })
+  })
+
+  test('the names of visible records are offered once each, in name order, from their index', async () => {
+    const ids = []
+    for (const name of ['乙', '甲', '乙', '丙']) ids.push(await createEntry(db, fields({ script: 'other', script_other: name }), seen(), [], who))
+    await createEntry(db, fields(), seen(), [], who)
+    await setHidden(db, { entry: ids[3] }, true, who, null)
+    expect(await customScripts(db)).toEqual(['乙', '甲'].sort())
+    const statement = customScriptsStatement(db) as unknown as { sql: string; values: unknown[] }
+    const details = (raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')
+    expect(details).not.toMatch(/TEMP B-TREE/)
+    expect(details).toMatch(/USING (COVERING )?INDEX entries_custom_scripts/)
   })
 })

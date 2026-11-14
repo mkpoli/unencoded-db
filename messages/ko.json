@@ -89,7 +89,6 @@
   "field.markClear": "표시 모두 지우기",
   "field.markRemove": "표시 {n} 지우기",
   "field.script": "문자 체계",
-  "field.scriptOther": "문자 체계 이름",
   "field.place": "발견한 곳",
   "field.placeHint": "책과 쪽수, 거리, 웹사이트 등 다른 사람이 다시 찾는 데 도움이 되는 정보를 적어 주세요.",
   "field.url": "링크",

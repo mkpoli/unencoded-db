@@ -89,7 +89,6 @@
   "field.markClear": "囲みをすべて消す",
   "field.markRemove": "囲み{n}を消す",
   "field.script": "文字の種類",
-  "field.scriptOther": "文字の種類の名前",
   "field.place": "見つけた場所",
   "field.placeHint": "書名とページ、通り、ウェブサイトなど、もう一度見つける手がかりを記入してください。",
   "field.url": "リンク",
