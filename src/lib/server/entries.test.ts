@@ -66,6 +66,43 @@ test('omitted comparison controls preserve existing data; explicit empty control
   expect(readEntryFields(form, original).fields.claims).toEqual([])
 })
 
+describe('marked works', () => {
+  const code = (charset: string, value: string) => claim('encoding', value, { charset })
+  const ids = async (listing: Parameters<typeof list>[1]) => (await list(db, listing))!.tiles.map(tile => tile.id)
+
+  test('a record is listed in or out of each marked work, and moves with its codes', async () => {
+    const encoded = await createEntry(db, fields({ claims: [code('unicode', 'U+2D6DD')] }), seen(), [], who)
+    const filed = await createEntry(db, fields({ claims: [code('zitools', '⿰魚它'), code('mj', 'MJ059588')] }), seen(), [], who)
+    const bare = await createEntry(db, fields(), seen(), [], who)
+    expect(await ids({ within: ['unicode'] })).toEqual([encoded])
+    expect(await ids({ within: ['zitools'] })).toEqual([filed, encoded])
+    expect(await ids({ without: ['zitools'] })).toEqual([bare])
+    expect(await ids({ within: ['zitools'], without: ['unicode'] })).toEqual([filed])
+    expect(await ids({ script: 'han', filter: 'unchecked', without: ['zitools', 'yedict', 'glyphwiki', 'mj'] })).toEqual([bare])
+    expect(await ids({ within: ['zitools'], without: ['zitools'] })).toEqual([])
+    expect(await counts(db)).toMatchObject({ 'r:unicode': 1, 'x:unicode': 2, 'r:zitools': 2, 'x:zitools': 1, 'r:glyphwiki': 1, 'x:glyphwiki': 2, 'r:mj': 1, 'x:mj': 2 })
+
+    await editEntry(db, bare, 1, fields({ claims: [code('glyphwiki', 'irg2021-03300')] }), who, null)
+    await editEntry(db, encoded, 1, fields(), who, null)
+    expect(await ids({ within: ['glyphwiki'] })).toEqual([bare])
+    expect(await ids({ without: ['unicode'] })).toEqual([bare, filed, encoded])
+    expect(await counts(db)).toMatchObject({ 'x:unicode': 3, 'r:zitools': 1, 'x:zitools': 2, 'r:glyphwiki': 1, 'x:glyphwiki': 2 })
+    expect((await counts(db))['r:unicode'] ?? 0).toBe(0)
+  })
+
+  test('a short list is read by its own key, however long the others are', async () => {
+    const rare = await createEntry(db, fields({ status: 'doubtful' }), seen(), [], who)
+    for (let i = 0; i < SEARCH_WINDOW + 10; i++) await createEntry(db, fields(), seen(), [], who)
+    expect(await list(db, { script: 'han', filter: 'doubtful', without: ['mj'] })).toEqual({ tiles: [expect.objectContaining({ id: rare })], next: null, partial: false })
+    expect(await list(db, { script: 'han', filter: 'doubtful', within: ['mj'] })).toEqual({ tiles: [], next: null, partial: false })
+  })
+
+  test('a work that is not marked names no list', async () => {
+    expect(await list(db, { within: ['big5'] })).toBeNull()
+    expect(await list(db, { without: ['nowhere'] })).toBeNull()
+  })
+})
+
 describe('adding a record', () => {
   test('rolls back the entry and sighting when indexing fails', async () => {
     raw.exec("CREATE TRIGGER fail_index BEFORE INSERT ON entry_tags BEGIN SELECT RAISE(ABORT, 'index failure'); END")
@@ -644,7 +681,7 @@ describe('people', () => {
 // with no scan of a table and no sort.
 describe('query cost', () => {
   const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
-  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'unchecked' }, { filter: 'ids' }, { script: 'han', filter: 'unchecked' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { script: 'han', filter: 'unchecked', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }]
+  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'unchecked' }, { filter: 'ids' }, { script: 'han', filter: 'unchecked' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { script: 'han', filter: 'unchecked', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'unchecked', facet: 'g:hakka', without: ['zitools'], query: '亻' }]
   for (const shape of shapes) test(`list ${JSON.stringify(shape)}`, () => {
     const statement = listStatement(db, shape) as unknown as { sql: string; values: unknown[] }
     const details = plan(statement.sql, statement.values)

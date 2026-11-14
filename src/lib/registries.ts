@@ -99,3 +99,6 @@ export function marksOf(encodings: readonly Encoding[]): Mark[] {
     return { registry, code, href: code === null ? null : registry.page?.(code) ?? null, since: registry.id === 'unicode' && code !== null ? unicodeAge(encodedCharacter(code)) : null }
   })
 }
+
+/** The marked works a record is in. */
+export const registeredIn = (encodings: readonly Encoding[]) => new Set(marksOf(encodings).filter(mark => mark.code !== null).map(mark => mark.registry.id))

@@ -336,6 +336,8 @@
   "registry.in": "{name}に収録",
   "registry.out": "{name}に未収録",
   "registry.since": "Unicode {version}で収録",
+  "registry.held": "収録",
+  "registry.absent": "未収録",
   "relationship.erroneous": "訛体",
   "relationship.sound": "字音",
   "relationship.meaning": "意味",
