@@ -10,6 +10,7 @@ import jurchen from 'han-compose/data/sources/jurchen/outlines.json.gz?url'
 import palette from 'han-compose/data/sources/palette/outlines.json.gz?url'
 import numbered from 'han-compose/data/numbered-sans-outlines.json.gz?url'
 import numberedContext from 'han-compose/data/numbered-five-context.json?url'
+import customForms from 'han-compose/data/custom-forms.json.gz?url'
 
 // The Unicode shards draw a part the export has no glyph for, one file per 256 code points. Vite
 // lists them as this build's files. A run outside Vite (the tests) lists none, and the composer reads
@@ -28,4 +29,5 @@ export const composerData: Record<string, string> = {
   'sources/palette/outlines.json.gz': palette,
   'numbered-sans-outlines.json.gz': numbered,
   'numbered-five-context.json': numberedContext,
+  'custom-forms.json.gz': customForms,
 }

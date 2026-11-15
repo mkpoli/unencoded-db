@@ -81,3 +81,10 @@ test('a description bundled outlines draw alone never shares a source with one t
   expect(sourceKey('⿱木㇐', {})).toBe(sourceKey('⿰木㇐', {}))
   expect(sourceKey('⿰木㇐', { style: 'serif' })).not.toBe(sourceKey('⿰木㇐', {}))
 })
+
+test('the server lists every bundled file the composer reads', async () => {
+  const { dataUrls } = await import('han-compose')
+  const { composerData } = await import('$lib/composer-data')
+  // The Unicode shards are listed by the build; the rest by name.
+  expect(Object.keys(dataUrls).filter(name => !name.startsWith('unicode/') && !(name in composerData))).toEqual([])
+})
