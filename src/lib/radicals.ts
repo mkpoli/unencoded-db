@@ -23,6 +23,8 @@ type Tables = {
 }
 let loaded: Tables | null = null
 const kangxi = [...RADICALS]
+/** The 214 Kangxi radicals in order. */
+export const KANGXI: readonly string[] = kangxi
 const kangxiStrokes = RADICAL_STROKES.split(' ').map(Number)
 /** The stroke count of a Kangxi radical. */
 export const radicalStrokes = (radical: string) => kangxiStrokes[kangxi.indexOf(radical)]
@@ -51,6 +53,9 @@ function tables(): Tables {
   }
 }
 
+// A variation selector picks a glyph of the character before it and leaves its radical alone.
+const bare = (text: string) => text.replace(/[\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/gu, '')
+
 function radicalOf(char: string) {
   const { runs } = tables(), point = char.codePointAt(0)!
   let low = 0, high = runs.length - 1
@@ -60,7 +65,8 @@ function radicalOf(char: string) {
 }
 
 /** The path of an encoded character: its Kangxi radical, the characters between, and the character itself unless it is a form of the radical. */
-function pathOf(text: string): string[] | null {
+function pathOf(written: string): string[] | null {
+  const text = bare(written)
   if ([...text].length !== 1) return null
   const found = tables()
   const char = found.equivalents.get(text) ?? text
@@ -79,8 +85,9 @@ function weigh(op: string, parts: readonly IdsPart[]) {
   const places = found.prior.get(shape), total = places?.reduce((sum, n) => sum + n, 0) ?? 0
   return parts.map((inner, index) => {
     const byPlace = places && total ? (places[index] + 0.5) / (total + 0.5 * parts.length) : 1 / parts.length
-    const part = unwrap(inner)
-    if (typeof part !== 'string') return byPlace
+    const whole = unwrap(inner)
+    if (typeof whole !== 'string') return byPlace
+    const part = bare(whole)
     const [head, seen] = found.parts.get(part) ?? [0, 0]
     const byPart = (head + LEAN * byPlace) / (seen + LEAN)
     const [headHere, seenHere] = found.slots.get(`${part}${shape}.${index}`) ?? [0, 0]
