@@ -97,9 +97,9 @@ test('browse continues an empty search window and reports the final segment', as
   raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 's:han', id FROM entries")
   const event = (url: string) => ({ url: new URL(url), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
   const first = await browseLoad(event('https://example.test/en?q=missing')) as any
-  expect(first).toMatchObject({ tiles: [], next: '0.2', partial: true, continued: false })
+  expect(first).toMatchObject({ tiles: [], next: '0.2', partial: true, continued: false, total: { n: 0, floor: false } })
   const last = await browseLoad(event(`https://example.test/en?q=missing&after=${first.next}`)) as any
-  expect(last).toMatchObject({ tiles: [], next: null, partial: false, continued: true })
+  expect(last).toMatchObject({ tiles: [], next: null, partial: false, continued: true, total: null })
   await expect(browseLoad(event('https://example.test/en?q=missing&after=0.0'))).rejects.toMatchObject({ status: 404 })
 })
 

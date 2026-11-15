@@ -1,5 +1,5 @@
 import { error, redirect } from '@sveltejs/kit'
-import { counts, cursorOf, decadeTag, exactSearchIds, facetTag, list, listTag, markTags, radicalTag, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, terms } from '$lib/server/entries'
+import { counts, cursorOf, decadeTag, exactSearchIds, facetTag, list, listTag, markTags, radicalTag, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, searchTotal, terms } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
 import { tileGlyphs } from '$lib/server/glyphs'
 import { parseRecordCode } from '$lib/code'
@@ -43,8 +43,10 @@ export const load: PageServerLoad = async (event) => {
   // A merged record opens the one it was merged into, and neither may be hidden.
   const named = coded ? await db.prepare('SELECT COALESCE(m.id, e.id) AS id FROM entries e LEFT JOIN entries m ON m.id = e.merged_into WHERE e.id = ? AND e.hidden_at IS NULL AND (e.merged_into IS NULL OR m.hidden_at IS NULL)').bind(coded).first<{ id: number }>() : null
   if (named) redirect(303, `/${event.params.locale}/entry/${named.id}`)
-  const [page, totals] = await Promise.all([searchError ? null : list(db, { script, filter, facet, radical, decade, within, without, query, order, seed, after }), counts(db)])
+  const listing = { script, filter, facet, radical, decade, within, without, query, order, seed, after }
+  // A search is counted on its first page; further pages are added to that one and keep its count.
+  const [page, totals, total] = await Promise.all([searchError ? null : list(db, listing), counts(db), searchError || after !== null ? null : searchTotal(db, listing)])
   if (!page && !searchError) error(404)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, page?.tiles ?? [], event.locals.glyphStyle)
-  return { ...(page ?? { tiles: [], next: null, partial: false }), counts: totals, glyphs, filter, genre, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, searchError, order, seed, continued: after !== null && query.length > 0 }
+  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, total, glyphs, filter, genre, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, searchError, order, seed, continued: after !== null && query.length > 0 }
 }

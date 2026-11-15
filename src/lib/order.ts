@@ -12,3 +12,5 @@ export const SOURCE_SORTS = ['new', 'most', 'earliest', 'latest'] as const
 export type SourceSort = (typeof SOURCE_SORTS)[number]
 export const sourceSortOf = (value: string | null | undefined): SourceSort | null => !value ? 'new' : (SOURCE_SORTS as readonly string[]).includes(value) ? value as SourceSort : null
 export const seedOf = (value: string | null | undefined) => value && /^(0|[1-9]\d{0,9})$/.test(value) && Number(value) < SEEDS ? Number(value) : null
+// The records one page of a list holds.
+export const PAGE = 48
