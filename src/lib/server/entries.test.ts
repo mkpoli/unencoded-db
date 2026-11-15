@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import type { Order } from '$lib/order'
 import { standing } from '$lib/radicals'
-import { addSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, chronology, DECADE_TILES, DECADES_PAGE, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -1128,5 +1128,40 @@ describe('radicals', () => {
     expect(await stand('ㄏ')).toEqual([{ path: 'ㄏ', radical: 'ㄏ', records: 2, branches: [] }])
     expect(await listed('ㄏ')).toEqual([other, id])
     expect(await counts(db)).not.toHaveProperty('b!ㄏ')
+  })
+})
+
+describe('chronology', () => {
+  // Records first seen in 14 decades from 1800, a decade's worth more in the 1900s, and one with no year.
+  beforeEach(() => {
+    const decades = Array.from({ length: 14 }, (_, i) => 1800 + i * 10)
+    const years = [...decades.map(decade => decade + 3), ...Array.from({ length: DECADE_TILES + 2 }, (_, i) => 1909 - i), null]
+    years.forEach((year, i) => raw.prepare("INSERT INTO entries(id, script, first_year, created_by, created_at, updated_at) VALUES(?, 'han', ?, ?, '2026', '2026')").run(i + 1, year === null ? null : String(year), who.actor))
+    raw.exec("INSERT INTO entry_tags(tag, entry_id, year) SELECT 'all', id, CAST(first_year AS INTEGER) FROM entries")
+    raw.exec("INSERT INTO entry_tags(tag, entry_id, year) SELECT 'y:' || (CAST(first_year AS INTEGER) / 10 * 10), id, CAST(first_year AS INTEGER) FROM entries WHERE first_year IS NOT NULL")
+    raw.exec("INSERT INTO tag_counts(tag, n) SELECT tag, count(*) FROM entry_tags GROUP BY tag")
+  })
+
+  test('counts every decade in order, and shows the earliest records of a page of them', async () => {
+    const first = await chronology(db, null)
+    expect(first.decades.map(row => row.decade)).toEqual(Array.from({ length: 14 }, (_, i) => 1800 + i * 10))
+    expect(first.decades.find(row => row.decade === 1900)!.n).toBe(DECADE_TILES + 3)
+    expect(first.shown.map(row => row.decade)).toEqual(Array.from({ length: DECADES_PAGE }, (_, i) => 1800 + i * 10))
+    const nineteen = first.shown.find(row => row.decade === 1900)!
+    expect(nineteen.tiles.map(tile => tile.firstYear)).toEqual(['1900', '1901', '1902', '1903', '1903', '1904', '1905', '1906'])
+    expect({ earlier: first.earlier, later: first.later, dated: first.dated, undated: first.undated }).toEqual({ earlier: null, later: 1920, dated: 14 + DECADE_TILES + 2, undated: 1 })
+    const next = await chronology(db, 1920)
+    expect(next.shown.map(row => row.decade)).toEqual([1920, 1930])
+    expect({ earlier: next.earlier, later: next.later }).toEqual({ earlier: 1800, later: null })
+    // A start anywhere opens the page that holds it, so pages never overlap; one past the last opens the last page.
+    expect((await chronology(db, 1915)).shown[0].decade).toBe(1920)
+    expect((await chronology(db, 1830)).shown.map(row => row.decade)).toEqual(first.shown.map(row => row.decade))
+    expect((await chronology(db, 2000)).shown.map(row => row.decade)).toEqual([1920, 1930])
+  })
+
+  test('reads the decade counts as one range of the counts by key', () => {
+    const statement = decadeCountsStatement(db) as unknown as { sql: string; values: unknown[] }
+    const details = (raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.values as never[])) as { detail: string }[]).map(row => row.detail)
+    expect(details).toEqual([expect.stringMatching(/^SEARCH tag_counts USING PRIMARY KEY \(tag>\? AND tag<\?\)$/)])
   })
 })
