@@ -104,6 +104,16 @@
     document.documentElement.dataset.tileSize = String(tileSize)
   }
   const count = (key: string) => data.counts?.[key] ?? 0
+  // The decades records were first seen in, by century, oldest first.
+  const centuries = $derived.by(() => {
+    const decades = Object.keys(data.counts ?? {}).filter(key => key.startsWith('y:')).map(key => Number(key.slice(2))).sort((a, b) => a - b)
+    const byCentury = new Map<number, number[]>()
+    for (const decade of decades) {
+      const century = Math.floor(decade / 100) * 100
+      byCentury.set(century, [...(byCentury.get(century) ?? []), decade])
+    }
+    return [...byCentury]
+  })
   // A collection or a tag is chosen by following a link, and stays until it is cleared.
   const pinned = $derived(data.genre ? null : data.collection ? { name: 'collection', value: data.collection, label: COLLECTIONS.find(item => item.slug === data.collection)?.label ?? data.collection } : data.tag ? { name: 'tag', value: data.tag, label: `#${data.tag}` } : null)
   const withFilter = (filter: string) => {
@@ -153,6 +163,10 @@
         {#each groups as group (group.parent.slug)}<optgroup label={group.parent.label}><option value={group.parent.slug}>{group.parent.label} ({count(`g:${group.parent.slug}`)})</option>{#each group.children as genre (genre.slug)}<option value={genre.slug}>{genre.label} ({count(`g:${genre.slug}`)})</option>{/each}</optgroup>{/each}
       </select></div>
     {/if}
+    <div class="field decade"><label for="decade">{t('browse.decadeLabel')}</label><select class="input" id="decade" name="decade" value={data.decade ?? ''}>
+      <option value="">{t('browse.all')}</option>
+      {#each centuries as [century, decades] (century)}<optgroup label="{century}–{century + 99}">{#each decades as decade (decade)}<option value={String(decade)}>{t('browse.decade', { n: decade })} ({count(`y:${decade}`)})</option>{/each}</optgroup>{/each}
+    </select></div>
     <div class="field radical"><span class="label" id="radical-label">{t('field.radical')}</span>{#if data.radical}{@const radical = [...data.radical].at(-1)}<input type="hidden" name="radical" value={data.radical} /><a class="pinned" href={unfiled} aria-label="{t('field.radical')} {radical} ×"><span class="glyph">{radical}</span> <span aria-hidden="true">×</span></a>{:else}<a class="input choose" id="radical-choice" href={href('/radicals')} aria-labelledby="radical-label radical-choice">{t('browse.all')}<span aria-hidden="true">›</span></a>{/if}</div>
     {#if data.order !== ORDER}<input type="hidden" name="sort" value={data.order} />{/if}
     {#if data.seed !== null}<input type="hidden" name="seed" value={data.seed} />{/if}
@@ -185,7 +199,7 @@
   {:else if shown.tiles.length}
     <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
   {:else if !shown.partial}
-    <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.filter || data.genre || data.collection || data.tag || data.radical || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
+    <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.filter || data.genre || data.collection || data.tag || data.radical || data.decade || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
   {/if}
   {#if shown.partial}<p class="muted">{t('browse.searchContinues')}</p>{/if}
   {#if shown.next !== null}<div bind:this={sentinel}><a class="button" href={more} aria-busy={busy} onclick={appendOnClick}>{t(shown.partial ? 'browse.continueSearch' : 'browse.more')}</a></div>{/if}
@@ -194,7 +208,7 @@
   .heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:start; gap:20px }
   .intro { gap:8px; max-width:720px }
   .filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:16px; border:1px solid var(--line); border-radius:9px; background:var(--surface) }
-  .filters .field { flex:1 1 180px } .filters .search { flex:2 1 260px } .filters .radical { flex:0 1 120px }
+  .filters .field { flex:1 1 140px } .filters .search { flex:2 1 220px } .filters .radical { flex:0 1 120px } .filters .decade { flex:1 1 140px }
   .choose { display:flex; align-items:center; justify-content:space-between; gap:8px } .choose:hover { border-color:var(--ink) } .pinned .glyph { font-size:18px; line-height:1 }
   .states, .marks, .sort { display:flex; flex-wrap:wrap; gap:4px }
   .shuffle { display:inline-flex; align-items:center; gap:6px } .shuffle svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round }

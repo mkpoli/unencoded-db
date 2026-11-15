@@ -130,7 +130,7 @@ export function parseMarks(raw: string | null | undefined): string[] {
 }
 
 type TagInput = Pick<Entry, 'script' | 'status' | 'description' | 'script_other'>
-export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key' | 'radical'>, hasSource: boolean, claims: readonly Claim[] = []) {
+export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key' | 'radical' | 'first_year'>, hasSource: boolean, claims: readonly Claim[] = []) {
   const filters = entry.status ? [`f:${entry.status}`] : []
   if (!entry.cover_key) filters.push('n:image')
   if (!entry.ids) filters.push('n:ids')
@@ -148,7 +148,9 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   // branches too. The path its stated radical names is kept apart (`b!`), since stating a radical makes it stand.
   const filing = fileRecord(entry.ids, entry.radical)
   const filed = [...pathsOf(filing?.path ?? []).map(path => `b:${path}`), ...(filing?.stated ? [`b!${filing.stated}`] : [])]
-  return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks, ...filed]
+  // A record with a year is listed under its decade.
+  const decade = entry.first_year === null ? [] : [`y:${Math.floor(Number(entry.first_year) / 10) * 10}`]
+  return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks, ...filed, ...decade]
 }
 
 const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'tag']
@@ -201,7 +203,7 @@ function summarize(sightings: SightingState[]) {
 }
 
 const tagsOf = (entry: Entry, claims: readonly Claim[], summary: ReturnType<typeof summarize>) =>
-  [...facetTags({ ...entry, status: statusOf(claims), ids: primaryIdsOf(claims), cover_key: summary.cover_key }, summary.hasSource, claims), ...wordTags(entry, claims, summary.visible)]
+  [...facetTags({ ...entry, status: statusOf(claims), ids: primaryIdsOf(claims), cover_key: summary.cover_key, first_year: summary.first_year }, summary.hasSource, claims), ...wordTags(entry, claims, summary.visible)]
 const facet = (tag: string) => !tag.startsWith('w:')
 const SUMMARY_SET = 'ids = ?, layout = ?, cover_key = ?, cover_place = ?, sightings = ?, types = ?, first_year = ?, first_year_kind = ?, marks = ?, status = ?'
 const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summarize>) => [primaryIdsOf(claims), layoutText(primaryLayoutOf(claims)) || null, summary.cover_key, summary.cover_place, summary.visible.length, summary.types, summary.first_year, summary.first_year_kind, marksHeld(claims).length ? JSON.stringify(marksHeld(claims)) : null, statusOf(claims)]
@@ -648,7 +650,7 @@ export async function mediaVisible(db: D1Database, key: string) {
   return Boolean(await db.prepare(`SELECT 1 FROM sighting_media x INDEXED BY sighting_media_by_image ${live} AND x.image_key = ?1 UNION ALL SELECT 1 FROM sighting_media x INDEXED BY sighting_media_by_thumb ${live} AND x.thumb_key = ?1 LIMIT 1`).bind(key).first())
 }
 
-export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; radical?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; order?: Order; seed?: number | null; after?: string | null; limit?: number }
+export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; radical?: string | null; decade?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; order?: Order; seed?: number | null; after?: string | null; limit?: number }
 export const PAGE = 48
 export const SEARCH_WINDOW = 256
 
@@ -673,6 +675,12 @@ export function radicalTag(radical?: string | null) {
   return path ? `b:${path}` : undefined
 }
 
+// A decade, written as its first year (`1930`), as the key its records are listed under.
+export function decadeTag(decade?: string | null) {
+  if (!decade) return null
+  return /^[1-9]\d{1,2}0$/.test(decade) ? `y:${decade}` : undefined
+}
+
 // The marked works a list keeps to (`r:`) and leaves out (`x:`), as the keys they are listed under, or
 // null for a name that is no marked work.
 export function markTags(within: readonly string[] = [], without: readonly string[] = []) {
@@ -686,14 +694,14 @@ export function exactSearchIds(query: string) {
 }
 
 // The keys every row of a listing holds and the words it is searched for. Null names a listing that is not one.
-function listPlan({ script, filter, facet, radical, within, without, query }: Listing) {
-  const base = listTag(script, filter), own = facetTag(facet), filed = radicalTag(radical), marks = markTags(within, without)
-  if (!base || own === undefined || filed === undefined || !marks) return null
+function listPlan({ script, filter, facet, radical, decade, within, without, query }: Listing) {
+  const base = listTag(script, filter), own = facetTag(facet), filed = radicalTag(radical), period = decadeTag(decade), marks = markTags(within, without)
+  if (!base || own === undefined || filed === undefined || period === undefined || !marks) return null
   if ((query?.trim().length ?? 0) > SEARCH_LENGTH_MAX) return null
   const exact = exactSearchIds(query ?? '')
   const words = exact ? [] : [...new Set(terms(query ?? ''))]
   if (!exact && (words.length > SEARCH_TERMS_MAX || (query?.trim() && !words.length))) return null
-  const keys = [...(own ? [own] : []), ...(filed ? [filed] : []), ...marks, ...(base !== 'all' ? [base] : [])]
+  const keys = [...(own ? [own] : []), ...(filed ? [filed] : []), ...(period ? [period] : []), ...marks, ...(base !== 'all' ? [base] : [])]
   return { keys, exact, words: words.map(word => `w:${word}`) }
 }
 

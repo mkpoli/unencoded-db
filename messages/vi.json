@@ -48,6 +48,8 @@
   "browse.order.earliest": "Niên đại sớm nhất",
   "browse.order.latest": "Niên đại muộn nhất",
   "browse.order.dated": "Chỉ liệt kê các bản ghi có niên đại",
+  "browse.decadeLabel": "Niên đại",
+  "browse.decade": "Thập niên {n}",
   "browse.order.random": "Xáo trộn",
   "browse.tileSize": "Cỡ ô",
   "browse.empty": "Chưa có mục từ nào phù hợp.",

@@ -209,3 +209,16 @@ test('a shuffled browse list is dealt a start and keeps it', async () => {
   expect(dealt.location).toMatch(/^\/en\?sort=random&filter=variant&seed=\d+$/)
   expect(await browseLoad(event('sort=random&seed=12'))).toMatchObject({ order: 'random', seed: 12, tiles: [] })
 })
+
+test('browse keeps to the decade a record was first seen in, and rejects one that is no decade', async () => {
+  const { db } = openTestDb()
+  const form = new FormData()
+  form.set('place', 'A book'); form.set('url', 'https://example.test/source'); form.set('report_date', '1937年5月')
+  const create = { request: { formData: async () => form }, url: new URL('https://example.test/en'), params: { locale: 'en' }, locals: {}, platform: { env: { DB: db, MEDIA: {} } }, cookies: { set() {} }, getClientAddress: () => '127.0.0.1' } as any
+  await expect(createActions.default(create)).rejects.toMatchObject({ status: 303 })
+  const event = (query: string) => ({ url: new URL(`https://example.test/en?${query}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
+  expect(await browseLoad(event('decade=1930'))).toMatchObject({ decade: '1930', tiles: [{ id: 1 }] })
+  expect(await browseLoad(event('decade=1930&sort=earliest'))).toMatchObject({ tiles: [{ id: 1 }] })
+  expect(await browseLoad(event('decade=1940'))).toMatchObject({ tiles: [] })
+  for (const query of ['decade=1937', 'decade=0', 'decade=19300', 'decade=abc']) await expect(browseLoad(event(query))).rejects.toMatchObject({ status: 404 })
+})

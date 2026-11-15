@@ -832,6 +832,20 @@ describe('order', () => {
     expect(cursorOf('old', '0')).toBeNull()
     expect(cursorOf('fewest', '0.3')).toEqual([0, 3])
   })
+  test('a record is listed under the decade it was first seen in, and moves with an older sighting', async () => {
+    const decades = (id: number) => raw.query("SELECT tag FROM entry_tags WHERE entry_id = ? AND tag GLOB 'y:*'").all(id)
+    const counted = () => raw.query("SELECT tag, n FROM tag_counts WHERE tag GLOB 'y:*' AND n > 0 ORDER BY tag").all()
+    const id = await createEntry(db, fields(), seen({ place: 'A shop sign', report_date: '1999' }), [], who)
+    await createEntry(db, fields(), seen({ place: 'A sign', report_date: 'undated' }), [], who)
+    expect(decades(id)).toEqual([{ tag: 'y:1990' }])
+    expect(counted()).toEqual([{ tag: 'y:1990', n: 1 }])
+    await addSighting(db, id, seen({ place: 'A book', original_date: '1935年' }), [], who)
+    expect(decades(id)).toEqual([{ tag: 'y:1930' }])
+    expect(counted()).toEqual([{ tag: 'y:1930', n: 1 }])
+    expect((await list(db, { decade: '1930' }))!.tiles.map(tile => tile.id)).toEqual([id])
+    expect(await list(db, { decade: '1935' })).toBeNull()
+  })
+
   test('a record keeps its first year on every row it is listed under, and its words keep none', async () => {
     const dated = (id: number) => raw.query("SELECT DISTINCT year FROM entry_tags WHERE entry_id = ? AND tag NOT GLOB 'w:*'").all(id)
     const words = (id: number) => raw.query("SELECT DISTINCT year FROM entry_tags WHERE entry_id = ? AND tag GLOB 'w:*'").all(id)
@@ -859,7 +873,7 @@ describe('order', () => {
 // with no scan of a table and no sort.
 describe('query cost', () => {
   const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
-  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { radical: '口' }, { radical: '儿兄克', script: 'han', filter: 'variant', facet: 'g:hakka', query: '亻' }, { radical: '儿兄克', order: 'most' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }, ...(['old', 'most', 'fewest', 'earliest', 'latest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
+  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { radical: '口' }, { decade: '1930' }, { decade: '1930', order: 'earliest', after: '1935.4' }, { decade: '1930', script: 'han', query: '亻' }, { radical: '儿兄克', script: 'han', filter: 'variant', facet: 'g:hakka', query: '亻' }, { radical: '儿兄克', order: 'most' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }, ...(['old', 'most', 'fewest', 'earliest', 'latest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
   for (const shape of shapes) test(`list ${JSON.stringify(shape)}`, () => {
     const statement = listStatement(db, shape) as unknown as { sql: string; values: unknown[] }
     const details = plan(statement.sql, statement.values)

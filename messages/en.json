@@ -48,6 +48,8 @@
   "browse.order.earliest": "Earliest attested",
   "browse.order.latest": "Latest attested",
   "browse.order.dated": "Lists only records with a year",
+  "browse.decadeLabel": "Decade",
+  "browse.decade": "{n}s",
   "browse.order.random": "Shuffle",
   "browse.tileSize": "Tile size",
   "browse.empty": "No record matches this yet.",

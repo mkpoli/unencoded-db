@@ -48,6 +48,8 @@
   "browse.order.earliest": "年代が古い順",
   "browse.order.latest": "年代が新しい順",
   "browse.order.dated": "年代のある記録だけを並べます",
+  "browse.decadeLabel": "年代",
+  "browse.decade": "{n}年代",
   "browse.order.random": "シャッフル",
   "browse.tileSize": "表示サイズ",
   "browse.empty": "該当する記録はありません。",
