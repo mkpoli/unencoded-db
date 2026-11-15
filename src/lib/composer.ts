@@ -6,10 +6,10 @@ export const GLYPH_STYLE: GlyphStyle = 'sans'
 export const GLYPH_STYLE_COOKIE = 'ug.glyph'
 
 const VERSIONS: Record<GlyphStyle, string> = {
-  sans: 'a83fc941166b-sans-compose-layout-v4-f6+variants',
-  serif: '8156f838798c-serif-compose-layout-v4-serif-f6+variants',
-  fangsong: '9f797e2322d2-fangsong-compose-layout-v4-fangsong-f6',
-  kaisho: 'ce3eaafda8f9-kaisho-compose-layout-v4-kaisho-f6',
+  sans: 'a83fc941166b-sans-compose-layout-v4-f7+variants',
+  serif: '8156f838798c-serif-compose-layout-v4-serif-f7+variants',
+  fangsong: '9f797e2322d2-fangsong-compose-layout-v4-fangsong-f7',
+  kaisho: 'ce3eaafda8f9-kaisho-compose-layout-v4-kaisho-f7',
 }
 export const composerVersion = (style: GlyphStyle) => VERSIONS[style]
 export const composerUrl = (style: GlyphStyle) => `https://ids-input-composer.mkpoli.workers.dev/${VERSIONS[style]}`

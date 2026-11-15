@@ -1,10 +1,10 @@
 // The drawing of each description, composed with han-compose and kept beside the composer's own
 // files. A page reads what is already drawn; a miss is drawn beside it, so a rare part never holds
 // up the page. A drawing is one path, or SVG markup when a layout moves its parts.
-import { documentView } from '@han-compose/composer/document-view'
-import { compose, sketch } from '@han-compose/composer/loader'
-import { onlyBundled } from '@han-compose/composer/local'
-import { sourceFor, traitKey, traitsOf } from '@han-compose/composer/source'
+import { documentView } from 'han-compose/document-view'
+import { compose, sketch } from 'han-compose/loader'
+import { onlyBundled } from 'han-compose/local'
+import { exportSource, sourceFor, traitKey, traitsOf } from 'han-compose/source'
 import { layerFrames, renderScopes, scopesMarkup } from 'ids-input/document'
 import { composerUrl, composerVersion, GLYPH_STYLE, type GlyphStyle } from '$lib/composer'
 import { composerData } from '$lib/composer-data'
@@ -24,6 +24,7 @@ const drawingsOf = (style: GlyphStyle) => `glyphs/${composerVersion(style)}`
 const IMMUTABLE = 'public, max-age=31536000, immutable'
 
 const sources = new WeakMap<Bucket, Map<string, Source>>()
+const exports = new WeakMap<Bucket, Map<string, ReturnType<typeof exportSource>>>()
 const pending = new Map<string, Promise<string | null>>()
 
 const typeOf = (name: string) => /^[gp]\//.test(name) ? 'application/octet-stream' : 'application/json'
@@ -62,9 +63,20 @@ function bundled(context: Context) {
 // built from bundled outlines alone has no export behind it, so it is never handed a description
 // that needs one.
 export function sourceKey(sequence: string, context: Context, separate = false) {
-  const traits = traitsOf(sequence)
-  const local = traits.empty || onlyBundled(sequence, separate)
-  return `${context.style ?? GLYPH_STYLE}:${local ? 'local' : 'remote'}:${traitKey(traits)}:${context.assets ? 1 : 0}:${separate ? 1 : 0}`
+  const traits = traitsOf(sequence), style = context.style ?? GLYPH_STYLE
+  const local = traits.empty || onlyBundled(sequence, separate, false, style)
+  return `${style}:${local ? 'local' : 'remote'}:${traitKey(traits)}:${context.assets ? 1 : 0}:${separate ? 1 : 0}`
+}
+
+// One export source for each style: whatever a description calls for, the export's manifest, layout
+// and identity table are read and parsed once.
+function exportOf(bucket: Bucket, context: Context, style: GlyphStyle) {
+  let byStyle = exports.get(bucket)
+  if (!byStyle) exports.set(bucket, byStyle = new Map())
+  const key = `${style}:${context.assets ? 1 : 0}`
+  let found = byStyle.get(key)
+  if (!found) byStyle.set(key, found = exportSource(composerUrl(style), { loaders: composerData, fetch: reader(bucket, style), read: bundled(context) }))
+  return found
 }
 
 function sourceOf(bucket: Bucket, sequence: string, context: Context, separate = false) {
@@ -75,7 +87,7 @@ function sourceOf(bucket: Bucket, sequence: string, context: Context, separate =
   const key = sourceKey(sequence, context, separate)
   let source = byTrait.get(key)
   if (!source) {
-    source = sourceFor(sequence, { base: composerUrl(style), fontStyle: style, traits, separate, fetch: reader(bucket, style), loaders: composerData, read: bundled(context) })
+    source = sourceFor(sequence, { base: composerUrl(style), fontStyle: style, traits, separate, exported: exportOf(bucket, context, style), loaders: composerData, read: bundled(context) })
     byTrait.set(key, source)
   }
   return source
@@ -122,7 +134,11 @@ export function drawGlyph(bucket: Bucket, glyph: Glyph, context: Context = {}): 
       if (!drawn) return null
       await bucket.put(`${drawingsOf(style)}/${await hashHex(name)}.txt`, drawn, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
       return drawn
-    })().catch(() => null).finally(() => pending.delete(task))
+    })().catch(error => {
+      // A drawing that fails leaves the description on the page; the log says why.
+      console.error(`glyph ${style} ${name}:`, error)
+      return null
+    }).finally(() => pending.delete(task))
     pending.set(task, run)
   }
   return run
