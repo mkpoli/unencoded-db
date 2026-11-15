@@ -11,7 +11,7 @@ import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, 
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { genreOf } from '$lib/genres'
-import { BRANCH_MIN, parsePath, pathsOf, radicalPath } from '$lib/radicals'
+import { BRANCH_MIN, KANGXI, parsePath, pathsOf, radicalPath } from '$lib/radicals'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
 import { hashHex } from './image'
@@ -786,17 +786,22 @@ export async function list(db: D1Database, listing: Listing) {
   return { tiles, next, partial: read.searching && next !== null && tiles.length < limit }
 }
 
-// The counts a page shows beside its filters. Tags are counted too, and read where they are listed.
+// The counts a page shows beside its filters. Tags are counted too, and read where they are listed. The
+// radical paths (`b:`) are stepped over by key, so the read does not grow with them.
+export const countsStatement = (db: D1Database) => db.prepare(`SELECT tag, n FROM tag_counts WHERE (tag < 'b:' OR tag >= 'b;') AND n > 0 AND tag NOT LIKE '%|%' AND tag NOT LIKE 't:%'`)
 export async function counts(db: D1Database) {
-  const { results } = await db.prepare(`SELECT tag, n FROM tag_counts WHERE n > 0 AND tag NOT LIKE '%|%' AND tag NOT LIKE 't:%' AND tag NOT LIKE 'b:%'`).all<{ tag: string; n: number }>()
+  const { results } = await countsStatement(db).all<{ tag: string; n: number }>()
   return Object.fromEntries(results.map(row => [row.tag, row.n])) as Record<string, number>
 }
 
 // The records each radical path holds, for the paths that can stand as a radical: a Kangxi radical in
 // use and any path with enough records. `under` keeps the read to one Kangxi radical and its branches.
+// The paths with enough records are one range of `tag_counts_branches` and the radicals are read by
+// key, so the read does not grow with the paths that hold fewer.
 export function radicalCountsStatement(db: D1Database, under?: string) {
   const from = `b:${under ?? ''}`, to = under ? `${from}\u{10FFFF}` : 'b;'
-  return db.prepare('SELECT substr(tag, 3) AS path, n FROM tag_counts WHERE tag >= ? AND tag < ? AND n > 0 AND (n >= ? OR length(tag) = 3)').bind(from, to, BRANCH_MIN)
+  return db.prepare(`SELECT substr(tag, 3) AS path, n FROM tag_counts INDEXED BY tag_counts_branches WHERE tag >= ?1 AND tag < ?2 AND n >= ${BRANCH_MIN}
+    UNION ALL SELECT substr(tag, 3), n FROM tag_counts WHERE tag IN (SELECT 'b:' || value FROM json_each(?3)) AND n > 0 AND n < ${BRANCH_MIN}`).bind(from, to, JSON.stringify(under ? [under] : KANGXI))
 }
 export async function radicalCounts(db: D1Database, under?: string) {
   return new Map((await radicalCountsStatement(db, under).all<{ path: string; n: number }>()).results.map(row => [row.path, row.n]))

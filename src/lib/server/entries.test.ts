@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import type { Order } from '$lib/order'
 import { standing } from '$lib/radicals'
-import { addSighting, claimedBy, counts, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -855,8 +855,19 @@ describe('query cost', () => {
   test('the radical counts read one range of the counts by key', () => {
     for (const under of [undefined, '儿']) {
       const statement = radicalCountsStatement(db, under) as unknown as { sql: string; values: unknown[] }
-      expect(plan(statement.sql, statement.values)).toEqual(['SEARCH tag_counts USING PRIMARY KEY (tag>? AND tag<?)'])
+      const details = plan(statement.sql, statement.values).join('\n')
+      expect(details).toMatch(/SEARCH tag_counts USING INDEX tag_counts_branches \(tag>\? AND tag<\?\)/)
+      expect(details).toMatch(/SEARCH tag_counts USING PRIMARY KEY \(tag=\?\)/)
+      expect(details).not.toMatch(/SCAN tag_counts|TEMP B-TREE/)
     }
+  })
+
+  test('the filter counts step over the radical paths by key', () => {
+    const statement = countsStatement(db) as unknown as { sql: string; values: unknown[] }
+    const details = plan(statement.sql, statement.values).join('\n')
+    expect(details).toMatch(/SEARCH tag_counts USING PRIMARY KEY \(tag<\?\)/)
+    expect(details).toMatch(/SEARCH tag_counts USING PRIMARY KEY \(tag>\?\)/)
+    expect(details).not.toMatch(/SCAN tag_counts/)
   })
 
   test('the second read of a shuffled list reads the shuffle index too', () => {
