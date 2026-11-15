@@ -62,9 +62,9 @@ function bundled(context: Context) {
 // built from bundled outlines alone has no export behind it, so it is never handed a description
 // that needs one.
 export function sourceKey(sequence: string, context: Context, separate = false) {
-  const traits = traitsOf(sequence)
-  const local = traits.empty || onlyBundled(sequence, separate)
-  return `${context.style ?? GLYPH_STYLE}:${local ? 'local' : 'remote'}:${traitKey(traits)}:${context.assets ? 1 : 0}:${separate ? 1 : 0}`
+  const traits = traitsOf(sequence), style = context.style ?? GLYPH_STYLE
+  const local = traits.empty || onlyBundled(sequence, separate, false, style)
+  return `${style}:${local ? 'local' : 'remote'}:${traitKey(traits)}:${context.assets ? 1 : 0}:${separate ? 1 : 0}`
 }
 
 function sourceOf(bucket: Bucket, sequence: string, context: Context, separate = false) {
