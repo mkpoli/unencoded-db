@@ -5,7 +5,8 @@
     "": {
       "name": "unencoded-db",
       "dependencies": {
-        "ids-input": "github:mkpoli/ids-input#f02f8faf",
+        "@han-compose/composer": "github:mkpoli/han-compose#f71e9de",
+        "ids-input": "github:mkpoli/ids-input#3e0c0e0f",
         "jose": "^6.2.15",
       },
       "devDependencies": {
@@ -96,6 +97,8 @@
     "@esbuild/win32-ia32": ["@esbuild/win32-ia32@0.28.2", "", { "os": "win32", "cpu": "ia32" }, "sha512-YmJbfTlvU7Sdn9BB+4PRES4oB6pxgS37MAONj+hBr/cpXS1aBPKXxNnDbu+QCWPj0o9dgyxeq79g6c5P8KeuYA=="],
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.2", "", { "os": "win32", "cpu": "x64" }, "sha512-5ebpxr3nWMzrL/rnUI755Jkuee0bHL/Gq0WTF9lvcpv73wAp5eu8MfBUgWK9bhWvZjj7yX8etf/8tI8Ney695g=="],
+
+    "@han-compose/composer": ["han-compose-monorepo@github:mkpoli/han-compose#f71e9de", {}, "mkpoli-han-compose-f71e9de", "sha512-V1om9GpKodmq+xTGat5eIPsH/uFd4oYjL1FWJiF225dyFuBtL/ZAuubUT7eOQib/JiCJ3ANyuiIPYkV0EnNDxw=="],
 
     "@img/colour": ["@img/colour@1.1.0", "", {}, "sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ=="],
 
@@ -265,7 +268,7 @@
 
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
 
-    "ids-input": ["ids-input@github:mkpoli/ids-input#f02f8fa", { "dependencies": { "@cf-wasm/resvg": "^0.4.0" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-f02f8fa", "sha512-QMrlj8AsV5U+jgrhqu1X5qNlYxFrquupLLApo6T82wvvb0GnnVgbMILB4tc/CxFiZ4PNGLG6tD606/vfyI3NEQ=="],
+    "ids-input": ["ids-input@github:mkpoli/ids-input#3e0c0e0", { "dependencies": { "@cf-wasm/resvg": "^0.4.0" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-3e0c0e0", "sha512-RfbSEBqwgFLExZSQr0Fi0PrDyV4iefJobdTF0iD84GUcqonPyCzYNiE9rnkx68Is1UjsE1mBJAXGuMHLeSeTLA=="],
 
     "is-reference": ["is-reference@3.0.3", "", { "dependencies": { "@types/estree": "^1.0.6" } }, "sha512-ixkJoqQvAP88E6wLydLGGqCJsrFUnqoH6HnaczB8XmDH1oaWU+xxdptvikTgaEhtZ53Ky6YXiBuUI2WXLMCwjw=="],
 

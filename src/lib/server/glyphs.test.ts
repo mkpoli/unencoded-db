@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
+import { readFile } from 'node:fs/promises'
 import { COMPOSER_VERSION } from '$lib/composer'
-import { glyphName, glyphPaths } from './glyphs'
+import { drawGlyph, glyphName, glyphPaths } from './glyphs'
 import { hashHex } from './image'
 
 test('a page reads cached drawings by the cleaned description', async () => {
@@ -31,4 +32,26 @@ test('a layout that is not one of the description draws the description alone', 
 
 test('a page without a bucket shows no drawings', async () => {
   expect(await glyphPaths(undefined, [{ ids: '⿰魚羊' }])).toEqual({})
+})
+
+const bopomofo = async () => {
+  const outlines = await readFile(new URL('../../../node_modules/@han-compose/composer/data/sources/bopomofo/outlines.json.gz', import.meta.url))
+  const kept: string[] = []
+  const bucket = { get: async () => null, put: async (key: string) => { kept.push(key) } } as unknown as Pick<R2Bucket, 'get' | 'put'>
+  return { bucket, kept, context: { assets: { fetch: async () => new Response(outlines) }, origin: 'https://example.test' } }
+}
+
+test('a bundled Bopomofo part draws through the build\'s asset binding', async () => {
+  const { bucket, context } = await bopomofo()
+  expect(await drawGlyph(bucket, { ids: 'ㄍ' }, context)).toMatch(/^M/)
+})
+
+test('a description with a layout is drawn part by part as markup, and kept under its own name', async () => {
+  const { bucket, kept, context } = await bopomofo()
+  const moved = { ids: '⿰ㄍㄎ', layout: '{"0":[1,0,0,1,-40,12]}' }
+  const plain = await drawGlyph(bucket, { ids: moved.ids }, context)
+  const drawn = await drawGlyph(bucket, moved, context)
+  expect(plain).toMatch(/^M/)
+  expect(drawn).toMatch(/^<defs>.*<path d="M/)
+  expect(kept).toEqual([moved.ids, glyphName(moved)].map(name => `glyphs/${COMPOSER_VERSION}/${new Bun.CryptoHasher('sha256').update(name).digest('hex')}.txt`))
 })

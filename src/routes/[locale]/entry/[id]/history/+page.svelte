@@ -2,13 +2,14 @@
   import HistoryList from '$lib/components/HistoryList.svelte'
   import Seo from '$lib/components/Seo.svelte'
   import { href, t } from '$lib/t'
+  import { recordCode } from '$lib/code'
   let { data, form } = $props()
 </script>
 
-<Seo title={t('history.title', { id: data.id })} />
+<Seo title={t('history.title', { id: recordCode(data.id) })} />
 <div class="page narrow stack">
   <a class="text-link back" href={href(`/entry/${data.id}`)}>← {t('history.back')}</a>
-  <h1>{t('history.title', { id: data.id })}</h1>
+  <h1>{t('history.title', { id: recordCode(data.id) })}</h1>
   {#if form?.error}<p class="notice bad" role="alert">{t(`error.${form.error}`)}</p>{/if}
   <HistoryList rows={data.rows} currentRev={data.rev} restore redact={Boolean(data.person?.moderator)} empty={t('history.empty')} next={data.next} />
 </div>

@@ -33,8 +33,7 @@ export const actions: Actions = {
     const rows = []
     for (const row of chosen) {
       const entry = new FormData()
-      entry.set('script', base.script)
-      if (base.script_other) entry.set('script_other', base.script_other)
+      entry.set('script', base.script_other ?? base.script)
       entry.set('ids', row.ids)
       const { fields, error } = readEntryFields(entry)
       if (error) return reject(400, error, values, row.index + 1)

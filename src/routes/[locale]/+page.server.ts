@@ -1,7 +1,8 @@
-import { error } from '@sveltejs/kit'
+import { error, redirect } from '@sveltejs/kit'
 import { counts, exactSearchIds, facetTag, list, listTag, markTags, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, terms } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
 import { tileGlyphs } from '$lib/server/glyphs'
+import { parseRecordCode } from '$lib/code'
 import { positiveId } from '../_submission.server'
 import type { PageServerLoad } from './$types'
 
@@ -24,8 +25,13 @@ export const load: PageServerLoad = async (event) => {
   const words = query.length <= SEARCH_LENGTH_MAX && !exact ? new Set(terms(query)) : new Set<string>()
   const searchError = query.length > SEARCH_LENGTH_MAX ? 'queryTooLong' : !exact && query && words.size === 0 ? 'noSearchTerms' : words.size > SEARCH_TERMS_MAX ? 'tooManyTerms' : null
   const db = env(event).DB
+  // A record's code typed whole, R+0022 or 天天玄玄, opens the record it names.
+  const coded = before === null ? parseRecordCode(query) : null
+  // A merged record opens the one it was merged into, and neither may be hidden.
+  const named = coded ? await db.prepare('SELECT COALESCE(m.id, e.id) AS id FROM entries e LEFT JOIN entries m ON m.id = e.merged_into WHERE e.id = ? AND e.hidden_at IS NULL AND (e.merged_into IS NULL OR m.hidden_at IS NULL)').bind(coded).first<{ id: number }>() : null
+  if (named) redirect(303, `/${event.params.locale}/entry/${named.id}`)
   const [page, totals] = await Promise.all([searchError ? null : list(db, { script, filter, facet, within, without, query, before }), counts(db)])
   if (!page && !searchError) error(404)
-  const glyphs = await tileGlyphs(event.platform, page?.tiles ?? [])
+  const glyphs = await tileGlyphs(event.platform, event.url.origin, page?.tiles ?? [])
   return { ...(page ?? { tiles: [], next: null, partial: false }), counts: totals, glyphs, filter, genre, collection, tag, within, without, query, searchError, continued: before !== null && query.length > 0 }
 }

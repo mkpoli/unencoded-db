@@ -6,8 +6,6 @@ declare module 'ids-input' {
   export function parse(ids: string | null | undefined, options?: { open?: boolean }): { tree?: IdsPart; problem?: IdsProblem }
   export function isNode(part: IdsPart | undefined): part is IdsNode
   export function write(tree: IdsPart): string
-  /** A composer's drawing as an SVG document, 1000 units a side. */
-  export function drawingSvg(drawing: import('ids-input/composer').Drawing, options?: { background?: string | null; ink?: string; padding?: number; size?: number; placeholders?: boolean; idPrefix?: string }): string
 }
 
 declare module 'ids-input/adapter' {
@@ -47,10 +45,10 @@ declare module 'ids-input/svelte' {
   export const IdsCharacterInfo: Component<{ root: HTMLElement | null; adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; onpick?: (part: string, path?: number[]) => void }>
   /** A description drawn by the adapter's `preview`. With a `session` and `editable`, its parts are moved, scaled and turned on the drawing. */
   export const IdsPreview: Component<{
-    adapter: { preview?: import('ids-input/composer').ComposerPreview }; tree: import('ids-input').IdsPart; chosen?: number[] | null
+    adapter: { preview?: import('@han-compose/composer').ComposerPreview }; tree: import('ids-input').IdsPart; chosen?: number[] | null
     messages?: Record<string, string>; locale?: string; small?: boolean; notes?: boolean; delay?: number
     session?: import('ids-input/document').DocumentSession | null; version?: number; editable?: boolean
-    scopes?: import('ids-input/document').ScopeTree | null; drawing?: import('ids-input/composer').Drawing | null
+    scopes?: import('ids-input/document').ScopeTree | null; drawing?: import('@han-compose/composer').Drawing | null
     onchoose?: ((path: number[]) => void) | null; onedit?: (() => void) | null
   }, {}, 'scopes' | 'drawing'>
   /** The text of `key` in `messages`, else in English. */
@@ -84,27 +82,57 @@ declare module 'ids-input/document' {
   export function pathOfLayer(root: IdsLayer, id: string): number[] | null
   export function affineForChain(chain: IdsOperation[]): number[] | null
   export function createDocumentSession(initial?: IdsDocument): DocumentSession
+  /** How a document is drawn over a composer's drawing; the composer's document view takes these two. */
+  export type Renderer = { layerFrames: (...given: never[]) => unknown; renderScopes: (...given: never[]) => unknown }
+  export const layerFrames: Renderer['layerFrames']
+  export const renderScopes: Renderer['renderScopes']
   export function scopesMarkup(drawing: ScopeTree, options?: { ink?: string; idPrefix?: string; emoji?: unknown[] | null; cut?: string | null; cutLeaf?: number | null }): { defs: string; body: string }
 }
 
-declare module 'ids-input/composer' {
+declare module '@han-compose/composer' {
   export type Drawing = { d: string; parts?: { leaf?: number; cut?: boolean }[]; slots?: unknown[]; cut?: string; emoji?: unknown[] }
   export type SketchLeaf = { index: number; box: number[]; empty: boolean }
-  export type ComposerPreview = ((sequence: string, options?: { signal?: AbortSignal }) => Promise<Drawing>) & { warm(sequence?: string): void }
+  export type ComposerPreview = ((sequence: string, options?: { signal?: AbortSignal }) => Promise<Drawing>) & { warm(): void }
   export type ComposerSource = {
     ready(): Promise<void>
     load(names: Iterable<string>): Promise<unknown[]>
     filesOf(keys: Iterable<string>): Set<string>
     store(): unknown
   }
-  export function createSource(read: (name: string) => Promise<ArrayBuffer | null>, options?: { concurrency?: number }): ComposerSource
-  export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'kaisho' }): Promise<Drawing>
+  export const dataUrls: Record<string, string>
+  export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho' }): Promise<Drawing>
   /** The composer in a Web Worker, reading han-compose's export at `base`. */
-  export function composerPreview(options: { base: string; separate?: boolean; fontStyle?: 'sans' | 'serif' | 'kaisho' }): ComposerPreview
+  export function composerPreview(options: { base: string; separate?: boolean; fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho'; loaders?: Record<string, string> }): ComposerPreview
+}
+
+declare module '@han-compose/composer/source' {
+  import type { ComposerSource } from '@han-compose/composer'
+  export function traitsOf(sequence: string): Record<string, boolean>
+  export function traitKey(traits: Record<string, boolean>): string
+  export function sourceFor(sequence: string, options?: {
+    base?: string
+    fontStyle?: string
+    separate?: boolean
+    bundled?: boolean
+    remote?: boolean
+    loaders?: Record<string, string>
+    traits?: Record<string, boolean>
+    fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    read?: (path: string, url?: string) => Promise<Response | object>
+  }): ComposerSource
+}
+
+declare module '@han-compose/composer/loader' {
+  import type { ComposerSource, Drawing, SketchLeaf } from '@han-compose/composer'
+  export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho' }): Promise<Drawing>
   /** Where each leaf of `sequence` goes before it is drawn. */
   export function sketch(source: ComposerSource, sequence: string): Promise<SketchLeaf[]>
-  /** A document over a drawing made with `separate`: `scopes` is its drawing once every part has its own ink. */
-  export function documentView(document: import('ids-input/document').IdsDocument, drawing: Drawing, sketch: SketchLeaf[] | null): { scopes: import('ids-input/document').ScopeTree | null; complete: boolean }
+}
+
+declare module '@han-compose/composer/document-view' {
+  import type { Drawing, SketchLeaf } from '@han-compose/composer'
+  /** A document over a drawing made with `separate`, drawn by `renderer`: `scopes` is its drawing once every part has its own ink. */
+  export function documentView(document: import('ids-input/document').IdsDocument, drawing: Drawing, sketch: SketchLeaf[] | null, options: { tolerance?: number; renderer: import('ids-input/document').Renderer }): { scopes: import('ids-input/document').ScopeTree | null; complete: boolean }
 }
 
 declare module '*/ids-input/src/svelte/fallback-font.js' {

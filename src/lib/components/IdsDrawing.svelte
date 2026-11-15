@@ -1,16 +1,17 @@
 <script lang="ts" module>
   // One composer of each kind for the page visit: a reader who leaves the form and comes back reuses its
   // worker and the export files it has already read. Parts are drawn one by one only where a layout moves them.
-  import type { ComposerPreview } from 'ids-input/composer'
+  import type { ComposerPreview } from '@han-compose/composer'
   import type { DocumentSession } from 'ids-input/document'
-  import { COMPOSER_VERSION } from '$lib/composer'
+  import { COMPOSER_URL } from '$lib/composer'
+  import { composerData } from '$lib/composer-data'
   import { idsMessages } from '$lib/ids-messages'
 
   const composers = new Map<boolean, Promise<ComposerPreview>>()
   function composer(separate: boolean) {
     let found = composers.get(separate)
     if (!found) {
-      found = import('ids-input/composer').then(({ composerPreview }) => composerPreview({ base: `https://glyphatlas.org/atlas/composer/${COMPOSER_VERSION}`, separate }))
+      found = import('@han-compose/composer').then(({ composerPreview, dataUrls }) => composerPreview({ base: COMPOSER_URL, separate, loaders: { ...dataUrls, ...composerData } }))
       composers.set(separate, found)
       found.catch(() => composers.delete(separate))
     }

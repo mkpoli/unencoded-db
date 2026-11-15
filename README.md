@@ -54,13 +54,19 @@ Only a meaning or a reading can be a scope. A reading may hold under meanings, a
 
 The CSV export has one column for each kind of claim, and a claim names its links after its value: `東 (usage) [under: east | cmn:dōng] [evidence: #3 #7]`, where the numbers are values of `sighting_id`. The JSON export carries `key`, `sightings` and `under` as stored.
 
+## Record codes
+
+A record's id is stored as an integer and shown in hexadecimal as `R+A1C2`, beside the same digits spelled with the first sixteen characters of the 千字文 (天 = 0 … 張 = F): 盈地辰玄. The 千字文 digits were proposed by NGWU YOH (chat message, 2026-11-14, unpublished).
+
+A code typed whole into search, in either spelling, opens its record.
+
 ## Search index
 
 Each entry indexes at most 400 distinct terms, drawn from its fields, its claims and its visible sightings. Terms beyond that limit are not searchable; changing this limit requires reindexing existing entries.
 
 ## Character drawings
 
-The gallery draws each record's IDS with [han-compose](https://github.com/mkpoli/han-compose), from the composer export Glyph Atlas publishes at `https://glyphatlas.org/atlas/composer/`. The export's files and the drawn paths stay in the `MEDIA` bucket under `composer/` and `glyphs/`. A missing drawing is composed in the background, and `/api/glyph?ids=…` answers one the page did not have. Only descriptions on visible records are drawn.
+The gallery draws each record's IDS with [han-compose](https://github.com/mkpoli/han-compose), from the composer export at `https://ids-input-composer.mkpoli.workers.dev/`. The export's files and the drawn paths stay in the `MEDIA` bucket under `composer/` and `glyphs/`. A missing drawing is composed in the background, and `/api/glyph?ids=…` answers one the page did not have. Only descriptions on visible records are drawn.
 
 A description can carry a layout: the parts moved, scaled or turned from where the composer puts them, each as an SVG matrix under its place in the description (`1.0` is the first part of the second part). The form's drawing adjusts the first description's layout with ids-input's layer document, and the gallery draws the description through it; `/api/glyph?ids=…&layout=…` answers such a drawing.
 
