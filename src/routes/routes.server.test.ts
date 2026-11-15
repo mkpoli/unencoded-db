@@ -97,7 +97,7 @@ test('browse continues an empty search window and reports the final segment', as
   raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 's:han', id FROM entries")
   const event = (url: string) => ({ url: new URL(url), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
   const first = await browseLoad(event('https://example.test/en?q=missing')) as any
-  expect(first).toMatchObject({ tiles: [], next: '2', partial: true, continued: false })
+  expect(first).toMatchObject({ tiles: [], next: '0.2', partial: true, continued: false })
   const last = await browseLoad(event(`https://example.test/en?q=missing&after=${first.next}`)) as any
   expect(last).toMatchObject({ tiles: [], next: null, partial: false, continued: true })
   await expect(browseLoad(event('https://example.test/en?q=missing&after=0'))).rejects.toMatchObject({ status: 404 })
@@ -201,7 +201,7 @@ test('a record code typed into search opens its record', async () => {
   // A code of a hidden record, of one merged into a hidden record, or of none, is searched as text.
   for (const q of ['R+0023', '天天玄黃', 'R+0025', 'R+0999']) expect(await browseLoad(event(q))).toMatchObject({ tiles: [] })
   // A later page of results is never left for a record.
-  expect(await browseLoad(at('q=R%2B0022&after=100'))).toMatchObject({ tiles: [] })
+  expect(await browseLoad(at('q=R%2B0022&after=0.100'))).toMatchObject({ tiles: [] })
 })
 
 test('a shuffled browse list is dealt a start and keeps it', async () => {
