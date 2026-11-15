@@ -6,7 +6,7 @@
   import Tile from '$lib/components/Tile.svelte'
   import { COLLECTIONS, groupGenres } from '$lib/genres'
   import { MARKED } from '$lib/registries'
-  import { ORDER, ORDERS } from '$lib/order'
+  import { ORDER, SORTS } from '$lib/order'
   import { STATUSES, NEEDS } from '$lib/scripts'
   import { href, t } from '$lib/t'
   import type { Snapshot } from './$types'
@@ -86,9 +86,10 @@
       tick().then(() => scrollTo(scrollX, y))
     }
   }
+  // A new order drops the place and the shuffle's start; shuffling again deals a new start.
   const sorted = (order: string) => {
     const params = new URLSearchParams(page.url.searchParams)
-    params.delete('after')
+    for (const name of ['after', 'seed']) params.delete(name)
     if (order === ORDER) params.delete('sort'); else params.set('sort', order)
     return params.size ? `?${params}` : href()
   }
@@ -138,6 +139,7 @@
       </select></div>
     {/if}
     {#if data.order !== ORDER}<input type="hidden" name="sort" value={data.order} />{/if}
+    {#if data.seed !== null}<input type="hidden" name="seed" value={data.seed} />{/if}
     {#each data.within as id}<input type="hidden" name="in" value={id} />{/each}{#each data.without as id}<input type="hidden" name="out" value={id} />{/each}
     <button class="button" type="submit">{t('browse.filter')}</button>
   </form>
@@ -147,7 +149,7 @@
     <a class="chip" class:on={!data.filter} href={withFilter('')}>{t('browse.all')} <span class="n">{count('all')}</span></a>
     {#each STATUSES as status}{#if count(`f:${status}`) || data.filter === status}<a class="chip" class:on={data.filter === status} href={withFilter(status)}>{t(`status.${status}`)} <span class="n">{count(`f:${status}`)}</span></a>{/if}{/each}
   </nav>
-  <nav class="sort" aria-label={t('browse.sort')}>{#each ORDERS as order}<a class="chip" class:on={data.order === order} aria-current={data.order === order ? 'true' : undefined} href={sorted(order)}>{t(`browse.order.${order}`)}</a>{/each}</nav>
+  <nav class="sort" aria-label={t('browse.sort')}>{#each SORTS as order}<a class="chip" class:on={data.order === order} aria-current={data.order === order ? 'true' : undefined} href={sorted(order)}>{t(`browse.order.${order}`)}</a>{/each}<a class="chip shuffle" class:on={data.order === 'random'} aria-current={data.order === 'random' ? 'true' : undefined} href={sorted('random')} data-sveltekit-preload-data="off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h3c4 0 8 12 12 12h3M17 14l4 4-4 4M3 18h3c1.7 0 3.5-2.3 5-5M14 8c1.5-1.4 2.6-2 4-2h3M17 2l4 4-4 4" /></svg>{t('browse.order.random')}</a></nav>
   </div>
   <nav class="marks" aria-label={t('field.encodings')}>
     {#each MARKED as registry (registry.id)}
@@ -175,6 +177,7 @@
   .filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:16px; border:1px solid var(--line); border-radius:9px; background:var(--surface) }
   .filters .field { flex:1 1 180px } .filters .search { flex:2 1 260px }
   .states, .marks, .sort { display:flex; flex-wrap:wrap; gap:4px }
+  .shuffle { display:inline-flex; align-items:center; gap:6px } .shuffle svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round }
   .bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px } .marks { gap:8px }
   .pair { display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:8px } .work { padding-inline:12px 4px; font-size:13px; font-weight:500; white-space:nowrap }
   .states .n, .marks .n { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums }

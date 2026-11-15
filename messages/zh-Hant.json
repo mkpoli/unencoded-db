@@ -44,6 +44,7 @@
   "browse.order.old": "最早",
   "browse.order.most": "證據最多",
   "browse.order.fewest": "證據最少",
+  "browse.order.random": "隨機",
   "browse.empty": "暫無符合的記錄。",
   "browse.emptyAll": "還沒有記錄。",
   "browse.addOne": "新增字",

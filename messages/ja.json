@@ -44,6 +44,7 @@
   "browse.order.old": "古い順",
   "browse.order.most": "証拠が多い順",
   "browse.order.fewest": "証拠が少ない順",
+  "browse.order.random": "シャッフル",
   "browse.empty": "該当する記録はありません。",
   "browse.emptyAll": "まだ記録はありません。",
   "browse.addOne": "文字を追加",

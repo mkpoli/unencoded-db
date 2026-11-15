@@ -44,6 +44,7 @@
   "browse.order.old": "Oldest",
   "browse.order.most": "Most evidence",
   "browse.order.fewest": "Least evidence",
+  "browse.order.random": "Shuffle",
   "browse.empty": "No record matches this yet.",
   "browse.emptyAll": "Nothing has been recorded yet.",
   "browse.addOne": "Add a character",

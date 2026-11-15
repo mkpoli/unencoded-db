@@ -101,7 +101,7 @@ test('browse continues an empty search window and reports the final segment', as
 test('browse answers an order or a cursor it does not know with 404', async () => {
   const { db } = openTestDb()
   const event = (query: string) => ({ url: new URL(`https://example.test/en?${query}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
-  for (const query of ['sort=random', 'sort=most&after=5', 'sort=new&after=1.5', 'sort=old&after=-1']) await expect(browseLoad(event(query))).rejects.toMatchObject({ status: 404 })
+  for (const query of ['sort=shuffle', 'sort=random&seed=4294967296', 'sort=random&seed=01', 'sort=random&after=5', 'sort=random&seed=5&after=x', 'sort=most&after=5', 'sort=new&after=1.5', 'sort=old&after=-1']) await expect(browseLoad(event(query))).rejects.toMatchObject({ status: 404 })
   expect(await browseLoad(event('sort=fewest&after=0.4'))).toMatchObject({ order: 'fewest', tiles: [] })
 })
 
@@ -171,4 +171,13 @@ test('a record code typed into search opens its record', async () => {
   for (const q of ['R+0023', '天天玄黃', 'R+0025', 'R+0999']) expect(await browseLoad(event(q))).toMatchObject({ tiles: [] })
   // A later page of results is never left for a record.
   expect(await browseLoad(at('q=R%2B0022&after=100'))).toMatchObject({ tiles: [] })
+})
+
+test('a shuffled browse list is dealt a start and keeps it', async () => {
+  const { db } = openTestDb()
+  const event = (query: string) => ({ url: new URL(`https://example.test/en?${query}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
+  const dealt = await Promise.resolve(browseLoad(event('sort=random&filter=variant'))).catch((thrown: any) => thrown)
+  expect(dealt).toMatchObject({ status: 302 })
+  expect(dealt.location).toMatch(/^\/en\?sort=random&filter=variant&seed=\d+$/)
+  expect(await browseLoad(event('sort=random&seed=12'))).toMatchObject({ order: 'random', seed: 12, tiles: [] })
 })
