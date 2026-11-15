@@ -56,7 +56,6 @@
   "script.shuishu": "수서",
   "script.nushu": "여서",
   "script.other": "기타 또는 모름",
-  "status.unchecked": "미확인",
   "status.variant": "등재된 문자의 이체자",
   "status.unifiable": "기존 글자와 통합 가능",
   "status.homograph": "기존 글자와 동형이자",

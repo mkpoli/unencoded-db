@@ -77,7 +77,7 @@
 <Seo title={`${recordCode(entry.id)} ${recordName(entry.id)}`} image={entry.cover_key ? media(entry.cover_key) : null} />
 <div class="page narrow stack">
   <div class="row"><a class="text-link back" href={href()}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
-  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span><span class="badge {entry.status}">{t(`status.${entry.status}`)}</span></div></div></div>
+  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}</div></div></div>
   {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
   {#if entry.merged_into}<p class="notice quiet"><a class="text-link" href={href(`/entry/${entry.merged_into}`)}>{t('entry.mergedInto', { id: recordCode(entry.merged_into) })}</a></p>{/if}
   <section class="panel stack">
