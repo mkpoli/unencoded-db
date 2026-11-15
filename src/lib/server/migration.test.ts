@@ -180,7 +180,7 @@ test('0005 gives every claim a key, a list of sightings and a scope, in claims a
   expect(journal.filter(row => !versions.some(version => version.id === row.id)).map(row => row.snapshot)).toEqual([sighting, '{}', '{"revision":4}', '{}', '{"from":3}'])
 
   // An old version is restored through the store, with its keys and the sighting it rested on.
-  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql']) raw.exec(migration(name))
+  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql']) raw.exec(migration(name))
   const db = d1Over(raw)
   expect(await revertEntry(db, 1, 1, { actor: 'p', ip: null })).toEqual({ ok: true, rev: 5 })
   expect((await getEntry(db, 1))!.claims).toEqual(first)
@@ -301,4 +301,21 @@ test('0011 leaves a record that no status rule matches without a status, tag or 
     { entry_id: 1, tag: 'all' }, { entry_id: 2, tag: 'all' }, { entry_id: 2, tag: 'f:variant' }, { entry_id: 2, tag: 's:han|f:variant' },
   ])
   expect(raw.query('SELECT tag, n FROM tag_counts ORDER BY tag').all()).toEqual([{ tag: 'all', n: 2 }, { tag: 'f:variant', n: 1 }, { tag: 's:han|f:variant', n: 1 }])
+})
+
+test('0012 gives every listed row its record\'s count of sources, under an index read by count', () => {
+  const raw = new Database(':memory:')
+  for (const name of ['0001_init.sql', '0002_sighting_via.sql', '0003_media_boxes.sql', '0004_unify_relation.sql', '0005_claim_links.sql', '0006_registry_tags.sql', '0007_entry_marks.sql', '0008_derived_status.sql', '0009_custom_scripts.sql', '0010_entry_layout.sql', '0011_no_default_status.sql']) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec("INSERT INTO entries(script, sightings, created_by, created_at, updated_at) VALUES ('han', 3, 'p', '2026', '2026'), ('han', 0, 'p', '2026', '2026')")
+  raw.exec("INSERT INTO entry_tags(tag, entry_id) VALUES ('all', 1), ('s:han', 1), ('all', 2)")
+
+  raw.exec(migration('0012_tag_sightings.sql'))
+
+  expect(raw.query('SELECT tag, entry_id, sightings FROM entry_tags ORDER BY entry_id, tag').all()).toEqual([
+    { tag: 'all', entry_id: 1, sightings: 3 }, { tag: 's:han', entry_id: 1, sightings: 3 }, { tag: 'all', entry_id: 2, sightings: 0 },
+  ])
+  const plan = (raw.query('EXPLAIN QUERY PLAN SELECT entry_id FROM entry_tags WHERE tag = ? AND (sightings, entry_id) < (?, ?) ORDER BY sightings DESC, entry_id DESC LIMIT 5').all('all', 9, 9) as { detail: string }[]).map(row => row.detail).join('\n')
+  expect(plan).toMatch(/USING COVERING INDEX entry_tags_by_sightings/)
+  expect(plan).not.toMatch(/TEMP B-TREE/)
 })
