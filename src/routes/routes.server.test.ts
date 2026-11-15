@@ -220,5 +220,7 @@ test('browse keeps to the decade a record was first seen in, and rejects one tha
   expect(await browseLoad(event('decade=1930'))).toMatchObject({ decade: '1930', tiles: [{ id: 1 }] })
   expect(await browseLoad(event('decade=1930&sort=earliest'))).toMatchObject({ tiles: [{ id: 1 }] })
   expect(await browseLoad(event('decade=1940'))).toMatchObject({ tiles: [] })
-  for (const query of ['decade=1937', 'decade=0', 'decade=19300', 'decade=abc']) await expect(browseLoad(event(query))).rejects.toMatchObject({ status: 404 })
+  // A year read from 「0012」 is 12, so the decades below 100 are decades too.
+  for (const query of ['decade=0', 'decade=10', 'decade=990']) expect(await browseLoad(event(query))).toMatchObject({ tiles: [] })
+  for (const query of ['decade=1937', 'decade=00', 'decade=05', 'decade=19300', 'decade=abc']) await expect(browseLoad(event(query))).rejects.toMatchObject({ status: 404 })
 })

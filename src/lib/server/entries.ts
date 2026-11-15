@@ -678,7 +678,7 @@ export function radicalTag(radical?: string | null) {
 // A decade, written as its first year (`1930`), as the key its records are listed under.
 export function decadeTag(decade?: string | null) {
   if (!decade) return null
-  return /^[1-9]\d{1,2}0$/.test(decade) ? `y:${decade}` : undefined
+  return /^(0|[1-9]\d{0,2}0)$/.test(decade) ? `y:${decade}` : undefined
 }
 
 // The marked works a list keeps to (`r:`) and leaves out (`x:`), as the keys they are listed under, or

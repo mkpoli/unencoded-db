@@ -106,7 +106,9 @@
   const count = (key: string) => data.counts?.[key] ?? 0
   // The decades records were first seen in, by century, oldest first.
   const centuries = $derived.by(() => {
-    const decades = Object.keys(data.counts ?? {}).filter(key => key.startsWith('y:')).map(key => Number(key.slice(2))).sort((a, b) => a - b)
+    // The chosen decade stays an option when it holds no record now, so the form keeps it.
+    const held = Object.keys(data.counts ?? {}).filter(key => key.startsWith('y:')).map(key => Number(key.slice(2)))
+    const decades = [...new Set([...held, ...(data.decade ? [Number(data.decade)] : [])])].sort((a, b) => a - b)
     const byCentury = new Map<number, number[]>()
     for (const decade of decades) {
       const century = Math.floor(decade / 100) * 100
