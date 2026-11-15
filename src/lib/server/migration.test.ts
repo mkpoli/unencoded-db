@@ -337,6 +337,22 @@ test('0016 gives every listed row its record\'s first year, under an index of th
   expect(plan).not.toMatch(/TEMP B-TREE/)
 })
 
+test('0017 lists every visible dated record under its decade, with its count and year, and counts each decade', () => {
+  const raw = new Database(':memory:')
+  for (const name of ['0001_init.sql', '0002_sighting_via.sql', '0003_media_boxes.sql', '0004_unify_relation.sql', '0005_claim_links.sql', '0006_registry_tags.sql', '0007_entry_marks.sql', '0008_derived_status.sql', '0009_custom_scripts.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0016_tag_year.sql']) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec(`INSERT INTO entries(script, first_year, sightings, hidden_at, merged_into, created_by, created_at, updated_at) VALUES
+    ('han', '1935', 2, NULL, NULL, 'p', '2026', '2026'), ('han', '1939', 1, NULL, NULL, 'p', '2026', '2026'), ('han', '980', 1, NULL, NULL, 'p', '2026', '2026'),
+    ('han', NULL, 1, NULL, NULL, 'p', '2026', '2026'), ('han', '1931', 1, 'hidden', NULL, 'p', '2026', '2026'), ('han', '1932', 1, NULL, 1, 'p', '2026', '2026')`)
+
+  raw.exec(migration('0017_decade_tags.sql'))
+
+  expect(raw.query("SELECT tag, entry_id, sightings, year FROM entry_tags WHERE tag GLOB 'y:*' ORDER BY entry_id").all()).toEqual([
+    { tag: 'y:1930', entry_id: 1, sightings: 2, year: 1935 }, { tag: 'y:1930', entry_id: 2, sightings: 1, year: 1939 }, { tag: 'y:980', entry_id: 3, sightings: 1, year: 980 },
+  ])
+  expect(raw.query("SELECT tag, n FROM tag_counts WHERE tag GLOB 'y:*' ORDER BY tag").all()).toEqual([{ tag: 'y:1930', n: 2 }, { tag: 'y:980', n: 1 }])
+})
+
 test('0014 reads each source\'s year as a record\'s first year is read, and counts the visible records that cite it', () => {
   const raw = new Database(':memory:')
   for (const name of ['0001_init.sql', '0002_sighting_via.sql', '0003_media_boxes.sql', '0004_unify_relation.sql', '0005_claim_links.sql', '0006_registry_tags.sql', '0007_entry_marks.sql', '0008_derived_status.sql', '0009_custom_scripts.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql']) raw.exec(migration(name))

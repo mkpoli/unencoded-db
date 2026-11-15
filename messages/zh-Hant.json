@@ -48,6 +48,8 @@
   "browse.order.earliest": "年代最早",
   "browse.order.latest": "年代最晚",
   "browse.order.dated": "只列出有年代的記錄",
+  "browse.decadeLabel": "年代",
+  "browse.decade": "{n}年代",
   "browse.order.random": "隨機",
   "browse.tileSize": "字塊大小",
   "browse.empty": "暫無符合的記錄。",
