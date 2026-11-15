@@ -802,6 +802,31 @@ export async function list(db: D1Database, listing: Listing) {
   return { tiles, next, partial: read.searching && next !== null && tiles.length < limit }
 }
 
+// The chronology: every decade records were first seen in, with how many each holds, read from the counts
+// kept with each write, and the earliest records of a page of decades, one range of the year index each.
+export const DECADES_PAGE = 12, DECADE_TILES = 8
+export const decadeCountsStatement = (db: D1Database) => db.prepare("SELECT tag, n FROM tag_counts WHERE tag >= 'y:' AND tag < 'y;' AND n > 0")
+export async function chronology(db: D1Database, from: number | null) {
+  const [{ results: counted }, all] = await Promise.all([
+    decadeCountsStatement(db).all<{ tag: string; n: number }>(),
+    db.prepare("SELECT n FROM tag_counts WHERE tag = 'all'").first<{ n: number }>(),
+  ])
+  const decades = counted.map(row => ({ decade: Number(row.tag.slice(2)), n: row.n })).sort((a, b) => a.decade - b.decade)
+  const start = from === null ? 0 : decades.findIndex(row => row.decade >= from)
+  const shown = start < 0 ? [] : decades.slice(start, start + DECADES_PAGE)
+  const reads = shown.map(row => listStatement(db, { decade: String(row.decade), order: 'earliest', limit: DECADE_TILES })!)
+  const pages = reads.length ? await db.batch<TileRow & { counted: number; matches: number }>(reads) : []
+  const dated = decades.reduce((sum, row) => sum + row.n, 0)
+  return {
+    decades,
+    shown: shown.map((row, i) => ({ ...row, tiles: pages[i].results.slice(0, DECADE_TILES).map(({ counted: _, matches: __, ...tile }) => toTile(tile)) })),
+    earlier: start > 0 ? decades[Math.max(0, start - DECADES_PAGE)].decade : null,
+    later: start >= 0 ? decades[start + DECADES_PAGE]?.decade ?? null : null,
+    dated,
+    undated: Math.max(0, (all?.n ?? 0) - dated),
+  }
+}
+
 // The counts a page shows beside its filters. Tags are counted too, and read where they are listed. The
 // radical paths (`b!`, `b:`) are stepped over by key, so the read does not grow with them.
 export const countsStatement = (db: D1Database) => db.prepare(`SELECT tag, n FROM tag_counts WHERE (tag < 'b!' OR tag >= 'b;') AND n > 0 AND tag NOT LIKE '%|%' AND tag NOT LIKE 't:%'`)

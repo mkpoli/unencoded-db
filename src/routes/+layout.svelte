@@ -8,7 +8,7 @@
   let { data, children } = $props()
 
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
-  const section = $derived(path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
+  const section = $derived(path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
   let menu = $state<HTMLDetailsElement>()
   const remember = (tag: string) => { document.cookie = `${LOCALE_COOKIE}=${tag};path=/;max-age=31536000;samesite=lax`; if (menu) menu.open = false }
   function setTheme(theme: string) {
@@ -36,6 +36,7 @@
   <nav class="site-nav" aria-label={t('nav.menu')}>
     <a class:active={section === 'browse'} aria-current={section === 'browse' ? 'page' : undefined} href={href()}>{t('nav.browse')}</a>
     <a class:active={section === 'radicals'} aria-current={section === 'radicals' ? 'page' : undefined} href={href('/radicals')}>{t('nav.radicals')}</a>
+    <a class:active={section === 'chronology'} aria-current={section === 'chronology' ? 'page' : undefined} href={href('/chronology')}>{t('nav.chronology')}</a>
     <a class:active={section === 'sources'} aria-current={section === 'sources' ? 'page' : undefined} href={href('/sources')}>{t('nav.sources')}</a>
     <a class:active={section === 'history'} aria-current={section === 'history' ? 'page' : undefined} href={href('/history')}>{t('nav.history')}</a>
     <a class:active={section === 'about'} aria-current={section === 'about' ? 'page' : undefined} href={href('/about')}>{t('nav.about')}</a>

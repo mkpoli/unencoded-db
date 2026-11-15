@@ -7,6 +7,7 @@ import { actions as addSightingActions } from './[locale]/entry/[id]/sighting/ne
 import { load as browseLoad } from './[locale]/+page.server'
 import { load as sourcesLoad } from './[locale]/sources/+page.server'
 import { load as radicalsLoad } from './[locale]/radicals/+page.server'
+import { load as chronologyLoad } from './[locale]/chronology/+page.server'
 
 const png = new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,10,0,0,0,10,8,6,0,0,0,0,0,0,0])
 
@@ -223,4 +224,12 @@ test('browse keeps to the decade a record was first seen in, and rejects one tha
   // A year read from 「0012」 is 12, so the decades below 100 are decades too.
   for (const query of ['decade=0', 'decade=10', 'decade=990']) expect(await browseLoad(event(query))).toMatchObject({ tiles: [] })
   for (const query of ['decade=1937', 'decade=00', 'decade=05', 'decade=19300', 'decade=abc']) await expect(browseLoad(event(query))).rejects.toMatchObject({ status: 404 })
+})
+
+test('the chronology starts at the first decade, and answers a start that is no decade with 404', async () => {
+  const { db } = openTestDb()
+  const event = (query: string) => ({ url: new URL(`https://example.test/en/chronology${query}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
+  expect(await chronologyLoad(event(''))).toMatchObject({ decades: [], shown: [], dated: 0, undated: 0 })
+  expect(await chronologyLoad(event('?from=1930'))).toMatchObject({ shown: [] })
+  for (const query of ['?from=1935', '?from=x', '?from=05']) await expect(chronologyLoad(event(query))).rejects.toMatchObject({ status: 404 })
 })
