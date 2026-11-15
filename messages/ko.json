@@ -53,6 +53,8 @@
   "browse.decade": "{n}년대",
   "chronology.dated": "연대 있음 {n}건",
   "chronology.undated": "연대 없음 {n}건",
+  "chronology.year": "연도",
+  "chronology.record": "기록",
   "chronology.earlier": "이전 연대",
   "chronology.later": "이후 연대",
   "browse.order.random": "섞기",

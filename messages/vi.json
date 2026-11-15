@@ -53,6 +53,8 @@
   "browse.decade": "Thập niên {n}",
   "chronology.dated": "{n} có niên đại",
   "chronology.undated": "{n} chưa có niên đại",
+  "chronology.year": "Năm",
+  "chronology.record": "Bản ghi",
   "chronology.earlier": "Sớm hơn",
   "chronology.later": "Muộn hơn",
   "browse.order.random": "Xáo trộn",
