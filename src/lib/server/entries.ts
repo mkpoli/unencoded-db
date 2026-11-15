@@ -761,6 +761,55 @@ export async function sourcePage(db: D1Database, id: number) {
   return { source, sightings: listed }
 }
 
+export const SOURCES_PAGE = 24
+// Sources read for one window: a source only hidden sightings cite is passed over, so a window reads more
+// than a page shows, and a page reads further windows, up to SOURCES_ROUNDS, while it has nothing to show.
+export const SOURCES_WINDOW = 48
+export const SOURCES_ROUNDS = 4
+// The sightings read for each source and way it is cited, hidden or not, and the records a card draws.
+export const SOURCE_CARD_READ = 32
+export const SOURCE_CARD_RECORDS = 6
+
+export type SourceCard = Source & { cover: string | null; records: Tile[]; total: number; more: boolean }
+
+// One window of sources, newest first. Each source reads its first SOURCE_CARD_READ sightings of each way
+// from its index and keeps the visible ones, so a source costs the same however long it is: a long one
+// counts only as far as that and says it has more, and one whose first sightings are all hidden is left out.
+async function sourceWindow(db: D1Database, before: number | null) {
+  const ways = [{ column: 'source_id', index: 'sightings_by_source', extra: '' }, { column: 'via_id', index: 'sightings_by_via', extra: ' AND r.source_id IS NOT r.via_id' }]
+  const seen = (way: typeof ways[number]) => `(SELECT json_group_array(json_array(r.entry_id, x.thumb_key, r.hidden_at IS NULL AND e.hidden_at IS NULL AND e.merged_into IS NULL${way.extra})) FROM (SELECT s.id, s.entry_id, s.source_id, s.via_id, s.hidden_at FROM sightings s INDEXED BY ${way.index} WHERE s.${way.column} = c.id ORDER BY s.id LIMIT ${SOURCE_CARD_READ + 1}) r CROSS JOIN entries e ON e.id = r.entry_id LEFT JOIN sighting_media x ON x.sighting_id = r.id AND x.position = 0)`
+  type Row = Source & { direct: string; via: string }
+  const { results } = await db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, ${seen(ways[0])} AS direct, ${seen(ways[1])} AS via FROM sources c WHERE c.id < ? ORDER BY c.id DESC LIMIT ?`)
+    .bind(before ?? Number.MAX_SAFE_INTEGER, SOURCES_WINDOW + 1).all<Row>()
+  const cards: (Source & { cover: string | null; ids: number[]; total: number; more: boolean })[] = []
+  let consumed = 0
+  for (const { direct, via, ...source } of results.slice(0, SOURCES_WINDOW)) {
+    consumed++
+    // One sighting past the read says whether there are more, and is not counted.
+    const lists = [direct, via].map(list => JSON.parse(list) as [number, string | null, number][])
+    const rows = lists.flatMap(list => list.slice(0, SOURCE_CARD_READ)).filter(([, , visible]) => visible)
+    if (!rows.length) continue
+    const ids = [...new Set(rows.map(([id]) => id))]
+    cards.push({ ...source, cover: rows.find(([, thumb]) => thumb)?.[1] ?? null, ids, total: ids.length, more: lists.some(list => list.length > SOURCE_CARD_READ) })
+    if (cards.length === SOURCES_PAGE) break
+  }
+  return { cards, next: consumed < results.length ? results[consumed - 1].id : null }
+}
+
+// A page of the source gallery: its sources, each with the records seen in it, and the cursor of the next page.
+export async function sourceList(db: D1Database, before?: number | null) {
+  let window = await sourceWindow(db, before ?? null)
+  for (let round = 1; round < SOURCES_ROUNDS && !window.cards.length && window.next !== null; round++) window = await sourceWindow(db, window.next)
+  const { cards, next } = window
+  const drawn = [...new Set(cards.flatMap(card => card.ids.slice(0, SOURCE_CARD_RECORDS)))]
+  const tiles = new Map<number, Tile>()
+  if (drawn.length) {
+    const { results: rows } = await db.prepare(`SELECT ${TILE_COLUMNS} FROM json_each(?) j CROSS JOIN entries e ON e.id = j.value WHERE e.hidden_at IS NULL AND e.merged_into IS NULL`).bind(JSON.stringify(drawn)).all<TileRow>()
+    for (const row of rows) tiles.set(row.id, toTile(row))
+  }
+  return { sources: cards.map(({ ids, ...card }): SourceCard => ({ ...card, records: ids.slice(0, SOURCE_CARD_RECORDS).flatMap(id => tiles.get(id) ?? []) })), next }
+}
+
 // The records that state this value: the ones described by a sequence, given a code, or related to a character.
 export async function claimedBy(db: D1Database, kind: Claim['kind'], value: string, limit = 6) {
   const { results } = await db.prepare('SELECT e.id, e.ids, e.cover_key FROM claims k CROSS JOIN entries e ON e.id = k.entry_id WHERE k.kind = ? AND k.value = ? AND e.merged_into IS NULL AND e.hidden_at IS NULL ORDER BY k.entry_id LIMIT ?').bind(kind, value, limit).all<{ id: number; ids: string | null; cover_key: string | null }>()
