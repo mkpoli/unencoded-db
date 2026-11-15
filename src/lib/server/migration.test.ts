@@ -315,7 +315,7 @@ test('0012 gives every listed row its record\'s count of sources, under an index
   expect(raw.query('SELECT tag, entry_id, sightings FROM entry_tags ORDER BY entry_id, tag').all()).toEqual([
     { tag: 'all', entry_id: 1, sightings: 3 }, { tag: 's:han', entry_id: 1, sightings: 3 }, { tag: 'all', entry_id: 2, sightings: 0 },
   ])
-  const plan = (raw.query('EXPLAIN QUERY PLAN SELECT entry_id FROM entry_tags WHERE tag = ? AND (sightings, entry_id) < (?, ?) ORDER BY sightings DESC, entry_id DESC LIMIT 5').all('all', 9, 9) as { detail: string }[]).map(row => row.detail).join('\n')
+  const plan = (raw.query("EXPLAIN QUERY PLAN SELECT entry_id FROM entry_tags WHERE tag = ? AND (sightings, entry_id) < (?, ?) AND tag NOT GLOB 'w:*' ORDER BY sightings DESC, entry_id DESC LIMIT 5").all('all', 9, 9) as { detail: string }[]).map(row => row.detail).join('\n')
   expect(plan).toMatch(/USING COVERING INDEX entry_tags_by_sightings/)
   expect(plan).not.toMatch(/TEMP B-TREE/)
 })
