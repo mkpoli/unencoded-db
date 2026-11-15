@@ -21,15 +21,16 @@
             {#if source.cover}<img src={media(source.cover)} alt="" loading="lazy" decoding="async" />{:else}<span class="blank">{t('browse.noImage')}</span>{/if}
           </a>
           <div class="body">
-            <a class="name" href={href(`/source/${source.id}`)}>{name}</a>
+            <h2 class="name"><a href={href(`/source/${source.id}`)}>{name}</a></h2>
             {#if byline}<span class="byline">{byline}</span>{/if}
             {#if source.title && host(source.url)}<span class="byline">{host(source.url)}</span>{/if}
             <span class="count">{count(source.total, source.more)}</span>
           </div>
           <div class="records">
             {#each source.records as tile (tile.id)}
-              <a class="record" href={href(`/entry/${tile.id}`)} title="{tile.ids ?? ''} {recordCode(tile.id)}">
-                {#if tile.ids}<IdsGlyph ids={tile.ids} layout={tile.layout} path={data.glyphs?.[tile.id]} />
+              {@const label = [tile.ids, recordCode(tile.id)].filter(Boolean).join(' ')}
+              <a class="record" href={href(`/entry/${tile.id}`)} title={label}>
+                {#if tile.ids}<IdsGlyph ids={tile.ids} layout={tile.layout} path={data.glyphs?.[tile.id]} /><span class="sr-only">{label}</span>
                 {:else if tile.cover_key}<img src={media(tile.cover_key)} alt={t('entry.record', { id: recordCode(tile.id) })} loading="lazy" decoding="async" />
                 {:else}<span class="code">{recordCode(tile.id)}</span>{/if}
               </a>
@@ -38,7 +39,7 @@
         </article>
       {/each}
     </div>
-  {:else}
+  {:else if data.next === null}
     <p class="empty muted">{t('sources.empty')}</p>
   {/if}
   {#if data.next !== null}<a class="button more" href="?before={data.next}">{t('browse.more')}</a>{/if}
@@ -52,8 +53,8 @@
   .card:hover .cover img { opacity:.9 }
   .blank { color:var(--muted); font-size:12px }
   .body { display:flex; flex-direction:column; gap:2px; padding:12px 14px 0; min-width:0 }
-  .name { font-weight:600; line-height:1.35; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden }
-  .name:hover { text-decoration:underline }
+  .name { margin:0; font-size:14px; font-weight:600; line-height:1.35; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden }
+  .name a:hover { text-decoration:underline }
   .byline { color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
   .records { display:flex; flex-wrap:wrap; align-items:center; gap:4px; padding:12px 14px 14px; margin-top:auto }
   .record { display:grid; place-items:center; width:36px; height:36px; border-radius:6px; background:var(--surface-tile); color:var(--ink); overflow:hidden }
