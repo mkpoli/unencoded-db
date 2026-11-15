@@ -819,7 +819,7 @@ export async function list(db: D1Database, listing: Listing) {
     if (tiles.length === limit) break
   }
   const next = consumed < results.length ? cursorAt(listing.order ?? ORDER, results[consumed - 1]) : null
-  return { tiles, next, partial: read.searching && next !== null && tiles.length < limit }
+  return { tiles, next, partial: read.searching && next !== null && tiles.length < limit, read: consumed }
 }
 
 // A search is counted once, from the shortest range it is tested against: a key, a word or the exact
@@ -844,8 +844,9 @@ export function totalStatement(db: D1Database, listing: Listing, from: TotalRang
     .bind(from.exact ?? from.tag, ...(exact ? [exact] : []), ...tags)
 }
 
-// How many records a search finds, or null for a listing that is no search.
-export async function searchTotal(db: D1Database, listing: Listing): Promise<{ n: number; floor: boolean } | null> {
+// How many records a search finds, and how many it looks through: the shortest of its keys, which `list`
+// reads. Null for a listing that is no search.
+export async function searchTotal(db: D1Database, listing: Listing): Promise<{ n: number; floor: boolean; pool: number } | null> {
   const plan = listPlan(listing)
   const keys = plan?.keys.length ? plan.keys : ['all']
   if (!plan || (!plan.exact && !plan.words.length && keys.length < 2)) return null
@@ -861,9 +862,10 @@ export async function searchTotal(db: D1Database, listing: Listing): Promise<{ n
     ...(plan.exact ? [{ exact: plan.exact, size: read[plan.words.length].results[0]?.n ?? 0 }] : []),
   ]
   const from = ranges.reduce((least, range) => range.size < least.size ? range : least)
-  if (!from.size) return { n: 0, floor: false }
+  const pool = Math.min(...keys.map(tag => sizes.get(tag) ?? 0))
+  if (!from.size) return { n: 0, floor: false, pool }
   const counted = await totalStatement(db, listing, from)!.first<{ n: number }>()
-  return { n: counted?.n ?? 0, floor: from.size > TOTAL_READ }
+  return { n: counted?.n ?? 0, floor: from.size > TOTAL_READ, pool }
 }
 
 // The chronology (年表): every dated record in the order of its earliest year, each with the evidence

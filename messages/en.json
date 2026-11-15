@@ -292,6 +292,7 @@
   "report.send": "Send report",
   "report.sent": "Thank you. A moderator will look at it.",
   "browse.searchSegmentEmpty": "No matches in this set.",
+  "browse.searched": "Searched {n} of {of}",
   "browse.found": "{n} found",
   "browse.pageLeft": "{n} more page",
   "browse.pagesLeft": "{n} more pages",

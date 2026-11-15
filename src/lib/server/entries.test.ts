@@ -97,8 +97,8 @@ describe('marked works', () => {
   test('a short list is read by its own key, however long the others are', async () => {
     const rare = await createEntry(db, fields({ claims: [newClaim('relation', '哦', { relationship: 'homograph' })] }), seen(), [], who)
     for (let i = 0; i < SEARCH_WINDOW + 10; i++) await createEntry(db, fields(), seen(), [], who)
-    expect(await list(db, { script: 'han', filter: 'homograph', without: ['mj'] })).toEqual({ tiles: [expect.objectContaining({ id: rare })], next: null, partial: false })
-    expect(await list(db, { script: 'han', filter: 'homograph', within: ['mj'] })).toEqual({ tiles: [], next: null, partial: false })
+    expect(await list(db, { script: 'han', filter: 'homograph', without: ['mj'] })).toEqual({ tiles: [expect.objectContaining({ id: rare })], next: null, partial: false, read: 1 })
+    expect(await list(db, { script: 'han', filter: 'homograph', within: ['mj'] })).toEqual({ tiles: [], next: null, partial: false, read: 0 })
   })
 
   test('a work that is not marked names no list', async () => {
@@ -1235,12 +1235,12 @@ describe('search total', () => {
     await createEntry(db, described('⿰木木'), seen(), [], who)
     await createEntry(db, described('⿰木水'), seen(), [], who)
     await createEntry(db, described('⿰水水'), seen({ place: 'A temple in Lukang' }), [], who)
-    expect(await searchTotal(db, { script: 'han', query: '木' })).toEqual({ n: 2, floor: false })
-    expect(await searchTotal(db, { script: 'han', query: '木 水' })).toEqual({ n: 1, floor: false })
-    expect(await searchTotal(db, { script: 'han', query: '⿰木水' })).toEqual({ n: 1, floor: false })
-    expect(await searchTotal(db, { script: 'han', query: 'Lukang' })).toEqual({ n: 1, floor: false })
-    expect(await searchTotal(db, { script: 'han', query: 'absent' })).toEqual({ n: 0, floor: false })
-    expect(await searchTotal(db, { script: 'han', filter: 'variant', query: '木' })).toEqual({ n: 0, floor: false })
+    expect(await searchTotal(db, { script: 'han', query: '木' })).toEqual({ n: 2, floor: false, pool: 3 })
+    expect(await searchTotal(db, { script: 'han', query: '木 水' })).toEqual({ n: 1, floor: false, pool: 3 })
+    expect(await searchTotal(db, { script: 'han', query: '⿰木水' })).toEqual({ n: 1, floor: false, pool: 3 })
+    expect(await searchTotal(db, { script: 'han', query: 'Lukang' })).toEqual({ n: 1, floor: false, pool: 3 })
+    expect(await searchTotal(db, { script: 'han', query: 'absent' })).toEqual({ n: 0, floor: false, pool: 3 })
+    expect(await searchTotal(db, { script: 'han', filter: 'variant', query: '木' })).toEqual({ n: 0, floor: false, pool: 0 })
     // A list with nothing to test is no search, and its count is the chip's.
     expect(await searchTotal(db, { script: 'han' })).toBeNull()
   })
@@ -1253,8 +1253,8 @@ describe('search total', () => {
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'w:wide', id FROM entries")
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'w:even', id FROM entries WHERE id % 2 = 0")
     raw.prepare("INSERT INTO tag_counts(tag, n) VALUES ('all', ?)").run(n)
-    expect(await searchTotal(db, { query: 'wide' })).toEqual({ n: TOTAL_READ, floor: true })
-    expect(await searchTotal(db, { query: 'wide even' })).toEqual({ n: Math.floor(n / 2), floor: false })
+    expect(await searchTotal(db, { query: 'wide' })).toEqual({ n: TOTAL_READ, floor: true, pool: n })
+    expect(await searchTotal(db, { query: 'wide even' })).toEqual({ n: Math.floor(n / 2), floor: false, pool: n })
   })
 
   test('each read is a range of an index', () => {

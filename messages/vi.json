@@ -292,6 +292,7 @@
   "report.send": "Gửi báo cáo",
   "report.sent": "Cảm ơn bạn. Người kiểm duyệt sẽ xem xét.",
   "browse.searchSegmentEmpty": "Không có kết quả phù hợp trong phần này.",
+  "browse.searched": "Đã tìm {n}/{of}",
   "browse.found": "Tìm thấy {n}",
   "browse.pageLeft": "Còn {n} trang",
   "browse.pagesLeft": "Còn {n} trang",

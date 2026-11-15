@@ -292,6 +292,7 @@
   "report.send": "신고 보내기",
   "report.sent": "감사합니다. 관리자가 확인하겠습니다.",
   "browse.searchSegmentEmpty": "이 범위에 일치하는 기록이 없습니다.",
+  "browse.searched": "{of}건 중 {n}건 검색함",
   "browse.found": "검색 결과 {n}건",
   "browse.pageLeft": "{n}페이지 남음",
   "browse.pagesLeft": "{n}페이지 남음",
