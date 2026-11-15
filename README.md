@@ -37,7 +37,7 @@ Without client credentials, the site offers anonymous contributions. Signing in 
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and, optionally, a second source it was found through |
 | `sighting_media` | A sighting's pictures, each with its mark and thumbnail |
 | `revisions` | The journal: every state of an entry or a sighting, with its author |
-| `entry_tags`, `tag_counts` | The index behind lists, filters and search |
+| `entry_tags`, `tag_counts` | The index behind lists, filters, radicals and search |
 | `reports`, `people`, `sessions` | Moderation and identity |
 
 A claim is a row of `kind`, `value` and JSON `data`; the kinds and their form fields are in `src/lib/claims.ts`, and a new kind needs no migration. Categories and collections are listed in `src/lib/genres.ts`. The character sets, dictionaries and glyph registries a record can state a code in are listed in `src/lib/registries.ts`; a record with a Unicode code for an ideograph also counts as registered in zi.tools, yedict and GlyphWiki. Unicode, zi.tools, yedict, GlyphWiki and MJ carry a mark, and the list narrows to the records in a marked work with `?in=<id>` or to the ones not in it with `?out=<id>`, each repeatable. `entries.marks` repeats the marked works a record is in, for the short tags on a gallery tile, and the JSON export gives it as an array.
@@ -60,6 +60,16 @@ A record's id is stored as an integer and shown in hexadecimal as `R+A1C2`, besi
 
 A code typed whole into search, in either spelling, opens its record.
 
+## Radicals
+
+A record is filed under a radical read from its first description. The head of a description is the part that holds its radical, and `src/lib/radicals.ts` chooses it by how often each part, in each place of a description, holds the radical of an encoded ideograph. The path runs from a Kangxi radical through each character down to the head: ⿺克卡 is filed `儿兄克`. A radical the record states stands in place of the one read, unless the description leads further down the same path.
+
+A record holds a `b:` tag for its path and for each path above it, so `?radical=儿` lists the records under 克 as well. A path longer than a Kangxi radical stands as a radical of its own once ten records stay in it after the branches standing under it are taken out; until then its records show under the path above. `/radicals` lists the radicals that stand.
+
+Radicals beyond the 214 of the Kangxi dictionary and the threshold of ten records were proposed by NGWU YOH (chat messages, 2026-11-06 to 2026-11-15, unpublished).
+
+A record is filed when it is written. `bun scripts/file-radicals.ts --local` (or `--remote`) files every listed record again, for records written before radicals were indexed and after the tables are rebuilt.
+
 ## Search index
 
 Each entry indexes at most 400 distinct terms, drawn from its fields, its claims and its visible sightings. Terms beyond that limit are not searchable; changing this limit requires reindexing existing entries.
@@ -75,6 +85,8 @@ A description can carry a layout: the parts moved, scaled or turned from where t
 The IDS editor uses separately licensed data and fonts. See the [third-party notices](static/third-party/ids-input/NOTICE.md); redistribution rights for some materials remain unverified.
 
 `static/unihan/` holds the radical, total stroke count, definition, readings and variants of each ideograph, taken from `kRSUnicode`, `kTotalStrokes`, `kDefinition`, `kMandarin`, `kCantonese`, `kJapanese`, `kHangul`, `kVietnamese` and the variant fields of [Unihan 18.0.0](https://www.unicode.org/Public/18.0.0/ucd/Unihan.zip) (Copyright Unicode, Inc., [Unicode License v3](https://www.unicode.org/license.txt)). `bun scripts/build-unihan.ts <Unihan.zip>` rebuilds it.
+
+`src/lib/radical-tables.ts` holds what files a description under a radical: the radical of each ideograph and the forms of each radical from `kRSUnicode`, the radicals' stroke counts from `kTotalStrokes` (both Unihan 18.0.0), the ideograph each radical and stroke character stands for from [EquivalentUnifiedIdeograph 18.0.0](https://www.unicode.org/Public/18.0.0/ucd/EquivalentUnifiedIdeograph.txt) (Copyright Unicode, Inc., [Unicode License v3](https://www.unicode.org/license.txt)), and counts over BabelStone's IDS table of how often each part of a description holds the radical. `bun scripts/build-radicals.ts <Unihan.zip> <EquivalentUnifiedIdeograph.txt>` rebuilds it.
 
 `src/lib/unicode-age.ts` holds the version of Unicode that first assigned each code point of the ideograph blocks, taken from [DerivedAge 18.0.0](https://www.unicode.org/Public/18.0.0/ucd/DerivedAge.txt) (Copyright Unicode, Inc., [Unicode License v3](https://www.unicode.org/license.txt)). `bun scripts/build-unicode-age.ts <DerivedAge.txt>` rebuilds it.
 
