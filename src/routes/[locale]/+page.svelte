@@ -143,7 +143,7 @@
         {#each groups as group (group.parent.slug)}<optgroup label={group.parent.label}><option value={group.parent.slug}>{group.parent.label} ({count(`g:${group.parent.slug}`)})</option>{#each group.children as genre (genre.slug)}<option value={genre.slug}>{genre.label} ({count(`g:${genre.slug}`)})</option>{/each}</optgroup>{/each}
       </select></div>
     {/if}
-    <div class="field radical"><span class="label">{t('field.radical')}</span>{#if data.radical}{@const radical = [...data.radical].at(-1)}<input type="hidden" name="radical" value={data.radical} /><a class="pinned" href={unfiled} aria-label="{radical} ×"><span class="glyph">{radical}</span> <span aria-hidden="true">×</span></a>{:else}<a class="input choose" href={href('/radicals')}>{t('browse.all')}<span aria-hidden="true">›</span></a>{/if}</div>
+    <div class="field radical"><span class="label" id="radical-label">{t('field.radical')}</span>{#if data.radical}{@const radical = [...data.radical].at(-1)}<input type="hidden" name="radical" value={data.radical} /><a class="pinned" href={unfiled} aria-label="{t('field.radical')} {radical} ×"><span class="glyph">{radical}</span> <span aria-hidden="true">×</span></a>{:else}<a class="input choose" id="radical-choice" href={href('/radicals')} aria-labelledby="radical-label radical-choice">{t('browse.all')}<span aria-hidden="true">›</span></a>{/if}</div>
     {#if data.order !== ORDER}<input type="hidden" name="sort" value={data.order} />{/if}
     {#if data.seed !== null}<input type="hidden" name="seed" value={data.seed} />{/if}
     {#each data.within as id}<input type="hidden" name="in" value={id} />{/each}{#each data.without as id}<input type="hidden" name="out" value={id} />{/each}
