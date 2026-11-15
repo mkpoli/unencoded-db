@@ -231,7 +231,8 @@ test('browse keeps to the decade a record was first seen in, and rejects one tha
 test('the chronology starts at the first decade, and answers a start that is no decade with 404', async () => {
   const { db } = openTestDb()
   const event = (query: string) => ({ url: new URL(`https://example.test/en/chronology${query}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
-  expect(await chronologyLoad(event(''))).toMatchObject({ decades: [], shown: [], dated: 0, undated: 0 })
-  expect(await chronologyLoad(event('?from=1930'))).toMatchObject({ shown: [], earlier: null, later: null })
-  for (const query of ['?from=1935', '?from=x', '?from=05']) await expect(chronologyLoad(event(query))).rejects.toMatchObject({ status: 404 })
+  expect(await chronologyLoad(event(''))).toMatchObject({ decades: [], entries: [], dated: 0, undated: 0 })
+  expect(await chronologyLoad(event('?from=1930'))).toMatchObject({ entries: [], earlier: null, later: null })
+  expect(await chronologyLoad(event('?at=1935.4'))).toMatchObject({ entries: [] })
+  for (const query of ['?from=1935', '?from=x', '?from=05', '?at=1935', '?at=1935.0']) await expect(chronologyLoad(event(query))).rejects.toMatchObject({ status: 404 })
 })

@@ -53,6 +53,8 @@
   "browse.decade": "{n}年代",
   "chronology.dated": "{n}条有年代",
   "chronology.undated": "{n}条未有年代",
+  "chronology.year": "年",
+  "chronology.record": "记录",
   "chronology.earlier": "更早",
   "chronology.later": "更晚",
   "browse.order.random": "随机",

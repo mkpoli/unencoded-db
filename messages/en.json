@@ -53,6 +53,8 @@
   "browse.decade": "{n}s",
   "chronology.dated": "{n} dated",
   "chronology.undated": "{n} undated",
+  "chronology.year": "Year",
+  "chronology.record": "Record",
   "chronology.earlier": "Earlier",
   "chronology.later": "Later",
   "browse.order.random": "Shuffle",

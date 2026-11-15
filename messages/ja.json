@@ -53,6 +53,8 @@
   "browse.decade": "{n}年代",
   "chronology.dated": "年代あり{n}件",
   "chronology.undated": "年代なし{n}件",
+  "chronology.year": "年",
+  "chronology.record": "記録",
   "chronology.earlier": "古い年代",
   "chronology.later": "新しい年代",
   "browse.order.random": "シャッフル",

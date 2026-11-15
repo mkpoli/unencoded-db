@@ -1,10 +1,12 @@
 <script lang="ts">
   import Seo from '$lib/components/Seo.svelte'
-  import Tile from '$lib/components/Tile.svelte'
-  import { href, t } from '$lib/t'
+  import IdsGlyph from '$lib/components/IdsGlyph.svelte'
+  import { recordCode } from '$lib/code'
+  import { href, media, t } from '$lib/t'
   let { data } = $props()
   const decadeList = (decade: number) => href(`?decade=${decade}&sort=earliest`)
-  const pageFrom = (decade: number) => href(`/chronology?from=${decade}`)
+  const fromDecade = (decade: number) => href(`/chronology?from=${decade}#y${decade}`)
+  const at = (place: string) => href(`/chronology?at=${place}`)
   // Every decade from the first to the last, empty ones too, so the gaps show on the bar chart.
   const span = $derived.by(() => {
     if (!data.decades.length) return []
@@ -13,15 +15,19 @@
     return Array.from({ length: (last - first) / 10 + 1 }, (_, i) => ({ decade: first + i * 10, n: held.get(first + i * 10) ?? 0 }))
   })
   const most = $derived(Math.max(1, ...data.decades.map(row => row.n)))
-  // The page's decades under their centuries.
-  const centuries = $derived.by(() => {
-    const groups: { century: number; rows: typeof data.shown }[] = []
-    for (const row of data.shown) {
-      const century = Math.floor(row.decade / 100) * 100
-      if (groups.at(-1)?.century === century) groups.at(-1)!.rows.push(row)
-      else groups.push({ century, rows: [row] })
+  const counts = $derived(new Map(data.decades.map(row => [row.decade, row.n])))
+  // The rows of the table: a decade's heading where a new decade begins, then each record, its year
+  // written only where the year changes.
+  const rows = $derived.by(() => {
+    const out: ({ kind: 'decade'; decade: number } | { kind: 'entry'; entry: (typeof data.entries)[number]; showYear: boolean })[] = []
+    let decade: number | null = null, year: number | null = null
+    for (const entry of data.entries) {
+      const here = Math.floor(entry.year / 10) * 10
+      if (here !== decade) { out.push({ kind: 'decade', decade: here }); decade = here; year = null }
+      out.push({ kind: 'entry', entry, showYear: entry.year !== year })
+      year = entry.year
     }
-    return groups
+    return out
   })
 </script>
 
@@ -35,29 +41,38 @@
     <ol class="bars" aria-label={t('nav.chronology')}>
       {#each span as row (row.decade)}
         <li class:century={row.decade % 100 === 0}>
-          {#if row.n}<a href={decadeList(row.decade)} title="{t('browse.decade', { n: row.decade })} · {row.n}"><span class="bar" style:height="{Math.max(6, (row.n / most) * 100)}%"></span><span class="sr-only">{t('browse.decade', { n: row.decade })} {row.n}</span></a>
+          {#if row.n}<a href={fromDecade(row.decade)} title="{t('browse.decade', { n: row.decade })} · {row.n}"><span class="bar" style:height="{Math.max(6, (row.n / most) * 100)}%"></span><span class="sr-only">{t('browse.decade', { n: row.decade })} {row.n}</span></a>
           {:else}<span class="gap" title={t('browse.decade', { n: row.decade })}></span>{/if}
           {#if row.decade % 100 === 0 || (row.decade === span[0].decade && 100 - (row.decade % 100) >= 50)}<span class="tick" aria-hidden="true">{row.decade}</span>{/if}
         </li>
       {/each}
     </ol>
-    {#each centuries as group (group.century)}
-      <section class="stack century-block">
-        <h2>{group.century}–{group.century + 99}</h2>
-        {#each group.rows as row (row.decade)}
-          <div class="decade" id="y{row.decade}">
-            <a class="label" href={decadeList(row.decade)}><span class="name">{t('browse.decade', { n: row.decade })}</span><span class="n">{row.n}</span></a>
-            <div class="tiles">{#each row.tiles as tile (tile.id)}<Tile {tile} glyph={data.glyphs[tile.id]} />{/each}</div>
-          </div>
+    {#if data.earlier}<a class="more earlier" href={at(data.earlier)}>↑ {t('chronology.earlier')}</a>{/if}
+    <table class="chronicle">
+      <thead><tr><th scope="col" class="year">{t('chronology.year')}</th><th scope="col">{t('chronology.record')}</th></tr></thead>
+      <tbody>
+        {#each rows as row (row.kind === 'decade' ? `d${row.decade}` : `e${row.entry.tile.id}`)}
+          {#if row.kind === 'decade'}
+            <tr class="decade" id="y{row.decade}"><th scope="rowgroup" colspan="2"><a href={decadeList(row.decade)}>{t('browse.decade', { n: row.decade })}</a><span class="n">{counts.get(row.decade) ?? 0}</span></th></tr>
+          {:else}
+            {@const entry = row.entry}
+            <tr class="entry" class:first={row.showYear}>
+              <td class="year">{#if row.showYear}{entry.year}{/if}</td>
+              <td class="what">
+                <a class="record" href={href(`/entry/${entry.tile.id}`)}>
+                  <span class="glyph">{#if entry.tile.ids}<IdsGlyph ids={entry.tile.ids} layout={entry.tile.layout} path={data.glyphs[entry.tile.id]} />{:else if entry.tile.cover_key}<img src={media(entry.tile.cover_key)} alt="" loading="lazy" decoding="async" />{/if}</span>
+                  <span class="text">
+                    <span class="name">{#if entry.tile.ids}<span class="ids">{entry.tile.ids}</span>{/if}<span class="code">{recordCode(entry.tile.id)}</span></span>
+                    {#if entry.sighting}<span class="source">{#if entry.sighting.title}『{entry.sighting.title}』{:else if entry.sighting.place}{entry.sighting.place}{/if}{#if entry.sighting.author}<span class="muted"> {entry.sighting.author}</span>{/if}{#if entry.sighting.date}<span class="date" title={t(entry.tile.firstYearKind === 'original' ? 'field.originalDate' : 'field.reportDate')}>（{entry.sighting.date}）</span>{/if}</span>{/if}
+                  </span>
+                </a>
+              </td>
+            </tr>
+          {/if}
         {/each}
-      </section>
-    {/each}
-    {#if data.earlier !== null || data.later !== null}
-      <nav class="pager">
-        {#if data.earlier !== null}<a class="button" href={pageFrom(data.earlier)}>← {t('chronology.earlier')}</a>{/if}
-        {#if data.later !== null}<a class="button" href={pageFrom(data.later)}>{t('chronology.later')} →</a>{/if}
-      </nav>
-    {/if}
+      </tbody>
+    </table>
+    {#if data.later}<a class="more later" href={at(data.later)}>↓ {t('chronology.later')}</a>{/if}
   {:else}
     <p class="empty muted">{t('browse.emptyAll')}</p>
   {/if}
@@ -74,16 +89,30 @@
   .bars a:hover .bar, .bars a:focus-visible .bar { background:var(--ink) }
   .gap { display:block; width:100%; height:2px; background:var(--line) }
   .tick { position:absolute; inset-block-start:calc(100% + 4px); inset-inline-start:2px; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap }
-  h2 { margin:8px 0 0; padding-bottom:6px; border-bottom:1px solid var(--line); font-size:15px; color:var(--muted); font-variant-numeric:tabular-nums }
-  .century-block { gap:20px }
-  .decade { display:grid; grid-template-columns:120px minmax(0,1fr); gap:16px; align-items:start }
-  .label { display:flex; flex-direction:column; gap:2px; padding-top:4px }
-  .label .name { font-weight:600 }
-  .label .n { font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
-  .label:hover .name { text-decoration:underline }
-  /* A decade's earliest records sit in one row. */
-  .tiles { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:12px 10px }
-  .pager { display:flex; justify-content:space-between; gap:8px }
+  /* The 年表: one axis down the page, the year in a shaded gutter beside what was first seen in it. */
+  .chronicle { width:100%; border-collapse:collapse; border:1px solid var(--line-strong); font-size:14px; line-height:1.5 }
+  .chronicle thead th { padding:10px 12px; border-bottom:1px solid var(--line-strong); font-size:13px; font-weight:500; color:var(--muted); text-align:start }
+  .chronicle th.year, .chronicle td.year { width:72px; padding:8px 10px; background:var(--surface-sunken); color:var(--muted); font-size:12.5px; font-variant-numeric:tabular-nums; text-align:end; vertical-align:top; white-space:nowrap }
+  .chronicle thead th.year { text-align:end }
+  .decade th { padding:14px 12px 6px; border-top:1px solid var(--line-strong); background:var(--surface); text-align:start; font-size:13px; font-weight:600 }
+  .decade a:hover { text-decoration:underline }
+  .decade .n { margin-inline-start:8px; font-weight:400; color:var(--muted); font-variant-numeric:tabular-nums }
+  .entry.first td { border-top:1px solid var(--line) }
+  .decade + .entry.first td { border-top:none }
+  .what { padding:4px 12px }
+  .record { display:flex; align-items:center; gap:12px; min-width:0; padding:2px 0 }
+  .record:hover .ids, .record:hover .source { text-decoration:underline; text-decoration-color:var(--line-strong) }
+  .glyph { flex:none; display:grid; place-items:center; width:40px; height:40px; overflow:hidden; border-radius:4px; background:var(--surface-tile); color:var(--ink) }
+  .glyph :global(.sequence) { font-size:9px; padding:1px }
+  .glyph img { width:100%; height:100%; object-fit:contain }
+  .text { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 12px; min-width:0 }
+  .name { display:inline-flex; align-items:baseline; gap:8px }
+  .ids { color:var(--muted) }
+  .code { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums }
+  .source { min-width:0; overflow-wrap:anywhere }
+  .date { color:var(--muted); font-variant-numeric:tabular-nums }
+  .more { align-self:center; font-size:14px; color:var(--muted) }
+  .more:hover { color:var(--ink) }
   .empty { padding:48px 16px; text-align:center }
-  @media(max-width:640px) { .decade { grid-template-columns:minmax(0,1fr); gap:8px } .label { flex-direction:row; align-items:baseline; gap:8px } .tiles { grid-template-columns:repeat(4,minmax(0,1fr)) } }
+  @media(max-width:640px) { .chronicle th.year, .chronicle td.year { width:52px; padding-inline:6px } .what { padding-inline:8px } }
 </style>
