@@ -14,7 +14,7 @@ import { genreOf } from '$lib/genres'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
 import { hashHex } from './image'
-import { ORDER, SEEDS, seedOf, type Order } from '$lib/order'
+import { ORDER, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
 
 export type EntryFields = { script: string; script_other: string | null; description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
 export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; via_url: string | null; via_title: string | null; via_author: string | null; via_publisher: string | null; via_report_date: string | null; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null }
@@ -255,7 +255,8 @@ const CITED_IN_SNAPSHOT = `UPDATE revisions SET snapshot = json_set(snapshot, '$
 async function citationOf(db: D1Database, values: (string | null)[]) {
   if (values.every(value => value === null)) return { hash: null, statements: [] }
   const hash = await hashHex(JSON.stringify(values))
-  return { hash, statements: [db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}) VALUES(?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values)] }
+  const year = firstYear(values[CITATION_FIELDS.indexOf('report_date')])?.n ?? null
+  return { hash, statements: [db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year) VALUES(?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year)] }
 }
 // The hashes bind to the source and via columns, in that order.
 async function sourceOf(db: D1Database, fields: SightingFields) {
@@ -280,6 +281,15 @@ const OCCURRENCE_COLUMNS = OCCURRENCE_FIELDS.join(', ')
 const OCCURRENCE_MARKS = OCCURRENCE_FIELDS.map(() => '?').join(', ')
 
 export type SightingDraft = { fields: SightingFields; media: StoredImage[] }
+
+// Counts again the visible records that cite each source a record's sightings cite, and the sources in
+// `also`, which a sighting cited before this write. It runs after the write in the same batch.
+const CITING = (column: string, index: string) => `SELECT s.entry_id FROM sightings s INDEXED BY ${index} CROSS JOIN entries e ON e.id = s.entry_id WHERE s.${column} = sources.id AND s.hidden_at IS NULL AND e.hidden_at IS NULL AND e.merged_into IS NULL`
+function recount(db: D1Database, entry: number | string, also: (number | null)[] = []) {
+  const { sql, values } = owned(entry)
+  return db.prepare(`UPDATE sources SET records = (SELECT count(*) FROM (${CITING('source_id', 'sightings_by_source')} UNION ${CITING('via_id', 'sightings_by_via')})) WHERE id IN (SELECT source_id FROM sightings WHERE entry_id = ${sql} UNION SELECT via_id FROM sightings WHERE entry_id = ${sql} UNION SELECT value FROM json_each(?))`)
+    .bind(...values, ...values, JSON.stringify(also.filter(id => id !== null)))
+}
 
 // `more` are further sightings the record starts with. They go in the same batch as the record and its
 // first sighting, so all of them are saved or none is. The sightings have no ids before this write, so a
@@ -311,6 +321,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
     db.prepare(`UPDATE entries SET ${SUMMARY_SET} WHERE id = ${ENTRY_SEQ}`).bind(...summaryValues(claims, summary)),
     db.prepare(`INSERT INTO entry_tags(tag, entry_id, sightings) SELECT value, ${ENTRY_SEQ}, CASE WHEN value GLOB 'w:*' THEN 0 ELSE ? END FROM json_each(?)`).bind(summary.visible.length, JSON.stringify(tags)),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),
+    recount(db, ENTRY_SEQ),
   ])
   return results[0].results[0].id
 }
@@ -396,6 +407,7 @@ export async function addSighting(db: D1Database, id: number, fields: SightingFi
         db.prepare(`INSERT INTO revisions(entry_id, sighting_id, kind, rev, snapshot, actor, at, ip_hash) VALUES(?, ${SIGHTING_SEQ}, 'sighting', 1, ?, ?, ?, ?)`)
           .bind(id, sightingSnapshot(fields, media), who.actor, at, who.ip),
         ...index,
+        recount(db, id),
       ])
       return results[before.length].results[0].id
     } catch (error) {
@@ -448,6 +460,7 @@ async function writeSighting(db: D1Database, id: number, baseRev: number, fields
         db.prepare('UPDATE entries SET updated_at = ? WHERE id = ?').bind(now(), current.entry_id),
         revision(db, who, { entry: current.entry_id, sighting: id, kind: 'sighting_edit', rev, snapshot: sightingSnapshot(fields, kept), summary }),
         ...index,
+        recount(db, current.entry_id, [current.source_id, current.via_id]),
       ])
       return { ok: true, rev }
     } catch (error) {
@@ -551,6 +564,7 @@ export async function setHidden(db: D1Database, target: { entry: number; sightin
         checkChanged(db, target.entry, who),
         revision(db, who, { entry: target.entry, sighting: target.sighting, kind: hidden ? 'hide' : 'unhide', rev: 0, snapshot: '{}', summary }),
         ...index,
+        recount(db, target.entry),
       ])
       return true
     } catch (error) {
@@ -562,7 +576,7 @@ export async function setHidden(db: D1Database, target: { entry: number; sightin
 
 async function refresh(db: D1Database, id: number) {
   const entry = await getEntryRow(db, id)
-  if (entry) await db.batch(await reindex(db, id, entry, await claimRows(db, id), await sightingRows(db, id)))
+  if (entry) await db.batch([...await reindex(db, id, entry, await claimRows(db, id), await sightingRows(db, id)), recount(db, id)])
 }
 
 export async function report(db: D1Database, target: { entry: number; sighting?: number | null }, reason: string, reporter: string) {
@@ -807,52 +821,72 @@ export async function sourcePage(db: D1Database, id: number) {
 }
 
 export const SOURCES_PAGE = 24
-// Sources read for one window: a source only hidden sightings cite is passed over, so a window reads more
-// than a page shows, and a page reads further windows, up to SOURCES_ROUNDS, while it has nothing to show.
-export const SOURCES_WINDOW = 48
-export const SOURCES_ROUNDS = 4
 // The sightings read for each source and way it is cited, hidden or not, and the records a card draws.
 export const SOURCE_CARD_READ = 32
 export const SOURCE_CARD_RECORDS = 6
 
-export type SourceCard = Source & { cover: string | null; records: Tile[]; total: number; more: boolean }
-
-// One window of sources, newest first. Each source reads its first SOURCE_CARD_READ sightings of each way
-// from its index and keeps the visible ones, so a source costs the same however long it is: a long one
-// counts only as far as that and says it has more, and one whose first sightings are all hidden is left out.
-async function sourceWindow(db: D1Database, before: number | null) {
-  const ways = [{ column: 'source_id', index: 'sightings_by_source', extra: '' }, { column: 'via_id', index: 'sightings_by_via', extra: ' AND r.source_id IS NOT r.via_id' }]
-  const seen = (way: typeof ways[number]) => `(SELECT json_group_array(json_array(r.entry_id, x.thumb_key, r.hidden_at IS NULL AND e.hidden_at IS NULL AND e.merged_into IS NULL${way.extra})) FROM (SELECT s.id, s.entry_id, s.source_id, s.via_id, s.hidden_at FROM sightings s INDEXED BY ${way.index} WHERE s.${way.column} = c.id ORDER BY s.id LIMIT ${SOURCE_CARD_READ + 1}) r CROSS JOIN entries e ON e.id = r.entry_id LEFT JOIN sighting_media x ON x.sighting_id = r.id AND x.position = 0)`
-  type Row = Source & { direct: string; via: string }
-  const { results } = await db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, ${seen(ways[0])} AS direct, ${seen(ways[1])} AS via FROM sources c WHERE c.id < ? ORDER BY c.id DESC LIMIT ?`)
-    .bind(before ?? Number.MAX_SAFE_INTEGER, SOURCES_WINDOW + 1).all<Row>()
-  const cards: (Source & { cover: string | null; ids: number[]; total: number; more: boolean })[] = []
-  let consumed = 0
-  for (const { direct, via, ...source } of results.slice(0, SOURCES_WINDOW)) {
-    consumed++
-    // One sighting past the read says whether there are more, and is not counted.
-    const lists = [direct, via].map(list => JSON.parse(list) as [number, string | null, number][])
-    const rows = lists.flatMap(list => list.slice(0, SOURCE_CARD_READ)).filter(([, , visible]) => visible)
-    if (!rows.length) continue
-    const ids = [...new Set(rows.map(([id]) => id))]
-    cards.push({ ...source, cover: rows.find(([, thumb]) => thumb)?.[1] ?? null, ids, total: ids.length, more: lists.some(list => list.length > SOURCE_CARD_READ) })
-    if (cards.length === SOURCES_PAGE) break
-  }
-  return { cards, next: consumed < results.length ? results[consumed - 1].id : null }
+// Where a page of the gallery starts: after the source with this sort key and id. A cursor without a key
+// is a place in a list read by id: the newest added, or the undated sources that end a sort by date. Null
+// names a cursor of a shape the sort does not take.
+export type SourceCursor = { key: number | null; id: number }
+export const sourceCursorText = (cursor: SourceCursor) => cursor.key === null ? `${cursor.id}` : `${cursor.key}.${cursor.id}`
+export function parseSourceCursor(sort: SourceSort, text: string): SourceCursor | null {
+  const match = /^(?:(\d{1,9})\.)?([1-9]\d{0,15})$/.exec(text)
+  if (!match || !Number.isSafeInteger(Number(match[2]))) return null
+  const keyed = match[1] !== undefined
+  if (sort === 'new' ? keyed : sort === 'most' ? !keyed : false) return null
+  return { key: keyed ? Number(match[1]) : null, id: Number(match[2]) }
 }
 
-// A page of the source gallery: its sources, each with the records seen in it, and the cursor of the next page.
-export async function sourceList(db: D1Database, before?: number | null) {
-  let window = await sourceWindow(db, before ?? null)
-  for (let round = 1; round < SOURCES_ROUNDS && !window.cards.length && window.next !== null; round++) window = await sourceWindow(db, window.next)
-  const { cards, next } = window
-  const drawn = [...new Set(cards.flatMap(card => card.ids.slice(0, SOURCE_CARD_RECORDS)))]
+export type SourceCard = Source & { records: number; cover: string | null; tiles: Tile[] }
+
+// Each order reads one partial index of the sources a visible record cites; a sort by date reads the dated
+// ones by year and then the undated ones by id.
+const SOURCE_READS = {
+  new: { index: 'sources_listed', where: 'c.records > 0', key: null, descending: true },
+  most: { index: 'sources_by_records', where: 'c.records > 0', key: 'records', descending: true },
+  earliest: { index: 'sources_by_year', where: 'c.records > 0 AND c.year IS NOT NULL', key: 'year', descending: false },
+  latest: { index: 'sources_by_year', where: 'c.records > 0 AND c.year IS NOT NULL', key: 'year', descending: true },
+  undated: { index: 'sources_undated', where: 'c.records > 0 AND c.year IS NULL', key: null, descending: true },
+} as const
+type SourceRead = typeof SOURCE_READS[keyof typeof SOURCE_READS]
+
+// Up to `limit` sources in one order after `cursor`. Each reads its first SOURCE_CARD_READ sightings of
+// each way from its index and keeps the visible ones, so a source costs the same however long it is.
+function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | null, limit: number) {
+  const ways = [{ column: 'source_id', index: 'sightings_by_source', extra: '' }, { column: 'via_id', index: 'sightings_by_via', extra: ' AND r.source_id IS NOT r.via_id' }]
+  const seen = (way: typeof ways[number]) => `(SELECT json_group_array(json_array(r.entry_id, x.thumb_key)) FROM (SELECT s.id, s.entry_id, s.source_id, s.via_id, s.hidden_at FROM sightings s INDEXED BY ${way.index} WHERE s.${way.column} = c.id ORDER BY s.id LIMIT ${SOURCE_CARD_READ}) r CROSS JOIN entries e ON e.id = r.entry_id LEFT JOIN sighting_media x ON x.sighting_id = r.id AND x.position = 0 WHERE r.hidden_at IS NULL AND e.hidden_at IS NULL AND e.merged_into IS NULL${way.extra})`
+  const direction = order.descending ? 'DESC' : 'ASC', past = order.descending ? '<' : '>'
+  const start = order.descending ? Number.MAX_SAFE_INTEGER : 0
+  const after = order.key ? `(c.${order.key}, c.id) ${past} (?, ?)` : `c.id ${past} ?`
+  const bound = order.key ? [cursor?.key ?? start, cursor?.id ?? start] : [cursor?.id ?? start]
+  type Row = Source & { year: number | null; records: number; direct: string; via: string }
+  return db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(ways[0])} AS direct, ${seen(ways[1])} AS via FROM sources c INDEXED BY ${order.index} WHERE ${order.where} AND ${after} ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction} LIMIT ?`)
+    .bind(...bound, limit).all<Row>().then(({ results }) => results)
+}
+
+// A page of the source gallery in one order: its sources, each with the records seen in it, and the cursor
+// of the next page.
+export async function sourceList(db: D1Database, sort: SourceSort = 'new', cursor: SourceCursor | null = null) {
+  const dated = sort === 'earliest' || sort === 'latest'
+  const tail = dated && cursor !== null && cursor.key === null
+  const order = SOURCE_READS[tail ? 'undated' : sort]
+  let rows = await sourceRun(db, order, cursor, SOURCES_PAGE + 1)
+  if (dated && !tail && rows.length <= SOURCES_PAGE) rows = [...rows, ...await sourceRun(db, SOURCE_READS.undated, null, SOURCES_PAGE + 1 - rows.length)]
+  const page = rows.slice(0, SOURCES_PAGE), end = page.at(-1)
+  // A page that ends on an undated source goes on among the undated ones, by id.
+  const next = rows.length > SOURCES_PAGE && end ? sourceCursorText({ key: order.key === null ? null : order.key === 'year' && end.year === null ? null : end[order.key], id: end.id }) : null
+  const cards = page.map(({ direct, via, year: _, ...source }) => {
+    const rows = [direct, via].flatMap(list => JSON.parse(list) as [number, string | null][])
+    return { ...source, cover: rows.find(([, thumb]) => thumb)?.[1] ?? null, ids: [...new Set(rows.map(([id]) => id))].slice(0, SOURCE_CARD_RECORDS) }
+  })
+  const drawn = [...new Set(cards.flatMap(card => card.ids))]
   const tiles = new Map<number, Tile>()
   if (drawn.length) {
-    const { results: rows } = await db.prepare(`SELECT ${TILE_COLUMNS} FROM json_each(?) j CROSS JOIN entries e ON e.id = j.value WHERE e.hidden_at IS NULL AND e.merged_into IS NULL`).bind(JSON.stringify(drawn)).all<TileRow>()
-    for (const row of rows) tiles.set(row.id, toTile(row))
+    const { results } = await db.prepare(`SELECT ${TILE_COLUMNS} FROM json_each(?) j CROSS JOIN entries e ON e.id = j.value WHERE e.hidden_at IS NULL AND e.merged_into IS NULL`).bind(JSON.stringify(drawn)).all<TileRow>()
+    for (const row of results) tiles.set(row.id, toTile(row))
   }
-  return { sources: cards.map(({ ids, ...card }): SourceCard => ({ ...card, records: ids.slice(0, SOURCE_CARD_RECORDS).flatMap(id => tiles.get(id) ?? []) })), next }
+  return { sources: cards.map(({ ids, ...card }): SourceCard => ({ ...card, tiles: ids.flatMap(id => tiles.get(id) ?? []) })), next }
 }
 
 // The records that state this value: the ones described by a sequence, given a code, or related to a character.

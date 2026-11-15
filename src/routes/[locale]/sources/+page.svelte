@@ -3,14 +3,24 @@
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { href, media, t } from '$lib/t'
   import { recordCode } from '$lib/code'
+  import { SOURCE_SORTS } from '$lib/order'
   let { data } = $props()
   const host = (url: string | null) => { try { return url ? new URL(url).host : null } catch { return null } }
-  const count = (n: number, more: boolean) => more ? t('source.recordsMore', { n }) : t(n === 1 ? 'source.record' : 'source.records', { n })
+  const count = (n: number) => t(n === 1 ? 'source.record' : 'source.records', { n })
+  const sorted = (sort: string, after?: string | null) => {
+    const query = new URLSearchParams()
+    if (sort !== 'new') query.set('sort', sort)
+    if (after) query.set('after', after)
+    return query.size ? `?${query}` : href('/sources')
+  }
 </script>
 
 <Seo title={t('nav.sources')} />
 <div class="page stack">
   <h1>{t('nav.sources')}</h1>
+  <nav class="sort" aria-label={t('sources.sort')}>
+    {#each SOURCE_SORTS as sort}<a class="chip" class:on={data.sort === sort} aria-current={data.sort === sort ? 'true' : undefined} href={sorted(sort)}>{t(`sources.sort.${sort}`)}</a>{/each}
+  </nav>
   {#if data.sources.length}
     <div class="cards">
       {#each data.sources as source (source.id)}
@@ -24,10 +34,10 @@
             <h2 class="name"><a href={href(`/source/${source.id}`)}>{name}</a></h2>
             {#if byline}<span class="byline">{byline}</span>{/if}
             {#if source.title && host(source.url)}<span class="byline">{host(source.url)}</span>{/if}
-            <span class="count">{count(source.total, source.more)}</span>
+            <span class="count">{count(source.records)}</span>
           </div>
           <div class="records">
-            {#each source.records as tile (tile.id)}
+            {#each source.tiles as tile (tile.id)}
               {@const label = [tile.ids, recordCode(tile.id)].filter(Boolean).join(' ')}
               <a class="record" href={href(`/entry/${tile.id}`)} title={label}>
                 {#if tile.ids}<IdsGlyph ids={tile.ids} layout={tile.layout} path={data.glyphs?.[tile.id]} /><span class="sr-only">{label}</span>
@@ -42,10 +52,11 @@
   {:else if data.next === null}
     <p class="empty muted">{t('sources.empty')}</p>
   {/if}
-  {#if data.next !== null}<a class="button more" href="?before={data.next}">{t('browse.more')}</a>{/if}
+  {#if data.next !== null}<a class="button more" href={sorted(data.sort, data.next)}>{t('browse.more')}</a>{/if}
 </div>
 
 <style>
+  .sort { display:flex; flex-wrap:wrap; gap:4px }
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:20px }
   .card { display:flex; flex-direction:column; min-width:0; border:1px solid var(--line); border-radius:10px; background:var(--surface); overflow:hidden }
   .cover { display:grid; place-items:center; aspect-ratio:16/10; background:var(--surface-sunken); overflow:hidden }
@@ -65,5 +76,5 @@
   .count { margin-top:4px; font-size:12px; font-weight:500 }
   .empty { padding:48px 16px; text-align:center }
   .more { align-self:start }
-  @media(max-width:500px) { .cards { grid-template-columns:minmax(0,1fr) } }
+  @media(max-width:500px) { .cards { grid-template-columns:minmax(0,1fr) } .sort { display:grid; grid-template-columns:1fr 1fr } .sort .chip { justify-content:center } }
 </style>
