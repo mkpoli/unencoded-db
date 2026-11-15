@@ -126,7 +126,7 @@ declare module '@han-compose/composer/loader' {
   import type { ComposerSource, Drawing, SketchLeaf } from '@han-compose/composer'
   export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho' }): Promise<Drawing>
   /** Where each leaf of `sequence` goes before it is drawn. */
-  export function sketch(source: ComposerSource, sequence: string): Promise<SketchLeaf[]>
+  export function sketch(source: ComposerSource, sequence: string, options?: { fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho' }): Promise<SketchLeaf[]>
 }
 
 declare module '@han-compose/composer/document-view' {

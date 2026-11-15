@@ -32,6 +32,6 @@ export const load: PageServerLoad = async (event) => {
   if (named) redirect(303, `/${event.params.locale}/entry/${named.id}`)
   const [page, totals] = await Promise.all([searchError ? null : list(db, { script, filter, facet, within, without, query, before }), counts(db)])
   if (!page && !searchError) error(404)
-  const glyphs = await tileGlyphs(event.platform, event.url.origin, page?.tiles ?? [])
+  const glyphs = await tileGlyphs(event.platform, event.url.origin, page?.tiles ?? [], event.locals.glyphStyle)
   return { ...(page ?? { tiles: [], next: null, partial: false }), counts: totals, glyphs, filter, genre, collection, tag, within, without, query, searchError, continued: before !== null && query.length > 0 }
 }

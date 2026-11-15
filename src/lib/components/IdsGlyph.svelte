@@ -4,12 +4,16 @@
   // for once it is near the viewport; until then, and when the composer cannot draw a part, the
   // description stands in. A drawing is one path, or the server's own SVG markup when a layout moved a part.
   import { onMount } from 'svelte'
+  import { page } from '$app/state'
+  import { GLYPH_STYLE } from '$lib/composer'
 
   let { ids, layout = null, path: given = null }: { ids: string; layout?: string | null; path?: string | null } = $props()
   let host = $state<HTMLElement>()
   let visible = $state(false)
   const uid = $props.id()
-  const wanted = $derived(ids ? `/api/glyph?ids=${encodeURIComponent(ids)}${layout ? `&layout=${encodeURIComponent(layout)}` : ''}` : '')
+  // The reader's style is part of the address, so a drawing in one style is never taken for another.
+  const style = $derived(page.data.glyphStyle ?? GLYPH_STYLE)
+  const wanted = $derived(ids ? `/api/glyph?ids=${encodeURIComponent(ids)}${layout ? `&layout=${encodeURIComponent(layout)}` : ''}${style !== GLYPH_STYLE ? `&style=${style}` : ''}` : '')
   // What was fetched belongs to the drawing it was asked for, so a glyph given another description starts again.
   let fetched = $state.raw<{ of: string; d: string } | null>(null)
   const path = $derived(given ?? (fetched?.of === wanted ? fetched.d : null))

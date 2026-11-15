@@ -3,17 +3,18 @@
   // worker and the export files it has already read. Parts are drawn one by one only where a layout moves them.
   import type { ComposerPreview } from '@han-compose/composer'
   import type { DocumentSession } from 'ids-input/document'
-  import { COMPOSER_URL } from '$lib/composer'
+  import { composerUrl, type GlyphStyle } from '$lib/composer'
   import { composerData } from '$lib/composer-data'
   import { idsMessages } from '$lib/ids-messages'
 
-  const composers = new Map<boolean, Promise<ComposerPreview>>()
-  function composer(separate: boolean) {
-    let found = composers.get(separate)
+  const composers = new Map<string, Promise<ComposerPreview>>()
+  function composer(separate: boolean, style: GlyphStyle) {
+    const key = `${style}:${separate}`
+    let found = composers.get(key)
     if (!found) {
-      found = import('@han-compose/composer').then(({ composerPreview, dataUrls }) => composerPreview({ base: COMPOSER_URL, separate, loaders: { ...dataUrls, ...composerData } }))
-      composers.set(separate, found)
-      found.catch(() => composers.delete(separate))
+      found = import('@han-compose/composer').then(({ composerPreview, dataUrls }) => composerPreview({ base: composerUrl(style), fontStyle: style, separate, loaders: { ...dataUrls, ...composerData } }))
+      composers.set(key, found)
+      found.catch(() => composers.delete(key))
     }
     return found
   }
@@ -47,6 +48,8 @@
   import { parse } from 'ids-input'
   import { cleanIds } from '$lib/ids'
   import { carryLayout, layoutText, placeOf, type Layout } from '$lib/layout'
+  import { page } from '$app/state'
+  import { glyphStyleOf } from '$lib/composer'
   import { locale } from '$lib/t'
 
   let { ids, layout = null, chosen = null, adjusting = $bindable(false) }: { ids: string; layout?: Layout | null; chosen?: number[] | null; adjusting?: boolean } = $props()
@@ -97,8 +100,8 @@
   $effect(() => {
     if (!near) return
     let live = true
-    const kind = separate
-    composer(kind).then(found => { found.warm(); if (live) preview = { draw: found, separate: kind } }, () => {})
+    const kind = separate, style = glyphStyleOf(page.data.glyphStyle)
+    composer(kind, style).then(found => { found.warm(); if (live) preview = { draw: found, separate: kind } }, () => {})
     return () => { live = false }
   })
 

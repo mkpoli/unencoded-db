@@ -5,7 +5,7 @@ import { documentView } from '@han-compose/composer/document-view'
 import { compose, sketch } from '@han-compose/composer/loader'
 import { sourceFor, traitKey, traitsOf } from '@han-compose/composer/source'
 import { layerFrames, renderScopes, scopesMarkup } from 'ids-input/document'
-import { COMPOSER_URL, COMPOSER_VERSION } from '$lib/composer'
+import { composerUrl, composerVersion, GLYPH_STYLE, type GlyphStyle } from '$lib/composer'
 import { composerData } from '$lib/composer-data'
 import { cleanIds } from '$lib/ids'
 import { cleanLayout, layoutText } from '$lib/layout'
@@ -17,8 +17,9 @@ type Source = ReturnType<typeof sourceFor>
 /** A description and, as its stored text, the layout it is drawn with. */
 export type Glyph = { ids: string | null; layout?: string | null }
 
-const FOLDER = `composer/${COMPOSER_VERSION}`
-const DRAWINGS = `glyphs/${COMPOSER_VERSION}`
+// Each style's export and drawings have their own folders, named by the export's version.
+const folderOf = (style: GlyphStyle) => `composer/${composerVersion(style)}`
+const drawingsOf = (style: GlyphStyle) => `glyphs/${composerVersion(style)}`
 const IMMUTABLE = 'public, max-age=31536000, immutable'
 
 const sources = new WeakMap<Bucket, Map<string, Source>>()
@@ -27,12 +28,12 @@ const pending = new Map<string, Promise<string | null>>()
 const typeOf = (name: string) => /^[gp]\//.test(name) ? 'application/octet-stream' : 'application/json'
 
 // The export's files pass through the bucket, so a shard fetched once stays here.
-function reader(bucket: Bucket) {
+function reader(bucket: Bucket, style: GlyphStyle) {
   return async (input: RequestInfo | URL): Promise<Response> => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
-    const name = url.pathname.split(`/${COMPOSER_VERSION}/`)[1] ?? ''
+    const name = url.pathname.split(`/${composerVersion(style)}/`)[1] ?? ''
     if (!name) throw new Error(`${url} is not a composer export file.`)
-    const key = `${FOLDER}/${name}`
+    const key = `${folderOf(style)}/${name}`
     const stored = await bucket.get(key)
     if (stored) return new Response(await stored.arrayBuffer(), { headers: { 'content-type': typeOf(name) } })
     const response = await fetch(url)
@@ -45,7 +46,7 @@ function reader(bucket: Bucket) {
 }
 
 export type ComposerAssets = { fetch(input: RequestInfo | URL): Promise<Response> }
-type Context = { assets?: ComposerAssets; origin?: string }
+type Context = { assets?: ComposerAssets; origin?: string; style?: GlyphStyle }
 
 // The outlines the export lacks are files of this build; the asset binding answers them by URL.
 function bundled(context: Context) {
@@ -61,10 +62,11 @@ function sourceOf(bucket: Bucket, sequence: string, context: Context, separate =
   let byTrait = sources.get(bucket)
   if (!byTrait) sources.set(bucket, byTrait = new Map())
   const traits = traitsOf(sequence)
-  const key = `${traitKey(traits)}:${context.assets ? 1 : 0}:${separate ? 1 : 0}`
+  const style = context.style ?? GLYPH_STYLE
+  const key = `${style}:${traitKey(traits)}:${context.assets ? 1 : 0}:${separate ? 1 : 0}`
   let source = byTrait.get(key)
   if (!source) {
-    source = sourceFor(sequence, { base: COMPOSER_URL, traits, separate, fetch: reader(bucket), loaders: composerData, read: bundled(context) })
+    source = sourceFor(sequence, { base: composerUrl(style), fontStyle: style, traits, separate, fetch: reader(bucket, style), loaders: composerData, read: bundled(context) })
     byTrait.set(key, source)
   }
   return source
@@ -77,19 +79,19 @@ export function glyphName(glyph: Glyph) {
   return layout ? `${ids}\n${layout}` : ids
 }
 
-async function read(bucket: Bucket, name: string) {
-  const stored = await bucket.get(`${DRAWINGS}/${await hashHex(name)}.txt`)
+async function read(bucket: Bucket, name: string, style: GlyphStyle) {
+  const stored = await bucket.get(`${drawingsOf(style)}/${await hashHex(name)}.txt`)
   return stored ? stored.text() : null
 }
 
 // The parts drawn one by one and moved as the layout says. Null for a description whose parts the
 // composer cannot tell apart, which is then drawn as it stands; a drawing that failed is thrown, so
 // that nothing is kept in its place.
-async function adjusted(from: Source, ids: string, layout: string, name: string) {
+async function adjusted(from: Source, ids: string, layout: string, name: string, style: GlyphStyle) {
   const document = layoutDocument(ids, cleanLayout(layout, ids))
   if (!document) return null
-  const drawn = await compose(from, ids, { separate: true })
-  const leaves = await sketch(from, ids)
+  const drawn = await compose(from, ids, { separate: true, fontStyle: style })
+  const leaves = await sketch(from, ids, { fontStyle: style })
   const view = documentView(document, drawn, leaves, { renderer: { layerFrames, renderScopes } })
   if (!view.scopes || !view.complete) return null
   // What a part takes away and the emoji among the parts are drawn as the form's own plate draws them.
@@ -98,32 +100,33 @@ async function adjusted(from: Source, ids: string, layout: string, name: string)
 }
 
 export function drawGlyph(bucket: Bucket, glyph: Glyph, context: Context = {}): Promise<string | null> {
-  const name = glyphName(glyph)
+  const name = glyphName(glyph), style = context.style ?? GLYPH_STYLE
   if (!name) return Promise.resolve(null)
-  let run = pending.get(name)
+  const task = `${style}\n${name}`
+  let run = pending.get(task)
   if (!run) {
     run = (async () => {
-      const stored = await read(bucket, name)
+      const stored = await read(bucket, name, style)
       if (stored) return stored
       const [ids, layout] = name.split('\n')
-      const drawn = (layout ? await adjusted(sourceOf(bucket, ids, context, true), ids, layout, name) : null) ?? (await compose(sourceOf(bucket, ids, context), ids)).d
+      const drawn = (layout ? await adjusted(sourceOf(bucket, ids, context, true), ids, layout, name, style) : null) ?? (await compose(sourceOf(bucket, ids, context), ids, { fontStyle: style })).d
       if (!drawn) return null
-      await bucket.put(`${DRAWINGS}/${await hashHex(name)}.txt`, drawn, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
+      await bucket.put(`${drawingsOf(style)}/${await hashHex(name)}.txt`, drawn, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
       return drawn
-    })().catch(() => null).finally(() => pending.delete(name))
-    pending.set(name, run)
+    })().catch(() => null).finally(() => pending.delete(task))
+    pending.set(task, run)
   }
   return run
 }
 
 // The drawings a page already has, by `glyphName`. A glyph without one keeps its description until it is drawn.
-export async function glyphPaths(bucket: Bucket | undefined, glyphs: Glyph[]) {
+export async function glyphPaths(bucket: Bucket | undefined, glyphs: Glyph[], style: GlyphStyle = GLYPH_STYLE) {
   const wanted = [...new Set(glyphs.map(glyphName).filter(Boolean))]
   const paths: Record<string, string> = {}
   if (!bucket?.get) return paths
   await Promise.all(wanted.map(async name => {
     try {
-      const path = await read(bucket, name)
+      const path = await read(bucket, name, style)
       if (path) paths[name] = path
     } catch {
       // A cache that cannot be read leaves the description on the page.
@@ -143,11 +146,11 @@ export async function warmGlyphs(bucket: Bucket | undefined, glyphs: Glyph[], co
 }
 
 /** The drawings of a page's tiles, by record; the ones not drawn yet are drawn after the response. */
-export async function tileGlyphs(platform: App.Platform | undefined, origin: string, tiles: (Glyph & { id: number })[]) {
+export async function tileGlyphs(platform: App.Platform | undefined, origin: string, tiles: (Glyph & { id: number })[], style: GlyphStyle = GLYPH_STYLE) {
   const bucket = platform?.env?.MEDIA
   const shown = tiles.filter(tile => tile.ids)
-  const paths = await glyphPaths(bucket, shown)
+  const paths = await glyphPaths(bucket, shown, style)
   const missing = new Map(shown.map(tile => [glyphName(tile), tile]).filter(([name]) => !paths[name as string]) as [string, Glyph][])
-  if (missing.size) platform?.ctx?.waitUntil(warmGlyphs(bucket, [...missing.values()], { assets: platform?.env?.ASSETS, origin }))
+  if (missing.size) platform?.ctx?.waitUntil(warmGlyphs(bucket, [...missing.values()], { assets: platform?.env?.ASSETS, origin, style }))
   return Object.fromEntries(shown.flatMap(tile => { const path = paths[glyphName(tile)]; return path ? [[tile.id, path]] : [] })) as Record<number, string>
 }

@@ -1,8 +1,9 @@
+import type { GlyphStyle } from '$lib/composer'
 import type { Person } from '$lib/server/people'
 
 declare global {
   namespace App {
-    interface Locals { person: Person | null; theme: string }
+    interface Locals { person: Person | null; theme: string; glyphStyle: GlyphStyle }
     interface Platform {
       ctx: ExecutionContext
       env: {

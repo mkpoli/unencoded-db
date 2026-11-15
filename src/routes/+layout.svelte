@@ -1,6 +1,8 @@
 <script lang="ts">
   import '../app.css'
+  import { invalidateAll } from '$app/navigation'
   import { page } from '$app/state'
+  import { GLYPH_STYLE_COOKIE, GLYPH_STYLES, type GlyphStyle } from '$lib/composer'
   import { LOCALES, LOCALE_NAMES, LOCALE_COOKIE } from '$lib/i18n'
   import { href, locale, t } from '$lib/t'
   let { data, children } = $props()
@@ -13,6 +15,12 @@
     document.cookie = `ug.theme=${theme};path=/;max-age=31536000;samesite=lax`
     document.documentElement.dataset.theme = theme
     if (menu) menu.open = false
+  }
+  // The server draws a page's glyphs in the reader's style, so the page is read again in the new one.
+  function setGlyphStyle(style: GlyphStyle) {
+    document.cookie = `${GLYPH_STYLE_COOKIE}=${style};path=/;max-age=31536000;samesite=lax`
+    if (menu) menu.open = false
+    void invalidateAll()
   }
   const closeMenu = (event: PointerEvent) => { if (menu?.open && !menu.contains(event.target as Node)) menu.open = false }
 </script>
@@ -47,6 +55,10 @@
         <div class="menu-group">
           <span class="menu-label">{t('nav.theme')}</span>
           {#each ['system', 'light', 'dark'] as theme}<button type="button" onclick={() => setTheme(theme)}>{t(`theme.${theme}`)}</button>{/each}
+        </div>
+        <div class="menu-group">
+          <span class="menu-label">{t('nav.glyphStyle')}</span>
+          {#each GLYPH_STYLES as style}<button type="button" class:on={data.glyphStyle === style} aria-pressed={data.glyphStyle === style} onclick={() => setGlyphStyle(style)}>{t(`glyphStyle.${style}`)}</button>{/each}
         </div>
         <div class="menu-group"><a href="https://ko-fi.com/mkpoli" target="_blank" rel="noopener">{t('nav.sponsor')} ↗</a></div>
       </div>
@@ -87,7 +99,7 @@
   .menu-label { padding: 2px 10px 4px; font-size: 11px; color: var(--muted) }
   .menu-group a, .menu-group button { display: block; width: 100%; min-height: 36px; padding: 7px 10px; border: 0; border-radius: 6px; background: none; text-align: left; cursor: pointer }
   .menu-group a:hover, .menu-group button:hover { background: var(--surface-sunken) }
-  .menu-group a.on { color: var(--accent); font-weight: 500 }
+  .menu-group a.on, .menu-group button.on { color: var(--accent); font-weight: 500 }
   main { min-height: 60vh }
   .site-footer { padding: 18px var(--page-gutter) 36px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px }
   @media (max-width: 960px) {
