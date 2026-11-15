@@ -100,7 +100,7 @@ test('browse continues an empty search window and reports the final segment', as
   expect(first).toMatchObject({ tiles: [], next: '0.2', partial: true, continued: false })
   const last = await browseLoad(event(`https://example.test/en?q=missing&after=${first.next}`)) as any
   expect(last).toMatchObject({ tiles: [], next: null, partial: false, continued: true })
-  await expect(browseLoad(event('https://example.test/en?q=missing&after=0'))).rejects.toMatchObject({ status: 404 })
+  await expect(browseLoad(event('https://example.test/en?q=missing&after=0.0'))).rejects.toMatchObject({ status: 404 })
 })
 
 test('browse answers an order or a cursor it does not know with 404', async () => {
