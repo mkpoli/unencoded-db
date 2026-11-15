@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { filedUnder, parsePath, pathsOf, radicalPath, radicalStrokes, standing } from './radicals'
+import { filedUnder, fileRecord, parsePath, pathsOf, radicalPath, radicalStrokes, standing } from './radicals'
 
 test('a description is filed under the radical of its head, through the characters on the way', () => {
   expect(radicalPath('⿰氵⿱艹男')).toEqual(['水'])
@@ -41,6 +41,37 @@ test('a stated radical stands unless the description leads further down its path
   expect(radicalPath('⿱糞土', '糞部')).toEqual(['米', '糞'])
   expect(radicalPath(null, '氵')).toEqual(['水'])
   expect(radicalPath('⿰口男', 'mouth')).toEqual(['口'])
+})
+
+test('a record names the path of the radical it states', () => {
+  expect(fileRecord('⿱糞土', '糞')).toEqual({ path: ['米', '糞'], stated: '米糞' })
+  expect(fileRecord('⿱吅犬', '口')).toEqual({ path: ['口', '吅'], stated: '口' })
+  expect(fileRecord('⿱吅犬')).toEqual({ path: ['口', '吅'], stated: null })
+  expect(fileRecord('⿰口男', 'mouth')).toEqual({ path: ['口'], stated: null })
+  expect(fileRecord(null, '部')?.path[0]).toBe('邑')
+  expect(fileRecord(null, null)).toBeNull()
+})
+
+test('a stated character without a Kangxi radical is a radical of its own', () => {
+  expect(fileRecord('⿸ㄏ·', 'ㄏ')).toEqual({ path: ['ㄏ'], stated: 'ㄏ' })
+  expect(radicalPath('⿰口男', 'ㄏ部')).toEqual(['ㄏ'])
+  expect(radicalPath('⿰口男', '㇇')).toEqual(['㇇'])
+  expect(radicalPath('⿰口男', 'a')).toEqual(['口'])
+  expect(radicalPath('⿰口男', '1')).toEqual(['口'])
+  expect(parsePath('ㄏ')).toBe('ㄏ')
+  expect(parsePath('ㄏ口')).toBeNull()
+  expect(parsePath('a')).toBeNull()
+  expect(radicalStrokes('ㄏ')).toBeNull()
+})
+
+test('a stated path stands whatever it holds, and radicals outside the Kangxi set come last', () => {
+  const counts = new Map([['田', 5], ['田男', 2], ['米', 3], ['米糞', 1], ['ㄏ', 1], ['龠', 1]])
+  expect(standing(counts).map(branch => [branch.path, branch.branches.length])).toEqual([['田', 0], ['米', 0], ['龠', 0], ['ㄏ', 0]])
+  const found = standing(counts, new Set(['田男', 'ㄏ']))
+  expect(found.map(branch => branch.path)).toEqual(['田', '米', '龠', 'ㄏ'])
+  expect(found[0].branches).toEqual([{ path: '田男', radical: '男', records: 2, branches: [] }])
+  expect(filedUnder(['田', '男'], counts, new Set(['田男'])).map(branch => branch.radical)).toEqual(['田', '男'])
+  expect(filedUnder(['米', '糞'], counts, new Set(['田男'])).map(branch => branch.radical)).toEqual(['米'])
 })
 
 test('a path names itself and each path above it', () => {

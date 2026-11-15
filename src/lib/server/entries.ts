@@ -11,7 +11,7 @@ import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, 
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { genreOf } from '$lib/genres'
-import { BRANCH_MIN, KANGXI, parsePath, pathsOf, radicalPath } from '$lib/radicals'
+import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf } from '$lib/radicals'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
 import { hashHex } from './image'
@@ -144,8 +144,10 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   // A record is counted in or out of every marked work, so a list of either is one range.
   const held = marksHeld(claims)
   const marks = MARKED.map(registry => `${held.includes(registry.id) ? 'r' : 'x'}:${registry.id}`)
-  // A record is listed under its radical's path and under every path above it, so a radical lists its branches too.
-  const filed = pathsOf(radicalPath(entry.ids, entry.radical) ?? []).map(path => `b:${path}`)
+  // A record is listed under its radical's path and under every path above it, so a radical lists its
+  // branches too. The path its stated radical names is kept apart (`b!`), since stating a radical makes it stand.
+  const filing = fileRecord(entry.ids, entry.radical)
+  const filed = [...pathsOf(filing?.path ?? []).map(path => `b:${path}`), ...(filing?.stated ? [`b!${filing.stated}`] : [])]
   return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks, ...filed]
 }
 
@@ -787,24 +789,29 @@ export async function list(db: D1Database, listing: Listing) {
 }
 
 // The counts a page shows beside its filters. Tags are counted too, and read where they are listed. The
-// radical paths (`b:`) are stepped over by key, so the read does not grow with them.
-export const countsStatement = (db: D1Database) => db.prepare(`SELECT tag, n FROM tag_counts WHERE (tag < 'b:' OR tag >= 'b;') AND n > 0 AND tag NOT LIKE '%|%' AND tag NOT LIKE 't:%'`)
+// radical paths (`b!`, `b:`) are stepped over by key, so the read does not grow with them.
+export const countsStatement = (db: D1Database) => db.prepare(`SELECT tag, n FROM tag_counts WHERE (tag < 'b!' OR tag >= 'b;') AND n > 0 AND tag NOT LIKE '%|%' AND tag NOT LIKE 't:%'`)
 export async function counts(db: D1Database) {
   const { results } = await countsStatement(db).all<{ tag: string; n: number }>()
   return Object.fromEntries(results.map(row => [row.tag, row.n])) as Record<string, number>
 }
 
 // The records each radical path holds, for the paths that can stand as a radical: a Kangxi radical in
-// use and any path with enough records. `under` keeps the read to one Kangxi radical and its branches.
-// The paths with enough records are one range of `tag_counts_branches` and the radicals are read by
-// key, so the read does not grow with the paths that hold fewer.
+// use, any path with enough records and any path a record states. `under` keeps the read to one radical
+// and its branches. The paths with enough records are one range of `tag_counts_branches`, the stated
+// paths one range of the counts, and the rest is read by key, so the read does not grow with the paths
+// that hold fewer and that no record states.
 export function radicalCountsStatement(db: D1Database, under?: string) {
   const from = `b:${under ?? ''}`, to = under ? `${from}\u{10FFFF}` : 'b;'
-  return db.prepare(`SELECT substr(tag, 3) AS path, n FROM tag_counts INDEXED BY tag_counts_branches WHERE tag >= ?1 AND tag < ?2 AND n >= ${BRANCH_MIN}
-    UNION ALL SELECT substr(tag, 3), n FROM tag_counts WHERE tag IN (SELECT 'b:' || value FROM json_each(?3)) AND n > 0 AND n < ${BRANCH_MIN}`).bind(from, to, JSON.stringify(under ? [under] : KANGXI))
+  const stated = `b!${under ?? ''}`, statedTo = under ? `${stated}\u{10FFFF}` : 'b"'
+  return db.prepare(`SELECT 0 AS stated, substr(tag, 3) AS path, n FROM tag_counts INDEXED BY tag_counts_branches WHERE tag >= ?1 AND tag < ?2 AND n >= ${BRANCH_MIN}
+    UNION ALL SELECT 0, substr(tag, 3), n FROM tag_counts WHERE tag IN (SELECT 'b:' || value FROM json_each(?3)) AND n > 0 AND n < ${BRANCH_MIN}
+    UNION ALL SELECT 0, substr(t.tag, 3), t.n FROM tag_counts d CROSS JOIN tag_counts t ON t.tag = 'b:' || substr(d.tag, 3) WHERE d.tag >= ?4 AND d.tag < ?5 AND d.n > 0 AND t.n > 0 AND t.n < ${BRANCH_MIN}
+    UNION ALL SELECT 1, substr(tag, 3), n FROM tag_counts WHERE tag >= ?4 AND tag < ?5 AND n > 0`).bind(from, to, JSON.stringify(under ? [under] : KANGXI), stated, statedTo)
 }
 export async function radicalCounts(db: D1Database, under?: string) {
-  return new Map((await radicalCountsStatement(db, under).all<{ path: string; n: number }>()).results.map(row => [row.path, row.n]))
+  const { results } = await radicalCountsStatement(db, under).all<{ stated: number; path: string; n: number }>()
+  return { counts: new Map(results.filter(row => !row.stated).map(row => [row.path, row.n])), stated: new Set(results.filter(row => row.stated).map(row => row.path)) }
 }
 
 export const TAGS_MAX = 200

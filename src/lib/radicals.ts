@@ -2,7 +2,8 @@
 // the part that holds its radical: the weights in radical-tables.ts, counted over the encoded ideographs
 // whose radical Unihan names, choose it. The path runs from a Kangxi radical through each character on
 // the way to the head, so ⿺克卡 is filed 儿兄克. A path is a radical of its own once enough records
-// stay in it; until then its records are filed under the path above.
+// stay in it, or once a record states it as its radical; until then its records are filed under the
+// path above. A stated character that has no Kangxi radical is a radical outside the Kangxi set.
 import { isNode, parse, type IdsPart } from 'ids-input'
 import { splitIds } from './ids'
 import { HEAD_COUNTS, HEAD_PRIOR, RADICALS, RADICAL_EQUIVALENTS, RADICAL_FORMS, RADICAL_RUNS, RADICAL_STROKES, RADICAL_VIA } from './radical-tables'
@@ -26,8 +27,8 @@ const kangxi = [...RADICALS]
 /** The 214 Kangxi radicals in order. */
 export const KANGXI: readonly string[] = kangxi
 const kangxiStrokes = RADICAL_STROKES.split(' ').map(Number)
-/** The stroke count of a Kangxi radical. */
-export const radicalStrokes = (radical: string) => kangxiStrokes[kangxi.indexOf(radical)]
+/** The stroke count of a Kangxi radical, or null for a radical outside the set. */
+export const radicalStrokes = (radical: string) => kangxiStrokes[kangxi.indexOf(radical)] ?? null
 
 function tables(): Tables {
   if (loaded) return loaded
@@ -112,18 +113,34 @@ function detect(inner: IdsPart, whole = false): string[] | null {
   return null
 }
 
+// What can be a radical outside the Kangxi set: one character of a script without case, or a symbol such as a stroke.
+const CUSTOM = /^[\p{Lo}\p{So}]$/u
+const isCustom = (text: string) => CUSTOM.test(text) && pathOf(text) === null
+
+/** The path a stated radical names: that of an ideograph, or a character outside the Kangxi set on its own. */
+function statedPath(stated: string | null | undefined) {
+  const text = bare((stated ?? '').normalize('NFC').trim().replace(/(?<=.)部$/u, ''))
+  return pathOf(text) ?? (isCustom(text) ? [text] : null)
+}
+
+/** Where a record is filed: its path from the radical down, and the path its stated radical names. */
+export type Filing = { path: string[]; stated: string | null }
+
 /**
- * The path a record is filed under, as its characters from the Kangxi radical down, or null when the
- * description names no part with a radical. A radical the record states stands, unless the description
- * leads further down the same path.
+ * Where a record is filed, or null when it states no radical and its description names no part with
+ * one. A radical the record states stands, unless the description leads further down the same path.
  */
-export function radicalPath(ids: string | null | undefined, stated?: string | null): string[] | null {
+export function fileRecord(ids: string | null | undefined, stated?: string | null): Filing | null {
   const sequence = splitIds(ids)[0]
   const parsed = sequence ? parse(sequence, { open: true }) : null
   const detected = parsed && !parsed.problem && parsed.tree !== undefined ? detect(parsed.tree, true) : null
-  const named = pathOf((stated ?? '').normalize('NFC').trim().replace(/部$/u, ''))
-  return (named && !(detected && named.every((char, index) => detected[index] === char)) ? named : detected)?.slice(0, PATH_MAX) ?? null
+  const named = statedPath(stated)
+  const path = named && !(detected && named.every((char, index) => detected[index] === char)) ? named : detected
+  return path ? { path: path.slice(0, PATH_MAX), stated: named?.join('') ?? null } : null
 }
+
+/** The path a record is filed under, as its characters from the radical down. */
+export const radicalPath = (ids: string | null | undefined, stated?: string | null) => fileRecord(ids, stated)?.path ?? null
 
 /** Every path a record is listed under: its own and each one above it. */
 export const pathsOf = (path: readonly string[]) => path.map((_, index) => path.slice(0, index + 1).join(''))
@@ -132,23 +149,24 @@ export const pathsOf = (path: readonly string[]) => path.map((_, index) => path.
 export function parsePath(text: string | null | undefined) {
   const path = (text ?? '').normalize('NFC')
   const chars = [...path]
-  return chars.length >= 1 && chars.length <= PATH_MAX && kangxi.includes(chars[0]) && chars.every(char => radicalOf(char) !== null) ? path : null
+  return (chars.length >= 1 && chars.length <= PATH_MAX && kangxi.includes(chars[0]) && chars.every(char => radicalOf(char) !== null)) || isCustom(path) ? path : null
 }
 
 export type Branch = { path: string; radical: string; records: number; branches: Branch[] }
 
 /**
- * The radicals that stand, given the records each path holds: every Kangxi radical in use, and each
- * longer path that keeps `BRANCH_MIN` records once the branches standing under it are taken out. They
- * come in Kangxi order, each with the branches under it, the fullest first.
+ * The radicals that stand, given the records each path holds and the paths records state: every radical
+ * in use, each stated path, and each longer path that keeps `BRANCH_MIN` records once the branches
+ * standing under it are taken out. The Kangxi radicals come in order and the others after them, each
+ * with the branches under it, the fullest first.
  */
-export function standing(counts: ReadonlyMap<string, number>): Branch[] {
+export function standing(counts: ReadonlyMap<string, number>, stated: ReadonlySet<string> = new Set()): Branch[] {
   const paths = [...counts.keys()].map(path => [...path]).sort((a, b) => b.length - a.length)
   const kept = new Map(counts)
   const found = new Map<string, Branch>()
   for (const chars of paths) {
     const path = chars.join(''), own = kept.get(path) ?? 0
-    if (chars.length > 1 && own < BRANCH_MIN) continue
+    if (chars.length > 1 && own < BRANCH_MIN && !stated.has(path)) continue
     if (chars.length === 1 && !(counts.get(path)! > 0)) continue
     found.set(path, { path, radical: chars.at(-1)!, records: counts.get(path)!, branches: [] })
     for (let length = chars.length - 1; length >= 1; length--) { const above = chars.slice(0, length).join(''); kept.set(above, (kept.get(above) ?? 0) - own) }
@@ -162,14 +180,15 @@ export function standing(counts: ReadonlyMap<string, number>): Branch[] {
   }
   const sort = (branches: Branch[]) => { branches.sort((a, b) => b.records - a.records || a.path.localeCompare(b.path)); branches.forEach(branch => sort(branch.branches)) }
   roots.forEach(root => sort(root.branches))
-  return roots.sort((a, b) => kangxi.indexOf(a.path) - kangxi.indexOf(b.path))
+  const place = (path: string) => kangxi.includes(path) ? kangxi.indexOf(path) : kangxi.length
+  return roots.sort((a, b) => place(a.path) - place(b.path) || a.path.localeCompare(b.path))
 }
 
 /** The standing radicals a path runs through, from the Kangxi radical down. */
-export function filedUnder(path: readonly string[], counts: ReadonlyMap<string, number>): Branch[] {
+export function filedUnder(path: readonly string[], counts: ReadonlyMap<string, number>, stated: ReadonlySet<string> = new Set()): Branch[] {
   const own = pathsOf(path)
   const out: Branch[] = []
-  let level = standing(counts)
+  let level = standing(counts, stated)
   for (;;) {
     const next = level.find(branch => own.includes(branch.path))
     if (!next) return out

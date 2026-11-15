@@ -21,9 +21,9 @@
   <h1>{t('nav.radicals')}</h1>
   {#if data.groups.length}
     <dl class="table">
-      {#each data.groups as group (group.strokes)}
+      {#each data.groups as group (group.strokes ?? 0)}
         <div class="row">
-          <dt><span class="sr-only">{t('field.strokes')}</span>{group.strokes}</dt>
+          <dt>{#if group.strokes === null}<span class="sr-only">{t('field.encodingOther')}</span><span aria-hidden="true">＋</span>{:else}<span class="sr-only">{t('field.strokes')}</span>{group.strokes}{/if}</dt>
           <dd>
             {#each group.radicals as radical (radical.path)}
               <div class="radical" class:branched={radical.branches.length}>
