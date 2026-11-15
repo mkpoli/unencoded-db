@@ -230,6 +230,6 @@ test('the chronology starts at the first decade, and answers a start that is no 
   const { db } = openTestDb()
   const event = (query: string) => ({ url: new URL(`https://example.test/en/chronology${query}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
   expect(await chronologyLoad(event(''))).toMatchObject({ decades: [], shown: [], dated: 0, undated: 0 })
-  expect(await chronologyLoad(event('?from=1930'))).toMatchObject({ shown: [] })
+  expect(await chronologyLoad(event('?from=1930'))).toMatchObject({ shown: [], earlier: null, later: null })
   for (const query of ['?from=1935', '?from=x', '?from=05']) await expect(chronologyLoad(event(query))).rejects.toMatchObject({ status: 404 })
 })

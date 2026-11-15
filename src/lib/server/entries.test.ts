@@ -1153,9 +1153,10 @@ describe('chronology', () => {
     const next = await chronology(db, 1920)
     expect(next.shown.map(row => row.decade)).toEqual([1920, 1930])
     expect({ earlier: next.earlier, later: next.later }).toEqual({ earlier: 1800, later: null })
-    // A start between decades begins at the next one; one past the last shows none.
+    // A start anywhere opens the page that holds it, so pages never overlap; one past the last opens the last page.
     expect((await chronology(db, 1915)).shown[0].decade).toBe(1920)
-    expect((await chronology(db, 2000)).shown).toEqual([])
+    expect((await chronology(db, 1830)).shown.map(row => row.decade)).toEqual(first.shown.map(row => row.decade))
+    expect((await chronology(db, 2000)).shown.map(row => row.decade)).toEqual([1920, 1930])
   })
 
   test('reads the decade counts as one range of the counts by key', () => {

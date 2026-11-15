@@ -37,7 +37,7 @@
         <li class:century={row.decade % 100 === 0}>
           {#if row.n}<a href={decadeList(row.decade)} title="{t('browse.decade', { n: row.decade })} · {row.n}"><span class="bar" style:height="{Math.max(6, (row.n / most) * 100)}%"></span><span class="sr-only">{t('browse.decade', { n: row.decade })} {row.n}</span></a>
           {:else}<span class="gap" title={t('browse.decade', { n: row.decade })}></span>{/if}
-          {#if row.decade % 100 === 0 || row.decade === span[0].decade}<span class="tick" aria-hidden="true">{row.decade}</span>{/if}
+          {#if row.decade % 100 === 0 || (row.decade === span[0].decade && 100 - (row.decade % 100) >= 50)}<span class="tick" aria-hidden="true">{row.decade}</span>{/if}
         </li>
       {/each}
     </ol>
@@ -66,7 +66,7 @@
 <style>
   .heading { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px 16px }
   .totals { display:flex; gap:16px; margin:0; font-variant-numeric:tabular-nums }
-  .bars { display:flex; align-items:flex-end; gap:2px; height:120px; margin:0; padding:0 28px 22px 0; list-style:none; overflow-x:auto }
+  .bars { display:flex; align-items:flex-end; gap:2px; height:120px; margin:0; padding:6px 28px 22px 6px; list-style:none; overflow-x:auto }
   .bars li { position:relative; flex:1 0 6px; height:100%; display:flex; align-items:flex-end }
   .bars li.century { border-inline-start:1px solid var(--line) }
   .bars a { display:flex; align-items:flex-end; width:100%; height:100% }

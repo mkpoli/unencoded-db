@@ -812,16 +812,19 @@ export async function chronology(db: D1Database, from: number | null) {
     db.prepare("SELECT n FROM tag_counts WHERE tag = 'all'").first<{ n: number }>(),
   ])
   const decades = counted.map(row => ({ decade: Number(row.tag.slice(2)), n: row.n })).sort((a, b) => a.decade - b.decade)
-  const start = from === null ? 0 : decades.findIndex(row => row.decade >= from)
-  const shown = start < 0 ? [] : decades.slice(start, start + DECADES_PAGE)
+  // Pages are fixed runs of decades, so a start anywhere opens the page that holds it, and a start past
+  // the last decade opens the last page.
+  const at = from === null ? 0 : decades.findIndex(row => row.decade >= from)
+  const start = Math.floor((at < 0 ? Math.max(0, decades.length - 1) : at) / DECADES_PAGE) * DECADES_PAGE
+  const shown = decades.slice(start, start + DECADES_PAGE)
   const reads = shown.map(row => listStatement(db, { decade: String(row.decade), order: 'earliest', limit: DECADE_TILES })!)
   const pages = reads.length ? await db.batch<TileRow & { counted: number; matches: number }>(reads) : []
   const dated = decades.reduce((sum, row) => sum + row.n, 0)
   return {
     decades,
     shown: shown.map((row, i) => ({ ...row, tiles: pages[i].results.slice(0, DECADE_TILES).map(({ counted: _, matches: __, ...tile }) => toTile(tile)) })),
-    earlier: start > 0 ? decades[Math.max(0, start - DECADES_PAGE)].decade : null,
-    later: start >= 0 ? decades[start + DECADES_PAGE]?.decade ?? null : null,
+    earlier: start > 0 ? decades[start - DECADES_PAGE].decade : null,
+    later: decades.at(start + DECADES_PAGE)?.decade ?? null,
     dated,
     undated: Math.max(0, (all?.n ?? 0) - dated),
   }
