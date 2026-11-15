@@ -4,6 +4,7 @@
   "app.description": "Glyph Atlas的资料维基，记录Unicode未编码文字及可统一的异体字，为向IRG提交提案积累资料。",
   "nav.browse": "记录",
   "nav.history": "历史",
+  "nav.radicals": "部首",
   "nav.sources": "出处",
   "nav.about": "关于",
   "nav.add": "添加字",
