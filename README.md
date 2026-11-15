@@ -68,7 +68,7 @@ A record holds a `b:` tag for its path and for each path above it, so `?radical=
 
 Radicals beyond the 214 of the Kangxi dictionary and the threshold of ten records were proposed by NGWU YOH (chat messages, 2026-11-06 to 2026-11-15, unpublished).
 
-A record is filed when it is written. `bun scripts/file-radicals.ts --local` (or `--remote`) files every listed record again, for records written before radicals were indexed and after the tables are rebuilt.
+A record is filed when it is written. `bun scripts/file-radicals.ts --local` (or `--remote`) files every listed record again, for records written before radicals were indexed and after the tables are rebuilt. Pause writes (`WRITES_PAUSED`) for the run: a record written during it keeps its earlier path until it is written again.
 
 ## Search index
 

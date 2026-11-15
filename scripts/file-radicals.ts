@@ -1,6 +1,7 @@
 // Files every listed record under its radical again: the `b:` rows of `entry_tags` and their counts.
 // A record is filed when it is written; this is for the records written before radicals were indexed,
-// and for after src/lib/radical-tables.ts is rebuilt.
+// and for after src/lib/radical-tables.ts is rebuilt. A record written between the read and the write
+// keeps the path it had at the read until it is written again, so pause writes (WRITES_PAUSED) for the run.
 //
 //   bun scripts/file-radicals.ts --local
 //   bun scripts/file-radicals.ts --remote
