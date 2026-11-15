@@ -97,10 +97,12 @@
   })
 
   // The export's manifest and layout are read while the first description is still being typed.
+  // Only a change of style, not every change of the page's data, asks for another composer.
+  const style = $derived(glyphStyleOf(page.data.glyphStyle))
   $effect(() => {
     if (!near) return
     let live = true
-    const kind = separate, style = glyphStyleOf(page.data.glyphStyle)
+    const kind = separate
     composer(kind, style).then(found => { found.warm(); if (live) preview = { draw: found, separate: kind } }, () => {})
     return () => { live = false }
   })
