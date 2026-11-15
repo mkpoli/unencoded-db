@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
-import { addSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, WORD_SIZE, EXACT_SIZE, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -1229,4 +1229,46 @@ test('a record names the evidence that holds its earliest year through every wri
   // A record with no year names none.
   const undated = await createEntry(db, fields(), seen(), [], who)
   expect(first(undated)).toBeNull()
+})
+describe('search total', () => {
+  test('a search counts every record it finds, from its shortest range', async () => {
+    await createEntry(db, described('⿰木木'), seen(), [], who)
+    await createEntry(db, described('⿰木水'), seen(), [], who)
+    await createEntry(db, described('⿰水水'), seen({ place: 'A temple in Lukang' }), [], who)
+    expect(await searchTotal(db, { script: 'han', query: '木' })).toEqual({ n: 2, floor: false })
+    expect(await searchTotal(db, { script: 'han', query: '木 水' })).toEqual({ n: 1, floor: false })
+    expect(await searchTotal(db, { script: 'han', query: '⿰木水' })).toEqual({ n: 1, floor: false })
+    expect(await searchTotal(db, { script: 'han', query: 'Lukang' })).toEqual({ n: 1, floor: false })
+    expect(await searchTotal(db, { script: 'han', query: 'absent' })).toEqual({ n: 0, floor: false })
+    expect(await searchTotal(db, { script: 'han', filter: 'variant', query: '木' })).toEqual({ n: 0, floor: false })
+    // A list with nothing to test is no search, and its count is the chip's.
+    expect(await searchTotal(db, { script: 'han' })).toBeNull()
+  })
+
+  test('past the records it may read, the count is a floor', async () => {
+    const n = TOTAL_READ + 5
+    raw.prepare(`WITH RECURSIVE seq(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM seq WHERE x < ?)
+      INSERT INTO entries(id, script, created_by, created_at, updated_at) SELECT x, 'han', ?, '2026', '2026' FROM seq`).run(n, who.actor)
+    raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'all', id FROM entries")
+    raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'w:wide', id FROM entries")
+    raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'w:even', id FROM entries WHERE id % 2 = 0")
+    raw.prepare("INSERT INTO tag_counts(tag, n) VALUES ('all', ?)").run(n)
+    expect(await searchTotal(db, { query: 'wide' })).toEqual({ n: TOTAL_READ, floor: true })
+    expect(await searchTotal(db, { query: 'wide even' })).toEqual({ n: Math.floor(n / 2), floor: false })
+  })
+
+  test('each read is a range of an index', () => {
+    const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
+    const statements = [
+      totalStatement(db, { script: 'han', query: '亻 木' }, { tag: 'w:亻' }),
+      totalStatement(db, { script: 'han', filter: 'variant', within: ['unicode'], query: '亻' }, { tag: 'r:unicode' }),
+      totalStatement(db, { script: 'han', query: '⿰木木' }, { exact: '⿰木木' }),
+    ].map(statement => statement as unknown as { sql: string; values: unknown[] })
+    for (const { sql, values } of [...statements, { sql: WORD_SIZE, values: ['w:亻'] }, { sql: EXACT_SIZE, values: ['⿰木木'] }]) {
+      const details = plan(sql, values)
+      expect(details.join('\n')).not.toMatch(/TEMP B-TREE/)
+      // Every table is searched by key; the one scan is of the capped range read just above it.
+      for (const detail of details) expect(detail).not.toMatch(/^SCAN (?!d$|\(subquery-\d+\)$)/)
+    }
+  })
 })

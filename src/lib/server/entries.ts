@@ -15,7 +15,7 @@ import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf } from '$lib/radical
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
 import { hashHex } from './image'
-import { ORDER, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
+import { ORDER, PAGE, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
 
 export type EntryFields = { script: string; script_other: string | null; description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
 export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; via_url: string | null; via_title: string | null; via_author: string | null; via_publisher: string | null; via_report_date: string | null; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null }
@@ -672,7 +672,6 @@ export async function mediaVisible(db: D1Database, key: string) {
 }
 
 export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; radical?: string | null; decade?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; order?: Order; seed?: number | null; after?: string | null; limit?: number }
-export const PAGE = 48
 export const SEARCH_WINDOW = 256
 
 // The one key a script and a filter name, or null for a filter that is not one.
@@ -821,6 +820,50 @@ export async function list(db: D1Database, listing: Listing) {
   }
   const next = consumed < results.length ? cursorAt(listing.order ?? ORDER, results[consumed - 1]) : null
   return { tiles, next, partial: read.searching && next !== null && tiles.length < limit }
+}
+
+// A search is counted once, from the shortest range it is tested against: a key, a word or the exact
+// description. At most TOTAL_READ records of that range are read; past that the count is a floor.
+export const TOTAL_READ = 1000
+type TotalRange = { tag: string; exact?: false } | { tag?: undefined; exact: string }
+export const WORD_SIZE = `SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags WHERE tag = ? LIMIT ${TOTAL_READ + 1})`
+export const EXACT_SIZE = `SELECT count(*) AS n FROM (SELECT entry_id FROM claims WHERE kind = 'ids' AND value = ? GROUP BY entry_id LIMIT ${TOTAL_READ + 1})`
+export function totalStatement(db: D1Database, listing: Listing, from: TotalRange) {
+  const plan = listPlan(listing)
+  if (!plan) return null
+  const tags = [...(plan.keys.length ? plan.keys : ['all']), ...plan.words].filter(tag => tag !== from.tag)
+  const exact = from.exact ? null : plan.exact
+  const tests = [
+    ...(exact ? ["EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value = ? AND k.entry_id = d.entry_id)"] : []),
+    ...tags.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = d.entry_id)'),
+  ].join(' AND ') || '1'
+  const range = from.exact
+    ? "SELECT entry_id FROM claims WHERE kind = 'ids' AND value = ? GROUP BY entry_id ORDER BY entry_id"
+    : 'SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id'
+  return db.prepare(`SELECT count(*) AS n FROM (${range} LIMIT ${TOTAL_READ}) d WHERE ${tests}`)
+    .bind(from.exact ?? from.tag, ...(exact ? [exact] : []), ...tags)
+}
+
+// How many records a search finds, or null for a listing that is no search.
+export async function searchTotal(db: D1Database, listing: Listing): Promise<{ n: number; floor: boolean } | null> {
+  const plan = listPlan(listing)
+  const keys = plan?.keys.length ? plan.keys : ['all']
+  if (!plan || (!plan.exact && !plan.words.length && keys.length < 2)) return null
+  const [known, ...read] = await db.batch<{ tag: string; n: number }>([
+    db.prepare('SELECT tag, n FROM tag_counts WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(keys)),
+    ...plan.words.map(word => db.prepare(WORD_SIZE).bind(word)),
+    ...(plan.exact ? [db.prepare(EXACT_SIZE).bind(plan.exact)] : []),
+  ])
+  const sizes = new Map(known.results.map(row => [row.tag, row.n]))
+  const ranges: (TotalRange & { size: number })[] = [
+    ...keys.map(tag => ({ tag, size: sizes.get(tag) ?? 0 })),
+    ...plan.words.map((tag, i) => ({ tag, size: read[i].results[0]?.n ?? 0 })),
+    ...(plan.exact ? [{ exact: plan.exact, size: read[plan.words.length].results[0]?.n ?? 0 }] : []),
+  ]
+  const from = ranges.reduce((least, range) => range.size < least.size ? range : least)
+  if (!from.size) return { n: 0, floor: false }
+  const counted = await totalStatement(db, listing, from)!.first<{ n: number }>()
+  return { n: counted?.n ?? 0, floor: from.size > TOTAL_READ }
 }
 
 // The chronology (年表): every dated record in the order of its earliest year, each with the evidence

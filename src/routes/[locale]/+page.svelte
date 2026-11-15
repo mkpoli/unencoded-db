@@ -7,7 +7,7 @@
   import Tile from '$lib/components/Tile.svelte'
   import { COLLECTIONS, groupGenres } from '$lib/genres'
   import { MARKED } from '$lib/registries'
-  import { ORDER, SORTS } from '$lib/order'
+  import { ORDER, PAGE, SORTS } from '$lib/order'
   import { STATUSES, NEEDS } from '$lib/scripts'
   import { href, t } from '$lib/t'
   import { TILE_SIZE_COOKIE, TILE_SIZES, tileSizeOf } from '$lib/tile-size'
@@ -16,8 +16,8 @@
   const { standalone, groups } = groupGenres()
   // Further pages are appended as the list nears its end. They belong to the listing they were read for,
   // and a new listing starts again from its own first page.
-  type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: string | null; partial: boolean }
-  const fresh = (from: typeof data): Shown => ({ for: from, tiles: from.tiles, glyphs: from.glyphs ?? {}, next: from.next, partial: from.partial })
+  type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: string | null; partial: boolean; total: typeof data.total }
+  const fresh = (from: typeof data): Shown => ({ for: from, tiles: from.tiles, glyphs: from.glyphs ?? {}, next: from.next, partial: from.partial, total: from.total })
   let loaded = $state.raw<Shown | null>(null)
   const shown = $derived(loaded?.for === data ? loaded : fresh(data))
   const REACH = 1200
@@ -44,7 +44,7 @@
       const next = result.data as typeof data
       // A record already shown is not added twice, whatever the page that brings it again.
       const shownIds = new Set(base.tiles.map(tile => tile.id))
-      loaded = { for: from, tiles: [...base.tiles, ...next.tiles.filter(tile => !shownIds.has(tile.id))], glyphs: { ...base.glyphs, ...next.glyphs }, next: next.next, partial: next.partial }
+      loaded = { for: from, tiles: [...base.tiles, ...next.tiles.filter(tile => !shownIds.has(tile.id))], glyphs: { ...base.glyphs, ...next.glyphs }, next: next.next, partial: next.partial, total: base.total }
       failedFor = null
       // The sentinel has moved down. Until the observer looks at it again it is taken to be far, and it is
       // observed afresh so the observer reports where it is now, even if scrolling has brought it back.
@@ -65,8 +65,12 @@
     watching.observe(sentinel)
     return () => { watching.disconnect(); observer = undefined; near = false }
   })
-  // A search reads the records a window at a time and may find nothing in one, so it continues only when asked.
-  $effect(() => { if (near && !busy && failedFor !== data && !shown.partial && shown.next !== null) grow() })
+  // A search reads the records a window at a time and may find nothing in one. It knows how many it finds,
+  // so it keeps reading while some are still to come; past a count it could only bound, it waits to be asked.
+  const left = $derived(shown.total ? shown.total.n - shown.tiles.length : null)
+  const done = $derived(shown.total !== null && !shown.total.floor && left !== null && left <= 0)
+  const pagesLeft = $derived(left !== null && left > 0 ? Math.ceil(left / PAGE) : null)
+  $effect(() => { if (near && !busy && failedFor !== data && !done && (!shown.partial || (left ?? 0) > 0) && shown.next !== null) grow() })
   const appendOnClick = (event: MouseEvent) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     event.preventDefault()
@@ -79,8 +83,8 @@
   let arrival = ''
   afterNavigate(navigation => { arrival = navigation.type })
   const reloaded = () => (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'reload'
-  export const snapshot: Snapshot<{ tiles: Shown['tiles']; next: string | null; partial: boolean; y: number } | null> = {
-    capture: () => loaded?.for === data ? { tiles: loaded.tiles, next: loaded.next, partial: loaded.partial, y: scrollY } : null,
+  export const snapshot: Snapshot<{ tiles: Shown['tiles']; next: string | null; partial: boolean; total: Shown['total']; y: number } | null> = {
+    capture: () => loaded?.for === data ? { tiles: loaded.tiles, next: loaded.next, partial: loaded.partial, total: loaded.total, y: scrollY } : null,
     restore: value => {
       if (!value || (arrival === 'enter' && reloaded())) return
       const { y, ...pages } = value
@@ -199,12 +203,12 @@
   {#if data.searchError}
     <p class="muted" role="alert">{t(`browse.${data.searchError}`)}</p>
   {:else if shown.tiles.length}
+    {#if shown.total}<p class="found">{t('browse.found', { n: `${shown.total.n}${shown.total.floor ? '+' : ''}` })}</p>{/if}
     <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
-  {:else if !shown.partial}
+  {:else if !shown.partial || done}
     <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.filter || data.genre || data.collection || data.tag || data.radical || data.decade || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
   {/if}
-  {#if shown.partial}<p class="muted">{t('browse.searchContinues')}</p>{/if}
-  {#if shown.next !== null}<div bind:this={sentinel}><a class="button" href={more} aria-busy={busy} onclick={appendOnClick}>{t(shown.partial ? 'browse.continueSearch' : 'browse.more')}</a></div>{/if}
+  {#if shown.next !== null && !done}<div class="ahead" bind:this={sentinel}>{#if pagesLeft !== null}<p class="muted">{t(pagesLeft === 1 && !shown.total?.floor ? 'browse.pageLeft' : 'browse.pagesLeft', { n: `${pagesLeft}${shown.total?.floor ? '+' : ''}` })}</p>{/if}<a class="button" href={more} aria-busy={busy} onclick={appendOnClick}>{t(shown.partial ? 'browse.continueSearch' : 'browse.more')}</a></div>{/if}
 </div>
 <style>
   .heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:start; gap:20px }
@@ -225,5 +229,7 @@
   .size input { width:96px; padding:0; border:0; background:none; accent-color:var(--accent) }
   .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(var(--tile-size),100%),1fr)); gap:22px 16px }
   :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .tiles { gap:8px }
+  .found { margin-bottom:-8px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
+  .ahead { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px }
   .empty { padding:48px 16px; text-align:center; color:var(--muted) } .empty a { display:inline-block; margin-top:12px; color:var(--ink) }
 </style>
