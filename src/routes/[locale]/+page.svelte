@@ -20,7 +20,10 @@
   const REACH = 1200
   let sentinel = $state<HTMLElement>()
   let observer: IntersectionObserver | undefined
-  let near = $state(false), busy = $state(false)
+  let near = $state(false)
+  // The listing a read is on its way for. A read for a listing left behind neither holds up nor frees the next.
+  let busyFor = $state.raw<typeof data | null>(null)
+  const busy = $derived(busyFor === data)
   let failedFor = $state.raw<typeof data | null>(null)
   const more = $derived.by(() => {
     const params = new URLSearchParams(page.url.searchParams)
@@ -30,7 +33,7 @@
   async function grow() {
     if (busy || shown.next === null) return
     const from = data, base = shown, target = more
-    busy = true
+    busyFor = from
     try {
       const result = await preloadData(target)
       if (from !== data) return
@@ -48,7 +51,7 @@
     } catch {
       if (from === data) failedFor = from
     } finally {
-      busy = false
+      if (busyFor === from) busyFor = null
     }
   }
   $effect(() => {
