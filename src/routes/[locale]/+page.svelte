@@ -5,7 +5,6 @@
   import Seo from '$lib/components/Seo.svelte'
   import Tile from '$lib/components/Tile.svelte'
   import { COLLECTIONS, groupGenres } from '$lib/genres'
-  import { cleanIds } from '$lib/ids'
   import { MARKED } from '$lib/registries'
   import { STATUSES, NEEDS } from '$lib/scripts'
   import { href, t } from '$lib/t'
@@ -143,7 +142,7 @@
   {#if data.searchError}
     <p class="muted" role="alert">{t(`browse.${data.searchError}`)}</p>
   {:else if shown.tiles.length}
-    <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[cleanIds(tile.ids ?? '')]} />{/each}</div>
+    <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
   {:else if !shown.partial}
     <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.filter || data.genre || data.collection || data.tag || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
   {/if}

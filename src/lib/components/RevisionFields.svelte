@@ -2,7 +2,7 @@
   // A past version of a record or a sighting, as it read then. A record's claims are listed by kind, each
   // with the claims it held under and the sightings it rested on.
   import { doculectKey } from '$lib/doculects'
-  import { CLAIM_KINDS, claimsOf, compositionOf, scopesOf, type Claim, type ClaimKind } from '$lib/claims'
+  import { CLAIM_KINDS, claimsOf, compositionOf, layoutOf, scopesOf, type Claim, type ClaimKind } from '$lib/claims'
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { registryLabel } from '$lib/registries'
@@ -79,7 +79,7 @@
       {#each CLAIM_KINDS.filter(kind => kind !== 'relation') as kind}
         {@const items = claimsOf(entry.claims, kind)}
         {#if items.length}
-          <div class:wide={WIDE.includes(kind)}><dt>{t(KIND_LABELS[kind])}</dt><dd><ul class="claims" class:ids={kind === 'ids'}>{#each items as claim (claim.key)}<li>{shown(claim, entry.claims)}{@render scopes(claim, entry.claims)}{@render bases(claim)}</li>{/each}</ul></dd></div>
+          <div class:wide={WIDE.includes(kind)}><dt>{t(KIND_LABELS[kind])}</dt><dd><ul class="claims" class:ids={kind === 'ids'}>{#each items as claim (claim.key)}<li>{shown(claim, entry.claims)}{#if layoutOf(claim)}<span class="scope">{t('field.layoutAdjusted')}</span>{/if}{@render scopes(claim, entry.claims)}{@render bases(claim)}</li>{/each}</ul></dd></div>
         {/if}
       {/each}
     </dl>

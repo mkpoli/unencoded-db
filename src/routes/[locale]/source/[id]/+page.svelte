@@ -2,7 +2,6 @@
   import Seo from '$lib/components/Seo.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
-  import { cleanIds } from '$lib/ids'
   import { href, t } from '$lib/t'
   import { recordCode } from '$lib/code'
   let { data } = $props()
@@ -36,7 +35,7 @@
       {@const tile = sighting.tile}
       <article class="panel seen" id="sighting-{sighting.id}">
         <a class="record" href={href(`/entry/${tile.id}#sighting-${sighting.id}`)}>
-          <span class="plate">{#if tile.ids}<IdsGlyph ids={tile.ids} path={data.glyphs?.[cleanIds(tile.ids)]} />{:else}<span class="small muted">{t('browse.noImage')}</span>{/if}</span>
+          <span class="plate">{#if tile.ids}<IdsGlyph ids={tile.ids} layout={tile.layout} path={data.glyphs?.[tile.id]} />{:else}<span class="small muted">{t('browse.noImage')}</span>{/if}</span>
           <span class="ids">{tile.ids ?? ''}</span>
           <span class="small muted">{recordCode(tile.id)}</span>
         </a>

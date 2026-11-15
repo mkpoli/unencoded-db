@@ -1,8 +1,7 @@
 import { error, redirect } from '@sveltejs/kit'
 import { counts, exactSearchIds, facetTag, list, listTag, markTags, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, terms } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
-import { glyphPaths, warmGlyphs } from '$lib/server/glyphs'
-import { cleanIds } from '$lib/ids'
+import { tileGlyphs } from '$lib/server/glyphs'
 import { parseRecordCode } from '$lib/code'
 import { positiveId } from '../_submission.server'
 import type { PageServerLoad } from './$types'
@@ -33,10 +32,6 @@ export const load: PageServerLoad = async (event) => {
   if (named) redirect(303, `/${event.params.locale}/entry/${named.id}`)
   const [page, totals] = await Promise.all([searchError ? null : list(db, { script, filter, facet, within, without, query, before }), counts(db)])
   if (!page && !searchError) error(404)
-  const media = event.platform?.env?.MEDIA
-  const ids = (page?.tiles.map(tile => tile.ids).filter((id): id is string => Boolean(id)) ?? []).map(cleanIds)
-  const glyphs = await glyphPaths(media, ids)
-  const missing = [...new Set(ids.filter(id => !glyphs[id]))]
-  if (missing.length) event.platform?.ctx?.waitUntil(warmGlyphs(media, missing, { assets: event.platform?.env?.ASSETS, origin: event.url.origin }))
+  const glyphs = await tileGlyphs(event.platform, event.url.origin, page?.tiles ?? [])
   return { ...(page ?? { tiles: [], next: null, partial: false }), counts: totals, glyphs, filter, genre, collection, tag, within, without, query, searchError, continued: before !== null && query.length > 0 }
 }

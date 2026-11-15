@@ -20,10 +20,17 @@
   // One description of a character, sent as an `ids` value. It is a plain text input until ids-input's
   // sequence field has loaded and takes its place, so the form works before scripts run and without them.
   import { onMount, tick } from 'svelte'
+  import type { IdsAdapter, IdsEditor } from 'ids-input/svelte'
   import { IDS_LENGTH_MAX } from '$lib/ids'
   import { locale } from '$lib/t'
 
-  let { value = $bindable(''), label, titled = false, compact = false }: { value?: string; label: string; titled?: boolean; compact?: boolean } = $props()
+  let { value = $bindable(''), label, titled = false, compact = false, adapter, oneditor }: {
+    value?: string; label: string; titled?: boolean; compact?: boolean
+    /** The tables the field's editor looks parts up in, once tools are opened over it. */
+    adapter?: IdsAdapter
+    /** Hears of the field's editor when ids-input has loaded. */
+    oneditor?: (editor: IdsEditor) => void
+  } = $props()
 
   const uid = $props.id()
   const at = locale()
@@ -62,7 +69,7 @@
 </script>
 
 {#if kit}
-  <kit.Field bind:this={field} bind:value {label} {titled} {compact} messages={kit.messages} locale={at} {placeholder} />
+  <kit.Field bind:this={field} bind:value {label} {titled} {compact} messages={kit.messages} locale={at} {placeholder} {adapter} {oneditor} />
   <input type="hidden" name="ids" {value} />
 {:else}
   <div class="plain" class:compact>

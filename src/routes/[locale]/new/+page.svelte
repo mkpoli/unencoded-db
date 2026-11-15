@@ -3,14 +3,13 @@
   import PictureList from '$lib/components/PictureList.svelte'
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import SightingFields from '$lib/components/SightingFields.svelte'
-  import IdsDrawing from '$lib/components/IdsDrawing.svelte'
-  import IdsField from '$lib/components/IdsField.svelte'
+  import CharacterFields from '$lib/components/CharacterFields.svelte'
   import CompositionField from '$lib/components/CompositionField.svelte'
   import IdentityFields from '$lib/components/IdentityFields.svelte'
   import SenseFields from '$lib/components/SenseFields.svelte'
   import CategoryFields from '$lib/components/CategoryFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
-  import { compositionOf, valuesOf } from '$lib/claims'
+  import { compositionOf, primaryLayoutOf, valuesOf } from '$lib/claims'
   import { ADD_SIGHTINGS_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
   import { SIGHTING_START } from '$lib/scripts'
   import { href, media, t } from '$lib/t'
@@ -57,6 +56,7 @@
   })
   const claims = $derived(values?.claims ?? [])
   const descriptions = untrack(() => valuesOf(form?.values.claims ?? [], 'ids'))
+  const layout = untrack(() => primaryLayoutOf(form?.values.claims ?? []))
   let primary = $state(descriptions[0] ?? '')
   const composition = $derived.by(() => { const found = compositionOf(claims); return found ? JSON.stringify(found) : '' })
 
@@ -79,16 +79,14 @@
   <header class="heading"><h1>{t('add.title')}</h1><a class="text-link" href={href('/batch')}>{t('batch.link')}</a></header>
   {#if message}<p class="notice bad" role="alert" bind:this={notice}>{message}</p>{/if}
   <form class="form" method="POST" enctype="multipart/form-data" onsubmit={weigh}>
-    <section class="panel character">
-      <div class="plate"><IdsDrawing ids={primary} /></div>
-      <div class="described">
-        <IdsField values={descriptions} bind:primary onfill={facts => filled = facts} />
+    <section class="panel">
+      <CharacterFields values={descriptions} {layout} bind:primary onfill={facts => filled = facts}>
         <div class="sheet">
           <CompositionField ids={primary} value={composition} />
           <ScriptPicker value={values?.script} other={values?.script_other} />
           <IdentityFields {claims} radical={values?.radical} strokes={values?.strokes} fill={filled} />
         </div>
-      </div>
+      </CharacterFields>
     </section>
     <section class="panel titled"><label class="section-title" for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="3">{values?.description ?? ''}</textarea></section>
     <section class="panel"><SenseFields {claims} {evidence} fill={filled} /></section>
@@ -114,14 +112,11 @@
 <style>
   /* Three steps of space: a label and its control, the fields of a group, one group and the next. */
   .form { display:flex; flex-direction:column; gap:28px; min-width:0 }
-  .group, .sighting, .described { display:flex; flex-direction:column; gap:16px; min-width:0 }
+  .group, .sighting { display:flex; flex-direction:column; gap:16px; min-width:0 }
   .heading { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:6px 16px }
   .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
-  .character { display:grid; grid-template-columns:208px minmax(0, 1fr); align-items:start; gap:24px }
   .sheet { display:flex; flex-direction:column; gap:10px; padding-top:10px; border-top:1px dashed var(--line) }
   .titled { display:flex; flex-direction:column; gap:8px; min-width:0 }
-  /* The drawing stays in view while the facts beside it are filled in. */
-  .plate { position:sticky; inset-block-start:16px }
   .sighting { position:relative; margin:0 }
   .sighting:focus-visible { outline-offset:4px }
   legend { padding:0 6px; margin-inline-start:-6px; font-weight:600 }
@@ -131,7 +126,5 @@
   .filed { margin-top:14px }
   @media(max-width:700px) {
     .panel { padding:16px }
-    .character { grid-template-columns:minmax(0, 1fr); gap:16px }
-    .plate { position:static; width:148px; justify-self:center }
   }
 </style>
