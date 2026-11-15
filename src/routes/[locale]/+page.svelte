@@ -118,6 +118,11 @@
     for (const name of ['collection', 'tag', 'after']) params.delete(name)
     return params.size ? `?${params}` : href()
   })
+  const unfiled = $derived.by(() => {
+    const params = new URLSearchParams(page.url.searchParams)
+    for (const name of ['radical', 'after']) params.delete(name)
+    return params.size ? `?${params}` : href()
+  })
 </script>
 
 <Seo />
@@ -138,6 +143,7 @@
         {#each groups as group (group.parent.slug)}<optgroup label={group.parent.label}><option value={group.parent.slug}>{group.parent.label} ({count(`g:${group.parent.slug}`)})</option>{#each group.children as genre (genre.slug)}<option value={genre.slug}>{genre.label} ({count(`g:${genre.slug}`)})</option>{/each}</optgroup>{/each}
       </select></div>
     {/if}
+    <div class="field radical"><span class="label">{t('field.radical')}</span>{#if data.radical}{@const radical = [...data.radical].at(-1)}<input type="hidden" name="radical" value={data.radical} /><a class="pinned" href={unfiled} aria-label="{radical} ×"><span class="glyph">{radical}</span> <span aria-hidden="true">×</span></a>{:else}<a class="input choose" href={href('/radicals')}>{t('browse.all')}<span aria-hidden="true">›</span></a>{/if}</div>
     {#if data.order !== ORDER}<input type="hidden" name="sort" value={data.order} />{/if}
     {#if data.seed !== null}<input type="hidden" name="seed" value={data.seed} />{/if}
     {#each data.within as id}<input type="hidden" name="in" value={id} />{/each}{#each data.without as id}<input type="hidden" name="out" value={id} />{/each}
@@ -166,7 +172,7 @@
   {:else if shown.tiles.length}
     <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
   {:else if !shown.partial}
-    <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.filter || data.genre || data.collection || data.tag || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
+    <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.filter || data.genre || data.collection || data.tag || data.radical || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
   {/if}
   {#if shown.partial}<p class="muted">{t('browse.searchContinues')}</p>{/if}
   {#if shown.next !== null}<div bind:this={sentinel}><a class="button" href={more} aria-busy={busy} onclick={appendOnClick}>{t(shown.partial ? 'browse.continueSearch' : 'browse.more')}</a></div>{/if}
@@ -175,7 +181,8 @@
   .heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:start; gap:20px }
   .intro { gap:8px; max-width:720px }
   .filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:16px; border:1px solid var(--line); border-radius:9px; background:var(--surface) }
-  .filters .field { flex:1 1 180px } .filters .search { flex:2 1 260px }
+  .filters .field { flex:1 1 180px } .filters .search { flex:2 1 260px } .filters .radical { flex:0 1 120px }
+  .choose { display:flex; align-items:center; justify-content:space-between; gap:8px } .choose:hover { border-color:var(--ink) } .pinned .glyph { font-size:18px; line-height:1 }
   .states, .marks, .sort { display:flex; flex-wrap:wrap; gap:4px }
   .shuffle { display:inline-flex; align-items:center; gap:6px } .shuffle svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round }
   .bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px } .marks { gap:8px }

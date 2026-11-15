@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import type { Order } from '$lib/order'
-import { addSighting, claimedBy, counts, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, parseSourceCursor, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { standing } from '$lib/radicals'
+import { addSighting, claimedBy, counts, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -840,7 +841,7 @@ describe('order', () => {
 // with no scan of a table and no sort.
 describe('query cost', () => {
   const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
-  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }, ...(['old', 'most', 'fewest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
+  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { radical: '口' }, { radical: '儿兄克', script: 'han', filter: 'variant', facet: 'g:hakka', query: '亻' }, { radical: '儿兄克', order: 'most' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }, ...(['old', 'most', 'fewest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
   for (const shape of shapes) test(`list ${JSON.stringify(shape)}`, () => {
     const statement = listStatement(db, shape) as unknown as { sql: string; values: unknown[] }
     const details = plan(statement.sql, statement.values)
@@ -849,6 +850,13 @@ describe('query cost', () => {
     if (shape.order === 'random') return expect(details[0]).toMatch(/^SEARCH t USING COVERING INDEX entry_tags_by_shuffle \(tag=\? AND <expr>>\? AND <expr><\?\)$/)
     // A list by count reads the count index from the cursor on; any other reads the key in order.
     expect(details[0]).toMatch(shape.order === 'most' || shape.order === 'fewest' ? /^SEARCH t USING COVERING INDEX entry_tags_by_sightings \(tag=\? AND \(sightings,entry_id\)[<>]\(\?,\?\)\)$/ : /^SEARCH (t|w\d) USING PRIMARY KEY/)
+  })
+
+  test('the radical counts read one range of the counts by key', () => {
+    for (const under of [undefined, '儿']) {
+      const statement = radicalCountsStatement(db, under) as unknown as { sql: string; values: unknown[] }
+      expect(plan(statement.sql, statement.values)).toEqual(['SEARCH tag_counts USING PRIMARY KEY (tag>? AND tag<?)'])
+    }
   })
 
   test('the second read of a shuffled list reads the shuffle index too', () => {
@@ -1000,5 +1008,48 @@ describe('scripts outside the list', () => {
     const details = (raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')
     expect(details).not.toMatch(/TEMP B-TREE|SCAN entries/)
     expect(details.match(/SEARCH entries USING (COVERING )?INDEX entries_custom_scripts \(script_other>\?\)/g)).toHaveLength(2)
+  })
+})
+
+describe('radicals', () => {
+  const tagsOf = (id: number) => (raw.query("SELECT tag FROM entry_tags WHERE entry_id = ? AND tag GLOB 'b:*' ORDER BY tag").all(id) as { tag: string }[]).map(row => row.tag)
+  const listed = async (radical: string) => (await list(db, { radical }))!.tiles.map(tile => tile.id)
+
+  test('a record is listed under its radical and every path down to its head', async () => {
+    const weight = await createEntry(db, described('⿺克卡'), seen(), [], who)
+    const mouth = await createEntry(db, described('⿰口男'), seen(), [], who)
+    expect(tagsOf(weight)).toEqual(['b:儿', 'b:儿兄', 'b:儿兄克'])
+    expect(tagsOf(mouth)).toEqual(['b:口'])
+    expect(await listed('儿')).toEqual([weight])
+    expect(await listed('儿兄克')).toEqual([weight])
+    expect(await listed('口')).toEqual([mouth])
+    expect(await listed('山')).toEqual([])
+    expect(await list(db, { radical: '克' })).toBeNull()
+    expect(await list(db, { radical: 'x' })).toBeNull()
+    expect(await counts(db)).not.toHaveProperty('b:口')
+  })
+
+  test('a new description or a stated radical files the record again, and a hidden record is filed nowhere', async () => {
+    const id = await createEntry(db, described('⿰口男'), seen(), [], who)
+    await editEntry(db, id, 1, described('⿰男口'), who, null)
+    expect(tagsOf(id)).toEqual(['b:田', 'b:田男'])
+    await editEntry(db, id, 2, { ...described('⿰男口'), radical: '口' }, who, null)
+    expect(tagsOf(id)).toEqual(['b:口'])
+    expect(await radicalCounts(db)).toEqual(new Map([['口', 1]]))
+    await setHidden(db, { entry: id }, true, who, null)
+    expect(tagsOf(id)).toEqual([])
+    expect(await radicalCounts(db)).toEqual(new Map())
+  })
+
+  test('a path stands as a radical once ten records stay in it', async () => {
+    for (const part of '千百十分厘毫卡兩') await createEntry(db, described(`⿺克${part}`), seen(), [], who)
+    await createEntry(db, described('⿰兄口'), seen(), [], who)
+    const nine = await createEntry(db, described('⿺克米'), seen(), [], who)
+    expect(standing(await radicalCounts(db))).toEqual([{ path: '儿', radical: '儿', records: 10, branches: [{ path: '儿兄', radical: '兄', records: 10, branches: [] }] }])
+    await createEntry(db, described('⿺克斤'), seen(), [], who)
+    // 兄 keeps one record of its own once 克 stands, so it stands no longer.
+    expect(standing(await radicalCounts(db, '儿'))).toEqual([{ path: '儿', radical: '儿', records: 11, branches: [{ path: '儿兄克', radical: '克', records: 10, branches: [] }] }])
+    await setHidden(db, { entry: nine }, true, who, null)
+    expect(standing(await radicalCounts(db))).toEqual([{ path: '儿', radical: '儿', records: 10, branches: [{ path: '儿兄', radical: '兄', records: 10, branches: [] }] }])
   })
 })
