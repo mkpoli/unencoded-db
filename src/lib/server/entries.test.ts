@@ -858,7 +858,11 @@ describe('query cost', () => {
       const details = plan(statement.sql, statement.values).join('\n')
       expect(details).toMatch(/SEARCH tag_counts USING INDEX tag_counts_branches \(tag>\? AND tag<\?\)/)
       expect(details).toMatch(/SEARCH tag_counts USING PRIMARY KEY \(tag=\?\)/)
-      expect(details).not.toMatch(/SCAN tag_counts|TEMP B-TREE/)
+      // The stated paths are one range of the counts, and each one's records are read by key.
+      expect(details).toMatch(/SEARCH d USING PRIMARY KEY \(tag>\? AND tag<\?\)/)
+      expect(details).toMatch(/SEARCH t USING PRIMARY KEY \(tag=\?\)/)
+      expect(details).toMatch(/SEARCH tag_counts USING PRIMARY KEY \(tag>\? AND tag<\?\)/)
+      expect(details).not.toMatch(/SCAN (tag_counts|d|t)\b|TEMP B-TREE/)
     }
   })
 
@@ -1024,7 +1028,9 @@ describe('scripts outside the list', () => {
 
 describe('radicals', () => {
   const tagsOf = (id: number) => (raw.query("SELECT tag FROM entry_tags WHERE entry_id = ? AND tag GLOB 'b:*' ORDER BY tag").all(id) as { tag: string }[]).map(row => row.tag)
+  const statedBy = (id: number) => (raw.query("SELECT tag FROM entry_tags WHERE entry_id = ? AND tag GLOB 'b!*' ORDER BY tag").all(id) as { tag: string }[]).map(row => row.tag)
   const listed = async (radical: string) => (await list(db, { radical }))!.tiles.map(tile => tile.id)
+  const stand = async (under?: string) => { const { counts, stated } = await radicalCounts(db, under); return standing(counts, stated) }
 
   test('a record is listed under its radical and every path down to its head', async () => {
     const weight = await createEntry(db, described('⿺克卡'), seen(), [], who)
@@ -1046,21 +1052,47 @@ describe('radicals', () => {
     expect(tagsOf(id)).toEqual(['b:田', 'b:田男'])
     await editEntry(db, id, 2, { ...described('⿰男口'), radical: '口' }, who, null)
     expect(tagsOf(id)).toEqual(['b:口'])
-    expect(await radicalCounts(db)).toEqual(new Map([['口', 1]]))
+    expect(statedBy(id)).toEqual(['b!口'])
+    expect(await radicalCounts(db)).toEqual({ counts: new Map([['口', 1]]), stated: new Set(['口']) })
     await setHidden(db, { entry: id }, true, who, null)
     expect(tagsOf(id)).toEqual([])
-    expect(await radicalCounts(db)).toEqual(new Map())
+    expect(await radicalCounts(db)).toEqual({ counts: new Map(), stated: new Set() })
   })
 
   test('a path stands as a radical once ten records stay in it', async () => {
     for (const part of '千百十分厘毫卡兩') await createEntry(db, described(`⿺克${part}`), seen(), [], who)
     await createEntry(db, described('⿰兄口'), seen(), [], who)
     const nine = await createEntry(db, described('⿺克米'), seen(), [], who)
-    expect(standing(await radicalCounts(db))).toEqual([{ path: '儿', radical: '儿', records: 10, branches: [{ path: '儿兄', radical: '兄', records: 10, branches: [] }] }])
+    expect(await stand()).toEqual([{ path: '儿', radical: '儿', records: 10, branches: [{ path: '儿兄', radical: '兄', records: 10, branches: [] }] }])
     await createEntry(db, described('⿺克斤'), seen(), [], who)
     // 兄 keeps one record of its own once 克 stands, so it stands no longer.
-    expect(standing(await radicalCounts(db, '儿'))).toEqual([{ path: '儿', radical: '儿', records: 11, branches: [{ path: '儿兄克', radical: '克', records: 10, branches: [] }] }])
+    expect(await stand('儿')).toEqual([{ path: '儿', radical: '儿', records: 11, branches: [{ path: '儿兄克', radical: '克', records: 10, branches: [] }] }])
     await setHidden(db, { entry: nine }, true, who, null)
-    expect(standing(await radicalCounts(db))).toEqual([{ path: '儿', radical: '儿', records: 10, branches: [{ path: '儿兄', radical: '兄', records: 10, branches: [] }] }])
+    expect(await stand()).toEqual([{ path: '儿', radical: '儿', records: 10, branches: [{ path: '儿兄', radical: '兄', records: 10, branches: [] }] }])
+  })
+
+  test('a radical a record states stands at once, and holds the records read into it', async () => {
+    const read = await createEntry(db, described('⿰男求'), seen(), [], who)
+    expect(await stand()).toEqual([{ path: '田', radical: '田', records: 1, branches: [] }])
+    const said = await createEntry(db, { ...described('⿱糞土'), radical: '男' }, seen(), [], who)
+    expect(tagsOf(said)).toEqual(['b:田', 'b:田男'])
+    expect(statedBy(said)).toEqual(['b!田男'])
+    expect(await stand()).toEqual([{ path: '田', radical: '田', records: 2, branches: [{ path: '田男', radical: '男', records: 2, branches: [] }] }])
+    expect(await stand('田')).toEqual(await stand())
+    expect(await listed('田男')).toEqual([said, read])
+    await setHidden(db, { entry: said }, true, who, null)
+    expect(await stand()).toEqual([{ path: '田', radical: '田', records: 1, branches: [] }])
+  })
+
+  test('a stated character without a Kangxi radical is a radical after the Kangxi ones', async () => {
+    const id = await createEntry(db, { ...described('⿸ㄏ·'), radical: 'ㄏ' }, seen(), [], who)
+    const other = await createEntry(db, { ...described('⿰口男'), radical: 'ㄏ' }, seen(), [], who)
+    await createEntry(db, described('⿰龠口'), seen(), [], who)
+    expect(tagsOf(id)).toEqual(['b:ㄏ'])
+    expect(statedBy(id)).toEqual(['b!ㄏ'])
+    expect((await stand()).map(branch => [branch.path, branch.records])).toEqual([['龠', 1], ['ㄏ', 2]])
+    expect(await stand('ㄏ')).toEqual([{ path: 'ㄏ', radical: 'ㄏ', records: 2, branches: [] }])
+    expect(await listed('ㄏ')).toEqual([other, id])
+    expect(await counts(db)).not.toHaveProperty('b!ㄏ')
   })
 })

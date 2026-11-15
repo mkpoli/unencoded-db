@@ -62,11 +62,11 @@ A code typed whole into search, in either spelling, opens its record.
 
 ## Radicals
 
-A record is filed under a radical read from its first description. The head of a description is the part that holds its radical, and `src/lib/radicals.ts` chooses it by how often each part, in each place of a description, holds the radical of an encoded ideograph. The path runs from a Kangxi radical through each character down to the head: ⿺克卡 is filed `儿兄克`. A radical the record states stands in place of the one read, unless the description leads further down the same path.
+A record is filed under a radical read from its first description. The head of a description is the part that holds its radical, and `src/lib/radicals.ts` chooses it by how often each part, in each place of a description, holds the radical of an encoded ideograph. The path runs from a Kangxi radical through each character down to the head: ⿺克卡 is filed `儿兄克`. A radical the record states stands in place of the one read, unless the description leads further down the same path. A stated character with no Kangxi radical, such as ㄏ, is a radical outside the Kangxi set.
 
-A record holds a `b:` tag for its path and for each path above it, so `?radical=儿` lists the records under 克 as well. A path longer than a Kangxi radical stands as a radical of its own once ten records stay in it after the branches standing under it are taken out; until then its records show under the path above. `/radicals` lists the radicals that stand.
+A record holds a `b:` tag for its path and for each path above it, so `?radical=儿` lists the records under 克 as well, and a `b!` tag for the path its stated radical names. A path longer than a Kangxi radical stands as a radical of its own once a record states it, or once ten records stay in it after the branches standing under it are taken out; until then its records show under the path above. Stating 男 on one record therefore gathers every record read as `田男` under 男. `/radicals` lists the radicals that stand, the ones outside the Kangxi set last.
 
-Radicals beyond the 214 of the Kangxi dictionary and the threshold of ten records were proposed by NGWU YOH (chat messages, 2026-11-06 to 2026-11-15, unpublished).
+Radicals beyond the 214 of the Kangxi dictionary, adding one whenever a character needs it, and the threshold of ten records were proposed by NGWU YOH (chat messages, 2026-11-06 to 2026-11-15, unpublished).
 
 A record is filed when it is written. `bun scripts/file-radicals.ts --local` (or `--remote`) files every listed record again, for records written before radicals were indexed and after the tables are rebuilt. Pause writes (`WRITES_PAUSED`) for the run: a record written during it keeps its earlier path until it is written again.
 

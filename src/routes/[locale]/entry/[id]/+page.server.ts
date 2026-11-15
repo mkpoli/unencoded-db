@@ -14,7 +14,8 @@ export const load: PageServerLoad = async (event) => {
   if (found.entry.merged_into) redirect(302, `/${event.params.locale}/entry/${found.entry.merged_into}`)
   // The radicals the record is filed under, from the Kangxi radical down to the branch that holds it.
   const path = radicalPath(found.entry.ids, found.entry.radical)
-  const filed = path ? filedUnder(path, await radicalCounts(env(event).DB, path[0])).map(({ path, radical }) => ({ path, radical })) : []
+  const held = path ? await radicalCounts(env(event).DB, path[0]) : null
+  const filed = path && held ? filedUnder(path, held.counts, held.stated).map(({ path, radical }) => ({ path, radical })) : []
   return { entry: found.entry, claims: found.claims, sightings: found.sightings.filter(s => !s.hidden_at), filed }
 }
 
