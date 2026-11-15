@@ -198,5 +198,6 @@
   .size svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.4 }
   .size input { width:96px; padding:0; border:0; background:none; accent-color:var(--accent) }
   .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(var(--tile-size),100%),1fr)); gap:22px 16px }
+  :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .tiles { gap:8px }
   .empty { padding:48px 16px; text-align:center; color:var(--muted) } .empty a { display:inline-block; margin-top:12px; color:var(--ink) }
 </style>

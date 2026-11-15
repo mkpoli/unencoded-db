@@ -37,7 +37,7 @@
 </a>
 
 <style>
-  .tile { display: flex; flex-direction: column; gap: 3px; min-width: 0 }
+  .tile { position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 0 }
   .plate { display: grid; place-items: center; aspect-ratio: 1; overflow: hidden; border-radius: 6px; background: var(--surface-tile); color: var(--ink); margin-bottom: 4px }
   .tile:hover .plate { outline: 2px solid var(--line-strong); outline-offset: 1px }
   img { width: 100%; height: 100%; object-fit: contain; display: block }
@@ -51,4 +51,7 @@
   .meta { display: flex; align-items: baseline; gap: 5px; min-width: 0; min-height: 18px; font-size: 12px; color: var(--muted) }
   .meta time { flex: none; font-variant-numeric: tabular-nums }
   .sightings { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+  /* Tiles below 96px show the glyph alone; the lines under it stay readable to assistive technology. */
+  :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .tile > :not(.plate) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap }
+  :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .plate { margin-bottom: 0 }
 </style>
