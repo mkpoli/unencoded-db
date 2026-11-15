@@ -3,6 +3,7 @@
 // up the page. A drawing is one path, or SVG markup when a layout moves its parts.
 import { documentView } from '@han-compose/composer/document-view'
 import { compose, sketch } from '@han-compose/composer/loader'
+import { onlyBundled } from '@han-compose/composer/local'
 import { sourceFor, traitKey, traitsOf } from '@han-compose/composer/source'
 import { layerFrames, renderScopes, scopesMarkup } from 'ids-input/document'
 import { composerUrl, composerVersion, GLYPH_STYLE, type GlyphStyle } from '$lib/composer'
@@ -56,14 +57,22 @@ function bundled(context: Context) {
   }
 }
 
-// A source is chosen by what the description calls for and whether its parts are drawn one by one,
-// and reads the export through one bucket.
+// A source is chosen by style, what the description calls for, whether bundled outlines alone draw
+// it, and whether its parts are drawn one by one; it reads the export through one bucket. A source
+// built from bundled outlines alone has no export behind it, so it is never handed a description
+// that needs one.
+export function sourceKey(sequence: string, context: Context, separate = false) {
+  const traits = traitsOf(sequence)
+  const local = traits.empty || onlyBundled(sequence, separate)
+  return `${context.style ?? GLYPH_STYLE}:${local ? 'local' : 'remote'}:${traitKey(traits)}:${context.assets ? 1 : 0}:${separate ? 1 : 0}`
+}
+
 function sourceOf(bucket: Bucket, sequence: string, context: Context, separate = false) {
   let byTrait = sources.get(bucket)
   if (!byTrait) sources.set(bucket, byTrait = new Map())
   const traits = traitsOf(sequence)
   const style = context.style ?? GLYPH_STYLE
-  const key = `${style}:${traitKey(traits)}:${context.assets ? 1 : 0}:${separate ? 1 : 0}`
+  const key = sourceKey(sequence, context, separate)
   let source = byTrait.get(key)
   if (!source) {
     source = sourceFor(sequence, { base: composerUrl(style), fontStyle: style, traits, separate, fetch: reader(bucket, style), loaders: composerData, read: bundled(context) })

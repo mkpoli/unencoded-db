@@ -122,6 +122,10 @@ declare module '@han-compose/composer/source' {
   }): ComposerSource
 }
 
+declare module '@han-compose/composer/local' {
+  export function onlyBundled(sequence: string, separate?: boolean, unicode?: boolean, fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho'): boolean
+}
+
 declare module '@han-compose/composer/loader' {
   import type { ComposerSource, Drawing, SketchLeaf } from '@han-compose/composer'
   export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho' }): Promise<Drawing>
