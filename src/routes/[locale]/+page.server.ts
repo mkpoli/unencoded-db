@@ -17,7 +17,7 @@ export const load: PageServerLoad = async (event) => {
   // A marked work keeps the list to the records in it or to the ones not in it: ?in=, ?out=, each as often as needed.
   const within = [...new Set(searchParams.getAll('in'))], without = [...new Set(searchParams.getAll('out'))]
   const query = (searchParams.get('q') ?? '').trim()
-  // ?sort= names an order other than the newest first; ?after= is the place a further page starts from.
+  // ?sort= names an order other than most evidence first; ?after= is the place a further page starts from.
   const order = orderOf(searchParams.get('sort'))
   const after = searchParams.get('after')
   if (!order || !cursorOf(order, after)) error(404)

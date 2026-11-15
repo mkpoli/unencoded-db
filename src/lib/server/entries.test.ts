@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
-import type { Order } from '$lib/order'
+import { ORDER, type Order } from '$lib/order'
 import { addSighting, claimedBy, counts, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, shuffleRanges, SOURCE_CARD_READ, sourceList, sourcePage, SOURCES_PAGE, SOURCES_WINDOW, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
@@ -247,11 +247,11 @@ describe('search', () => {
       const found: number[] = []
       let pages = 0
       do {
-        const statement = listStatement(db, { query, after, limit: 2 })!
+        const statement = listStatement(db, { order: 'new', query, after, limit: 2 })!
         const candidates = (await statement.all<{ id: number; matches: number }>()).results
         // Every row returned by the statement is a facet candidate, including nonmatches.
         expect(candidates.length).toBeLessThanOrEqual(SEARCH_WINDOW + 1)
-        const page: NonNullable<Awaited<ReturnType<typeof list>>> = (await list(db, { query, after, limit: 2 }))!
+        const page: NonNullable<Awaited<ReturnType<typeof list>>> = (await list(db, { order: 'new', query, after, limit: 2 }))!
         found.push(...page.tiles.map(tile => tile.id))
         if (page.next !== null) expect(after === null || Number(page.next) < Number(after)).toBe(true)
         after = page.next
@@ -259,7 +259,7 @@ describe('search', () => {
       } while (after !== null)
       expect(found).toEqual(query === 'absent' ? [] : query === 'rare' ? [700, 520, 300, 100, 2] : [700, 300, 2])
     }
-    const first = (await list(db, { query: 'absent' }))!
+    const first = (await list(db, { order: 'new', query: 'absent' }))!
     expect(first).toMatchObject({ tiles: [], next: String(n - SEARCH_WINDOW + 1), partial: true })
     const candidates = (await listStatement(db, { query: 'absent' })!.all<{ matches: number }>()).results
     expect(candidates).toHaveLength(SEARCH_WINDOW + 1)
@@ -803,7 +803,7 @@ describe('order', () => {
 // with no scan of a table and no sort.
 describe('query cost', () => {
   const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
-  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }, ...(['old', 'most', 'fewest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
+  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }, ...(['new', 'old', 'fewest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'new' || order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
   for (const shape of shapes) test(`list ${JSON.stringify(shape)}`, () => {
     const statement = listStatement(db, shape) as unknown as { sql: string; values: unknown[] }
     const details = plan(statement.sql, statement.values)
@@ -811,7 +811,7 @@ describe('query cost', () => {
     for (const detail of details) expect(detail).not.toMatch(/^SCAN (?!.*USING)/)
     if (shape.order === 'random') return expect(details[0]).toMatch(/^SEARCH t USING COVERING INDEX entry_tags_by_shuffle \(tag=\? AND <expr>>\? AND <expr><\?\)$/)
     // A list by count reads the count index from the cursor on; any other reads the key in order.
-    expect(details[0]).toMatch(shape.order === 'most' || shape.order === 'fewest' ? /^SEARCH t USING COVERING INDEX entry_tags_by_sightings \(tag=\? AND \(sightings,entry_id\)[<>]\(\?,\?\)\)$/ : /^SEARCH (t|w\d) USING PRIMARY KEY/)
+    expect(details[0]).toMatch((shape.order ?? ORDER) === 'most' || shape.order === 'fewest' ? /^SEARCH t USING COVERING INDEX entry_tags_by_sightings \(tag=\? AND \(sightings,entry_id\)[<>]\(\?,\?\)\)$/ : /^SEARCH (t|w\d) USING PRIMARY KEY/)
   })
 
   test('the second read of a shuffled list reads the shuffle index too', () => {

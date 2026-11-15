@@ -1,7 +1,7 @@
 // The orders a list can be read in. Each is one range of an index on `entry_tags`.
-export const ORDERS = ['new', 'old', 'most', 'fewest', 'random'] as const
+export const ORDERS = ['most', 'fewest', 'new', 'old', 'random'] as const
 export type Order = (typeof ORDERS)[number]
-export const ORDER: Order = 'new'
+export const ORDER: Order = 'most'
 export const orderOf = (value: string | null | undefined): Order | null => !value ? ORDER : (ORDERS as readonly string[]).includes(value) ? value as Order : null
 // The orders offered beside one another; the shuffled one has its own button.
 export const SORTS = ORDERS.filter(order => order !== 'random')
