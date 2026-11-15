@@ -678,11 +678,13 @@ const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status,
 
 // Where each order reads its range, and the place a cursor names in it: the record alone for the orders
 // by record, the count and the record for the orders by count. Null names a cursor that is not one.
+// The order indexes leave out word rows, which are only looked up by key; a read names that so it may use them.
+const LISTED = "t.tag NOT GLOB 'w:*'"
 const ORDER_READS: Record<Order, { by: string; past: string; counted: boolean }> = {
   new: { by: 't.entry_id DESC', past: 't.entry_id < ?', counted: false },
   old: { by: 't.entry_id', past: 't.entry_id > ?', counted: false },
-  most: { by: 't.sightings DESC, t.entry_id DESC', past: '(t.sightings, t.entry_id) < (?, ?)', counted: true },
-  fewest: { by: 't.sightings, t.entry_id', past: '(t.sightings, t.entry_id) > (?, ?)', counted: true },
+  most: { by: 't.sightings DESC, t.entry_id DESC', past: `(t.sightings, t.entry_id) < (?, ?) AND ${LISTED}`, counted: true },
+  fewest: { by: 't.sightings, t.entry_id', past: `(t.sightings, t.entry_id) > (?, ?) AND ${LISTED}`, counted: true },
 }
 const ID = /^[1-9]\d{0,15}$/, COUNT = /^(0|[1-9]\d{0,8})$/
 export function cursorOf(order: Order, after: string | null | undefined): number[] | null | undefined {
