@@ -113,7 +113,8 @@ function between(char: string, radical: number, seen = new Set<string>()): strin
     if (head === null) return []
     tree = unwrap(tree.parts[head])
   }
-  return typeof tree !== 'string' || isForm(tree, radical) ? [] : [...between(tree, radical, seen), tree]
+  // A description that is one character names it only where that character has a radical and holds this one.
+  return typeof tree !== 'string' || !filed.has(tree) || isForm(tree, radical) || depthOf(tree, radical) === Infinity ? [] : [...between(tree, radical, seen), tree]
 }
 const via: string[] = []
 for (const [char, { radical, rest }] of filed) {

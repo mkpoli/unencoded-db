@@ -11,11 +11,20 @@ test('a description is filed under the radical of its head, through the characte
   expect(radicalPath('⿰钅滞')).toEqual(['金'])
 })
 
+test('a variation selector on a part leaves its radical alone', () => {
+  expect(radicalPath('⿰氵\u{E0100}男')).toEqual(['水'])
+  expect(radicalPath('⿱艹\uFE00男')).toEqual(radicalPath('⿱艹男'))
+  expect(radicalPath('男\uFE00')).toEqual(['田'])
+})
+
 test('the first description counts, and a part without a radical is passed over', () => {
   expect(radicalPath('⿰口男 ⿰氵男')).toEqual(['口'])
   expect(radicalPath('⿰？男')).toEqual(['田', '男'])
   expect(radicalPath('⿰⺼尔')).toEqual(['肉'])
   expect(radicalPath('⿸ㄏ·')).toBeNull()
+  // 𬼁 is described as ？ alone, which is no character on the way to its radical.
+  expect(radicalPath('⿰𬼁口')).toEqual(['丿', '𬼁'])
+  expect(parsePath('丿𬼁')).toBe('丿𬼁')
   expect(radicalPath('')).toBeNull()
   expect(radicalPath(null)).toBeNull()
 })
