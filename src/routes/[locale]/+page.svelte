@@ -36,7 +36,9 @@
       if (from !== data) return
       if (result.type !== 'loaded' || result.status !== 200) { failedFor = from; return }
       const next = result.data as typeof data
-      loaded = { for: from, tiles: [...base.tiles, ...next.tiles], glyphs: { ...base.glyphs, ...next.glyphs }, next: next.next, partial: next.partial }
+      // A record already shown is not added twice, whatever the page that brings it again.
+      const shownIds = new Set(base.tiles.map(tile => tile.id))
+      loaded = { for: from, tiles: [...base.tiles, ...next.tiles.filter(tile => !shownIds.has(tile.id))], glyphs: { ...base.glyphs, ...next.glyphs }, next: next.next, partial: next.partial }
       failedFor = null
       // The observer reports the moved sentinel a frame later; until then it is measured here.
       await tick()
