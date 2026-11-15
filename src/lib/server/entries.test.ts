@@ -760,7 +760,7 @@ describe('order', () => {
     expect(await walk('fewest')).toEqual([1, 5, 3, 6, 2, 4, 7])
   })
   test('a shuffled list reads every record once from any start, in the order of its ranks', async () => {
-    const rank = (id: number) => (id * 2654435761) % 2 ** 32
+    const rank = (id: number) => { const x = (id * 2654435761) % 2 ** 32; return Number(((BigInt(x) ^ BigInt(Math.floor(x / 65536))) * 73244475n) % 2n ** 32n) }
     const byRank = [1, 2, 3, 4, 5, 6, 7].sort((a, b) => rank(a) - rank(b))
     for (const seed of [0, 1, rank(4), rank(4) + 1, 2 ** 31, 2 ** 32 - 1]) {
       const found = await walk('random', seed)
