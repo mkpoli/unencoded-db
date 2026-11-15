@@ -29,14 +29,16 @@ test('create, browse, view, edit and add a sighting', async () => {
   let detail = await detailLoad(event()) as any
   expect(detail.entry.rev).toBe(1)
   expect(detail.sightings).toHaveLength(1)
+  expect(detail.earliest).toBeNull()
   expect(objects.size).toBe(1)
   const edit = new FormData(); edit.set('rev', '1'); edit.set('description', 'Updated')
   await expect(detailActions.edit(event(edit))).rejects.toMatchObject({ status: 303 })
   const stale = await detailActions.edit(event(edit)) as any
   expect(stale.status).toBe(409)
-  const seen = new FormData(); seen.set('url', 'https://example.test/source')
+  const seen = new FormData(); seen.set('url', 'https://example.test/source'); seen.set('original_date', '1935')
   await expect(addSightingActions.default(event(seen))).rejects.toMatchObject({ status: 303 })
   detail = await detailLoad(event()) as any
+  expect(detail.earliest).toEqual({ year: '1935', kind: 'original', sighting: detail.sightings[1].id })
   expect(detail.entry.description).toBe('Updated')
   expect(detail.sightings).toHaveLength(2)
 })

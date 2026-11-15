@@ -215,6 +215,8 @@
   "entry.edit": "편집",
   "entry.history": "이력",
   "entry.report": "신고",
+  "entry.firstSeen": "최초 확인 {year}년",
+  "entry.earliest": "최초",
   "entry.about": "문자 정보",
   "entry.noDescription": "아직 작성된 설명이 없습니다.",
   "entry.openIds": "IDS Workshop에서 열기",

@@ -215,6 +215,8 @@
   "entry.edit": "Chỉnh sửa",
   "entry.history": "Lịch sử",
   "entry.report": "Báo cáo",
+  "entry.firstSeen": "Thấy sớm nhất năm {year}",
+  "entry.earliest": "Sớm nhất",
   "entry.about": "Về chữ này",
   "entry.noDescription": "Chưa có mô tả nào về chữ này.",
   "entry.openIds": "Mở trong IDS Workshop",

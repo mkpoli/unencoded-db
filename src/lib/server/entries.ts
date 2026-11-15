@@ -174,6 +174,24 @@ function firstYear(value: string | null) {
 // The year a list is read by: a record's first year as a number, which keeps no leading zero.
 const yearOf = (text: string | null) => text === null ? null : Number(text)
 
+// A sighting's year: the work's own date when it is the earlier, else the date it was reported.
+function sightingYear(sighting: Pick<SightingFields, 'report_date' | 'original_date'>) {
+  const report = firstYear(sighting.report_date), original = firstYear(sighting.original_date)
+  return original && (!report || original.n <= report.n) ? { ...original, kind: 'original' as const } : report ? { ...report, kind: 'report' as const } : null
+}
+
+// The earliest attestation among visible sightings, and the sighting that holds it: the first added
+// of those that share its year.
+export function earliestSighting<T extends Pick<SightingFields, 'report_date' | 'original_date'> & { id?: number; hidden_at?: string | null }>(sightings: T[]) {
+  let found: { text: string; n: number; kind: YearKind; sighting: T } | null = null
+  for (const sighting of sightings) {
+    if (sighting.hidden_at) continue
+    const year = sightingYear(sighting)
+    if (year && (!found || year.n < found.n)) found = { ...year, sighting }
+  }
+  return found
+}
+
 type SightingState = SightingFields & { media?: StoredImage[]; hidden_at?: string | null }
 
 // What a tile shows of a record, read from its visible sightings: the cover, where it was seen, which
@@ -183,13 +201,8 @@ function summarize(sightings: SightingState[]) {
   const visible = sightings.filter(sighting => !sighting.hidden_at)
   const cover = visible.find(sighting => sighting.media?.length)
   const types = new Set<SightingType>()
-  let year: { text: string; n: number; kind: YearKind } | null = null
-  for (const sighting of visible) {
-    for (const type of parseSightingTypes(sighting.types)) types.add(type)
-    const report = firstYear(sighting.report_date), original = firstYear(sighting.original_date)
-    const found = original && (!report || original.n <= report.n) ? { ...original, kind: 'original' as const } : report ? { ...report, kind: 'report' as const } : null
-    if (found && (!year || found.n < year.n)) year = found
-  }
+  for (const sighting of visible) for (const type of parseSightingTypes(sighting.types)) types.add(type)
+  const year = earliestSighting(visible)
   const chosen = SIGHTING_TYPES.filter(type => types.has(type))
   return {
     visible,

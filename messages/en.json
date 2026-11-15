@@ -215,6 +215,8 @@
   "entry.edit": "Edit",
   "entry.history": "History",
   "entry.report": "Report",
+  "entry.firstSeen": "First seen {year}",
+  "entry.earliest": "Earliest",
   "entry.about": "About this character",
   "entry.noDescription": "Nothing has been written about it yet.",
   "entry.openIds": "Open in the IDS Workshop",

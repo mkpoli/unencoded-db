@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import type { Order } from '$lib/order'
 import { standing } from '$lib/radicals'
-import { addSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, chronology, DECADE_TILES, DECADES_PAGE, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, earliestSighting, chronology, DECADE_TILES, DECADES_PAGE, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -1164,4 +1164,14 @@ describe('chronology', () => {
     const details = (raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.values as never[])) as { detail: string }[]).map(row => row.detail)
     expect(details).toEqual([expect.stringMatching(/^SEARCH tag_counts USING PRIMARY KEY \(tag>\? AND tag<\?\)$/)])
   })
+})
+
+test('the earliest attestation is a work\'s own date when older than its report, among visible evidence, first added on a tie', () => {
+  const at = (id: number, report_date: string | null, original_date: string | null, hidden_at: string | null = null) => ({ id, report_date, original_date, hidden_at })
+  expect(earliestSighting([at(1, '2017-03-01', null), at(2, '1999', '1935年'), at(3, '1940', null)])).toMatchObject({ text: '1935', kind: 'original', sighting: { id: 2 } })
+  // A reported date older than the work's own date is the earlier one.
+  expect(earliestSighting([at(1, '1920', '1950')])).toMatchObject({ text: '1920', kind: 'report' })
+  expect(earliestSighting([at(1, '1999', null), at(2, '1800', null, 'hidden')])).toMatchObject({ text: '1999', sighting: { id: 1 } })
+  expect(earliestSighting([at(1, '1935', null), at(2, '1935', null)])).toMatchObject({ sighting: { id: 1 } })
+  expect(earliestSighting([at(1, null, null), at(2, '令和', null)])).toBeNull()
 })

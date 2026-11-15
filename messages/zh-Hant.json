@@ -215,6 +215,8 @@
   "entry.edit": "編輯",
   "entry.history": "歷史",
   "entry.report": "檢舉",
+  "entry.firstSeen": "最早見於{year}年",
+  "entry.earliest": "最早",
   "entry.about": "關於這個字",
   "entry.noDescription": "還沒有關於這個字的描述。",
   "entry.openIds": "在IDS Workshop中開啟",

@@ -215,6 +215,8 @@
   "entry.edit": "编辑",
   "entry.history": "历史",
   "entry.report": "举报",
+  "entry.firstSeen": "最早见于{year}年",
+  "entry.earliest": "最早",
   "entry.about": "关于这个字",
   "entry.noDescription": "还没有关于这个字的描述。",
   "entry.openIds": "在IDS Workshop中打开",

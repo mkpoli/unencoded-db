@@ -215,6 +215,8 @@
   "entry.edit": "編集",
   "entry.history": "履歴",
   "entry.report": "報告",
+  "entry.firstSeen": "初出{year}年",
+  "entry.earliest": "初出",
   "entry.about": "この文字について",
   "entry.noDescription": "まだ説明はありません。",
   "entry.openIds": "IDS Workshopで開く",
