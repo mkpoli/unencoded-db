@@ -114,7 +114,7 @@
         <div><dt>{registryLabel(encoding.charset)}</dt><dd>{#if character}<span class="character encoded">{character}</span><CopyButton text={character} /> {/if}{#if page}<a class="mono text-link" href={page} target="_blank" rel="noopener">{encoding.code} ↗</a>{:else}<span class="mono">{encoding.code}</span>{/if}{#if character}<span class="sites">{#each characterLinks(character, at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</span>{/if}</dd></div>
       {/each}
       {#if ivd}<div><dt>{t('field.ivd')}</dt><dd class:mono={ivd !== 'none'}>{ivd === 'none' ? t('field.ivdNone') : ivd}</dd></div>{/if}
-      {#if entry.radical}<div><dt>{t('field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
+      {#if data.filed.length}<div><dt>{t('field.radical')}</dt><dd class="radicals">{#each data.filed as radical, index (radical.path)}{#if index}<span class="muted" aria-hidden="true">›</span>{/if}<a class="character text-link" href={href(`?radical=${encodeURIComponent(radical.path)}`)}>{radical.radical}</a>{/each}</dd></div>{:else if entry.radical}<div><dt>{t('field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
       {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
     </dl>
     <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} />
@@ -212,6 +212,7 @@
   .marks { display:flex; flex-wrap:wrap; gap:6px; margin:0; padding:0; list-style:none } .marks a:hover { text-decoration:underline }
   .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:12px; margin:0 } .facts:empty { display:none }
   dt { color:var(--muted); font-size:12px } dd { margin:2px 0 0; overflow-wrap:anywhere }
+  .radicals { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px }
   .character { font-size:20px; line-height:1.3 } .character.encoded { font-family:inherit; vertical-align:middle }
   .supports { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px; margin:0; min-width:0 }
   .supported { display:inline-flex; align-items:baseline; gap:6px; min-width:0; max-width:100%; padding:1px 9px; border:1px solid var(--line); border-radius:999px; font-size:12.5px } .supported:hover { border-color:var(--accent); color:var(--accent) }

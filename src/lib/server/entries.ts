@@ -11,6 +11,7 @@ import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, 
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { genreOf } from '$lib/genres'
+import { BRANCH_MIN, KANGXI, parsePath, pathsOf, radicalPath } from '$lib/radicals'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
 import { hashHex } from './image'
@@ -129,7 +130,7 @@ export function parseMarks(raw: string | null | undefined): string[] {
 }
 
 type TagInput = Pick<Entry, 'script' | 'status' | 'description' | 'script_other'>
-export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key'>, hasSource: boolean, claims: readonly Claim[] = []) {
+export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key' | 'radical'>, hasSource: boolean, claims: readonly Claim[] = []) {
   const filters = entry.status ? [`f:${entry.status}`] : []
   if (!entry.cover_key) filters.push('n:image')
   if (!entry.ids) filters.push('n:ids')
@@ -143,7 +144,9 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   // A record is counted in or out of every marked work, so a list of either is one range.
   const held = marksHeld(claims)
   const marks = MARKED.map(registry => `${held.includes(registry.id) ? 'r' : 'x'}:${registry.id}`)
-  return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks]
+  // A record is listed under its radical's path and under every path above it, so a radical lists its branches too.
+  const filed = pathsOf(radicalPath(entry.ids, entry.radical) ?? []).map(path => `b:${path}`)
+  return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks, ...filed]
 }
 
 const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'tag']
@@ -640,7 +643,7 @@ export async function mediaVisible(db: D1Database, key: string) {
   return Boolean(await db.prepare(`SELECT 1 FROM sighting_media x INDEXED BY sighting_media_by_image ${live} AND x.image_key = ?1 UNION ALL SELECT 1 FROM sighting_media x INDEXED BY sighting_media_by_thumb ${live} AND x.thumb_key = ?1 LIMIT 1`).bind(key).first())
 }
 
-export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; order?: Order; seed?: number | null; after?: string | null; limit?: number }
+export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; radical?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; order?: Order; seed?: number | null; after?: string | null; limit?: number }
 export const PAGE = 48
 export const SEARCH_WINDOW = 256
 
@@ -658,6 +661,13 @@ export function facetTag(facet?: string | null) {
   return match ? `${match[1]}:${match[2]}` : undefined
 }
 
+// A radical's path (`b:`), as the key its records and its branches' records are listed under.
+export function radicalTag(radical?: string | null) {
+  if (!radical) return null
+  const path = parsePath(radical)
+  return path ? `b:${path}` : undefined
+}
+
 // The marked works a list keeps to (`r:`) and leaves out (`x:`), as the keys they are listed under, or
 // null for a name that is no marked work.
 export function markTags(within: readonly string[] = [], without: readonly string[] = []) {
@@ -671,14 +681,14 @@ export function exactSearchIds(query: string) {
 }
 
 // The keys every row of a listing holds and the words it is searched for. Null names a listing that is not one.
-function listPlan({ script, filter, facet, within, without, query }: Listing) {
-  const base = listTag(script, filter), own = facetTag(facet), marks = markTags(within, without)
-  if (!base || own === undefined || !marks) return null
+function listPlan({ script, filter, facet, radical, within, without, query }: Listing) {
+  const base = listTag(script, filter), own = facetTag(facet), filed = radicalTag(radical), marks = markTags(within, without)
+  if (!base || own === undefined || filed === undefined || !marks) return null
   if ((query?.trim().length ?? 0) > SEARCH_LENGTH_MAX) return null
   const exact = exactSearchIds(query ?? '')
   const words = exact ? [] : [...new Set(terms(query ?? ''))]
   if (!exact && (words.length > SEARCH_TERMS_MAX || (query?.trim() && !words.length))) return null
-  const keys = [...(own ? [own] : []), ...marks, ...(base !== 'all' ? [base] : [])]
+  const keys = [...(own ? [own] : []), ...(filed ? [filed] : []), ...marks, ...(base !== 'all' ? [base] : [])]
   return { keys, exact, words: words.map(word => `w:${word}`) }
 }
 
@@ -776,10 +786,25 @@ export async function list(db: D1Database, listing: Listing) {
   return { tiles, next, partial: read.searching && next !== null && tiles.length < limit }
 }
 
-// The counts a page shows beside its filters. Tags are counted too, and read where they are listed.
+// The counts a page shows beside its filters. Tags are counted too, and read where they are listed. The
+// radical paths (`b:`) are stepped over by key, so the read does not grow with them.
+export const countsStatement = (db: D1Database) => db.prepare(`SELECT tag, n FROM tag_counts WHERE (tag < 'b:' OR tag >= 'b;') AND n > 0 AND tag NOT LIKE '%|%' AND tag NOT LIKE 't:%'`)
 export async function counts(db: D1Database) {
-  const { results } = await db.prepare(`SELECT tag, n FROM tag_counts WHERE n > 0 AND tag NOT LIKE '%|%' AND tag NOT LIKE 't:%'`).all<{ tag: string; n: number }>()
+  const { results } = await countsStatement(db).all<{ tag: string; n: number }>()
   return Object.fromEntries(results.map(row => [row.tag, row.n])) as Record<string, number>
+}
+
+// The records each radical path holds, for the paths that can stand as a radical: a Kangxi radical in
+// use and any path with enough records. `under` keeps the read to one Kangxi radical and its branches.
+// The paths with enough records are one range of `tag_counts_branches` and the radicals are read by
+// key, so the read does not grow with the paths that hold fewer.
+export function radicalCountsStatement(db: D1Database, under?: string) {
+  const from = `b:${under ?? ''}`, to = under ? `${from}\u{10FFFF}` : 'b;'
+  return db.prepare(`SELECT substr(tag, 3) AS path, n FROM tag_counts INDEXED BY tag_counts_branches WHERE tag >= ?1 AND tag < ?2 AND n >= ${BRANCH_MIN}
+    UNION ALL SELECT substr(tag, 3), n FROM tag_counts WHERE tag IN (SELECT 'b:' || value FROM json_each(?3)) AND n > 0 AND n < ${BRANCH_MIN}`).bind(from, to, JSON.stringify(under ? [under] : KANGXI))
+}
+export async function radicalCounts(db: D1Database, under?: string) {
+  return new Map((await radicalCountsStatement(db, under).all<{ path: string; n: number }>()).results.map(row => [row.path, row.n]))
 }
 
 export const TAGS_MAX = 200

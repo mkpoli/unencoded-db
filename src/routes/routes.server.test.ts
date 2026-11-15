@@ -6,6 +6,7 @@ import { actions as detailActions, load as detailLoad } from './[locale]/entry/[
 import { actions as addSightingActions } from './[locale]/entry/[id]/sighting/new/+page.server'
 import { load as browseLoad } from './[locale]/+page.server'
 import { load as sourcesLoad } from './[locale]/sources/+page.server'
+import { load as radicalsLoad } from './[locale]/radicals/+page.server'
 
 const png = new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,10,0,0,0,10,8,6,0,0,0,0,0,0,0])
 
@@ -163,6 +164,23 @@ test('browse narrows by category, collection or tag and rejects a malformed one'
   expect(await browseLoad(event('tag=IRG'))).toMatchObject({ tag: 'IRG', tiles: [{ id: 1 }] })
   expect(await browseLoad(event('genre=music'))).toMatchObject({ tiles: [] })
   await expect(browseLoad(event('genre=a%7Cb'))).rejects.toMatchObject({ status: 404 })
+})
+
+test('the radicals page lists the radicals in use, browse narrows by one and the record names it', async () => {
+  const { db } = openTestDb()
+  for (const ids of ['⿺克卡', '⿰口男']) {
+    const form = new FormData()
+    form.set('place', 'A book'); form.set('url', 'https://example.test/source'); form.append('ids', ids)
+    const create = { request: { formData: async () => form }, url: new URL('https://example.test/en'), params: { locale: 'en' }, locals: {}, platform: { env: { DB: db, MEDIA: {} } }, cookies: { set() {} }, getClientAddress: () => '127.0.0.1' } as any
+    await expect(createActions.default(create)).rejects.toMatchObject({ status: 303 })
+  }
+  const platform = { env: { DB: db } }
+  expect(await radicalsLoad({ platform } as any)).toEqual({ groups: [{ strokes: 2, radicals: [{ path: '儿', radical: '儿', records: 1, branches: [] }] }, { strokes: 3, radicals: [{ path: '口', radical: '口', records: 1, branches: [] }] }] })
+  const event = (query: string) => ({ url: new URL(`https://example.test/en?${query}`), locals: { glyphStyle: 'sans' }, platform }) as any
+  expect(await browseLoad(event(`radical=${encodeURIComponent('儿兄克')}`))).toMatchObject({ radical: '儿兄克', tiles: [{ id: 1 }] })
+  expect(await browseLoad(event(`radical=${encodeURIComponent('口')}`))).toMatchObject({ tiles: [{ id: 2 }] })
+  await expect(browseLoad(event(`radical=${encodeURIComponent('克')}`))).rejects.toMatchObject({ status: 404 })
+  expect(await detailLoad({ params: { id: '1', locale: 'en' }, platform } as any)).toMatchObject({ filed: [{ path: '儿', radical: '儿' }] })
 })
 
 test('a record code typed into search opens its record', async () => {

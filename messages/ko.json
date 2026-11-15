@@ -4,6 +4,7 @@
   "app.description": "유니코드 미등재 문자와 통합 가능한 이체자의 자료를 기록하는 Glyph Atlas 위키입니다. IRG 제안을 위한 자료를 모읍니다.",
   "nav.browse": "기록",
   "nav.history": "이력",
+  "nav.radicals": "부수",
   "nav.sources": "출처",
   "nav.about": "소개",
   "nav.add": "문자 추가",

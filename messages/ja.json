@@ -4,6 +4,7 @@
   "app.description": "Unicode未収録文字と包摂可能な異体字の資料を記録するGlyph Atlasのウィキです。IRGへの提案に向けた資料を集めています。",
   "nav.browse": "記録一覧",
   "nav.history": "履歴",
+  "nav.radicals": "部首",
   "nav.sources": "出典",
   "nav.about": "このサイトについて",
   "nav.add": "文字を追加",

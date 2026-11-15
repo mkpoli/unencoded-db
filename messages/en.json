@@ -4,6 +4,7 @@
   "app.description": "A Glyph Atlas evidence wiki documenting Unicode-unencoded characters and unifiable variants for prospective IRG submissions.",
   "nav.browse": "Records",
   "nav.history": "History",
+  "nav.radicals": "Radicals",
   "nav.sources": "Sources",
   "nav.about": "About",
   "nav.add": "Add a character",

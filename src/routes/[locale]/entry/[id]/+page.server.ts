@@ -1,5 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit'
-import { editEntry, getEntry, readEntryFields } from '$lib/server/entries'
+import { editEntry, getEntry, radicalCounts, readEntryFields } from '$lib/server/entries'
+import { filedUnder, radicalPath } from '$lib/radicals'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { writer } from '$lib/server/people'
 import { positiveId } from '../../../_submission.server'
@@ -11,7 +12,10 @@ export const load: PageServerLoad = async (event) => {
   const found = await getEntry(env(event).DB, id)
   if (!found || found.entry.hidden_at) error(404)
   if (found.entry.merged_into) redirect(302, `/${event.params.locale}/entry/${found.entry.merged_into}`)
-  return { entry: found.entry, claims: found.claims, sightings: found.sightings.filter(s => !s.hidden_at) }
+  // The radicals the record is filed under, from the Kangxi radical down to the branch that holds it.
+  const path = radicalPath(found.entry.ids, found.entry.radical)
+  const filed = path ? filedUnder(path, await radicalCounts(env(event).DB, path[0])).map(({ path, radical }) => ({ path, radical })) : []
+  return { entry: found.entry, claims: found.claims, sightings: found.sightings.filter(s => !s.hidden_at), filed }
 }
 
 export const actions: Actions = {
