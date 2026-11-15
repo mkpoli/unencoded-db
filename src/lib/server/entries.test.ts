@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
-import { addSighting, claimedBy, counts, createEntry, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, SOURCE_CARD_READ, sourceList, sourcePage, SOURCES_PAGE, SOURCES_WINDOW, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import type { Order } from '$lib/order'
+import { addSighting, claimedBy, counts, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, shuffleRanges, SOURCE_CARD_READ, sourceList, sourcePage, SOURCES_PAGE, SOURCES_WINDOW, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -211,17 +212,17 @@ describe('search', () => {
       SELECT x, 'han', CASE WHEN x IN (1, 2, 300, 520) THEN '⿰木木' ELSE '⿱木木' END, ?, '2026', '2026' FROM seq`).run(n, who.actor)
     raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) SELECT id, 0, printf('ids%05d', id), 'ids', ids FROM entries")
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'all', id FROM entries")
-    let before: number | null = null
+    let after: string | null = null
     const found: number[] = []
     let pages = 0
     do {
-      const candidates = (await listStatement(db, { query: '⿰木木', before, limit: 1 })!.all()).results
+      const candidates = (await listStatement(db, { query: '⿰木木', after, limit: 1 })!.all()).results
       expect(candidates.length).toBeLessThanOrEqual(SEARCH_WINDOW + 1)
-      const page: NonNullable<Awaited<ReturnType<typeof list>>> = (await list(db, { query: '⿰木木', before, limit: 1 }))!
+      const page: NonNullable<Awaited<ReturnType<typeof list>>> = (await list(db, { query: '⿰木木', after, limit: 1 }))!
       found.push(...page.tiles.map(tile => tile.id))
-      before = page.next
+      after = page.next
       expect(++pages).toBeLessThan(10)
-    } while (before !== null)
+    } while (after !== null)
     expect(found).toEqual([520, 300, 2, 1])
   })
   test('finds a part inside a description sequence and a word in the place', async () => {
@@ -242,24 +243,24 @@ describe('search', () => {
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'w:other', id FROM entries WHERE id IN (2, 300, 700)")
 
     for (const query of ['absent', 'rare', 'rare other']) {
-      let before: number | null = null
+      let after: string | null = null
       const found: number[] = []
       let pages = 0
       do {
-        const statement = listStatement(db, { query, before, limit: 2 })!
+        const statement = listStatement(db, { query, after, limit: 2 })!
         const candidates = (await statement.all<{ id: number; matches: number }>()).results
         // Every row returned by the statement is a facet candidate, including nonmatches.
         expect(candidates.length).toBeLessThanOrEqual(SEARCH_WINDOW + 1)
-        const page: NonNullable<Awaited<ReturnType<typeof list>>> = (await list(db, { query, before, limit: 2 }))!
+        const page: NonNullable<Awaited<ReturnType<typeof list>>> = (await list(db, { query, after, limit: 2 }))!
         found.push(...page.tiles.map(tile => tile.id))
-        if (page.next !== null) expect(before === null || page.next < before).toBe(true)
-        before = page.next
+        if (page.next !== null) expect(after === null || Number(page.next) < Number(after)).toBe(true)
+        after = page.next
         expect(++pages).toBeLessThan(10)
-      } while (before !== null)
+      } while (after !== null)
       expect(found).toEqual(query === 'absent' ? [] : query === 'rare' ? [700, 520, 300, 100, 2] : [700, 300, 2])
     }
     const first = (await list(db, { query: 'absent' }))!
-    expect(first).toMatchObject({ tiles: [], next: n - SEARCH_WINDOW + 1, partial: true })
+    expect(first).toMatchObject({ tiles: [], next: String(n - SEARCH_WINDOW + 1), partial: true })
     const candidates = (await listStatement(db, { query: 'absent' })!.all<{ matches: number }>()).results
     expect(candidates).toHaveLength(SEARCH_WINDOW + 1)
     expect(candidates.every(row => row.matches === 0)).toBe(true)
@@ -734,17 +735,90 @@ describe('source gallery', () => {
   })
 })
 
+describe('order', () => {
+  // Records 1–7 with 0, 2, 1, 2, 0, 1, 2 sources, read two at a time in every order.
+  const counts = [0, 2, 1, 2, 0, 1, 2]
+  beforeEach(() => {
+    counts.forEach((n, i) => raw.prepare("INSERT INTO entries(id, script, sightings, created_by, created_at, updated_at) VALUES(?, 'han', ?, ?, '2026', '2026')").run(i + 1, n, who.actor))
+    raw.exec("INSERT INTO entry_tags(tag, entry_id, sightings) SELECT 'all', id, sightings FROM entries")
+  })
+  const walk = async (order: Order, seed?: number) => {
+    const found: number[] = []
+    let after: string | null = null, pages = 0
+    do {
+      const page: NonNullable<Awaited<ReturnType<typeof list>>> = (await list(db, { order, seed, after, limit: 2 }))!
+      found.push(...page.tiles.map(tile => tile.id))
+      after = page.next
+      expect(++pages).toBeLessThan(10)
+    } while (after !== null)
+    return found
+  }
+  test('each order reads every record once, in its order', async () => {
+    expect(await walk('new')).toEqual([7, 6, 5, 4, 3, 2, 1])
+    expect(await walk('old')).toEqual([1, 2, 3, 4, 5, 6, 7])
+    expect(await walk('most')).toEqual([7, 4, 2, 6, 3, 5, 1])
+    expect(await walk('fewest')).toEqual([1, 5, 3, 6, 2, 4, 7])
+  })
+  test('a shuffled list reads every record once from any start, in the order of its ranks', async () => {
+    const rank = (id: number) => { const x = BigInt(id) * 1540483477n % 2n ** 32n; return Number(((x ^ (x >> 16n)) * 73244475n) % 2n ** 32n) }
+    const byRank = [1, 2, 3, 4, 5, 6, 7].sort((a, b) => rank(a) - rank(b))
+    for (const seed of [0, 1, rank(4), rank(4) + 1, 2 ** 31, 2 ** 32 - 1]) {
+      const found = await walk('random', seed)
+      const start = byRank.findIndex(id => rank(id) >= seed)
+      expect(found).toEqual(start < 0 ? byRank : [...byRank.slice(start), ...byRank.slice(0, start)])
+    }
+    expect(await list(db, { order: 'random' })).toBeNull()
+  })
+  test('a shuffled list continues after a cursor up to its start', () => {
+    expect(shuffleRanges(100, null)).toEqual([[100, 2 ** 32], [0, 100]])
+    expect(shuffleRanges(100, 500)).toEqual([[501, 2 ** 32], [0, 100]])
+    expect(shuffleRanges(100, 2 ** 32 - 1)).toEqual([[0, 100]])
+    expect(shuffleRanges(100, 40)).toEqual([[41, 100]])
+    expect(shuffleRanges(100, 99)).toEqual([])
+    expect(shuffleRanges(0, null)).toEqual([[0, 2 ** 32]])
+  })
+  test('a cursor of another order is no cursor', () => {
+    expect(cursorOf('random', '4294967296')).toBeNull()
+    expect(cursorOf('random', '1.5')).toBeNull()
+    expect(cursorOf('random', '0')).toEqual([0])
+    expect(cursorOf('new', '2.7')).toBeNull()
+    expect(cursorOf('most', '7')).toBeNull()
+    expect(cursorOf('most', '-1.7')).toBeNull()
+    expect(cursorOf('old', '0')).toBeNull()
+    expect(cursorOf('fewest', '0.3')).toEqual([0, 3])
+  })
+  test('a record keeps its count on every row it is listed under, and its words keep none', async () => {
+    const counted = (id: number) => raw.query("SELECT DISTINCT sightings FROM entry_tags WHERE entry_id = ? AND tag NOT GLOB 'w:*'").all(id)
+    const words = (id: number) => raw.query("SELECT DISTINCT sightings FROM entry_tags WHERE entry_id = ? AND tag GLOB 'w:*'").all(id)
+    const id = await createEntry(db, fields(), seen({ place: 'A shop sign' }), [], who)
+    expect(counted(id)).toEqual([{ sightings: 1 }])
+    expect(words(id)).toEqual([{ sightings: 0 }])
+    await addSighting(db, id, seen({ place: 'A book' }), [], who)
+    expect(counted(id)).toEqual([{ sightings: 2 }])
+    expect(words(id)).toEqual([{ sightings: 0 }])
+  })
+})
+
 // Every list a visitor can ask for, as the query plan runs it: one range of `entry_tags` and lookups by key,
 // with no scan of a table and no sort.
 describe('query cost', () => {
   const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
-  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }]
+  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }, ...(['old', 'most', 'fewest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
   for (const shape of shapes) test(`list ${JSON.stringify(shape)}`, () => {
     const statement = listStatement(db, shape) as unknown as { sql: string; values: unknown[] }
     const details = plan(statement.sql, statement.values)
     expect(details.join('\n')).not.toMatch(/TEMP B-TREE/)
     for (const detail of details) expect(detail).not.toMatch(/^SCAN (?!.*USING)/)
-    expect(details[0]).toMatch(/^SEARCH (t|w\d) USING PRIMARY KEY/)
+    if (shape.order === 'random') return expect(details[0]).toMatch(/^SEARCH t USING COVERING INDEX entry_tags_by_shuffle \(tag=\? AND <expr>>\? AND <expr><\?\)$/)
+    // A list by count reads the count index from the cursor on; any other reads the key in order.
+    expect(details[0]).toMatch(shape.order === 'most' || shape.order === 'fewest' ? /^SEARCH t USING COVERING INDEX entry_tags_by_sightings \(tag=\? AND \(sightings,entry_id\)[<>]\(\?,\?\)\)$/ : /^SEARCH (t|w\d) USING PRIMARY KEY/)
+  })
+
+  test('the second read of a shuffled list reads the shuffle index too', () => {
+    const statement = listStatement(db, { order: 'random', seed: 7 }, undefined, 1) as unknown as { sql: string; values: unknown[] }
+    expect(plan(statement.sql, statement.values)[0]).toMatch(/^SEARCH t USING COVERING INDEX entry_tags_by_shuffle/)
+    expect(listStatement(db, { order: 'random', seed: 0 }, undefined, 1)).toBeNull()
+    expect(listStatement(db, { order: 'new' }, undefined, 1)).toBeNull()
   })
 
   test('an exact description search reads the claims index by value', () => {

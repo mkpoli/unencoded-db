@@ -14,6 +14,7 @@ import { genreOf } from '$lib/genres'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
 import { hashHex } from './image'
+import { ORDER, SEEDS, seedOf, type Order } from '$lib/order'
 
 export type EntryFields = { script: string; script_other: string | null; description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
 export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; via_url: string | null; via_title: string | null; via_author: string | null; via_publisher: string | null; via_report_date: string | null; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null }
@@ -210,6 +211,8 @@ async function reindex(db: D1Database, id: number, entry: Entry, claims: readonl
     db.prepare(`UPDATE entries SET ${SUMMARY_SET} WHERE id = ?`).bind(...summaryValues(claims, summary), id),
     db.prepare('DELETE FROM entry_tags WHERE entry_id = ? AND tag IN (SELECT value FROM json_each(?))').bind(id, JSON.stringify(gone)),
     db.prepare('INSERT OR IGNORE INTO entry_tags(tag, entry_id) SELECT value, ? FROM json_each(?)').bind(id, JSON.stringify(added)),
+    // Word rows are only looked up by key, never read in order, so they keep no count.
+    db.prepare("UPDATE entry_tags SET sightings = ? WHERE entry_id = ? AND sightings != ? AND tag NOT GLOB 'w:*'").bind(summary.visible.length, id, summary.visible.length),
     db.prepare('UPDATE tag_counts SET n = n - 1 WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(gone.filter(facet))),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(added.filter(facet))),
   ]
@@ -306,7 +309,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
     ]),
     ...(claims.some(claim => claim.sightings.length) ? [db.prepare(CITED_BY_PLACE), db.prepare(CITED_IN_SNAPSHOT)] : []),
     db.prepare(`UPDATE entries SET ${SUMMARY_SET} WHERE id = ${ENTRY_SEQ}`).bind(...summaryValues(claims, summary)),
-    db.prepare(`INSERT INTO entry_tags(tag, entry_id) SELECT value, ${ENTRY_SEQ} FROM json_each(?)`).bind(JSON.stringify(tags)),
+    db.prepare(`INSERT INTO entry_tags(tag, entry_id, sightings) SELECT value, ${ENTRY_SEQ}, CASE WHEN value GLOB 'w:*' THEN 0 ELSE ? END FROM json_each(?)`).bind(summary.visible.length, JSON.stringify(tags)),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),
   ])
   return results[0].results[0].id
@@ -623,7 +626,7 @@ export async function mediaVisible(db: D1Database, key: string) {
   return Boolean(await db.prepare(`SELECT 1 FROM sighting_media x INDEXED BY sighting_media_by_image ${live} AND x.image_key = ?1 UNION ALL SELECT 1 FROM sighting_media x INDEXED BY sighting_media_by_thumb ${live} AND x.thumb_key = ?1 LIMIT 1`).bind(key).first())
 }
 
-export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; before?: number | null; limit?: number }
+export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; order?: Order; seed?: number | null; after?: string | null; limit?: number }
 export const PAGE = 48
 export const SEARCH_WINDOW = 256
 
@@ -673,10 +676,46 @@ function listRead(plan: NonNullable<ReturnType<typeof listPlan>>, range = plan.k
 
 const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind, e.marks'
 
-// `range` names the key to read; without it the first key is read.
-export function listStatement(db: D1Database, listing: Listing, range?: string) {
+// Where each order reads its range, and the place a cursor names in it: the record alone for the orders
+// by record, the count and the record for the orders by count. Null names a cursor that is not one.
+// The order indexes leave out word rows, which are only looked up by key; a read names that so it may use them.
+const LISTED = "t.tag NOT GLOB 'w:*'"
+// A shuffled list reads by rank from its seed to the end, then from 0 to the seed. The expression is the
+// one migration 0013 indexes, so it must stay the same character for character.
+const MIXED = '(((t.entry_id % 4294967296) * 1540483477) % 4294967296)'
+const FOLDED = `((${MIXED} | (${MIXED} >> 16)) - (${MIXED} & (${MIXED} >> 16)))`
+const RANK = `((${FOLDED} * 73244475) % 4294967296)`
+const ORDER_READS: Record<Exclude<Order, 'random'>, { by: string; past: string; counted: boolean }> = {
+  new: { by: 't.entry_id DESC', past: 't.entry_id < ?', counted: false },
+  old: { by: 't.entry_id', past: 't.entry_id > ?', counted: false },
+  most: { by: 't.sightings DESC, t.entry_id DESC', past: `(t.sightings, t.entry_id) < (?, ?) AND ${LISTED}`, counted: true },
+  fewest: { by: 't.sightings, t.entry_id', past: `(t.sightings, t.entry_id) > (?, ?) AND ${LISTED}`, counted: true },
+}
+const ID = /^[1-9]\d{0,15}$/, COUNT = /^(0|[1-9]\d{0,8})$/
+export function cursorOf(order: Order, after: string | null | undefined): number[] | null | undefined {
+  if (order === 'random') return after === null || after === undefined ? [] : seedOf(after) === null ? null : [Number(after)]
+  const descending = order === 'new' || order === 'most'
+  if (after === null || after === undefined) return ORDER_READS[order].counted ? (descending ? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER] : [-1, 0]) : [descending ? Number.MAX_SAFE_INTEGER : 0]
+  const parts = after.split('.')
+  if (ORDER_READS[order].counted ? parts.length !== 2 || !COUNT.test(parts[0]) || !ID.test(parts[1]) : parts.length !== 1 || !ID.test(parts[0])) return null
+  return parts.map(Number)
+}
+const cursorAt = (order: Order, row: { id: number; counted: number }) => order === 'random' || !ORDER_READS[order].counted ? String(order === 'random' ? row.counted : row.id) : `${row.counted}.${row.id}`
+
+// The rank ranges a shuffled list has left to read, [from, to) each, after the rank a cursor names.
+export function shuffleRanges(seed: number, after: number | null): [number, number][] {
+  const ranges: [number, number][] = after === null ? [[seed, SEEDS], [0, seed]] : after >= seed ? [[after + 1, SEEDS], [0, seed]] : [[after + 1, seed]]
+  return ranges.filter(([from, to]) => from < to)
+}
+
+// `range` names the key to read; without it the first key is read. A shuffled list may need a second
+// read once the first reaches the end of the ranks: `part` names it, and `taken` the rows the first gave.
+export function listStatement(db: D1Database, listing: Listing, range?: string, part = 0, taken = 0) {
   const plan = listPlan(listing)
-  if (!plan) return null
+  const order = listing.order ?? ORDER, cursor = cursorOf(order, listing.after)
+  if (!plan || !cursor) return null
+  const ranks = order === 'random' ? listing.seed === null || listing.seed === undefined ? null : shuffleRanges(listing.seed, cursor[0] ?? null)[part] ?? null : part ? null : undefined
+  if (ranks === null) return null
   const read = listRead(plan, range)
   // The range drives the query. Tests are projections, not filters:
   // LIMIT therefore bounds candidates read even when no row passes.
@@ -684,8 +723,9 @@ export function listStatement(db: D1Database, listing: Listing, range?: string) 
     ...(plan.exact ? ["EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value = ? AND k.entry_id = t.entry_id)"] : []),
     ...read.tests.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = t.entry_id)'),
   ].join(' AND ') || '1'
-  return db.prepare(`SELECT ${TILE_COLUMNS}, (${tests}) AS matches FROM entry_tags t CROSS JOIN entries e ON e.id = t.entry_id WHERE t.tag = ? AND t.entry_id < ? ORDER BY t.entry_id DESC LIMIT ?`)
-    .bind(...(plan.exact ? [plan.exact] : []), ...read.tests, read.tag, listing.before ?? Number.MAX_SAFE_INTEGER, (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1)
+  const { by, past, key } = order === 'random' ? { by: RANK, past: `${RANK} >= ? AND ${RANK} < ? AND ${LISTED}`, key: RANK } : { ...ORDER_READS[order], key: 't.sightings' }
+  return db.prepare(`SELECT ${TILE_COLUMNS}, ${key} AS counted, (${tests}) AS matches FROM entry_tags t CROSS JOIN entries e ON e.id = t.entry_id WHERE t.tag = ? AND ${past} ORDER BY ${by} LIMIT ?`)
+    .bind(...(plan.exact ? [plan.exact] : []), ...read.tests, read.tag, ...(ranks ?? cursor), (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1 - taken)
 }
 
 type TileRow = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind' | 'marks'>
@@ -694,7 +734,7 @@ const toTile = ({ types, first_year, first_year_kind, marks, ...row }: TileRow):
 
 export async function list(db: D1Database, listing: Listing) {
   const plan = listPlan(listing)
-  if (!plan) return null
+  if (!plan || !cursorOf(listing.order ?? ORDER, listing.after) || (listing.order === 'random' && (listing.seed ?? null) === null)) return null
   // Of several keys the one with the fewest records is read, so a short list is not sought in a long one.
   let range: string | undefined
   if (plan.keys.length > 1) {
@@ -702,18 +742,23 @@ export async function list(db: D1Database, listing: Listing) {
     const sizes = new Map(results.map(row => [row.tag, row.n]))
     range = plan.keys.reduce((least, key) => (sizes.get(key) ?? 0) < (sizes.get(least) ?? 0) ? key : least)
   }
-  const read = listRead(plan, range), statement = listStatement(db, listing, range)!
+  const read = listRead(plan, range)
   const limit = listing.limit ?? PAGE
-  const { results } = await statement.all<TileRow & { matches: number }>()
   const window = read.searching ? SEARCH_WINDOW : limit
+  const results: (TileRow & { counted: number; matches: number })[] = []
+  for (let part = 0; results.length <= window; part++) {
+    const statement = listStatement(db, listing, range, part, results.length)
+    if (!statement) break
+    results.push(...(await statement.all<TileRow & { counted: number; matches: number }>()).results)
+  }
   const tiles: Tile[] = []
   let consumed = 0
-  for (const { matches, ...row } of results.slice(0, window)) {
+  for (const { matches, counted: _, ...row } of results.slice(0, window)) {
     consumed++
     if (matches) tiles.push(toTile(row))
     if (tiles.length === limit) break
   }
-  const next = consumed < results.length ? results[consumed - 1].id : null
+  const next = consumed < results.length ? cursorAt(listing.order ?? ORDER, results[consumed - 1]) : null
   return { tiles, next, partial: read.searching && next !== null && tiles.length < limit }
 }
 
