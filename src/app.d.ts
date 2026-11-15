@@ -1,9 +1,10 @@
 import type { GlyphStyle } from '$lib/composer'
 import type { Person } from '$lib/server/people'
+import type { TileSize } from '$lib/tile-size'
 
 declare global {
   namespace App {
-    interface Locals { person: Person | null; theme: string; glyphStyle: GlyphStyle }
+    interface Locals { person: Person | null; theme: string; glyphStyle: GlyphStyle; tileSize: TileSize }
     interface Platform {
       ctx: ExecutionContext
       env: {

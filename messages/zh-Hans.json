@@ -45,6 +45,7 @@
   "browse.order.most": "证据最多",
   "browse.order.fewest": "证据最少",
   "browse.order.random": "随机",
+  "browse.tileSize": "字块大小",
   "browse.empty": "暂无匹配的记录。",
   "browse.emptyAll": "还没有记录。",
   "browse.addOne": "添加字",

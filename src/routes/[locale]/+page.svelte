@@ -9,6 +9,7 @@
   import { ORDER, SORTS } from '$lib/order'
   import { STATUSES, NEEDS } from '$lib/scripts'
   import { href, t } from '$lib/t'
+  import { TILE_SIZE_COOKIE, TILE_SIZES, tileSizeOf } from '$lib/tile-size'
   import type { Snapshot } from './$types'
   let { data } = $props()
   const { standalone, groups } = groupGenres()
@@ -93,6 +94,13 @@
     if (order === ORDER) params.delete('sort'); else params.set('sort', order)
     return params.size ? `?${params}` : href()
   }
+  // The reader's tile width, set on the document so the server-drawn list and a moved slider agree.
+  let tileSize = $state(tileSizeOf(String(page.data.tileSize)))
+  function sizeTiles(index: number) {
+    tileSize = TILE_SIZES[index] ?? tileSize
+    document.cookie = `${TILE_SIZE_COOKIE}=${tileSize};path=/;max-age=31536000;samesite=lax`
+    document.documentElement.dataset.tileSize = String(tileSize)
+  }
   const count = (key: string) => data.counts?.[key] ?? 0
   // A collection or a tag is chosen by following a link, and stays until it is cleared.
   const pinned = $derived(data.genre ? null : data.collection ? { name: 'collection', value: data.collection, label: COLLECTIONS.find(item => item.slug === data.collection)?.label ?? data.collection } : data.tag ? { name: 'tag', value: data.tag, label: `#${data.tag}` } : null)
@@ -150,6 +158,7 @@
     {#each STATUSES as status}{#if count(`f:${status}`) || data.filter === status}<a class="chip" class:on={data.filter === status} href={withFilter(status)}>{t(`status.${status}`)} <span class="n">{count(`f:${status}`)}</span></a>{/if}{/each}
   </nav>
   <nav class="sort" aria-label={t('browse.sort')}>{#each SORTS as order}<a class="chip" class:on={data.order === order} aria-current={data.order === order ? 'true' : undefined} href={sorted(order)}>{t(`browse.order.${order}`)}</a>{/each}<a class="chip shuffle" class:on={data.order === 'random'} aria-current={data.order === 'random' ? 'true' : undefined} href={sorted('random')} data-sveltekit-preload-data="off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h3c4 0 8 12 12 12h3M17 14l4 4-4 4M3 18h3c1.7 0 3.5-2.3 5-5M14 8c1.5-1.4 2.6-2 4-2h3M17 2l4 4-4 4" /></svg>{t('browse.order.random')}</a></nav>
+  <label class="size" title={t('browse.tileSize')}><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="6" height="6" rx="1" /></svg><input type="range" min="0" max={TILE_SIZES.length - 1} step="1" value={TILE_SIZES.indexOf(tileSize)} aria-label={t('browse.tileSize')} oninput={event => sizeTiles(Number(event.currentTarget.value))} /><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="1.5" /></svg></label>
   </div>
   <nav class="marks" aria-label={t('field.encodings')}>
     {#each MARKED as registry (registry.id)}
@@ -182,7 +191,10 @@
   .pair { display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:8px } .work { padding-inline:12px 4px; font-size:13px; font-weight:500; white-space:nowrap }
   .states .n, .marks .n { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums }
   .pinned { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:42px; padding:9px 12px; border:1px solid var(--accent); border-radius:7px; background:var(--accent-light); color:var(--accent); font-weight:500 }
-  .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:22px 16px }
+  .bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px }
+  .size { display:flex; align-items:center; gap:6px; color:var(--muted) }
+  .size svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.4 }
+  .size input { width:96px; padding:0; border:0; background:none; accent-color:var(--accent) }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(var(--tile-size),100%),1fr)); gap:22px 16px }
   .empty { padding:48px 16px; text-align:center; color:var(--muted) } .empty a { display:inline-block; margin-top:12px; color:var(--ink) }
-  @media(max-width:500px) { .tiles { grid-template-columns:repeat(2,minmax(0,1fr)) } }
 </style>
