@@ -52,6 +52,6 @@
   .meta time { flex: none; font-variant-numeric: tabular-nums }
   .sightings { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
   /* Tiles below 96px show the glyph alone; the lines under it stay readable to assistive technology. */
-  :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .tile > :not(.plate) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap }
+  :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) :is(.tile > :not(.plate), .blank) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap }
   :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .plate { margin-bottom: 0 }
 </style>
