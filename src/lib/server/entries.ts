@@ -174,6 +174,24 @@ function firstYear(value: string | null) {
 // The year a list is read by: a record's first year as a number, which keeps no leading zero.
 const yearOf = (text: string | null) => text === null ? null : Number(text)
 
+// A sighting's year: the work's own date when it is the earlier, else the date it was reported.
+function sightingYear(sighting: Pick<SightingFields, 'report_date' | 'original_date'>) {
+  const report = firstYear(sighting.report_date), original = firstYear(sighting.original_date)
+  return original && (!report || original.n <= report.n) ? { ...original, kind: 'original' as const } : report ? { ...report, kind: 'report' as const } : null
+}
+
+// The earliest attestation among visible sightings, and the sighting that holds it: the first added
+// of those that share its year.
+export function earliestSighting<T extends Pick<SightingFields, 'report_date' | 'original_date'> & { id?: number; hidden_at?: string | null }>(sightings: T[]) {
+  let found: { text: string; n: number; kind: YearKind; sighting: T } | null = null
+  for (const sighting of sightings) {
+    if (sighting.hidden_at) continue
+    const year = sightingYear(sighting)
+    if (year && (!found || year.n < found.n)) found = { ...year, sighting }
+  }
+  return found
+}
+
 type SightingState = SightingFields & { media?: StoredImage[]; hidden_at?: string | null }
 
 // What a tile shows of a record, read from its visible sightings: the cover, where it was seen, which
@@ -183,13 +201,13 @@ function summarize(sightings: SightingState[]) {
   const visible = sightings.filter(sighting => !sighting.hidden_at)
   const cover = visible.find(sighting => sighting.media?.length)
   const types = new Set<SightingType>()
-  let year: { text: string; n: number; kind: YearKind } | null = null
-  for (const sighting of visible) {
-    for (const type of parseSightingTypes(sighting.types)) types.add(type)
-    const report = firstYear(sighting.report_date), original = firstYear(sighting.original_date)
-    const found = original && (!report || original.n <= report.n) ? { ...original, kind: 'original' as const } : report ? { ...report, kind: 'report' as const } : null
-    if (found && (!year || found.n < year.n)) year = found
-  }
+  for (const sighting of visible) for (const type of parseSightingTypes(sighting.types)) types.add(type)
+  const year = earliestSighting(visible)
+  const added = visible.filter(sighting => !(sighting as { id?: number }).id)
+  const held = (year?.sighting as { id?: number } | undefined)?.id
+  // The sighting that holds the year: a stored one by its id, or one this write inserts, by how many of
+  // the inserted ones follow it, counted back from the sightings sequence.
+  const first: { id: number } | { after: number } | null = !year ? null : held ? { id: held } : { after: added.length - 1 - added.indexOf(year.sighting) }
   const chosen = SIGHTING_TYPES.filter(type => types.has(type))
   return {
     visible,
@@ -198,6 +216,7 @@ function summarize(sightings: SightingState[]) {
     types: chosen.length ? JSON.stringify(chosen) : null,
     first_year: year?.text ?? null,
     first_year_kind: year?.kind ?? null,
+    first,
     hasSource: visible.some(referenceComplete),
   }
 }
@@ -205,8 +224,11 @@ function summarize(sightings: SightingState[]) {
 const tagsOf = (entry: Entry, claims: readonly Claim[], summary: ReturnType<typeof summarize>) =>
   [...facetTags({ ...entry, status: statusOf(claims), ids: primaryIdsOf(claims), cover_key: summary.cover_key, first_year: summary.first_year }, summary.hasSource, claims), ...wordTags(entry, claims, summary.visible)]
 const facet = (tag: string) => !tag.startsWith('w:')
-const SUMMARY_SET = 'ids = ?, layout = ?, cover_key = ?, cover_place = ?, sightings = ?, types = ?, first_year = ?, first_year_kind = ?, marks = ?, status = ?'
-const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summarize>) => [primaryIdsOf(claims), layoutText(primaryLayoutOf(claims)) || null, summary.cover_key, summary.cover_place, summary.visible.length, summary.types, summary.first_year, summary.first_year_kind, marksHeld(claims).length ? JSON.stringify(marksHeld(claims)) : null, statusOf(claims)]
+const SIGHTING_SEQ = "(SELECT seq FROM sqlite_sequence WHERE name = 'sightings')"
+// A summary names the sighting that holds the record's year by its id (1), or, for one the same write
+// inserts, by how many inserted sightings follow it (2).
+const SUMMARY_SET = `ids = ?, layout = ?, cover_key = ?, cover_place = ?, sightings = ?, types = ?, first_year = ?, first_year_kind = ?, marks = ?, status = ?, first_sighting = CASE ? WHEN 1 THEN ? WHEN 2 THEN ${SIGHTING_SEQ} - ? END`
+const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summarize>) => [primaryIdsOf(claims), layoutText(primaryLayoutOf(claims)) || null, summary.cover_key, summary.cover_place, summary.visible.length, summary.types, summary.first_year, summary.first_year_kind, marksHeld(claims).length ? JSON.stringify(marksHeld(claims)) : null, statusOf(claims), ...(!summary.first ? [0, 0, 0] : 'id' in summary.first ? [1, summary.first.id, 0] : [2, 0, summary.first.after])]
 
 // Brings a record's tags, counts and summary up to date. It answers the statements, to run with the
 // write they belong to.
@@ -231,7 +253,6 @@ async function reindex(db: D1Database, id: number, entry: Entry, claims: readonl
 // ---------- Claims, sources and pictures as statements ----------
 
 const ENTRY_SEQ = "(SELECT seq FROM sqlite_sequence WHERE name = 'entries')"
-const SIGHTING_SEQ = "(SELECT seq FROM sqlite_sequence WHERE name = 'sightings')"
 
 // `owner` is an id to bind or one of the sequence reads above, for a row made in the same batch.
 const owned = (owner: number | string) => ({ sql: typeof owner === 'number' ? '?' : owner, values: typeof owner === 'number' ? [owner] : [] })
@@ -802,32 +823,69 @@ export async function list(db: D1Database, listing: Listing) {
   return { tiles, next, partial: read.searching && next !== null && tiles.length < limit }
 }
 
-// The chronology: every decade records were first seen in, with how many each holds, read from the counts
-// kept with each write, and the earliest records of a page of decades, one range of the year index each.
-export const DECADES_PAGE = 12, DECADE_TILES = 8
+// The chronology (年表): every dated record in the order of its earliest year, each with the evidence
+// that holds that year, read from a place in the year index on. A place is a year and a record, and a
+// page starts at its own first row. The decades and their counts come from the counts kept with each write.
+export const CHRONICLE_PAGE = 100
 export const decadeCountsStatement = (db: D1Database) => db.prepare("SELECT tag, n FROM tag_counts WHERE tag >= 'y:' AND tag < 'y;' AND n > 0")
-export async function chronology(db: D1Database, from: number | null) {
-  const [{ results: counted }, all] = await Promise.all([
-    decadeCountsStatement(db).all<{ tag: string; n: number }>(),
-    db.prepare("SELECT n FROM tag_counts WHERE tag = 'all'").first<{ n: number }>(),
+const CHRONICLE_COLUMNS = `${TILE_COLUMNS}, t.year AS year, s.id AS s_id, s.place AS s_place, s.original_date AS s_original, c.title AS c_title, c.author AS c_author, c.report_date AS c_report`
+const CHRONICLE_FROM = `entry_tags t CROSS JOIN entries e ON e.id = t.entry_id LEFT JOIN sightings s ON s.id = e.first_sighting LEFT JOIN sources c ON c.id = s.source_id`
+const CHRONICLE_DATED = `t.tag = 'all' AND t.year IS NOT NULL AND ${LISTED}`
+// A page is read forwards from a place, inclusive, or backwards from just before one; both read one row
+// past the page, to know whether more lie that way.
+export const chronicleStatement = (db: D1Database, at: [number, number], limit = CHRONICLE_PAGE + 1) =>
+  db.prepare(`SELECT ${CHRONICLE_COLUMNS} FROM ${CHRONICLE_FROM} WHERE ${CHRONICLE_DATED} AND (t.year, t.entry_id) >= (?, ?) ORDER BY t.year, t.entry_id LIMIT ?`).bind(at[0], at[1], limit)
+export const chronicleBackStatement = (db: D1Database, before: [number, number], limit = CHRONICLE_PAGE + 1) =>
+  db.prepare(`SELECT ${CHRONICLE_COLUMNS} FROM ${CHRONICLE_FROM} WHERE ${CHRONICLE_DATED} AND (t.year, t.entry_id) < (?, ?) ORDER BY t.year DESC, t.entry_id DESC LIMIT ?`).bind(before[0], before[1], limit)
+
+type ChronicleRow = TileRow & { year: number; s_id: number | null; s_place: string | null; s_original: string | null; c_title: string | null; c_author: string | null; c_report: string | null }
+export type ChronicleEntry = { year: number; tile: Tile; sighting: { id: number; place: string | null; title: string | null; author: string | null; date: string | null } | null }
+export type ChroniclePlace = { at: [number, number] } | { before: [number, number] }
+const placeOf = (row: { year: number; id: number }) => `${row.year}.${row.id}`
+const toEntry = ({ year, s_id, s_place, s_original, c_title, c_author, c_report, ...tile }: ChronicleRow): ChronicleEntry => ({
+  year,
+  tile: toTile(tile),
+  // The date the year was read from: the work's own when it gave the year, else the report's.
+  sighting: s_id === null ? null : { id: s_id, place: s_place, title: c_title, author: c_author, date: tile.first_year_kind === 'original' ? s_original : c_report },
+})
+
+// Each page links to the page just before its first row and the page from the row after its last, so
+// going back and forth returns to the same rows.
+export async function chronology(db: D1Database, place: ChroniclePlace) {
+  const forward = 'at' in place
+  const edge = forward ? place.at : place.before
+  const [counts, total, read, across] = await db.batch<Record<string, unknown>>([
+    decadeCountsStatement(db),
+    db.prepare("SELECT n FROM tag_counts WHERE tag = 'all'"),
+    forward ? chronicleStatement(db, edge) : chronicleBackStatement(db, edge),
+    // Whether anything lies on the other side of the place the page was read from.
+    forward ? chronicleBackStatement(db, edge, 1) : chronicleStatement(db, edge, 1),
   ])
+  const counted = counts.results as { tag: string; n: number }[], rows = read.results as ChronicleRow[], other = across.results as ChronicleRow[]
+  const all = (total.results as { n: number }[])[0]
   const decades = counted.map(row => ({ decade: Number(row.tag.slice(2)), n: row.n })).sort((a, b) => a.decade - b.decade)
-  // Pages are fixed runs of decades, so a start anywhere opens the page that holds it, and a start past
-  // the last decade opens the last page.
-  const at = from === null ? 0 : decades.findIndex(row => row.decade >= from)
-  const start = Math.floor((at < 0 ? Math.max(0, decades.length - 1) : at) / DECADES_PAGE) * DECADES_PAGE
-  const shown = decades.slice(start, start + DECADES_PAGE)
-  const reads = shown.map(row => listStatement(db, { decade: String(row.decade), order: 'earliest', limit: DECADE_TILES })!)
-  const pages = reads.length ? await db.batch<TileRow & { counted: number; matches: number }>(reads) : []
   const dated = decades.reduce((sum, row) => sum + row.n, 0)
+  const shown = rows.slice(0, CHRONICLE_PAGE)
+  if (!forward) shown.reverse()
+  const more = rows.length > CHRONICLE_PAGE
+  const first = shown[0], last = shown.at(-1)
   return {
     decades,
-    shown: shown.map((row, i) => ({ ...row, tiles: pages[i].results.slice(0, DECADE_TILES).map(({ counted: _, matches: __, ...tile }) => toTile(tile)) })),
-    earlier: start > 0 ? decades[start - DECADES_PAGE].decade : null,
-    later: decades.at(start + DECADES_PAGE)?.decade ?? null,
+    entries: shown.map(toEntry),
+    earlier: first && (forward ? other.length > 0 : more) ? `before=${placeOf(first)}` : null,
+    later: forward ? (more ? `at=${placeOf(rows[CHRONICLE_PAGE])}` : null) : last && other.length ? `at=${placeOf(other[0])}` : null,
     dated,
     undated: Math.max(0, (all?.n ?? 0) - dated),
   }
+}
+
+// A place in the chronology: from `year.record` on (?at=), the rows before one (?before=), or a decade's start.
+export function chroniclePlace(at: string | null, before: string | null, from: string | null): ChroniclePlace | undefined {
+  const parse = (text: string) => { const match = /^(0|[1-9]\d{0,8})\.([1-9]\d{0,15})$/.exec(text); return match ? [Number(match[1]), Number(match[2])] as [number, number] : undefined }
+  if (at !== null) { const found = parse(at); return found && { at: found } }
+  if (before !== null) { const found = parse(before); return found && { before: found } }
+  if (from !== null) return /^(0|[1-9]\d{0,2}0)$/.test(from) ? { at: [Number(from), 0] } : undefined
+  return { at: [-1, 0] }
 }
 
 // The counts a page shows beside its filters. Tags are counted too, and read where they are listed. The

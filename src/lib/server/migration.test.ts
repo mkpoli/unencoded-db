@@ -180,7 +180,7 @@ test('0005 gives every claim a key, a list of sightings and a scope, in claims a
   expect(journal.filter(row => !versions.some(version => version.id === row.id)).map(row => row.snapshot)).toEqual([sighting, '{}', '{"revision":4}', '{}', '{"from":3}'])
 
   // An old version is restored through the store, with its keys and the sighting it rested on.
-  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0016_tag_year.sql']) raw.exec(migration(name))
+  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0016_tag_year.sql', '0018_first_sighting.sql']) raw.exec(migration(name))
   const db = d1Over(raw)
   expect(await revertEntry(db, 1, 1, { actor: 'p', ip: null })).toEqual({ ok: true, rev: 5 })
   expect((await getEntry(db, 1))!.claims).toEqual(first)
@@ -351,6 +351,28 @@ test('0017 lists every visible dated record under its decade, with its count and
     { tag: 'y:1930', entry_id: 1, sightings: 2, year: 1935 }, { tag: 'y:1930', entry_id: 2, sightings: 1, year: 1939 }, { tag: 'y:980', entry_id: 3, sightings: 1, year: 980 },
   ])
   expect(raw.query("SELECT tag, n FROM tag_counts WHERE tag GLOB 'y:*' ORDER BY tag").all()).toEqual([{ tag: 'y:1930', n: 2 }, { tag: 'y:980', n: 1 }])
+})
+
+test('0018 names the visible sighting that holds each record\'s earliest year, the first added on a tie', () => {
+  const raw = new Database(':memory:')
+  for (const name of ['0001_init.sql', '0002_sighting_via.sql', '0003_media_boxes.sql', '0004_unify_relation.sql', '0005_claim_links.sql', '0006_registry_tags.sql', '0007_entry_marks.sql', '0008_derived_status.sql', '0009_custom_scripts.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql']) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec("INSERT INTO entries(script, created_by, created_at, updated_at) VALUES ('han', 'p', '2026', '2026'), ('han', 'p', '2026', '2026'), ('han', 'p', '2026', '2026'), ('han', 'p', '2026', '2026')")
+  raw.exec("INSERT INTO sources(hash, title, report_date, year) VALUES ('a', 'Recent', '2017-03-01', 2017), ('b', 'Old print', '1999', 1999), ('c', 'Early', '1920', 1920)")
+  const sighting = raw.prepare("INSERT INTO sightings(entry_id, first_entry, source_id, place, original_date, hidden_at, created_by, created_at, updated_at) VALUES (?, ?, ?, 'here', ?, ?, 'p', '2026', '2026')")
+  // 1: a sign from 2017 and a 1999 reprint of a 1935年 work; the 1935 one holds the year.
+  sighting.run(1, 1, 1, null, null); sighting.run(1, 1, 2, '1935年5月', null)
+  // 2: a 1920 report of a 1950 work dates by the report; a hidden 1800 sighting does not count.
+  sighting.run(2, 2, 3, '1950', null); sighting.run(2, 2, 3, '1800', 'hidden')
+  // 3: two sightings of one year; the first added holds it. 4: no year at all.
+  sighting.run(3, 3, 2, null, null); sighting.run(3, 3, 2, null, null)
+  sighting.run(4, 4, null, '明治', null)
+
+  raw.exec(migration('0018_first_sighting.sql'))
+
+  expect(raw.query('SELECT id, first_sighting FROM entries ORDER BY id').all()).toEqual([
+    { id: 1, first_sighting: 2 }, { id: 2, first_sighting: 3 }, { id: 3, first_sighting: 5 }, { id: 4, first_sighting: null },
+  ])
 })
 
 test('0014 reads each source\'s year as a record\'s first year is read, and counts the visible records that cite it', () => {

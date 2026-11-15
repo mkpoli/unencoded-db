@@ -29,14 +29,16 @@ test('create, browse, view, edit and add a sighting', async () => {
   let detail = await detailLoad(event()) as any
   expect(detail.entry.rev).toBe(1)
   expect(detail.sightings).toHaveLength(1)
+  expect(detail.earliest).toBeNull()
   expect(objects.size).toBe(1)
   const edit = new FormData(); edit.set('rev', '1'); edit.set('description', 'Updated')
   await expect(detailActions.edit(event(edit))).rejects.toMatchObject({ status: 303 })
   const stale = await detailActions.edit(event(edit)) as any
   expect(stale.status).toBe(409)
-  const seen = new FormData(); seen.set('url', 'https://example.test/source')
+  const seen = new FormData(); seen.set('url', 'https://example.test/source'); seen.set('original_date', '1935')
   await expect(addSightingActions.default(event(seen))).rejects.toMatchObject({ status: 303 })
   detail = await detailLoad(event()) as any
+  expect(detail.earliest).toEqual({ year: '1935', kind: 'original', sighting: detail.sightings[1].id })
   expect(detail.entry.description).toBe('Updated')
   expect(detail.sightings).toHaveLength(2)
 })
@@ -229,7 +231,9 @@ test('browse keeps to the decade a record was first seen in, and rejects one tha
 test('the chronology starts at the first decade, and answers a start that is no decade with 404', async () => {
   const { db } = openTestDb()
   const event = (query: string) => ({ url: new URL(`https://example.test/en/chronology${query}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
-  expect(await chronologyLoad(event(''))).toMatchObject({ decades: [], shown: [], dated: 0, undated: 0 })
-  expect(await chronologyLoad(event('?from=1930'))).toMatchObject({ shown: [], earlier: null, later: null })
-  for (const query of ['?from=1935', '?from=x', '?from=05']) await expect(chronologyLoad(event(query))).rejects.toMatchObject({ status: 404 })
+  expect(await chronologyLoad(event(''))).toMatchObject({ decades: [], entries: [], dated: 0, undated: 0 })
+  expect(await chronologyLoad(event('?from=1930'))).toMatchObject({ entries: [], earlier: null, later: null })
+  expect(await chronologyLoad(event('?at=1935.4'))).toMatchObject({ entries: [] })
+  expect(await chronologyLoad(event('?before=1935.4'))).toMatchObject({ entries: [], earlier: null, later: null })
+  for (const query of ['?from=1935', '?from=x', '?from=05', '?at=1935', '?at=1935.0', '?before=x']) await expect(chronologyLoad(event(query))).rejects.toMatchObject({ status: 404 })
 })

@@ -77,7 +77,7 @@
 <Seo title={`${recordCode(entry.id)} ${recordName(entry.id)}`} image={entry.cover_key ? media(entry.cover_key) : null} />
 <div class="page narrow stack">
   <div class="row"><a class="text-link back" href={href()}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
-  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}</div></div></div>
+  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: data.earliest.year })}</a>{/if}</div></div></div>
   {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
   {#if entry.merged_into}<p class="notice quiet"><a class="text-link" href={href(`/entry/${entry.merged_into}`)}>{t('entry.mergedInto', { id: recordCode(entry.merged_into) })}</a></p>{/if}
   <section class="panel stack">
@@ -166,7 +166,7 @@
           </div>
         {/if}
         {#if sighting.place}<h3>{sighting.place}</h3>{/if}
-        {#if types.length}<div class="row badges">{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
+        {#if types.length || data.earliest?.sighting === sighting.id}<div class="row badges">{#if data.earliest?.sighting === sighting.id}<span class="badge earliest">{t('entry.earliest')}</span>{/if}{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
         {#if sighting.via_id}
           <p class="via"><span class="muted">{t('field.via')}</span>
@@ -227,4 +227,7 @@
   .url { overflow-wrap:anywhere }
   .via { margin:0; overflow-wrap:anywhere }
   @media(max-width:700px) { .panel { padding:16px } .plate { width:72px; height:72px } }
+  .first-seen { align-self:center; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; text-decoration:underline; text-decoration-color:var(--line-strong); text-underline-offset:3px }
+  .first-seen:hover { color:var(--ink) }
+  .badge.earliest { background:var(--accent-light); color:var(--accent) }
 </style>
