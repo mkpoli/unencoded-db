@@ -1142,31 +1142,49 @@ describe('chronology', () => {
   })
 
   test('lists dated records by year from a place, a page at a time, and counts the decades', async () => {
-    const first = await chronology(db, chroniclePlace(null, null)!)
+    const first = await chronology(db, chroniclePlace(null, null, null)!)
     expect(first.entries.map(entry => entry.year).slice(0, 3)).toEqual([1803, 1813, 1823])
     expect(first.entries).toHaveLength(CHRONICLE_PAGE)
     expect(first.decades[0]).toEqual({ decade: 1800, n: 1 })
-    expect({ earlier: first.earlier, dated: first.dated, undated: first.undated }).toEqual({ earlier: null, dated: 14 + CHRONICLE_PAGE, undated: 1 })
-    // The next page starts at the row after the last, and its earlier page is the first one again.
-    const next = await chronology(db, chroniclePlace(first.later, null)!)
+    expect({ earlier: first.earlier, later: first.later, dated: first.dated, undated: first.undated }).toEqual({ earlier: null, later: `at=1978.${CHRONICLE_PAGE + 1}`, dated: 14 + CHRONICLE_PAGE, undated: 1 })
+    const next = await chronology(db, chroniclePlace(first.later!.slice(3), null, null)!)
     expect(next.entries.map(entry => entry.tile.id)).toEqual(Array.from({ length: 14 }, (_, i) => CHRONICLE_PAGE + 1 + i))
     expect(next.later).toBeNull()
-    expect(next.earlier).toBe('1803.1')
+    expect(next.earlier).toBe(`before=1978.${CHRONICLE_PAGE + 1}`)
     // A decade starts at its first record.
-    expect((await chronology(db, chroniclePlace(null, '1950')!)).entries[0]).toMatchObject({ year: 1950, tile: { id: 15 } })
+    expect((await chronology(db, chroniclePlace(null, null, '1950')!)).entries[0]).toMatchObject({ year: 1950, tile: { id: 15 } })
+  })
+
+  test('pages tile exactly both ways, even with fewer than a page before the start', async () => {
+    const ids = async (place: ReturnType<typeof chroniclePlace>) => (await chronology(db, place!)).entries.map(entry => entry.tile.id)
+    // 1950 starts after 14 records, fewer than a page.
+    const from = await chronology(db, chroniclePlace(null, null, '1950')!)
+    expect(from.earlier).toBe('before=1950.15')
+    const back = await chronology(db, chroniclePlace(null, '1950.15', null)!)
+    expect(back.entries.map(entry => entry.tile.id)).toEqual(Array.from({ length: 14 }, (_, i) => i + 1))
+    expect(back.earlier).toBeNull()
+    // Going back and forth returns to the same rows.
+    expect(back.later).toBe('at=1950.15')
+    expect(await ids(chroniclePlace('1950.15', null, null))).toEqual(from.entries.map(entry => entry.tile.id))
+    // A full page back from the end, and on from there.
+    const end = await chronology(db, chroniclePlace(null, `1983.${CHRONICLE_PAGE + 14}`, null)!)
+    expect(end.entries).toHaveLength(CHRONICLE_PAGE)
+    expect(end.earlier).toBe(`before=${end.entries[0].year}.${end.entries[0].tile.id}`)
+    expect(end.later).toBe(`at=1983.${CHRONICLE_PAGE + 14}`)
   })
 
   test('names the evidence that holds each year, with the date it was read from', async () => {
     const id = await createEntry(db, fields(), seen({ title: 'Old print', author: 'Someone', report_date: '1999', original_date: '1935年5月' }), [], who)
-    const page = await chronology(db, [1935, 0])
+    const page = await chronology(db, { at: [1935, 0] })
     expect(page.entries[0]).toMatchObject({ year: 1935, tile: { id }, sighting: { title: 'Old print', author: 'Someone', date: '1935年5月' } })
   })
 
-  test('a place is a year and a record, or a decade', () => {
-    expect(chroniclePlace('1935.412', null)).toEqual([1935, 412])
-    expect(chroniclePlace(null, '1930')).toEqual([1930, 0])
-    expect(chroniclePlace(null, null)).toEqual([-1, 0])
-    for (const [at, from] of [['1935', null], ['1935.0', null], ['x.1', null], [null, '1935'], [null, '05']]) expect(chroniclePlace(at, from)).toBeUndefined()
+  test('a place is a year and a record either way, or a decade', () => {
+    expect(chroniclePlace('1935.412', null, null)).toEqual({ at: [1935, 412] })
+    expect(chroniclePlace(null, '1935.412', null)).toEqual({ before: [1935, 412] })
+    expect(chroniclePlace(null, null, '1930')).toEqual({ at: [1930, 0] })
+    expect(chroniclePlace(null, null, null)).toEqual({ at: [-1, 0] })
+    for (const [at, before, from] of [['1935', null, null], ['1935.0', null, null], [null, 'x.1', null], [null, null, '1935'], [null, null, '05']]) expect(chroniclePlace(at, before, from)).toBeUndefined()
   })
 
   test('reads one range of the year index, and the counts by key', () => {

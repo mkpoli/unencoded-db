@@ -234,5 +234,6 @@ test('the chronology starts at the first decade, and answers a start that is no 
   expect(await chronologyLoad(event(''))).toMatchObject({ decades: [], entries: [], dated: 0, undated: 0 })
   expect(await chronologyLoad(event('?from=1930'))).toMatchObject({ entries: [], earlier: null, later: null })
   expect(await chronologyLoad(event('?at=1935.4'))).toMatchObject({ entries: [] })
-  for (const query of ['?from=1935', '?from=x', '?from=05', '?at=1935', '?at=1935.0']) await expect(chronologyLoad(event(query))).rejects.toMatchObject({ status: 404 })
+  expect(await chronologyLoad(event('?before=1935.4'))).toMatchObject({ entries: [], earlier: null, later: null })
+  for (const query of ['?from=1935', '?from=x', '?from=05', '?at=1935', '?at=1935.0', '?before=x']) await expect(chronologyLoad(event(query))).rejects.toMatchObject({ status: 404 })
 })

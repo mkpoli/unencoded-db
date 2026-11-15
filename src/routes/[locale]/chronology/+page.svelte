@@ -6,7 +6,7 @@
   let { data } = $props()
   const decadeList = (decade: number) => href(`?decade=${decade}&sort=earliest`)
   const fromDecade = (decade: number) => href(`/chronology?from=${decade}#y${decade}`)
-  const at = (place: string) => href(`/chronology?at=${place}`)
+  const paged = (query: string) => href(`/chronology?${query}`)
   // Every decade from the first to the last, empty ones too, so the gaps show on the bar chart.
   const span = $derived.by(() => {
     if (!data.decades.length) return []
@@ -16,15 +16,14 @@
   })
   const most = $derived(Math.max(1, ...data.decades.map(row => row.n)))
   const counts = $derived(new Map(data.decades.map(row => [row.decade, row.n])))
-  // The rows of the table: a decade's heading where a new decade begins, then each record, its year
-  // written only where the year changes.
-  const rows = $derived.by(() => {
-    const out: ({ kind: 'decade'; decade: number } | { kind: 'entry'; entry: (typeof data.entries)[number]; showYear: boolean })[] = []
-    let decade: number | null = null, year: number | null = null
+  // The table's decades, each its own group of rows, with the year written only where it changes.
+  const groups = $derived.by(() => {
+    const out: { decade: number; rows: { entry: (typeof data.entries)[number]; showYear: boolean }[] }[] = []
+    let year: number | null = null
     for (const entry of data.entries) {
-      const here = Math.floor(entry.year / 10) * 10
-      if (here !== decade) { out.push({ kind: 'decade', decade: here }); decade = here; year = null }
-      out.push({ kind: 'entry', entry, showYear: entry.year !== year })
+      const decade = Math.floor(entry.year / 10) * 10
+      if (out.at(-1)?.decade !== decade) { out.push({ decade, rows: [] }); year = null }
+      out.at(-1)!.rows.push({ entry, showYear: entry.year !== year })
       year = entry.year
     }
     return out
@@ -47,14 +46,13 @@
         </li>
       {/each}
     </ol>
-    {#if data.earlier}<a class="more earlier" href={at(data.earlier)}>↑ {t('chronology.earlier')}</a>{/if}
+    {#if data.earlier}<a class="more earlier" href={paged(data.earlier)}>↑ {t('chronology.earlier')}</a>{/if}
     <table class="chronicle">
       <thead><tr><th scope="col" class="year">{t('chronology.year')}</th><th scope="col">{t('chronology.record')}</th></tr></thead>
-      <tbody>
-        {#each rows as row (row.kind === 'decade' ? `d${row.decade}` : `e${row.entry.tile.id}`)}
-          {#if row.kind === 'decade'}
-            <tr class="decade" id="y{row.decade}"><th scope="rowgroup" colspan="2"><a href={decadeList(row.decade)}>{t('browse.decade', { n: row.decade })}</a><span class="n">{counts.get(row.decade) ?? 0}</span></th></tr>
-          {:else}
+      {#each groups as group (group.decade)}
+        <tbody>
+          <tr class="decade" id="y{group.decade}"><th scope="rowgroup" colspan="2"><a href={decadeList(group.decade)}>{t('browse.decade', { n: group.decade })}</a><span class="n">{counts.get(group.decade) ?? 0}</span></th></tr>
+          {#each group.rows as row (row.entry.tile.id)}
             {@const entry = row.entry}
             <tr class="entry" class:first={row.showYear}>
               <td class="year">{#if row.showYear}{entry.year}{/if}</td>
@@ -68,11 +66,11 @@
                 </a>
               </td>
             </tr>
-          {/if}
-        {/each}
-      </tbody>
+          {/each}
+        </tbody>
+      {/each}
     </table>
-    {#if data.later}<a class="more later" href={at(data.later)}>↓ {t('chronology.later')}</a>{/if}
+    {#if data.later}<a class="more later" href={paged(data.later)}>↓ {t('chronology.later')}</a>{/if}
   {:else}
     <p class="empty muted">{t('browse.emptyAll')}</p>
   {/if}
@@ -99,6 +97,7 @@
   .decade .n { margin-inline-start:8px; font-weight:400; color:var(--muted); font-variant-numeric:tabular-nums }
   .entry.first td { border-top:1px solid var(--line) }
   .decade + .entry.first td { border-top:none }
+  tbody + tbody .decade th { border-top:1px solid var(--line-strong) }
   .what { padding:4px 12px }
   .record { display:flex; align-items:center; gap:12px; min-width:0; padding:2px 0 }
   .record:hover .ids, .record:hover .source { text-decoration:underline; text-decoration-color:var(--line-strong) }
