@@ -6,6 +6,6 @@ export default defineConfig({
   // The IDS editor's data is fetched as gzip files, and each stays a file of its own.
   build: { assetsInlineLimit: 0 },
   // The composer's Worker resolves from its package, so both packages stay out of pre-bundling.
-  optimizeDeps: { exclude: ['ids-input', '@han-compose/composer'] },
-  server: { fs: { allow: ['node_modules/ids-input', 'node_modules/@han-compose/composer'] } },
+  optimizeDeps: { exclude: ['ids-input', 'han-compose'] },
+  server: { fs: { allow: ['node_modules/ids-input', 'node_modules/han-compose'] } },
 })

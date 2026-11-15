@@ -35,7 +35,7 @@ test('a page without a bucket shows no drawings', async () => {
 })
 
 const bopomofo = async () => {
-  const outlines = await readFile(new URL('../../../node_modules/@han-compose/composer/data/sources/bopomofo/outlines.json.gz', import.meta.url))
+  const outlines = await readFile(new URL('../../../node_modules/han-compose/data/sources/bopomofo/outlines.json.gz', import.meta.url))
   const kept: string[] = []
   const bucket = { get: async () => null, put: async (key: string) => { kept.push(key) } } as unknown as Pick<R2Bucket, 'get' | 'put'>
   return { bucket, kept, context: { assets: { fetch: async () => new Response(outlines) }, origin: 'https://example.test' } }

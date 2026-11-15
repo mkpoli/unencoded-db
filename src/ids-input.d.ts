@@ -45,10 +45,10 @@ declare module 'ids-input/svelte' {
   export const IdsCharacterInfo: Component<{ root: HTMLElement | null; adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; onpick?: (part: string, path?: number[]) => void }>
   /** A description drawn by the adapter's `preview`. With a `session` and `editable`, its parts are moved, scaled and turned on the drawing. */
   export const IdsPreview: Component<{
-    adapter: { preview?: import('@han-compose/composer').ComposerPreview }; tree: import('ids-input').IdsPart; chosen?: number[] | null
+    adapter: { preview?: import('han-compose').ComposerPreview }; tree: import('ids-input').IdsPart; chosen?: number[] | null
     messages?: Record<string, string>; locale?: string; small?: boolean; notes?: boolean; delay?: number
     session?: import('ids-input/document').DocumentSession | null; version?: number; editable?: boolean
-    scopes?: import('ids-input/document').ScopeTree | null; drawing?: import('@han-compose/composer').Drawing | null
+    scopes?: import('ids-input/document').ScopeTree | null; drawing?: import('han-compose').Drawing | null
     onchoose?: ((path: number[]) => void) | null; onedit?: (() => void) | null
   }, {}, 'scopes' | 'drawing'>
   /** The text of `key` in `messages`, else in English. */
@@ -89,7 +89,7 @@ declare module 'ids-input/document' {
   export function scopesMarkup(drawing: ScopeTree, options?: { ink?: string; idPrefix?: string; emoji?: unknown[] | null; cut?: string | null; cutLeaf?: number | null }): { defs: string; body: string }
 }
 
-declare module '@han-compose/composer' {
+declare module 'han-compose' {
   export type Drawing = { d: string; parts?: { leaf?: number; cut?: boolean }[]; slots?: unknown[]; cut?: string; emoji?: unknown[] }
   export type SketchLeaf = { index: number; box: number[]; empty: boolean }
   export type ComposerPreview = ((sequence: string, options?: { signal?: AbortSignal }) => Promise<Drawing>) & { warm(): void }
@@ -105,8 +105,8 @@ declare module '@han-compose/composer' {
   export function composerPreview(options: { base: string; separate?: boolean; fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho'; loaders?: Record<string, string> }): ComposerPreview
 }
 
-declare module '@han-compose/composer/source' {
-  import type { ComposerSource } from '@han-compose/composer'
+declare module 'han-compose/source' {
+  import type { ComposerSource } from 'han-compose'
   export function traitsOf(sequence: string): Record<string, boolean>
   export function traitKey(traits: Record<string, boolean>): string
   export function sourceFor(sequence: string, options?: {
@@ -122,19 +122,19 @@ declare module '@han-compose/composer/source' {
   }): ComposerSource
 }
 
-declare module '@han-compose/composer/local' {
+declare module 'han-compose/local' {
   export function onlyBundled(sequence: string, separate?: boolean, unicode?: boolean, fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho'): boolean
 }
 
-declare module '@han-compose/composer/loader' {
-  import type { ComposerSource, Drawing, SketchLeaf } from '@han-compose/composer'
+declare module 'han-compose/loader' {
+  import type { ComposerSource, Drawing, SketchLeaf } from 'han-compose'
   export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho' }): Promise<Drawing>
   /** Where each leaf of `sequence` goes before it is drawn. */
   export function sketch(source: ComposerSource, sequence: string, options?: { fontStyle?: 'sans' | 'serif' | 'fangsong' | 'kaisho' }): Promise<SketchLeaf[]>
 }
 
-declare module '@han-compose/composer/document-view' {
-  import type { Drawing, SketchLeaf } from '@han-compose/composer'
+declare module 'han-compose/document-view' {
+  import type { Drawing, SketchLeaf } from 'han-compose'
   /** A document over a drawing made with `separate`, drawn by `renderer`: `scopes` is its drawing once every part has its own ink. */
   export function documentView(document: import('ids-input/document').IdsDocument, drawing: Drawing, sketch: SketchLeaf[] | null, options: { tolerance?: number; renderer: import('ids-input/document').Renderer }): { scopes: import('ids-input/document').ScopeTree | null; complete: boolean }
 }

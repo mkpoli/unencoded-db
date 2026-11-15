@@ -1,10 +1,10 @@
 // The drawing of each description, composed with han-compose and kept beside the composer's own
 // files. A page reads what is already drawn; a miss is drawn beside it, so a rare part never holds
 // up the page. A drawing is one path, or SVG markup when a layout moves its parts.
-import { documentView } from '@han-compose/composer/document-view'
-import { compose, sketch } from '@han-compose/composer/loader'
-import { onlyBundled } from '@han-compose/composer/local'
-import { sourceFor, traitKey, traitsOf } from '@han-compose/composer/source'
+import { documentView } from 'han-compose/document-view'
+import { compose, sketch } from 'han-compose/loader'
+import { onlyBundled } from 'han-compose/local'
+import { sourceFor, traitKey, traitsOf } from 'han-compose/source'
 import { layerFrames, renderScopes, scopesMarkup } from 'ids-input/document'
 import { composerUrl, composerVersion, GLYPH_STYLE, type GlyphStyle } from '$lib/composer'
 import { composerData } from '$lib/composer-data'

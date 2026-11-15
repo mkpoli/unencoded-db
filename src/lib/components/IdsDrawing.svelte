@@ -1,7 +1,7 @@
 <script lang="ts" module>
   // One composer of each kind for the page visit: a reader who leaves the form and comes back reuses its
   // worker and the export files it has already read. Parts are drawn one by one only where a layout moves them.
-  import type { ComposerPreview } from '@han-compose/composer'
+  import type { ComposerPreview } from 'han-compose'
   import type { DocumentSession } from 'ids-input/document'
   import { composerUrl, type GlyphStyle } from '$lib/composer'
   import { composerData } from '$lib/composer-data'
@@ -12,7 +12,7 @@
     const key = `${style}:${separate}`
     let found = composers.get(key)
     if (!found) {
-      found = import('@han-compose/composer').then(({ composerPreview, dataUrls }) => composerPreview({ base: composerUrl(style), fontStyle: style, separate, loaders: { ...dataUrls, ...composerData } }))
+      found = import('han-compose').then(({ composerPreview, dataUrls }) => composerPreview({ base: composerUrl(style), fontStyle: style, separate, loaders: { ...dataUrls, ...composerData } }))
       composers.set(key, found)
       found.catch(() => composers.delete(key))
     }
