@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import type { Order } from '$lib/order'
-import { addSighting, claimedBy, counts, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, claimedBy, counts, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, shuffleRanges, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -698,11 +698,11 @@ describe('order', () => {
     counts.forEach((n, i) => raw.prepare("INSERT INTO entries(id, script, sightings, created_by, created_at, updated_at) VALUES(?, 'han', ?, ?, '2026', '2026')").run(i + 1, n, who.actor))
     raw.exec("INSERT INTO entry_tags(tag, entry_id, sightings) SELECT 'all', id, sightings FROM entries")
   })
-  const walk = async (order: Order) => {
+  const walk = async (order: Order, seed?: number) => {
     const found: number[] = []
     let after: string | null = null, pages = 0
     do {
-      const page: NonNullable<Awaited<ReturnType<typeof list>>> = (await list(db, { order, after, limit: 2 }))!
+      const page: NonNullable<Awaited<ReturnType<typeof list>>> = (await list(db, { order, seed, after, limit: 2 }))!
       found.push(...page.tiles.map(tile => tile.id))
       after = page.next
       expect(++pages).toBeLessThan(10)
@@ -715,7 +715,28 @@ describe('order', () => {
     expect(await walk('most')).toEqual([7, 4, 2, 6, 3, 5, 1])
     expect(await walk('fewest')).toEqual([1, 5, 3, 6, 2, 4, 7])
   })
+  test('a shuffled list reads every record once from any start, in the order of its ranks', async () => {
+    const rank = (id: number) => (id * 2654435761) % 2 ** 32
+    const byRank = [1, 2, 3, 4, 5, 6, 7].sort((a, b) => rank(a) - rank(b))
+    for (const seed of [0, 1, rank(4), rank(4) + 1, 2 ** 31, 2 ** 32 - 1]) {
+      const found = await walk('random', seed)
+      const start = byRank.findIndex(id => rank(id) >= seed)
+      expect(found).toEqual(start < 0 ? byRank : [...byRank.slice(start), ...byRank.slice(0, start)])
+    }
+    expect(await list(db, { order: 'random' })).toBeNull()
+  })
+  test('a shuffled list continues after a cursor up to its start', () => {
+    expect(shuffleRanges(100, null)).toEqual([[100, 2 ** 32], [0, 100]])
+    expect(shuffleRanges(100, 500)).toEqual([[501, 2 ** 32], [0, 100]])
+    expect(shuffleRanges(100, 2 ** 32 - 1)).toEqual([[0, 100]])
+    expect(shuffleRanges(100, 40)).toEqual([[41, 100]])
+    expect(shuffleRanges(100, 99)).toEqual([])
+    expect(shuffleRanges(0, null)).toEqual([[0, 2 ** 32]])
+  })
   test('a cursor of another order is no cursor', () => {
+    expect(cursorOf('random', '4294967296')).toBeNull()
+    expect(cursorOf('random', '1.5')).toBeNull()
+    expect(cursorOf('random', '0')).toEqual([0])
     expect(cursorOf('new', '2.7')).toBeNull()
     expect(cursorOf('most', '7')).toBeNull()
     expect(cursorOf('most', '-1.7')).toBeNull()
@@ -738,14 +759,22 @@ describe('order', () => {
 // with no scan of a table and no sort.
 describe('query cost', () => {
   const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
-  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }, ...(['old', 'most', 'fewest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }])]
+  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }, ...(['old', 'most', 'fewest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
   for (const shape of shapes) test(`list ${JSON.stringify(shape)}`, () => {
     const statement = listStatement(db, shape) as unknown as { sql: string; values: unknown[] }
     const details = plan(statement.sql, statement.values)
     expect(details.join('\n')).not.toMatch(/TEMP B-TREE/)
     for (const detail of details) expect(detail).not.toMatch(/^SCAN (?!.*USING)/)
+    if (shape.order === 'random') return expect(details[0]).toMatch(/^SEARCH t USING COVERING INDEX entry_tags_by_shuffle \(tag=\? AND <expr>>\? AND <expr><\?\)$/)
     // A list by count reads the count index from the cursor on; any other reads the key in order.
     expect(details[0]).toMatch(shape.order === 'most' || shape.order === 'fewest' ? /^SEARCH t USING COVERING INDEX entry_tags_by_sightings \(tag=\? AND \(sightings,entry_id\)[<>]\(\?,\?\)\)$/ : /^SEARCH (t|w\d) USING PRIMARY KEY/)
+  })
+
+  test('the second read of a shuffled list reads the shuffle index too', () => {
+    const statement = listStatement(db, { order: 'random', seed: 7 }, undefined, 1) as unknown as { sql: string; values: unknown[] }
+    expect(plan(statement.sql, statement.values)[0]).toMatch(/^SEARCH t USING COVERING INDEX entry_tags_by_shuffle/)
+    expect(listStatement(db, { order: 'random', seed: 0 }, undefined, 1)).toBeNull()
+    expect(listStatement(db, { order: 'new' }, undefined, 1)).toBeNull()
   })
 
   test('an exact description search reads the claims index by value', () => {
