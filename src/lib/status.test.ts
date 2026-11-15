@@ -6,14 +6,14 @@ const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null): 
 const relation = (value: string, relationship: string) => claim('relation', value, { relationship })
 const unicode = claim('encoding', 'U+54E6', { charset: 'unicode' })
 
-test('a record with no claim that decides is unchecked', () => {
-  expect(statusOf([])).toBe('unchecked')
-  expect(statusOf([claim('ids', '⿰口我'), claim('meaning', 'oh'), relation('哦', 'similar'), relation('哦', 'not_variant')])).toBe('unchecked')
+test('a record with no claim that decides has no status', () => {
+  expect(statusOf([])).toBeNull()
+  expect(statusOf([claim('ids', '⿰口我'), claim('meaning', 'oh'), relation('哦', 'similar'), relation('哦', 'not_variant')])).toBeNull()
 })
 
 test('a Unicode code makes a record encoded, and another set does not', () => {
   expect(statusOf([unicode])).toBe('encoded')
-  expect(statusOf([claim('encoding', 'A140', { charset: 'big5' })])).toBe('unchecked')
+  expect(statusOf([claim('encoding', 'A140', { charset: 'big5' })])).toBeNull()
 })
 
 test('unifiable needs no encoded value', () => {
@@ -27,8 +27,8 @@ test('a homograph, variant or erroneous form of an encoded character takes that 
   expect(statusOf([relation('𲎿', 'variant')])).toBe('variant')
 })
 
-test('a relation to a description sequence, a private use character or several characters stays unchecked', () => {
-  for (const value of ['⿰乂也', '', '哦哦', '']) for (const relationship of ['homograph', 'variant', 'erroneous']) expect(statusOf([relation(value, relationship)])).toBe('unchecked')
+test('a relation to a description sequence, a private use character or several characters decides nothing', () => {
+  for (const value of ['⿰乂也', '', '哦哦', '']) for (const relationship of ['homograph', 'variant', 'erroneous']) expect(statusOf([relation(value, relationship)])).toBeNull()
 })
 
 test('the first rule that matches wins', () => {

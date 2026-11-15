@@ -56,7 +56,6 @@
   "script.shuishu": "Shuishu",
   "script.nushu": "Nüshu",
   "script.other": "Other or not sure",
-  "status.unchecked": "Not checked",
   "status.variant": "Variant of an encoded character",
   "status.unifiable": "Unifiable with an encoded character",
   "status.homograph": "Homograph of an encoded character",

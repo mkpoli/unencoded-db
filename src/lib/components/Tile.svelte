@@ -11,7 +11,6 @@
   const shown = $derived(tile.types.slice(0, 1))
   const hidden = $derived(tile.types.length - shown.length)
   const works = $derived(MARKED.filter(registry => tile.marks.includes(registry.id)))
-  const marked = $derived(tile.status !== 'unchecked')
 </script>
 
 <a class="tile" href={href(`/entry/${tile.id}`)}>
@@ -21,9 +20,9 @@
     {:else}<span class="blank"><span class="small">{t('browse.noImage')}</span></span>{/if}
   </span>
   <span class="ids-line">{tile.ids ?? ''}</span>
-  {#if tile.types.length || marked}
+  {#if tile.types.length || tile.status}
     <span class="tags">
-      {#if marked}<span class="tag state {tile.status}">{t(`browse.${tile.status}`)}</span>{/if}
+      {#if tile.status}<span class="tag state {tile.status}">{t(`browse.${tile.status}`)}</span>{/if}
       {#each shown as type}<span class="tag">{label(type)}</span>{/each}
       {#if hidden > 0}<span class="tag" title={tile.types.map(label).join(' · ')}>+{hidden}</span>{/if}
     </span>

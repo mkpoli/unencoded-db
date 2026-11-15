@@ -79,7 +79,7 @@ describe('marked works', () => {
     expect(await ids({ within: ['zitools'] })).toEqual([filed, encoded])
     expect(await ids({ without: ['zitools'] })).toEqual([bare])
     expect(await ids({ within: ['zitools'], without: ['unicode'] })).toEqual([filed])
-    expect(await ids({ script: 'han', filter: 'unchecked', without: ['zitools', 'yedict', 'glyphwiki', 'mj'] })).toEqual([bare])
+    expect(await ids({ script: 'han', without: ['zitools', 'yedict', 'glyphwiki', 'mj'] })).toEqual([bare])
     expect(await ids({ within: ['zitools'], without: ['zitools'] })).toEqual([])
     expect(await counts(db)).toMatchObject({ 'r:unicode': 1, 'x:unicode': 2, 'r:zitools': 2, 'x:zitools': 1, 'r:glyphwiki': 1, 'x:glyphwiki': 2, 'r:mj': 1, 'x:mj': 2 })
 
@@ -170,10 +170,11 @@ describe('adding a record', () => {
 
   test('a record lands in the lists of its script, its status and what it lacks', async () => {
     const id = await createEntry(db, fields({ script: 'nom' }), seen(), [], who)
-    for (const [script, filter] of [[null, null], ['nom', null], [null, 'unchecked'], ['nom', 'unchecked'], [null, 'image'], [null, 'ids'], ['nom', 'source']] as const)
+    for (const [script, filter] of [[null, null], ['nom', null], [null, 'image'], [null, 'ids'], ['nom', 'source']] as const)
       expect((await list(db, { script, filter }))!.tiles.map(tile => tile.id)).toEqual([id])
     expect((await list(db, { script: 'han' }))!.tiles).toEqual([])
-    expect(await counts(db)).toMatchObject({ all: 1, 's:nom': 1, 'f:unchecked': 1, 'n:image': 1 })
+    expect(await counts(db)).toMatchObject({ all: 1, 's:nom': 1, 'n:image': 1 })
+    expect(await counts(db)).not.toHaveProperty('f:unchecked')
   })
 
   test('a filter that does not exist lists nothing', async () => {
@@ -317,13 +318,13 @@ describe('the wiki', () => {
     await editEntry(db, id, 1, fields({ claims: [claim('encoding', 'U+5650', { charset: 'unicode' })] }), who, null)
     expect(raw.query('SELECT status FROM entries WHERE id = ?').get(id)).toEqual({ status: 'encoded' })
     expect(raw.query("SELECT tag FROM entry_tags WHERE entry_id = ? AND tag LIKE '%f:%' ORDER BY tag").all(id)).toEqual([{ tag: 'f:encoded' }, { tag: 's:han|f:encoded' }])
-    expect((await list(db, { filter: 'unchecked' }))!.tiles).toEqual([])
+    expect(await list(db, { filter: 'unchecked' })).toBeNull()
     expect((await list(db, { filter: 'encoded' }))!.tiles).toHaveLength(1)
     expect(await counts(db)).toMatchObject({ 'f:encoded': 1 })
     expect((await counts(db))['f:unchecked']).toBeUndefined()
     await revertEntry(db, id, (await history(db, id)).find(row => row.kind === 'create')!.id, who)
-    expect(raw.query('SELECT status FROM entries WHERE id = ?').get(id)).toEqual({ status: 'unchecked' })
-    expect(await counts(db)).toMatchObject({ 'f:unchecked': 1 })
+    expect(raw.query('SELECT status FROM entries WHERE id = ?').get(id)).toEqual({ status: null })
+    expect((await counts(db))['f:encoded']).toBeUndefined()
   })
 
   test('a record created with a relation to an encoded character takes its status from it', async () => {
@@ -693,7 +694,7 @@ describe('people', () => {
 // with no scan of a table and no sort.
 describe('query cost', () => {
   const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
-  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'unchecked' }, { filter: 'ids' }, { script: 'han', filter: 'unchecked' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { script: 'han', filter: 'unchecked', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'unchecked', facet: 'g:hakka', without: ['zitools'], query: '亻' }]
+  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }]
   for (const shape of shapes) test(`list ${JSON.stringify(shape)}`, () => {
     const statement = listStatement(db, shape) as unknown as { sql: string; values: unknown[] }
     const details = plan(statement.sql, statement.values)

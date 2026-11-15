@@ -70,7 +70,7 @@
   <div class="snapshot">
     <div class="row">
       <span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>
-      <span class="badge {status}">{t(`status.${status}`)}</span>
+      {#if status}<span class="badge {status}">{t(`status.${status}`)}</span>{/if}
     </div>
     <p class:muted={!entry.description} class="description">{entry.description || t('entry.noDescription')}</p>
     <dl class="facts">

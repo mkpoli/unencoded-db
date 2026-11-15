@@ -46,7 +46,7 @@ export function resolveScript(raw: string): { script: ScriptId; script_other: st
 /** The script of a record as a reader sees it, and as the form's field holds it. */
 export const scriptName = (locale: string, script: string, other?: string | null) => script === 'other' && other ? other : translate(locale, `script.${script}`)
 
-export const STATUSES = ['unchecked', 'encoded', 'unifiable', 'homograph', 'variant'] as const
+export const STATUSES = ['encoded', 'unifiable', 'homograph', 'variant'] as const
 export type Status = (typeof STATUSES)[number]
 
 export const CONTEXTS = ['running_text', 'heading', 'logo', 'handwriting', 'other'] as const

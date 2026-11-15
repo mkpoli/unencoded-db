@@ -180,7 +180,7 @@ test('0005 gives every claim a key, a list of sightings and a scope, in claims a
   expect(journal.filter(row => !versions.some(version => version.id === row.id)).map(row => row.snapshot)).toEqual([sighting, '{}', '{"revision":4}', '{}', '{"from":3}'])
 
   // An old version is restored through the store, with its keys and the sighting it rested on.
-  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql']) raw.exec(migration(name))
+  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql']) raw.exec(migration(name))
   const db = d1Over(raw)
   expect(await revertEntry(db, 1, 1, { actor: 'p', ip: null })).toEqual({ ok: true, rev: 5 })
   expect((await getEntry(db, 1))!.claims).toEqual(first)
@@ -280,4 +280,25 @@ test('0008 derives every record\'s status from its claims, with its tags, counts
   const rows = raw.query('SELECT snapshot FROM revisions ORDER BY id').all() as { snapshot: string }[]
   expect(JSON.parse(rows[0].snapshot)).not.toHaveProperty('status')
   expect(rows[1].snapshot).toBe('{}')
+})
+
+test('0011 leaves a record that no status rule matches without a status, tag or count', () => {
+  const raw = new Database(':memory:')
+  for (const name of ['0001_init.sql', '0002_sighting_via.sql', '0003_media_boxes.sql', '0004_unify_relation.sql', '0005_claim_links.sql', '0006_registry_tags.sql', '0007_entry_marks.sql', '0008_derived_status.sql', '0009_custom_scripts.sql', '0010_entry_layout.sql']) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  const entry = raw.prepare("INSERT INTO entries(script, status, created_by, created_at, updated_at) VALUES ('han', ?, 'p', '2026', '2026')")
+  for (const status of ['unchecked', 'variant']) entry.run(status)
+  const tag = raw.prepare('INSERT INTO entry_tags(tag, entry_id) VALUES (?, ?)')
+  for (const [id, status] of [[1, 'unchecked'], [2, 'variant']] as const) for (const t of [`f:${status}`, `s:han|f:${status}`, 'all']) tag.run(t, id)
+  const count = raw.prepare('INSERT INTO tag_counts(tag, n) VALUES (?, ?)')
+  for (const [t, n] of [['f:unchecked', 1], ['s:han|f:unchecked', 1], ['f:variant', 1], ['s:han|f:variant', 1], ['all', 2]] as const) count.run(t, n)
+
+  raw.exec(migration('0011_no_default_status.sql'))
+
+  expect(raw.query('SELECT id, status FROM entries ORDER BY id').all()).toEqual([{ id: 1, status: null }, { id: 2, status: 'variant' }])
+  expect(() => raw.exec("UPDATE entries SET status = 'unchecked' WHERE id = 1")).toThrow(/CHECK/)
+  expect(raw.query('SELECT entry_id, tag FROM entry_tags ORDER BY entry_id, tag').all()).toEqual([
+    { entry_id: 1, tag: 'all' }, { entry_id: 2, tag: 'all' }, { entry_id: 2, tag: 'f:variant' }, { entry_id: 2, tag: 's:han|f:variant' },
+  ])
+  expect(raw.query('SELECT tag, n FROM tag_counts ORDER BY tag').all()).toEqual([{ tag: 'all', n: 2 }, { tag: 'f:variant', n: 1 }, { tag: 's:han|f:variant', n: 1 }])
 })

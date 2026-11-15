@@ -56,7 +56,6 @@
   "script.shuishu": "水書",
   "script.nushu": "女書",
   "script.other": "其他或不確定",
-  "status.unchecked": "未查核",
   "status.variant": "已編碼字的異體",
   "status.unifiable": "可認同於已編碼字",
   "status.homograph": "與已編碼字同形異字",

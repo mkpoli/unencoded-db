@@ -56,7 +56,6 @@
   "script.shuishu": "水書",
   "script.nushu": "女書",
   "script.other": "その他・不明",
-  "status.unchecked": "未確認",
   "status.variant": "収録済み文字の異体字",
   "status.unifiable": "既存字に統合可能",
   "status.homograph": "既存字と同形異字",
