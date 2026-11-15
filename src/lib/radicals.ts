@@ -113,13 +113,15 @@ function detect(inner: IdsPart, whole = false): string[] | null {
   return null
 }
 
-// What can be a radical outside the Kangxi set: one character of a script without case, or a symbol such as a stroke.
-const CUSTOM = /^[\p{Lo}\p{So}]$/u
+// What can be a radical outside the Kangxi set: one letter of a script without case, a radical character
+// or a stroke. Placeholders such as □ and 〓, description operators and other symbols are none.
+const CUSTOM = /^[\p{Lo}\u2E80-\u2FDF\u31C0-\u31EF]$/u
 const isCustom = (text: string) => CUSTOM.test(text) && pathOf(text) === null
 
 /** The path a stated radical names: that of an ideograph, or a character outside the Kangxi set on its own. */
 function statedPath(stated: string | null | undefined) {
-  const text = bare((stated ?? '').normalize('NFC').trim().replace(/(?<=.)部$/u, ''))
+  // A compatibility form names the character it stands for: ㊊ is 月.
+  const text = bare((stated ?? '').normalize('NFKC').trim().replace(/(?<=.)部$/u, ''))
   return pathOf(text) ?? (isCustom(text) ? [text] : null)
 }
 

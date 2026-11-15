@@ -58,6 +58,10 @@ test('a stated character without a Kangxi radical is a radical of its own', () =
   expect(radicalPath('⿰口男', '㇇')).toEqual(['㇇'])
   expect(radicalPath('⿰口男', 'a')).toEqual(['口'])
   expect(radicalPath('⿰口男', '1')).toEqual(['口'])
+  // A placeholder, an operator or a pictograph is no radical, and a compatibility form names its character.
+  for (const stated of ['□', '〓', '⿰', '😀', '©', '？', '々']) expect(fileRecord('⿰口男', stated)).toEqual({ path: ['口'], stated: null })
+  expect(fileRecord('⿰口男', '㊊')).toEqual({ path: ['月'], stated: '月' })
+  expect(parsePath('□')).toBeNull()
   expect(parsePath('ㄏ')).toBe('ㄏ')
   expect(parsePath('ㄏ口')).toBeNull()
   expect(parsePath('a')).toBeNull()
