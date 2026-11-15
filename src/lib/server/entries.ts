@@ -211,7 +211,8 @@ async function reindex(db: D1Database, id: number, entry: Entry, claims: readonl
     db.prepare(`UPDATE entries SET ${SUMMARY_SET} WHERE id = ?`).bind(...summaryValues(claims, summary), id),
     db.prepare('DELETE FROM entry_tags WHERE entry_id = ? AND tag IN (SELECT value FROM json_each(?))').bind(id, JSON.stringify(gone)),
     db.prepare('INSERT OR IGNORE INTO entry_tags(tag, entry_id) SELECT value, ? FROM json_each(?)').bind(id, JSON.stringify(added)),
-    db.prepare('UPDATE entry_tags SET sightings = ? WHERE entry_id = ? AND sightings != ?').bind(summary.visible.length, id, summary.visible.length),
+    // Word rows are only looked up by key, never read in order, so they keep no count.
+    db.prepare("UPDATE entry_tags SET sightings = ? WHERE entry_id = ? AND sightings != ? AND tag NOT GLOB 'w:*'").bind(summary.visible.length, id, summary.visible.length),
     db.prepare('UPDATE tag_counts SET n = n - 1 WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(gone.filter(facet))),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(added.filter(facet))),
   ]
@@ -308,7 +309,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
     ]),
     ...(claims.some(claim => claim.sightings.length) ? [db.prepare(CITED_BY_PLACE), db.prepare(CITED_IN_SNAPSHOT)] : []),
     db.prepare(`UPDATE entries SET ${SUMMARY_SET} WHERE id = ${ENTRY_SEQ}`).bind(...summaryValues(claims, summary)),
-    db.prepare(`INSERT INTO entry_tags(tag, entry_id, sightings) SELECT value, ${ENTRY_SEQ}, ? FROM json_each(?)`).bind(summary.visible.length, JSON.stringify(tags)),
+    db.prepare(`INSERT INTO entry_tags(tag, entry_id, sightings) SELECT value, ${ENTRY_SEQ}, CASE WHEN value GLOB 'w:*' THEN 0 ELSE ? END FROM json_each(?)`).bind(summary.visible.length, JSON.stringify(tags)),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),
   ])
   return results[0].results[0].id

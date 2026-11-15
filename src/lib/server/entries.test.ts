@@ -766,11 +766,15 @@ describe('order', () => {
     expect(cursorOf('old', '0')).toBeNull()
     expect(cursorOf('fewest', '0.3')).toEqual([0, 3])
   })
-  test('a record keeps its count on every row it is listed under', async () => {
-    const id = await createEntry(db, fields(), seen(), [], who)
-    const rows = raw.query('SELECT DISTINCT t.sightings = e.sightings AS same FROM entry_tags t JOIN entries e ON e.id = t.entry_id WHERE e.id = ?').all(id)
-    expect(rows).toEqual([{ same: 1 }])
-    expect(raw.query('SELECT DISTINCT sightings FROM entry_tags WHERE entry_id = ?').all(id)).toEqual([{ sightings: 1 }])
+  test('a record keeps its count on every row it is listed under, and its words keep none', async () => {
+    const counted = (id: number) => raw.query("SELECT DISTINCT sightings FROM entry_tags WHERE entry_id = ? AND tag NOT GLOB 'w:*'").all(id)
+    const words = (id: number) => raw.query("SELECT DISTINCT sightings FROM entry_tags WHERE entry_id = ? AND tag GLOB 'w:*'").all(id)
+    const id = await createEntry(db, fields(), seen({ place: 'A shop sign' }), [], who)
+    expect(counted(id)).toEqual([{ sightings: 1 }])
+    expect(words(id)).toEqual([{ sightings: 0 }])
+    await addSighting(db, id, seen({ place: 'A book' }), [], who)
+    expect(counted(id)).toEqual([{ sightings: 2 }])
+    expect(words(id)).toEqual([{ sightings: 0 }])
   })
 })
 
