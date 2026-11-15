@@ -1,7 +1,7 @@
 {
   "app.name": "珍字集覽",
-  "app.tagline": "未編碼文字與可統合的異體字",
-  "app.description": "Glyph Atlas的資料維基，記錄Unicode未編碼文字及可統合的異體字，為向IRG提交提案積累資料。",
+  "app.tagline": "罕見字及其出處",
+  "app.description": "Glyph Atlas的資料維基，收錄罕見的字：Unicode未收錄的字、異體字、誤印和存疑的字形，並記下各字的出處。",
   "nav.browse": "記錄",
   "nav.history": "歷史",
   "nav.sources": "出處",
@@ -290,7 +290,7 @@
   "moderate.hideSighting": "隱藏證據",
   "moderate.unhideSighting": "取消隱藏證據",
   "about.title": "關於珍字集覽",
-  "about.what": "珍字集覽是Glyph Atlas的資料維基，記錄Unicode未編碼文字及可統合的異體字，為向IRG提交提案積累資料。任何人無須帳號即可新增字，變更會保存在歷史記錄中。",
+  "about.what": "珍字集覽是Glyph Atlas的資料維基，收錄罕見的字：Unicode未收錄的字、異體字、誤印和存疑的字形，並記下各字的出處。這些記錄可作為向IRG提案的依據。任何人無須帳號即可新增字，變更會保存在歷史記錄中。",
   "about.howTitle": "新增字",
   "about.how": "提供圖片或連結，並註明出處即可。任何人日後都可以補充部件、出處、讀音或後來發現的碼位。經確認已編碼的字、異體字和誤印字都會保留記錄並標明狀態。",
   "about.irgTitle": "從記錄到提案",

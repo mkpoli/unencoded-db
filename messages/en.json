@@ -1,7 +1,7 @@
 {
   "app.name": "Rare Character Compendium",
-  "app.tagline": "Unencoded characters and unifiable variants",
-  "app.description": "A Glyph Atlas evidence wiki documenting Unicode-unencoded characters and unifiable variants for prospective IRG submissions.",
+  "app.tagline": "Variants, misprints and characters Unicode lacks",
+  "app.description": "A Glyph Atlas evidence wiki for rare characters: ones Unicode lacks, variants, misprints and uncertain forms, each recorded with where it was seen.",
   "nav.browse": "Records",
   "nav.history": "History",
   "nav.sources": "Sources",
@@ -290,7 +290,7 @@
   "moderate.hideSighting": "Hide evidence",
   "moderate.unhideSighting": "Unhide evidence",
   "about.title": "About Rare Character Compendium",
-  "about.what": "Rare Character Compendium is a Glyph Atlas evidence wiki documenting Unicode-unencoded characters and unifiable variants for prospective IRG submissions. Anyone can add a character without an account, and changes are recorded in its history.",
+  "about.what": "Rare Character Compendium is a Glyph Atlas evidence wiki for rare characters: ones Unicode lacks, variants, misprints and uncertain forms, each recorded with where it was seen. The records can support proposals to IRG. Anyone can add a character without an account, and changes are recorded in its history.",
   "about.howTitle": "Adding a character",
   "about.how": "A picture or a link and a note of where you found it are enough. Anyone can later add its parts, sources, reading, or the code point it turns out to have. A character that proves to be encoded, a variant or a misprint stays on record, marked as such.",
   "about.irgTitle": "From a record to a proposal",

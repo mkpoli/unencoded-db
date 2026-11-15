@@ -1,6 +1,6 @@
 # 珍字集覽 · Rare Character Compendium
 
-A Glyph Atlas evidence wiki documenting Unicode-unencoded characters and unifiable variants for prospective IRG submissions. Records can be created and edited anonymously; each change is attributed to a browser identity.
+A Glyph Atlas evidence wiki for rare characters: ones Unicode lacks, variants, misprints and uncertain forms, each recorded with where it was seen. The records can support proposals to IRG. Records can be created and edited anonymously; each change is attributed to a browser identity.
 
 ## Local development
 

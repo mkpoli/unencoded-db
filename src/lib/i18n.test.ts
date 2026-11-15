@@ -19,7 +19,7 @@ test('each locale uses its product name in the about page', () => {
     expect(catalogue['about.title']).toContain(names[locale])
     expect(catalogue['about.what']).toContain(names[locale])
     expect(catalogue['app.description']).toContain('Glyph Atlas')
-    expect(catalogue['app.description']).toContain('IRG')
+    expect(catalogue['about.what']).toContain('IRG')
   }
 })
 
