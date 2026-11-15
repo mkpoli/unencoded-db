@@ -682,7 +682,7 @@ const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status,
 const LISTED = "t.tag NOT GLOB 'w:*'"
 // A shuffled list reads by rank from its seed to the end, then from 0 to the seed. The expression is the
 // one migration 0013 indexes, so it must stay the same character for character.
-const MIXED = '((t.entry_id * 2654435761) % 4294967296)'
+const MIXED = '(((t.entry_id % 4294967296) * 1540483477) % 4294967296)'
 const FOLDED = `((${MIXED} | (${MIXED} >> 16)) - (${MIXED} & (${MIXED} >> 16)))`
 const RANK = `((${FOLDED} * 73244475) % 4294967296)`
 const ORDER_READS: Record<Exclude<Order, 'random'>, { by: string; past: string; counted: boolean }> = {
@@ -723,7 +723,7 @@ export function listStatement(db: D1Database, listing: Listing, range?: string, 
     ...(plan.exact ? ["EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value = ? AND k.entry_id = t.entry_id)"] : []),
     ...read.tests.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = t.entry_id)'),
   ].join(' AND ') || '1'
-  const { by, past, key } = order === 'random' ? { by: RANK, past: `${RANK} >= ? AND ${RANK} < ?`, key: RANK } : { ...ORDER_READS[order], key: 't.sightings' }
+  const { by, past, key } = order === 'random' ? { by: RANK, past: `${RANK} >= ? AND ${RANK} < ? AND ${LISTED}`, key: RANK } : { ...ORDER_READS[order], key: 't.sightings' }
   return db.prepare(`SELECT ${TILE_COLUMNS}, ${key} AS counted, (${tests}) AS matches FROM entry_tags t CROSS JOIN entries e ON e.id = t.entry_id WHERE t.tag = ? AND ${past} ORDER BY ${by} LIMIT ?`)
     .bind(...(plan.exact ? [plan.exact] : []), ...read.tests, read.tag, ...(ranks ?? cursor), (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1 - taken)
 }
