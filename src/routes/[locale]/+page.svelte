@@ -19,6 +19,7 @@
   const shown = $derived(loaded?.for === data ? loaded : fresh(data))
   const REACH = 1200
   let sentinel = $state<HTMLElement>()
+  let observer: IntersectionObserver | undefined
   let near = $state(false), busy = $state(false)
   let failedFor = $state.raw<typeof data | null>(null)
   const more = $derived.by(() => {
@@ -39,9 +40,11 @@
       const shownIds = new Set(base.tiles.map(tile => tile.id))
       loaded = { for: from, tiles: [...base.tiles, ...next.tiles.filter(tile => !shownIds.has(tile.id))], glyphs: { ...base.glyphs, ...next.glyphs }, next: next.next, partial: next.partial }
       failedFor = null
-      // The observer reports the moved sentinel a frame later; until then it is measured here.
+      // The sentinel has moved down. Until the observer looks at it again it is taken to be far, and it is
+      // observed afresh so the observer reports where it is now, even if scrolling has brought it back.
       await tick()
-      near = sentinel ? sentinel.getBoundingClientRect().top < innerHeight + REACH : false
+      near = false
+      if (observer && sentinel) { observer.unobserve(sentinel); observer.observe(sentinel) }
     } catch {
       if (from === data) failedFor = from
     } finally {
@@ -51,9 +54,10 @@
   $effect(() => {
     if (!sentinel) return
     void data
-    const observer = new IntersectionObserver(([entry]) => { near = entry.isIntersecting }, { rootMargin: `0px 0px ${REACH}px 0px` })
-    observer.observe(sentinel)
-    return () => { observer.disconnect(); near = false }
+    const watching = new IntersectionObserver(entries => { near = entries.at(-1)!.isIntersecting }, { rootMargin: `0px 0px ${REACH}px 0px` })
+    observer = watching
+    watching.observe(sentinel)
+    return () => { watching.disconnect(); observer = undefined; near = false }
   })
   // A search reads the records a window at a time and may find nothing in one, so it continues only when asked.
   $effect(() => { if (near && !busy && failedFor !== data && !shown.partial && shown.next !== null) grow() })
