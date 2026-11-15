@@ -1,7 +1,7 @@
 {
   "app.name": "Tuyển tập chữ quý",
-  "app.tagline": "Chữ chưa mã hóa và dị thể có thể hợp nhất",
-  "app.description": "Wiki tư liệu của Glyph Atlas về chữ chưa được mã hóa trong Unicode và các dị thể có thể hợp nhất, phục vụ các đề xuất gửi IRG.",
+  "app.tagline": "Chữ hiếm và nơi xuất hiện",
+  "app.description": "Wiki tư liệu của Glyph Atlas dành cho các chữ hiếm: chữ chưa có trong Unicode, chữ dị thể, chữ in nhầm và dạng chữ còn nghi vấn, mỗi chữ đều được ghi lại kèm nơi xuất hiện.",
   "nav.browse": "Danh mục",
   "nav.history": "Lịch sử",
   "nav.radicals": "Bộ thủ",
@@ -306,7 +306,7 @@
   "moderate.hideSighting": "Ẩn bằng chứng",
   "moderate.unhideSighting": "Bỏ ẩn bằng chứng",
   "about.title": "Giới thiệu Tuyển tập chữ quý",
-  "about.what": "Tuyển tập chữ quý là wiki tư liệu của Glyph Atlas về chữ chưa được mã hóa trong Unicode và các dị thể có thể hợp nhất, phục vụ các đề xuất gửi IRG. Ai cũng có thể thêm chữ mà không cần tài khoản; các thay đổi được lưu trong lịch sử.",
+  "about.what": "Tuyển tập chữ quý là wiki tư liệu của Glyph Atlas dành cho các chữ hiếm: chữ chưa có trong Unicode, chữ dị thể, chữ in nhầm và dạng chữ còn nghi vấn, mỗi chữ đều được ghi lại kèm nơi xuất hiện. Các ghi chép này có thể làm cơ sở cho các đề xuất gửi IRG. Bất kỳ ai cũng có thể thêm chữ mà không cần tài khoản, và mọi thay đổi đều được lưu lại trong lịch sử.",
   "about.howTitle": "Thêm chữ",
   "about.how": "Chỉ cần hình ảnh hoặc liên kết và ghi chú nơi tìm thấy chữ. Sau đó, ai cũng có thể bổ sung các thành phần, nguồn, cách đọc hoặc điểm mã nếu tìm thấy. Chữ được xác định là đã mã hóa, dị thể hoặc chữ in sai vẫn được lưu và đánh dấu tương ứng.",
   "about.irgTitle": "Từ mục từ đến đề xuất",

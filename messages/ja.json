@@ -1,7 +1,7 @@
 {
   "app.name": "珍字集覧",
-  "app.tagline": "未収録文字と包摂可能な異体字",
-  "app.description": "Unicode未収録文字と包摂可能な異体字の資料を記録するGlyph Atlasのウィキです。IRGへの提案に向けた資料を集めています。",
+  "app.tagline": "希少文字とその出典",
+  "app.description": "Glyph Atlasの資料ウィキ。Unicode未収録の文字、異体字、誤植、不確かな字形などの希少文字を、それぞれの出典とともに記録しています。",
   "nav.browse": "記録一覧",
   "nav.history": "履歴",
   "nav.radicals": "部首",
@@ -306,7 +306,7 @@
   "moderate.hideSighting": "証拠を非表示",
   "moderate.unhideSighting": "証拠を再表示",
   "about.title": "珍字集覧について",
-  "about.what": "珍字集覧は、Unicode未収録文字と包摂可能な異体字の資料を記録するGlyph Atlasのウィキです。IRGへの提案に向けた資料を集めています。アカウントなしで文字を追加でき、変更は履歴に残ります。",
+  "about.what": "珍字集覧はGlyph Atlasの資料ウィキです。Unicode未収録の文字、異体字、誤植、不確かな字形などの希少文字を、それぞれの出典とともに記録しています。これらの記録はIRGへの提案の根拠として活用できます。アカウントなしで誰でも文字を追加でき、変更内容は履歴に記録されます。",
   "about.howTitle": "文字の追加",
   "about.how": "画像またはリンクと、見つけた場所があれば登録できます。文字の部品、出典、読み、後に判明した符号位置などは、誰でも追加できます。収録済みと判明した文字や異体字、誤植も、その旨を示して記録に残します。",
   "about.irgTitle": "記録から提案へ",
