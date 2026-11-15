@@ -22,7 +22,7 @@
 
 <Seo title={heading} />
 <div class="page narrow stack">
-  <a class="text-link back" href={href()}>← {t('nav.browse')}</a>
+  <a class="text-link back" href={href('/sources')}>← {t('nav.sources')}</a>
   <section class="panel stack intro">
     <span class="badge">{t('source.title')}</span>
     <h1>{heading}</h1>

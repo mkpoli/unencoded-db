@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
-import { addSighting, claimedBy, counts, createEntry, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, sourcePage, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, claimedBy, counts, createEntry, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, SOURCE_CARD_READ, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -692,6 +692,37 @@ describe('people', () => {
 
 // Every list a visitor can ask for, as the query plan runs it: one range of `entry_tags` and lookups by key,
 // with no scan of a table and no sort.
+describe('source gallery', () => {
+  test('lists the sources visible sightings cite, with their records, newest first', async () => {
+    const first = await createEntry(db, fields(), seen({ title: 'Book' }), [image], who)
+    const second = await createEntry(db, fields(), seen({ title: 'Book' }), [], who)
+    await addSighting(db, first, seen({ title: 'Book' }), [], who)
+    await createEntry(db, fields(), seen({ title: 'Article', via_title: 'Book' }), [], who)
+    const gone = await createEntry(db, fields(), seen({ title: 'Withdrawn' }), [], who)
+    await setHidden(db, { entry: gone }, true, who, null)
+    const { sources, next } = await sourceList(db)
+    expect(next).toBeNull()
+    expect(sources.map(source => source.title)).toEqual(['Article', 'Book'])
+    const book = sources[1]
+    expect(book.records.map(tile => tile.id)).toEqual([first, second, first + 2])
+    expect(book).toMatchObject({ total: 3, more: false, cover: 't.webp' })
+    expect(sources[0]).toMatchObject({ total: 1, cover: null })
+  })
+
+  test('pages by source and says when a source has more sightings than it read', async () => {
+    const many = await createEntry(db, fields(), seen({ title: 'Long' }), [], who)
+    for (let i = 1; i < SOURCE_CARD_READ; i++) await addSighting(db, many, seen({ title: 'Long' }), [], who)
+    for (let i = 0; i < SOURCES_PAGE; i++) await createEntry(db, fields(), seen({ title: `Work ${i}` }), [], who)
+    const page = await sourceList(db)
+    expect(page.sources).toHaveLength(SOURCES_PAGE)
+    expect(page.next).not.toBeNull()
+    const rest = await sourceList(db, page.next)
+    expect(rest.sources.map(source => source.title)).toEqual(['Long'])
+    expect(rest.sources[0]).toMatchObject({ total: 1, more: true })
+    expect(rest.next).toBeNull()
+  })
+})
+
 describe('query cost', () => {
   const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
   const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }]
@@ -726,6 +757,22 @@ describe('query cost', () => {
     expect(plans[3]).toMatch(/SEARCH s USING INDEX sightings_by_via \(via_id=\?\)/)
     expect(plans[4]).toMatch(/SEARCH s USING INDEX sightings_by_via \(via_id=\?\)/)
     for (const details of plans) expect(details).not.toMatch(/TEMP B-TREE|SCAN (?!.*USING)/)
+  })
+
+  test('the source gallery reads sources by key and each source\'s sightings from its index', async () => {
+    const plans: string[] = []
+    const traced = { prepare(sql: string) {
+      const statement = db.prepare(sql)
+      return { bind(...values: unknown[]) { plans.push(plan(sql, values).join('\n')); return statement.bind(...values) } }
+    }, batch: (statements: D1PreparedStatement[]) => db.batch(statements) } as D1Database
+    await createEntry(db, fields(), seen({ title: 'Book', via_title: 'Post' }), [image], who)
+    await sourceList(traced)
+    expect(plans).toHaveLength(2)
+    expect(plans[0]).toMatch(/SEARCH c USING INTEGER PRIMARY KEY \(rowid<\?\)/)
+    expect(plans[0]).toMatch(/SEARCH s USING INDEX sightings_by_source \(source_id=\?\)/)
+    expect(plans[0]).toMatch(/SEARCH s USING INDEX sightings_by_via \(via_id=\?\)/)
+    expect(plans[1]).toMatch(/SEARCH e USING INTEGER PRIMARY KEY \(rowid=\?\)/)
+    for (const details of plans) expect(details).not.toMatch(/TEMP B-TREE|SCAN (?!j\b|\(subquery-\d+\))(?!.*USING)/)
   })
 
   test('a new record gives its claims the ids of their sightings through the indexes of the record', async () => {
