@@ -774,11 +774,13 @@ describe('source gallery', () => {
 })
 
 describe('order', () => {
-  // Records 1–7 with 0, 2, 1, 2, 0, 1, 2 sources, read two at a time in every order.
+  // Records 1–7 with 0, 2, 1, 2, 0, 1, 2 sources, and first seen in 1935, 980, none, 1935, 2017, none and
+  // 1618, read two at a time in every order.
   const counts = [0, 2, 1, 2, 0, 1, 2]
+  const years = ['1935', '980', null, '1935', '2017', null, '1618']
   beforeEach(() => {
-    counts.forEach((n, i) => raw.prepare("INSERT INTO entries(id, script, sightings, created_by, created_at, updated_at) VALUES(?, 'han', ?, ?, '2026', '2026')").run(i + 1, n, who.actor))
-    raw.exec("INSERT INTO entry_tags(tag, entry_id, sightings) SELECT 'all', id, sightings FROM entries")
+    counts.forEach((n, i) => raw.prepare("INSERT INTO entries(id, script, sightings, first_year, created_by, created_at, updated_at) VALUES(?, 'han', ?, ?, ?, '2026', '2026')").run(i + 1, n, years[i], who.actor))
+    raw.exec("INSERT INTO entry_tags(tag, entry_id, sightings, year) SELECT 'all', id, sightings, CAST(first_year AS INTEGER) FROM entries")
   })
   const walk = async (order: Order, seed?: number) => {
     const found: number[] = []
@@ -796,6 +798,9 @@ describe('order', () => {
     expect(await walk('old')).toEqual([1, 2, 3, 4, 5, 6, 7])
     expect(await walk('most')).toEqual([7, 4, 2, 6, 3, 5, 1])
     expect(await walk('fewest')).toEqual([1, 5, 3, 6, 2, 4, 7])
+    // By year, a record with none is left out, and 980 comes before 1618 as a number.
+    expect(await walk('earliest')).toEqual([2, 7, 1, 4, 5])
+    expect(await walk('latest')).toEqual([5, 4, 1, 7, 2])
   })
   test('a shuffled list reads every record once from any start, in the order of its ranks', async () => {
     const rank = (id: number) => { const x = BigInt(id) * 1540483477n % 2n ** 32n; return Number(((x ^ (x >> 16n)) * 73244475n) % 2n ** 32n) }
@@ -816,6 +821,8 @@ describe('order', () => {
     expect(shuffleRanges(0, null)).toEqual([[0, 2 ** 32]])
   })
   test('a cursor of another order is no cursor', () => {
+    expect(cursorOf('earliest', '7')).toBeNull()
+    expect(cursorOf('latest', '1935.4')).toEqual([1935, 4])
     expect(cursorOf('random', '4294967296')).toBeNull()
     expect(cursorOf('random', '1.5')).toBeNull()
     expect(cursorOf('random', '0')).toEqual([0])
@@ -825,6 +832,17 @@ describe('order', () => {
     expect(cursorOf('old', '0')).toBeNull()
     expect(cursorOf('fewest', '0.3')).toEqual([0, 3])
   })
+  test('a record keeps its first year on every row it is listed under, and its words keep none', async () => {
+    const dated = (id: number) => raw.query("SELECT DISTINCT year FROM entry_tags WHERE entry_id = ? AND tag NOT GLOB 'w:*'").all(id)
+    const words = (id: number) => raw.query("SELECT DISTINCT year FROM entry_tags WHERE entry_id = ? AND tag GLOB 'w:*'").all(id)
+    const id = await createEntry(db, fields(), seen({ place: 'A shop sign', report_date: '1999' }), [], who)
+    expect(dated(id)).toEqual([{ year: 1999 }])
+    expect(words(id)).toEqual([{ year: null }])
+    await addSighting(db, id, seen({ place: 'A book', original_date: '1935年' }), [], who)
+    expect(dated(id)).toEqual([{ year: 1935 }])
+    expect(words(id)).toEqual([{ year: null }])
+  })
+
   test('a record keeps its count on every row it is listed under, and its words keep none', async () => {
     const counted = (id: number) => raw.query("SELECT DISTINCT sightings FROM entry_tags WHERE entry_id = ? AND tag NOT GLOB 'w:*'").all(id)
     const words = (id: number) => raw.query("SELECT DISTINCT sightings FROM entry_tags WHERE entry_id = ? AND tag GLOB 'w:*'").all(id)
@@ -841,7 +859,7 @@ describe('order', () => {
 // with no scan of a table and no sort.
 describe('query cost', () => {
   const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
-  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { radical: '口' }, { radical: '儿兄克', script: 'han', filter: 'variant', facet: 'g:hakka', query: '亻' }, { radical: '儿兄克', order: 'most' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }, ...(['old', 'most', 'fewest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
+  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 'g:hakka' }, { facet: 't:IRG' }, { radical: '口' }, { radical: '儿兄克', script: 'han', filter: 'variant', facet: 'g:hakka', query: '亻' }, { radical: '儿兄克', order: 'most' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 'g:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 'g:hakka', without: ['zitools'], query: '亻' }, ...(['old', 'most', 'fewest', 'earliest', 'latest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
   for (const shape of shapes) test(`list ${JSON.stringify(shape)}`, () => {
     const statement = listStatement(db, shape) as unknown as { sql: string; values: unknown[] }
     const details = plan(statement.sql, statement.values)
@@ -849,6 +867,8 @@ describe('query cost', () => {
     for (const detail of details) expect(detail).not.toMatch(/^SCAN (?!.*USING)/)
     if (shape.order === 'random') return expect(details[0]).toMatch(/^SEARCH t USING COVERING INDEX entry_tags_by_shuffle \(tag=\? AND <expr>>\? AND <expr><\?\)$/)
     // A list by count reads the count index from the cursor on; any other reads the key in order.
+    // A list by year reads the dated rows of the year index; going down, "has a year" bounds it below.
+    if (shape.order === 'earliest' || shape.order === 'latest') return expect(details[0]).toMatch(/^SEARCH t USING COVERING INDEX entry_tags_by_year \(tag=\? AND (year>\? AND )?\(year,entry_id\)[<>]\(\?,\?\)\)$/)
     expect(details[0]).toMatch(shape.order === 'most' || shape.order === 'fewest' ? /^SEARCH t USING COVERING INDEX entry_tags_by_sightings \(tag=\? AND \(sightings,entry_id\)[<>]\(\?,\?\)\)$/ : /^SEARCH (t|w\d) USING PRIMARY KEY/)
   })
 

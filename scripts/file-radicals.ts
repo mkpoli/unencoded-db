@@ -18,15 +18,16 @@ const wrangler = (...args: string[]) => {
   return run.stdout.toString()
 }
 
-// `sightings` repeats the count the other rows of the record carry, which the lists by count read.
-const listed = JSON.parse(wrangler('--json', '--command', "SELECT e.id, e.ids, e.radical, t.sightings FROM entry_tags t JOIN entries e ON e.id = t.entry_id WHERE t.tag = 'all'"))[0].results as { id: number; ids: string | null; radical: string | null; sightings: number }[]
+// `sightings` and `year` repeat the count and first year the other rows of the record carry, which the
+// lists by count and by year read.
+const listed = JSON.parse(wrangler('--json', '--command', "SELECT e.id, e.ids, e.radical, t.sightings, t.year FROM entry_tags t JOIN entries e ON e.id = t.entry_id WHERE t.tag = 'all'"))[0].results as { id: number; ids: string | null; radical: string | null; sightings: number; year: number | null }[]
 const quote = (text: string) => `'${text.replace(/'/g, "''")}'`
 const rows = listed.flatMap(entry => {
   const filing = fileRecord(entry.ids, entry.radical)
-  return [...pathsOf(filing?.path ?? []).map(path => `b:${path}`), ...(filing?.stated ? [`b!${filing.stated}`] : [])].map(tag => `(${quote(tag)}, ${entry.id}, ${entry.sightings})`)
+  return [...pathsOf(filing?.path ?? []).map(path => `b:${path}`), ...(filing?.stated ? [`b!${filing.stated}`] : [])].map(tag => `(${quote(tag)}, ${entry.id}, ${entry.sightings}, ${entry.year ?? 'NULL'})`)
 })
 const statements = ["DELETE FROM entry_tags WHERE tag >= 'b!' AND tag < 'b;';"]
-for (let from = 0; from < rows.length; from += 200) statements.push(`INSERT OR IGNORE INTO entry_tags(tag, entry_id, sightings) VALUES ${rows.slice(from, from + 200).join(', ')};`)
+for (let from = 0; from < rows.length; from += 200) statements.push(`INSERT OR IGNORE INTO entry_tags(tag, entry_id, sightings, year) VALUES ${rows.slice(from, from + 200).join(', ')};`)
 statements.push("DELETE FROM tag_counts WHERE tag >= 'b!' AND tag < 'b;';", "INSERT INTO tag_counts(tag, n) SELECT tag, count(*) FROM entry_tags WHERE tag >= 'b!' AND tag < 'b;' GROUP BY tag;")
 
 const folder = mkdtempSync(join(tmpdir(), 'file-radicals-'))

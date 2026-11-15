@@ -169,6 +169,9 @@ function firstYear(value: string | null) {
   return match ? { text: match[0], n: Number(match[0]) } : null
 }
 
+// The year a list is read by: a record's first year as a number, which keeps no leading zero.
+const yearOf = (text: string | null) => text === null ? null : Number(text)
+
 type SightingState = SightingFields & { media?: StoredImage[]; hidden_at?: string | null }
 
 // What a tile shows of a record, read from its visible sightings: the cover, where it was seen, which
@@ -217,7 +220,7 @@ async function reindex(db: D1Database, id: number, entry: Entry, claims: readonl
     db.prepare('DELETE FROM entry_tags WHERE entry_id = ? AND tag IN (SELECT value FROM json_each(?))').bind(id, JSON.stringify(gone)),
     db.prepare('INSERT OR IGNORE INTO entry_tags(tag, entry_id) SELECT value, ? FROM json_each(?)').bind(id, JSON.stringify(added)),
     // Word rows are only looked up by key, never read in order, so they keep no count.
-    db.prepare("UPDATE entry_tags SET sightings = ? WHERE entry_id = ? AND sightings != ? AND tag NOT GLOB 'w:*'").bind(summary.visible.length, id, summary.visible.length),
+    db.prepare("UPDATE entry_tags SET sightings = ?1, year = ?2 WHERE entry_id = ?3 AND (sightings != ?1 OR year IS NOT ?2) AND tag NOT GLOB 'w:*'").bind(summary.visible.length, yearOf(summary.first_year), id),
     db.prepare('UPDATE tag_counts SET n = n - 1 WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(gone.filter(facet))),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(added.filter(facet))),
   ]
@@ -324,7 +327,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
     ]),
     ...(claims.some(claim => claim.sightings.length) ? [db.prepare(CITED_BY_PLACE), db.prepare(CITED_IN_SNAPSHOT)] : []),
     db.prepare(`UPDATE entries SET ${SUMMARY_SET} WHERE id = ${ENTRY_SEQ}`).bind(...summaryValues(claims, summary)),
-    db.prepare(`INSERT INTO entry_tags(tag, entry_id, sightings) SELECT value, ${ENTRY_SEQ}, CASE WHEN value GLOB 'w:*' THEN 0 ELSE ? END FROM json_each(?)`).bind(summary.visible.length, JSON.stringify(tags)),
+    db.prepare(`INSERT INTO entry_tags(tag, entry_id, sightings, year) SELECT value, ${ENTRY_SEQ}, CASE WHEN value GLOB 'w:*' THEN 0 ELSE ? END, CASE WHEN value GLOB 'w:*' THEN NULL ELSE ? END FROM json_each(?)`).bind(summary.visible.length, yearOf(summary.first_year), JSON.stringify(tags)),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),
     recount(db, ENTRY_SEQ),
   ])
@@ -711,16 +714,19 @@ const LISTED = "t.tag NOT GLOB 'w:*'"
 const MIXED = '(((t.entry_id % 4294967296) * 1540483477) % 4294967296)'
 const FOLDED = `((${MIXED} | (${MIXED} >> 16)) - (${MIXED} & (${MIXED} >> 16)))`
 const RANK = `((${FOLDED} * 73244475) % 4294967296)`
-const ORDER_READS: Record<Exclude<Order, 'random'>, { by: string; past: string; counted: boolean }> = {
-  new: { by: 't.entry_id DESC', past: 't.entry_id < ?', counted: false },
-  old: { by: 't.entry_id', past: 't.entry_id > ?', counted: false },
-  most: { by: 't.sightings DESC, t.entry_id DESC', past: `(t.sightings, t.entry_id) < (?, ?) AND ${LISTED}`, counted: true },
-  fewest: { by: 't.sightings, t.entry_id', past: `(t.sightings, t.entry_id) > (?, ?) AND ${LISTED}`, counted: true },
+// The orders by year read only the records that have one.
+const ORDER_READS: Record<Exclude<Order, 'random'>, { by: string; past: string; counted: boolean; key: string }> = {
+  new: { by: 't.entry_id DESC', past: 't.entry_id < ?', counted: false, key: 't.sightings' },
+  old: { by: 't.entry_id', past: 't.entry_id > ?', counted: false, key: 't.sightings' },
+  most: { by: 't.sightings DESC, t.entry_id DESC', past: `(t.sightings, t.entry_id) < (?, ?) AND ${LISTED}`, counted: true, key: 't.sightings' },
+  fewest: { by: 't.sightings, t.entry_id', past: `(t.sightings, t.entry_id) > (?, ?) AND ${LISTED}`, counted: true, key: 't.sightings' },
+  earliest: { by: 't.year, t.entry_id', past: `(t.year, t.entry_id) > (?, ?) AND t.year IS NOT NULL AND ${LISTED}`, counted: true, key: 't.year' },
+  latest: { by: 't.year DESC, t.entry_id DESC', past: `(t.year, t.entry_id) < (?, ?) AND t.year IS NOT NULL AND ${LISTED}`, counted: true, key: 't.year' },
 }
 const ID = /^[1-9]\d{0,15}$/, COUNT = /^(0|[1-9]\d{0,8})$/
 export function cursorOf(order: Order, after: string | null | undefined): number[] | null | undefined {
   if (order === 'random') return after === null || after === undefined ? [] : seedOf(after) === null ? null : [Number(after)]
-  const descending = order === 'new' || order === 'most'
+  const descending = order === 'new' || order === 'most' || order === 'latest'
   if (after === null || after === undefined) return ORDER_READS[order].counted ? (descending ? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER] : [-1, 0]) : [descending ? Number.MAX_SAFE_INTEGER : 0]
   const parts = after.split('.')
   if (ORDER_READS[order].counted ? parts.length !== 2 || !COUNT.test(parts[0]) || !ID.test(parts[1]) : parts.length !== 1 || !ID.test(parts[0])) return null
@@ -749,7 +755,7 @@ export function listStatement(db: D1Database, listing: Listing, range?: string, 
     ...(plan.exact ? ["EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value = ? AND k.entry_id = t.entry_id)"] : []),
     ...read.tests.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = t.entry_id)'),
   ].join(' AND ') || '1'
-  const { by, past, key } = order === 'random' ? { by: RANK, past: `${RANK} >= ? AND ${RANK} < ? AND ${LISTED}`, key: RANK } : { ...ORDER_READS[order], key: 't.sightings' }
+  const { by, past, key } = order === 'random' ? { by: RANK, past: `${RANK} >= ? AND ${RANK} < ? AND ${LISTED}`, key: RANK } : ORDER_READS[order]
   return db.prepare(`SELECT ${TILE_COLUMNS}, ${key} AS counted, (${tests}) AS matches FROM entry_tags t CROSS JOIN entries e ON e.id = t.entry_id WHERE t.tag = ? AND ${past} ORDER BY ${by} LIMIT ?`)
     .bind(...(plan.exact ? [plan.exact] : []), ...read.tests, read.tag, ...(ranks ?? cursor), (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1 - taken)
 }
