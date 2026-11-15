@@ -319,3 +319,24 @@ test('0012 gives every listed row its record\'s count of sources, under an index
   expect(plan).toMatch(/USING COVERING INDEX entry_tags_by_sightings/)
   expect(plan).not.toMatch(/TEMP B-TREE/)
 })
+
+test('0014 reads each source\'s year as a record\'s first year is read, and counts the visible records that cite it', () => {
+  const raw = new Database(':memory:')
+  for (const name of ['0001_init.sql', '0002_sighting_via.sql', '0003_media_boxes.sql', '0004_unify_relation.sql', '0005_claim_links.sql', '0006_registry_tags.sql', '0007_entry_marks.sql', '0008_derived_status.sql', '0009_custom_scripts.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql']) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  const dates = ['1850-03-01', 'c. 980', '令和2年 (2020)', '05/01/1999', '20260501', '12345', 'ab12cd345', '明治', '', null]
+  const source = raw.prepare("INSERT INTO sources(hash, title, report_date) VALUES (?, ?, ?)")
+  dates.forEach((date, i) => source.run(`h${i}`, `S${i}`, date))
+  const entry = raw.prepare("INSERT INTO entries(script, hidden_at, merged_into, created_by, created_at, updated_at) VALUES ('han', ?, ?, 'p', '2026', '2026')")
+  entry.run(null, null); entry.run(null, null); entry.run('2026', null); entry.run(null, 1)
+  const sighting = raw.prepare("INSERT INTO sightings(entry_id, first_entry, source_id, via_id, hidden_at, place, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'x', 'p', '2026', '2026')")
+  // Source 1: two records, one of them twice and once through it. Source 2: only a hidden sighting, a
+  // hidden record and a merged one. Source 3: found through it by record 2.
+  for (const [entryId, sourceId, viaId, hidden] of [[1, 1, null, null], [1, 1, 1, null], [2, 1, null, null], [2, 2, null, '2026'], [3, 2, null, null], [4, 2, null, null], [2, 4, 3, null]] as const) sighting.run(entryId, entryId, sourceId, viaId, hidden)
+
+  raw.exec(migration('0014_source_order.sql'))
+
+  const rows = raw.query('SELECT report_date, year, records FROM sources ORDER BY id').all() as { report_date: string | null; year: number | null; records: number }[]
+  expect(rows.map(row => row.year)).toEqual(dates.map(date => { const match = date?.match(/\d{3,4}/); return match ? Number(match[0]) : null }))
+  expect(rows.slice(0, 4).map(row => row.records)).toEqual([2, 0, 1, 1])
+})

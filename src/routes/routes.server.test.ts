@@ -5,6 +5,7 @@ import { actions as createActions } from './[locale]/new/+page.server'
 import { actions as detailActions, load as detailLoad } from './[locale]/entry/[id]/+page.server'
 import { actions as addSightingActions } from './[locale]/entry/[id]/sighting/new/+page.server'
 import { load as browseLoad } from './[locale]/+page.server'
+import { load as sourcesLoad } from './[locale]/sources/+page.server'
 
 const png = new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,10,0,0,0,10,8,6,0,0,0,0,0,0,0])
 
@@ -103,6 +104,13 @@ test('browse answers an order or a cursor it does not know with 404', async () =
   const event = (query: string) => ({ url: new URL(`https://example.test/en?${query}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
   for (const query of ['sort=shuffle', 'sort=random&seed=4294967296', 'sort=random&seed=01', 'sort=random&after=5', 'sort=random&seed=5&after=x', 'sort=most&after=5', 'sort=new&after=1.5', 'sort=old&after=-1']) await expect(browseLoad(event(query))).rejects.toMatchObject({ status: 404 })
   expect(await browseLoad(event('sort=fewest&after=0.4'))).toMatchObject({ order: 'fewest', tiles: [] })
+})
+
+test('the source gallery answers an order or a cursor it does not know with 404', async () => {
+  const { db } = openTestDb()
+  const event = (query: string) => ({ url: new URL(`https://example.test/en/sources?${query}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
+  for (const query of ['sort=added', 'sort=records', 'sort=old', 'sort=new&after=1.5', 'sort=most&after=5', 'sort=latest&after=x', 'sort=earliest&after=0']) await expect(sourcesLoad(event(query))).rejects.toMatchObject({ status: 404 })
+  for (const query of ['', 'sort=most&after=2.5', 'sort=earliest&after=1850.4', 'sort=latest&after=4']) expect(await sourcesLoad(event(query))).toMatchObject({ sources: [], next: null })
 })
 
 test('browse recognizes complete IDS without applying the component term limit', async () => {
