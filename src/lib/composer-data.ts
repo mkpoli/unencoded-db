@@ -11,7 +11,14 @@ import palette from 'han-compose/data/sources/palette/outlines.json.gz?url'
 import numbered from 'han-compose/data/numbered-sans-outlines.json.gz?url'
 import numberedContext from 'han-compose/data/numbered-five-context.json?url'
 
+// The Unicode shards draw a part the export has no glyph for, one file per 256 code points. Vite
+// lists them as this build's files. A run outside Vite (the tests) lists none, and the composer reads
+// the package's own copies, which only a host with a file system can.
+const shards: Record<string, string> = import.meta.env?.SSR === undefined ? {}
+  : import.meta.glob('/node_modules/han-compose/data/unicode/outlines/*.json.gz', { query: '?url', import: 'default', eager: true })
+
 export const composerData: Record<string, string> = {
+  ...Object.fromEntries(Object.entries(shards).map(([file, url]) => [file.slice(file.indexOf('/data/') + '/data/'.length), url])),
   'sources/tangut/outlines.json.gz': tangut,
   'sources/bopomofo/outlines.json.gz': bopomofo,
   'sources/new-korean/outlines.json.gz': newKorean,
