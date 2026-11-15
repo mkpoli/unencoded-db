@@ -1,3 +1,4 @@
+import { GLYPH_STYLE_COOKIE, glyphStyleOf } from '$lib/composer'
 import { redirect, type Handle } from '@sveltejs/kit'
 import { isLocale, LOCALE_COOKIE, negotiate } from '$lib/i18n'
 import { personOf, sessionName } from '$lib/server/people'
@@ -15,6 +16,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
   const theme = event.cookies.get('ug.theme')
   event.locals.theme = theme === 'light' || theme === 'dark' ? theme : 'system'
+  event.locals.glyphStyle = glyphStyleOf(event.cookies.get(GLYPH_STYLE_COOKIE))
   const db = event.platform?.env.DB
   event.locals.person = db && !pathname.startsWith('/media/') ? await personOf(db, event.cookies.get(sessionName(event))) : null
   if (!['GET', 'HEAD', 'OPTIONS'].includes(event.request.method) && !(event.route.id === '/auth/sign-out' && event.request.method === 'POST')) {

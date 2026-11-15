@@ -1,11 +1,11 @@
 import { expect, test } from 'bun:test'
 import { readFile } from 'node:fs/promises'
-import { COMPOSER_VERSION } from '$lib/composer'
+import { composerVersion, glyphStyleOf } from '$lib/composer'
 import { drawGlyph, glyphName, glyphPaths } from './glyphs'
 import { hashHex } from './image'
 
 test('a page reads cached drawings by the cleaned description', async () => {
-  const key = `glyphs/${COMPOSER_VERSION}/${await hashHex('⿰魚羊')}.txt`
+  const key = `glyphs/${composerVersion('sans')}/${await hashHex('⿰魚羊')}.txt`
   const bucket = {
     get: async (name: string) => name === key ? { text: async () => 'M0 0' } : null,
     put: async () => {},
@@ -17,7 +17,7 @@ test('a description with a layout is another drawing than the description alone'
   const layout = '{"0":[1,0,0,1,40,0]}'
   const plain = { ids: '⿰魚羊' }, moved = { ids: '⿰魚羊', layout }
   expect(glyphName(moved)).toBe(`⿰魚羊\n${layout}`)
-  const key = `glyphs/${COMPOSER_VERSION}/${await hashHex(glyphName(moved))}.txt`
+  const key = `glyphs/${composerVersion('sans')}/${await hashHex(glyphName(moved))}.txt`
   const bucket = {
     get: async (name: string) => name === key ? { text: async () => '<g/>' } : null,
     put: async () => {},
@@ -53,5 +53,24 @@ test('a description with a layout is drawn part by part as markup, and kept unde
   const drawn = await drawGlyph(bucket, moved, context)
   expect(plain).toMatch(/^M/)
   expect(drawn).toMatch(/^<defs>.*<path d="M/)
-  expect(kept).toEqual([moved.ids, glyphName(moved)].map(name => `glyphs/${COMPOSER_VERSION}/${new Bun.CryptoHasher('sha256').update(name).digest('hex')}.txt`))
+  expect(kept).toEqual([moved.ids, glyphName(moved)].map(name => `glyphs/${composerVersion('sans')}/${new Bun.CryptoHasher('sha256').update(name).digest('hex')}.txt`))
+})
+
+test('each style keeps its drawings in its own folder', async () => {
+  const key = (style: 'sans' | 'serif') => `glyphs/${composerVersion(style)}/${new Bun.CryptoHasher('sha256').update('⿰魚羊').digest('hex')}.txt`
+  const bucket = {
+    get: async (name: string) => name === key('serif') ? { text: async () => 'M1 1' } : null,
+    put: async () => {},
+  } as unknown as Pick<R2Bucket, 'get' | 'put'>
+  expect(await glyphPaths(bucket, [{ ids: '⿰魚羊' }])).toEqual({})
+  expect(await glyphPaths(bucket, [{ ids: '⿰魚羊' }], 'serif')).toEqual({ '⿰魚羊': 'M1 1' })
+  const { bucket: drawing, kept, context } = await bopomofo()
+  expect(await drawGlyph(drawing, { ids: 'ㄍ' }, { ...context, style: 'serif' })).toMatch(/^M/)
+  expect(kept).toEqual([`glyphs/${composerVersion('serif')}/${new Bun.CryptoHasher('sha256').update('ㄍ').digest('hex')}.txt`])
+})
+
+test('a style that is not one draws in the default', () => {
+  expect(glyphStyleOf('serif')).toBe('serif')
+  expect(glyphStyleOf('comic')).toBe('sans')
+  expect(glyphStyleOf(undefined)).toBe('sans')
 })

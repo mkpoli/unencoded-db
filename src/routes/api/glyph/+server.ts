@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit'
 import { isDescription } from 'ids-input'
+import { glyphStyleOf } from '$lib/composer'
 import { cleanIds } from '$lib/ids'
 import { cleanLayout, layoutText } from '$lib/layout'
 import { env } from '$lib/server/guard'
@@ -11,6 +12,8 @@ import type { RequestHandler } from './$types'
 // the route cannot be used as a general compositor.
 export const GET: RequestHandler = async (event) => {
   const raw = event.url.searchParams.get('ids') ?? '', given = event.url.searchParams.get('layout') ?? ''
+  const asked = event.url.searchParams.get('style'), style = glyphStyleOf(asked)
+  if (asked !== null && asked !== style) return new Response(null, { status: 404 })
   const ids = cleanIds(raw)
   if (raw.length > 200 || given.length > 8000 || [...ids].length < 2 || !isDescription(ids)) return new Response(null, { status: 404 })
   const layout = layoutText(cleanLayout(given, ids)) || null
@@ -18,7 +21,7 @@ export const GET: RequestHandler = async (event) => {
   const bindings = env(event)
   const visible = await bindings.DB.prepare('SELECT 1 FROM entries WHERE ids = ? AND layout IS ? AND hidden_at IS NULL AND merged_into IS NULL LIMIT 1').bind(ids, layout).first()
   if (!visible) return new Response(null, { status: 404 })
-  const path = await drawGlyph(bindings.MEDIA, { ids, layout }, { assets: bindings.ASSETS, origin: event.url.origin })
+  const path = await drawGlyph(bindings.MEDIA, { ids, layout }, { assets: bindings.ASSETS, origin: event.url.origin, style })
   if (!path) return new Response(null, { status: 404 })
   return json({ d: path }, { headers: { 'cache-control': 'public, max-age=31536000, immutable' } })
 }
