@@ -9,3 +9,18 @@ const hex = (id: number) => id.toString(16).toUpperCase().padStart(4, '0')
 
 export const recordCode = (id: number) => 'R+' + hex(id)
 export const recordName = (id: number) => [...hex(id)].map(digit => CODE_DIGITS[parseInt(digit, 16)]).join('')
+
+// The forms a reader types for 黃 and 張 where the script writes them otherwise.
+const TYPED: Record<string, string> = { 黄: '黃', 张: '張' }
+
+// The id a typed code names, in either spelling, or null for text that is no code in its written form.
+export function parseRecordCode(text: string) {
+  const typed = text.normalize('NFKC').trim()
+  // A plus sign written bare in an address arrives as a space.
+  const digits = /^r[+ ][0-9a-f]{4,8}$/i.test(typed)
+    ? typed.slice(2)
+    : [...typed].map(char => CODE_DIGITS.indexOf(TYPED[char] ?? char)).map(digit => digit < 0 ? '?' : digit.toString(16)).join('')
+  if (!/^[0-9a-f]{4,8}$/i.test(digits)) return null
+  const id = parseInt(digits, 16)
+  return id > 0 && hex(id) === digits.toUpperCase() ? id : null
+}
