@@ -122,7 +122,11 @@ export function drawGlyph(bucket: Bucket, glyph: Glyph, context: Context = {}): 
       if (!drawn) return null
       await bucket.put(`${drawingsOf(style)}/${await hashHex(name)}.txt`, drawn, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
       return drawn
-    })().catch(() => null).finally(() => pending.delete(task))
+    })().catch(error => {
+      // A drawing that fails leaves the description on the page; the log says why.
+      console.error(`glyph ${style} ${name}:`, error)
+      return null
+    }).finally(() => pending.delete(task))
     pending.set(task, run)
   }
   return run
