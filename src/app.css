@@ -31,7 +31,16 @@
   --backdrop: light-dark(#17171b66, rgb(0 0 0 / 65%));
   --mark: #e0241b;
   --page-gutter: 56px;
+  --tile-size: 145px;
 }
+:root[data-tile-size="48"] { --tile-size: 48px }
+:root[data-tile-size="64"] { --tile-size: 64px }
+:root[data-tile-size="80"] { --tile-size: 80px }
+:root[data-tile-size="96"] { --tile-size: 96px }
+:root[data-tile-size="120"] { --tile-size: 120px }
+:root[data-tile-size="180"] { --tile-size: 180px }
+:root[data-tile-size="230"] { --tile-size: 230px }
+:root[data-tile-size="300"] { --tile-size: 300px }
 :root[data-theme=light] { color-scheme: light }
 :root[data-theme=dark] { color-scheme: dark }
 * { box-sizing: border-box; scrollbar-width: thin }

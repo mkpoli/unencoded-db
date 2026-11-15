@@ -4,6 +4,7 @@ import { isLocale, LOCALE_COOKIE, negotiate } from '$lib/i18n'
 import { personOf, sessionName } from '$lib/server/people'
 import { limitWriteBody, MAX_PICTURES_BODY } from '$lib/server/body-limit'
 import { guardWrite, writeLimitFor } from '$lib/server/guard'
+import { TILE_SIZE_COOKIE, tileSizeOf } from '$lib/tile-size'
 
 const UNPREFIXED = /^\/(media|api|auth|_app|robots\.txt|favicon)/
 
@@ -17,6 +18,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   const theme = event.cookies.get('ug.theme')
   event.locals.theme = theme === 'light' || theme === 'dark' ? theme : 'system'
   event.locals.glyphStyle = glyphStyleOf(event.cookies.get(GLYPH_STYLE_COOKIE))
+  event.locals.tileSize = tileSizeOf(event.cookies.get(TILE_SIZE_COOKIE))
   const db = event.platform?.env.DB
   event.locals.person = db && !pathname.startsWith('/media/') ? await personOf(db, event.cookies.get(sessionName(event))) : null
   if (!['GET', 'HEAD', 'OPTIONS'].includes(event.request.method) && !(event.route.id === '/auth/sign-out' && event.request.method === 'POST')) {
@@ -28,7 +30,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     event.request = request
   }
   const response = await resolve(event, {
-    transformPageChunk: ({ html }) => html.replace('%lang%', isLocale(first) ? first : 'en').replace('%theme%', event.locals.theme),
+    transformPageChunk: ({ html }) => html.replace('%lang%', isLocale(first) ? first : 'en').replace('%theme%', event.locals.theme).replace('%tile%', String(event.locals.tileSize)),
   })
   response.headers.set('x-content-type-options', 'nosniff')
   response.headers.set('referrer-policy', 'strict-origin-when-cross-origin')
