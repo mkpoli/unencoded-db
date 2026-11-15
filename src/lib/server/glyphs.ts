@@ -4,7 +4,7 @@
 import { documentView } from 'han-compose/document-view'
 import { compose, sketch } from 'han-compose/loader'
 import { onlyBundled } from 'han-compose/local'
-import { sourceFor, traitKey, traitsOf } from 'han-compose/source'
+import { exportSource, sourceFor, traitKey, traitsOf } from 'han-compose/source'
 import { layerFrames, renderScopes, scopesMarkup } from 'ids-input/document'
 import { composerUrl, composerVersion, GLYPH_STYLE, type GlyphStyle } from '$lib/composer'
 import { composerData } from '$lib/composer-data'
@@ -24,6 +24,7 @@ const drawingsOf = (style: GlyphStyle) => `glyphs/${composerVersion(style)}`
 const IMMUTABLE = 'public, max-age=31536000, immutable'
 
 const sources = new WeakMap<Bucket, Map<string, Source>>()
+const exports = new WeakMap<Bucket, Map<string, ReturnType<typeof exportSource>>>()
 const pending = new Map<string, Promise<string | null>>()
 
 const typeOf = (name: string) => /^[gp]\//.test(name) ? 'application/octet-stream' : 'application/json'
@@ -67,6 +68,17 @@ export function sourceKey(sequence: string, context: Context, separate = false) 
   return `${style}:${local ? 'local' : 'remote'}:${traitKey(traits)}:${context.assets ? 1 : 0}:${separate ? 1 : 0}`
 }
 
+// One export source for each style: whatever a description calls for, the export's manifest, layout
+// and identity table are read and parsed once.
+function exportOf(bucket: Bucket, context: Context, style: GlyphStyle) {
+  let byStyle = exports.get(bucket)
+  if (!byStyle) exports.set(bucket, byStyle = new Map())
+  const key = `${style}:${context.assets ? 1 : 0}`
+  let found = byStyle.get(key)
+  if (!found) byStyle.set(key, found = exportSource(composerUrl(style), { loaders: composerData, fetch: reader(bucket, style), read: bundled(context) }))
+  return found
+}
+
 function sourceOf(bucket: Bucket, sequence: string, context: Context, separate = false) {
   let byTrait = sources.get(bucket)
   if (!byTrait) sources.set(bucket, byTrait = new Map())
@@ -75,7 +87,7 @@ function sourceOf(bucket: Bucket, sequence: string, context: Context, separate =
   const key = sourceKey(sequence, context, separate)
   let source = byTrait.get(key)
   if (!source) {
-    source = sourceFor(sequence, { base: composerUrl(style), fontStyle: style, traits, separate, fetch: reader(bucket, style), loaders: composerData, read: bundled(context) })
+    source = sourceFor(sequence, { base: composerUrl(style), fontStyle: style, traits, separate, exported: exportOf(bucket, context, style), loaders: composerData, read: bundled(context) })
     byTrait.set(key, source)
   }
   return source

@@ -117,6 +117,12 @@ declare module 'han-compose/source' {
     remote?: boolean
     loaders?: Record<string, string>
     traits?: Record<string, boolean>
+    exported?: ComposerSource | null
+    fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    read?: (path: string, url?: string) => Promise<Response | object>
+  }): ComposerSource
+  export function exportSource(base: string, options?: {
+    loaders?: Record<string, string>
     fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
     read?: (path: string, url?: string) => Promise<Response | object>
   }): ComposerSource
