@@ -680,8 +680,11 @@ const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status,
 // by record, the count and the record for the orders by count. Null names a cursor that is not one.
 // The order indexes leave out word rows, which are only looked up by key; a read names that so it may use them.
 const LISTED = "t.tag NOT GLOB 'w:*'"
-// A shuffled list reads by rank (see migration 0010) from its seed to the end, then from 0 to the seed.
-const RANK = '((t.entry_id * 2654435761) % 4294967296)'
+// A shuffled list reads by rank from its seed to the end, then from 0 to the seed. The expression is the
+// one migration 0013 indexes, so it must stay the same character for character.
+const MIXED = '((t.entry_id * 2654435761) % 4294967296)'
+const FOLDED = `((${MIXED} | (${MIXED} >> 16)) - (${MIXED} & (${MIXED} >> 16)))`
+const RANK = `((${FOLDED} * 73244475) % 4294967296)`
 const ORDER_READS: Record<Exclude<Order, 'random'>, { by: string; past: string; counted: boolean }> = {
   new: { by: 't.entry_id DESC', past: 't.entry_id < ?', counted: false },
   old: { by: 't.entry_id', past: 't.entry_id > ?', counted: false },
