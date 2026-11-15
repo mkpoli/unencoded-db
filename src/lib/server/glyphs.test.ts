@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { readFile } from 'node:fs/promises'
 import { composerVersion, glyphStyleOf } from '$lib/composer'
-import { drawGlyph, glyphName, glyphPaths } from './glyphs'
+import { drawGlyph, glyphName, glyphPaths, sourceKey } from './glyphs'
 import { hashHex } from './image'
 
 test('a page reads cached drawings by the cleaned description', async () => {
@@ -73,4 +73,11 @@ test('a style that is not one draws in the default', () => {
   expect(glyphStyleOf('serif')).toBe('serif')
   expect(glyphStyleOf('comic')).toBe('sans')
   expect(glyphStyleOf(undefined)).toBe('sans')
+})
+
+test('a description bundled outlines draw alone never shares a source with one that needs the export', () => {
+  // Both call for the palette, so their traits match; only the second has a part the export holds.
+  expect(sourceKey('⿰㇐㇑', {})).not.toBe(sourceKey('⿰木㇐', {}))
+  expect(sourceKey('⿱木㇐', {})).toBe(sourceKey('⿰木㇐', {}))
+  expect(sourceKey('⿰木㇐', { style: 'serif' })).not.toBe(sourceKey('⿰木㇐', {}))
 })
