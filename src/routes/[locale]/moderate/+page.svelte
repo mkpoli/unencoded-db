@@ -1,6 +1,7 @@
 <script lang="ts">
   import Seo from '$lib/components/Seo.svelte'
   import { href, t, when } from '$lib/t'
+  import { recordCode } from '$lib/code'
   let { data } = $props()
   function more(name: keyof typeof data.cursors, value: number) {
     const cursors = { ...data.cursors, [name]: value }
@@ -17,7 +18,7 @@
   <ol class="reports">
     {#each data.reports as report (report.id)}
       <li>
-        <div><a class="text-link" href={href(`/entry/${report.entry_id}`)}>{report.ids || t('entry.record', { id: report.entry_id })}</a>{#if report.sighting_id} · {t('entry.sightings')} #{report.sighting_id}{/if}</div>
+        <div><a class="text-link" href={href(`/entry/${report.entry_id}`)}>{report.ids || t('entry.record', { id: recordCode(report.entry_id) })}</a>{#if report.sighting_id} · {t('entry.sightings')} #{report.sighting_id}{/if}</div>
         <div class="muted small">{report.by_name} · <time datetime={report.at}>{when(report.at)}</time></div>
         <p class="reason">{report.reason}</p>
         <form method="POST" action={report.target_hidden_at ? '?/unhide' : '?/hide'}>
@@ -37,7 +38,7 @@
     <ol class="reports">
       {#each data.hiddenEntries as entry (entry.id)}
         <li>
-          <div>{entry.ids || t('entry.record', { id: entry.id })} · #{entry.id} · <time datetime={entry.hidden_at}>{when(entry.hidden_at)}</time></div>
+          <div>{entry.ids ? `${entry.ids} · ` : ''}{recordCode(entry.id)} · <time datetime={entry.hidden_at}>{when(entry.hidden_at)}</time></div>
           <form method="POST" action="?/restoreEntry"><input type="hidden" name="id" value={entry.id} /><button class="button" type="submit">{t('moderate.unhide')}</button></form>
         </li>
       {/each}
@@ -49,7 +50,7 @@
     <ol class="reports">
       {#each data.hiddenSightings as sighting (sighting.id)}
         <li>
-          <div>{sighting.ids || t('entry.record', { id: sighting.entry_id })} · #{sighting.entry_id} · {t('entry.sightings')} #{sighting.id} · {#if sighting.place}{sighting.place} · {/if}<time datetime={sighting.hidden_at}>{when(sighting.hidden_at)}</time></div>
+          <div>{sighting.ids ? `${sighting.ids} · ` : ''}{recordCode(sighting.entry_id)} · {t('entry.sightings')} #{sighting.id} · {#if sighting.place}{sighting.place} · {/if}<time datetime={sighting.hidden_at}>{when(sighting.hidden_at)}</time></div>
           <form method="POST" action="?/restoreSighting"><input type="hidden" name="id" value={sighting.id} /><button class="button" type="submit">{t('moderate.unhideSighting')}</button></form>
         </li>
       {/each}

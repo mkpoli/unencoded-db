@@ -2,6 +2,7 @@
   import RevisionFields from './RevisionFields.svelte'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
   import { href, t, when } from '$lib/t'
+  import { recordCode } from '$lib/code'
 
   type Row = {
     id: number; entry_id: number; sighting_id: number | null; kind: string; rev: number
@@ -30,7 +31,7 @@
   <span class="revision-change">
     <span class="revision-main">
       <span class="revision-kind">{t(`history.kind.${row.kind}`)}</span>
-      {#if showEntry}<a class="revision-entry" href={href(`/entry/${row.entry_id}`)} onclick={stop}>{row.ids || t('entry.record', { id: row.entry_id })}</a>{/if}
+      {#if showEntry}<a class="revision-entry" href={href(`/entry/${row.entry_id}`)} onclick={stop}>{row.ids || t('entry.record', { id: recordCode(row.entry_id) })}</a>{/if}
       {#if row.sighting_id}<span class="revision-number">#{row.sighting_id}</span>{/if}
     </span>
     {#if row.redacted || row.redacted_at}<span class="revision-comment">{t('history.redacted')}</span>{:else if row.summary}<span class="revision-comment">{row.summary}</span>{/if}

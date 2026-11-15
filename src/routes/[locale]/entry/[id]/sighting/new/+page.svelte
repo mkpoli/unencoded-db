@@ -5,10 +5,11 @@
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { MEDIA_MAX } from '$lib/limits'
   import { href, t } from '$lib/t'
+  import { recordCode } from '$lib/code'
   let { data, form } = $props()
   let busy = $state(false)
   let pictures = $state<PictureList>()
-  const title = $derived(t('sighting.addTitle', { id: data.id }))
+  const title = $derived(t('sighting.addTitle', { id: recordCode(data.id) }))
 </script>
 
 <Seo {title} />

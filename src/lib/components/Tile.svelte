@@ -1,6 +1,7 @@
 <script lang="ts">
   import IdsGlyph from './IdsGlyph.svelte'
   import { href, media, t } from '$lib/t'
+  import { recordCode } from '$lib/code'
   import type { Tile } from '$lib/server/entries'
   import type { SightingType } from '$lib/scripts'
   import { MARKED } from '$lib/registries'
@@ -16,7 +17,7 @@
 <a class="tile" href={href(`/entry/${tile.id}`)}>
   <span class="plate">
     {#if tile.ids}<IdsGlyph ids={tile.ids} path={glyph} />
-    {:else if tile.cover_key}<img src={media(tile.cover_key)} alt={t('entry.record', { id: tile.id })} loading="lazy" decoding="async" />
+    {:else if tile.cover_key}<img src={media(tile.cover_key)} alt={t('entry.record', { id: recordCode(tile.id) })} loading="lazy" decoding="async" />
     {:else}<span class="blank"><span class="small">{t('browse.noImage')}</span></span>{/if}
   </span>
   <span class="ids-line">{tile.ids ?? ''}</span>

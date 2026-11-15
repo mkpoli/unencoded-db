@@ -4,6 +4,7 @@
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
   import { cleanIds } from '$lib/ids'
   import { href, t } from '$lib/t'
+  import { recordCode } from '$lib/code'
   let { data } = $props()
   const source = $derived(data.source)
   const heading = $derived(source.title || source.url || t('source.title'))
@@ -37,7 +38,7 @@
         <a class="record" href={href(`/entry/${tile.id}#sighting-${sighting.id}`)}>
           <span class="plate">{#if tile.ids}<IdsGlyph ids={tile.ids} path={data.glyphs?.[cleanIds(tile.ids)]} />{:else}<span class="small muted">{t('browse.noImage')}</span>{/if}</span>
           <span class="ids">{tile.ids ?? ''}</span>
-          <span class="small muted">{t('entry.record', { id: tile.id })}</span>
+          <span class="small muted">{recordCode(tile.id)}</span>
         </a>
         <div class="stack body">
           {#if sighting.media.length}
