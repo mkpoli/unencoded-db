@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import { afterNavigate, preloadData } from '$app/navigation'
+  import { browser } from '$app/environment'
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
   import Tile from '$lib/components/Tile.svelte'
@@ -95,7 +96,8 @@
     return params.size ? `?${params}` : href()
   }
   // The reader's tile width, set on the document so the server-drawn list and a moved slider agree.
-  let tileSize = $state(tileSizeOf(String(page.data.tileSize)))
+  // The document holds the width last chosen in this tab; the layout's data holds the one the first page was drawn at.
+  let tileSize = $state(tileSizeOf(browser ? document.documentElement.dataset.tileSize : String(page.data.tileSize)))
   function sizeTiles(index: number) {
     tileSize = TILE_SIZES[index] ?? tileSize
     document.cookie = `${TILE_SIZE_COOKIE}=${tileSize};path=/;max-age=31536000;samesite=lax`
@@ -158,7 +160,7 @@
     {#each STATUSES as status}{#if count(`f:${status}`) || data.filter === status}<a class="chip" class:on={data.filter === status} href={withFilter(status)}>{t(`status.${status}`)} <span class="n">{count(`f:${status}`)}</span></a>{/if}{/each}
   </nav>
   <nav class="sort" aria-label={t('browse.sort')}>{#each SORTS as order}<a class="chip" class:on={data.order === order} aria-current={data.order === order ? 'true' : undefined} href={sorted(order)}>{t(`browse.order.${order}`)}</a>{/each}<a class="chip shuffle" class:on={data.order === 'random'} aria-current={data.order === 'random' ? 'true' : undefined} href={sorted('random')} data-sveltekit-preload-data="off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h3c4 0 8 12 12 12h3M17 14l4 4-4 4M3 18h3c1.7 0 3.5-2.3 5-5M14 8c1.5-1.4 2.6-2 4-2h3M17 2l4 4-4 4" /></svg>{t('browse.order.random')}</a></nav>
-  <label class="size" title={t('browse.tileSize')}><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="6" height="6" rx="1" /></svg><input type="range" min="0" max={TILE_SIZES.length - 1} step="1" value={TILE_SIZES.indexOf(tileSize)} aria-label={t('browse.tileSize')} oninput={event => sizeTiles(Number(event.currentTarget.value))} /><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="1.5" /></svg></label>
+  <label class="size" title={t('browse.tileSize')}><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="6" height="6" rx="1" /></svg><input type="range" min="0" max={TILE_SIZES.length - 1} step="1" value={TILE_SIZES.indexOf(tileSize)} aria-label={t('browse.tileSize')} aria-valuetext="{tileSize}px" oninput={event => sizeTiles(Number(event.currentTarget.value))} /><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="1.5" /></svg></label>
   </div>
   <nav class="marks" aria-label={t('field.encodings')}>
     {#each MARKED as registry (registry.id)}
