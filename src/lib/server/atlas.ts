@@ -34,11 +34,20 @@ export async function metadata(issuer: string): Promise<Metadata> {
   return data
 }
 
-export type Flow = { state: string; verifier: string; nonce: string; binding: string; locale: string; at: number }
+// Where sign-in returns to when it was started from the consent page of agent sign-in: that page's own
+// address on this site, and nothing else.
+export const NEXT_MAX = 1500
+export const nextPage = (value: unknown): string | undefined => {
+  if (typeof value !== 'string' || value.length > NEXT_MAX) return undefined
+  const match = /^\/([A-Za-z-]+)\/oauth\/authorize\?[\x21-\x7e]*$/.exec(value)
+  return match && isLocale(match[1]) ? value : undefined
+}
+
+export type Flow = { state: string; verifier: string; nonce: string; binding: string; locale: string; at: number; next?: string }
 export function parseFlow(value: string | undefined): Flow | null {
   try {
     const f = JSON.parse(value ?? '') as Flow
-    if (!f || ![f.state, f.verifier, f.nonce, f.binding].every(v => typeof v === 'string' && /^[A-Za-z0-9_-]{43,64}$/.test(v)) || !isLocale(f.locale) || !Number.isFinite(f.at) || f.at > Date.now() || f.at <= Date.now() - 600_000) return null
+    if (!f || ![f.state, f.verifier, f.nonce, f.binding].every(v => typeof v === 'string' && /^[A-Za-z0-9_-]{43,64}$/.test(v)) || !isLocale(f.locale) || (f.next !== undefined && nextPage(f.next) !== f.next) || !Number.isFinite(f.at) || f.at > Date.now() || f.at <= Date.now() - 600_000) return null
     return f
   } catch { return null }
 }

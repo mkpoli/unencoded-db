@@ -49,6 +49,8 @@ claude mcp add --transport http rare https://rare.glyphatlas.org/mcp
 
 A write passes the same checks and rate limits as the forms. A picture is given by its address and fetched by the site, up to ten from other sites in one call, and stands as its own thumbnail. The writes of one connection carry one anonymous name, kept by the `Mcp-Session-Id` the endpoint hands out; that id is no browser session and cannot be signed in. The tools are defined in `src/routes/mcp/_tools.server.ts`.
 
+An agent can sign in, and then writes under a person's name. The site is the OAuth 2.1 authorization server for its own endpoint: a client finds it at `/.well-known/oauth-protected-resource`, registers itself at `/oauth/register`, and opens `/oauth/authorize` in the person's browser, where they sign in through Glyph Atlas and allow it. The token it then gets from `/oauth/token` lasts a year and can be handed back at `/oauth/revoke`. In Claude Code, `/mcp` → `rare` → Authenticate starts it. The flow is in `src/lib/server/agents.ts`.
+
 ## Data model
 
 | Table | Holds |
@@ -61,6 +63,7 @@ A write passes the same checks and rate limits as the forms. A picture is given 
 | `revisions` | The journal: every state of an entry or a sighting, with its author |
 | `entry_tags`, `tag_counts` | The index behind lists, filters, radicals and search |
 | `reports`, `people`, `sessions` | Moderation and identity |
+| `agent_clients`, `agent_codes`, `agent_tokens` | Agent sign-in: the registered clients, the codes a person granted and the tokens traded for them, both kept as hashes |
 
 A claim is a row of `kind`, `value` and JSON `data`; the kinds and their form fields are in `src/lib/claims.ts`, and a new kind needs no migration. Categories and collections are listed in `src/lib/genres.ts`. The character sets, dictionaries and glyph registries a record can state a code in are listed in `src/lib/registries.ts`; a record with a Unicode code for an ideograph also counts as registered in zi.tools, yedict and GlyphWiki. Unicode, zi.tools, yedict, GlyphWiki and MJ carry a mark, and the list narrows to the records in a marked work with `?in=<id>` or to the ones not in it with `?out=<id>`, each repeatable. `entries.marks` repeats the marked works a record is in, for the short tags on a gallery tile, and the JSON export gives it as an array.
 

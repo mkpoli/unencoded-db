@@ -80,7 +80,9 @@ test('a page of another site cannot post here', async () => {
   const { send, call, count } = fixture()
   const add = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'add_record', arguments: { ids: ['⿰山東'], sightings: [sighting] } } }
   expect((await send(add, { origin: 'https://evil.example' })).status).toBe(403)
-  expect((await send(add, { 'content-type': 'text/plain' })).status).toBe(415)
+  // A body a browser sends without asking first is a form's, and stops at the site's own rule for forms.
+  expect((await send(add, { 'content-type': 'text/plain' })).status).toBe(403)
+  expect((await send(add, { 'content-type': 'application/xml' })).status).toBe(415)
   expect(count('entries')).toBe(0)
   expect((await send(add, { origin: ORIGIN })).status).toBe(200)
   expect(count('entries')).toBe(1)

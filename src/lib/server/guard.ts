@@ -25,6 +25,10 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
     case '/[locale]/batch': return action === 'default' ? 'ADDS' : null
     case '/[locale]/entry/[id]': return action === 'edit' ? 'EDITS' : null
     case '/[locale]/entry/[id]/sighting/new': return action === 'default' ? 'ADDS' : null
+    case '/oauth/register':
+    case '/oauth/token':
+    case '/oauth/revoke':
+    case '/[locale]/oauth/authorize':
     case '/[locale]/me':
     case '/[locale]/entry/[id]/report':
     case '/[locale]/entry/[id]/sighting/[sighting]/edit': return action === 'default' ? 'EDITS' : null
