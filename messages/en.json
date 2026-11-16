@@ -125,7 +125,7 @@
   "field.idsLoading": "Loading the editor…",
   "field.idsFill": "Fill in its details",
   "field.candidate.same": "Already recorded",
-  "field.candidate.unifiable": "Unifiable parts",
+  "field.candidate.probable": "Probably the same",
   "field.candidate.similar": "Similar",
   "field.candidateAdd": "Add evidence there",
   "field.idsMore": "Other descriptions",

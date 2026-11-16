@@ -125,7 +125,7 @@
   "field.idsLoading": "Đang tải trình soạn…",
   "field.idsFill": "Điền thông tin của chữ này",
   "field.candidate.same": "Đã có mục từ",
-  "field.candidate.unifiable": "Bộ phận có thể hợp nhất",
+  "field.candidate.probable": "Có lẽ giống nhau",
   "field.candidate.similar": "Tương tự",
   "field.candidateAdd": "Thêm bằng chứng vào đó",
   "field.idsMore": "Mô tả khác",

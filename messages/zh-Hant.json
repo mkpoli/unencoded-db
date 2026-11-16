@@ -125,7 +125,7 @@
   "field.idsLoading": "正在載入編輯器…",
   "field.idsFill": "填入該字的資訊",
   "field.candidate.same": "已有記錄",
-  "field.candidate.unifiable": "可合併的部件",
+  "field.candidate.probable": "很可能相同",
   "field.candidate.similar": "相似",
   "field.candidateAdd": "在此新增證據",
   "field.idsMore": "其他描述",

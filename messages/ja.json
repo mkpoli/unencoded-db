@@ -125,7 +125,7 @@
   "field.idsLoading": "エディターを読み込んでいます…",
   "field.idsFill": "この字の情報を入力",
   "field.candidate.same": "登録済み",
-  "field.candidate.unifiable": "統合できる部品",
+  "field.candidate.probable": "おそらく同じ",
   "field.candidate.similar": "類似",
   "field.candidateAdd": "ここに証拠を追加",
   "field.idsMore": "ほかの記述",

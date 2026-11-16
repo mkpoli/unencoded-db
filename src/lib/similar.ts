@@ -1,22 +1,22 @@
-// Which descriptions are likely the same character as one being typed, in three tiers. Both descriptions are
-// normalised (NFC, no spaces, radical code points as the ideographs they stand for) and every part with a
-// BabelStone description that is built of whole components (no ⿻, no stroke) is replaced by it, up to three
-// levels deep. BabelStone takes most characters down to strokes, which would make every pair alike. Then
-//   same      the normal forms are equal;
-//   unifiable they are equal once each part is its IWDS group (parts IWDS lists as one);
-//   similar   the same parts in another structure, the same structure with one part different, or mostly the same parts.
-// Nothing here touches the network or the page, so it runs in the browser, on the server and in tests.
+// Which descriptions are likely the same character as one being typed, in three tiers.
+//   same     the same text (NFC, no spaces) as one of the candidate's descriptions;
+//   probable equal once both are normalised (radical code points as the ideographs they stand for), their
+//            parts with a BabelStone description made of whole components are expanded, or each part is its IWDS
+//            group; a description with a placeholder (？, 〓, ①, ○) in it is never this or same;
+//   similar  the same parts in another structure, the same structure with one part different, or mostly the same parts.
+// BabelStone takes most characters down to strokes, so only a part built of components (no ⿻, no stroke) is
+// expanded, until none is. Nothing here touches the network or the page, so it runs in the browser, on the server and in tests.
 import { isNode, parse, type IdsPart } from 'ids-input'
 import groupData from './data/component-groups.json'
 import { radicalEquivalent } from './radicals'
 
-export type Tier = 'same' | 'unifiable' | 'similar'
+export type Tier = 'same' | 'probable' | 'similar'
 /** What expansion reads: each encoded character to its BabelStone description, atomic characters left out. */
 export type Data = { described: ReadonlyMap<string, string> }
 export type Tree = string | { op: string; parts: Tree[] }
 
-/** How many times a part may be replaced by its description inside one another. */
-export const EXPAND_DEPTH = 3
+/** Levels of expansion at most: parts are expanded until none is, and a table that loops stops here. */
+export const EXPAND_DEPTH = 6
 const STROKES = new Set([...'一丨丿丶乙亅乚𠃌⺄㇒'])
 /** A stroke: a character of CJK Strokes (U+31C0–U+31EF) or one of the single-stroke ideographs. */
 export const isStroke = (leaf: string) => STROKES.has(leaf) || /^[\u31C0-\u31EF]$/u.test(leaf)
@@ -54,6 +54,8 @@ const hasOverlay = (tree: Tree): boolean => typeof tree !== 'string' && (tree.op
 const hasStroke = (tree: Tree): boolean => typeof tree === 'string' ? isStroke(tree) : tree.parts.some(hasStroke)
 // What a description expands to, or null when it is not made of whole components.
 const wholes = new Map<string, Tree | null>()
+/** Forgets the expansions kept for the descriptions read so far; they are read again when needed. */
+export const forgetExpansions = () => wholes.clear()
 function wholeTree(description: string) {
   if (wholes.has(description)) return wholes.get(description)!
   const tree = treeOf(description)
@@ -90,8 +92,17 @@ export function expandedLeaves(ids: string, data: Data): string[] {
   return tree === null ? [] : leavesOf(tree)
 }
 
+/** NFC with the spaces taken out: the text two descriptions must share to be the same. */
+export const plain = (text: string) => text.normalize('NFC').replace(/\s+/gu, '')
+
+// A part that names no character: a question mark, a box, a circled number, a circle. A letter, an ideograph
+// (〇 included) or a private-use character is a part.
+const PART = /^[\p{L}\p{M}\p{Nl}\p{Co}]/u
+/** Whether a part is a placeholder for one that is unknown. */
+export const isPlaceholder = (leaf: string) => !PART.test(leaf)
+
 /** A description read once, for comparing with many. */
-export type Prepared = { normal: string; grouped: string; shape: string; leaves: string[]; keys: string[]; counts: Map<string, number> }
+export type Prepared = { text: string; normal: string; grouped: string; shape: string; leaves: string[]; keys: string[]; counts: Map<string, number>; placeholder: boolean }
 
 export function prepare(ids: string, data: Data): Prepared | null {
   const tree = expand(ids, data)
@@ -99,7 +110,7 @@ export function prepare(ids: string, data: Data): Prepared | null {
   const leaves = leavesOf(tree), keys = leaves.map(groupKey)
   const counts = new Map<string, number>()
   for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1)
-  return { normal: write(tree), grouped: write(tree, groupKey), shape: write(tree, () => '*'), leaves, keys, counts }
+  return { text: plain(ids), normal: write(tree), grouped: write(tree, groupKey), shape: write(tree, () => '*'), leaves, keys, counts, placeholder: leaves.some(isPlaceholder) }
 }
 
 const sameCounts = (a: string[], b: string[]) => { const left = [...a].sort(), right = [...b].sort(); return left.length === right.length && left.every((leaf, i) => leaf === right[i]) }
@@ -110,16 +121,35 @@ function jaccard(a: Map<string, number>, b: Map<string, number>) {
   return either ? both / either : 0
 }
 
-/** How a candidate relates to the description being typed, or null when it does not. `score` orders a tier: 1 for the first two, below for a similar one. */
-export function tierOf(query: string | Prepared, candidate: string | Prepared, data: Data): { tier: Tier; score: number } | null {
-  const q = typeof query === 'string' ? prepare(query, data) : query
-  const c = typeof candidate === 'string' ? prepare(candidate, data) : candidate
-  if (!q || !c) return null
-  if (q.normal === c.normal) return { tier: 'same', score: 1 }
-  if (q.grouped === c.grouped) return { tier: 'unifiable', score: 1 }
+export type Hit = { tier: Tier; score: number }
+const RANK: Record<Tier, number> = { same: 0, probable: 1, similar: 2 }
+/** The nearer of two hits: the better tier, then the higher score. */
+export const nearer = (a: Hit | null, b: Hit | null) => !b || (a && (RANK[a.tier] - RANK[b.tier] || b.score - a.score) <= 0) ? a : b
+
+function tierOne(q: Prepared, c: Prepared | null, text: string): Hit | null {
+  const open = !q.placeholder
+  if (open && q.text === text) return { tier: 'same', score: 1 }
+  if (!c) return null
+  if (open && (q.normal === c.normal || q.grouped === c.grouped)) return { tier: 'probable', score: 1 }
   if (sameCounts(q.leaves, c.leaves)) return { tier: 'similar', score: REARRANGED }
   const structured = q.shape !== '*' && q.shape === c.shape
   if (structured && q.keys.length === c.keys.length && q.keys.filter((key, i) => key !== c.keys[i]).length === 1) return { tier: 'similar', score: REARRANGED }
   const score = jaccard(q.counts, c.counts)
   return score >= SIMILAR_MIN ? { tier: 'similar', score } : null
+}
+
+/**
+ * How a candidate relates to the description being typed, or null when it does not. A candidate is one
+ * description or all of those it has, and takes its nearest. `score` orders a tier: 1 for the first two,
+ * below for a similar one. A query with a placeholder in it is never same or probable.
+ */
+export function tierOf(query: string | Prepared, candidate: string | Prepared | readonly (string | Prepared)[], data: Data): Hit | null {
+  const q = typeof query === 'string' ? prepare(query, data) : query
+  if (!q) return null
+  let best: Hit | null = null
+  for (const own of Array.isArray(candidate) ? candidate : [candidate]) {
+    const c = typeof own === 'string' ? prepare(own, data) : own
+    best = nearer(best, tierOne(q, c, typeof own === 'string' ? plain(own) : own.text))
+  }
+  return best
 }

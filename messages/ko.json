@@ -125,7 +125,7 @@
   "field.idsLoading": "편집기를 불러오는 중…",
   "field.idsFill": "이 글자의 정보 입력",
   "field.candidate.same": "이미 기록됨",
-  "field.candidate.unifiable": "통합 가능한 부품",
+  "field.candidate.probable": "아마 같은 글자",
   "field.candidate.similar": "비슷한 글자",
   "field.candidateAdd": "여기에 증거 추가",
   "field.idsMore": "다른 설명",
