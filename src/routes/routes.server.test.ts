@@ -94,13 +94,27 @@ test('browse continues an empty search window and reports the final segment', as
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
   raw.prepare(`WITH RECURSIVE seq(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM seq WHERE x < ?)
     INSERT INTO entries(id, script, created_by, created_at, updated_at) SELECT x, 'han', 'p', '2026', '2026' FROM seq`).run(SEARCH_WINDOW + 1)
-  raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 's:han', id FROM entries")
+  raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT tag, id FROM entries CROSS JOIN (SELECT 'all' AS tag UNION ALL SELECT 's:han')")
   const event = (url: string) => ({ url: new URL(url), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
   const first = await browseLoad(event('https://example.test/en?q=missing')) as any
   expect(first).toMatchObject({ tiles: [], next: '0.2', partial: true, continued: false, total: { n: 0, floor: false } })
   const last = await browseLoad(event(`https://example.test/en?q=missing&after=${first.next}`)) as any
   expect(last).toMatchObject({ tiles: [], next: null, partial: false, continued: true, total: null })
   await expect(browseLoad(event('https://example.test/en?q=missing&after=0.0'))).rejects.toMatchObject({ status: 404 })
+})
+
+test('browse lists every script, and a script narrows the list to its records', async () => {
+  const { db, raw } = openTestDb()
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec("INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES (1, 'han', '⿰木木', 'p', '2026', '2026'), (2, 'bouyei', '⿱好看', 'p', '2026', '2026')")
+  raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'all', id FROM entries UNION ALL SELECT 's:' || script, id FROM entries")
+  const event = (query: string) => ({ url: new URL(`https://example.test/en?${query}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
+  const ids = (result: any) => result.tiles.map((tile: { id: number }) => tile.id).sort()
+  expect(ids(await browseLoad(event('')))).toEqual([1, 2])
+  expect(await browseLoad(event(''))).toMatchObject({ script: null })
+  expect(ids(await browseLoad(event('script=bouyei')))).toEqual([2])
+  expect(ids(await browseLoad(event('script=han')))).toEqual([1])
+  await expect(browseLoad(event('script=klingon'))).rejects.toMatchObject({ status: 404 })
 })
 
 test('browse answers an order or a cursor it does not know with 404', async () => {
@@ -122,7 +136,7 @@ test('browse recognizes complete IDS without applying the component term limit',
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
   raw.exec("INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES (1, 'han', '⿰木木', 'p', '2026', '2026'), (2, 'han', '⿱木木', 'p', '2026', '2026'), (3, 'han', '⿰木⿰水⿰火⿰土⿰金石', 'p', '2026', '2026')")
   raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) SELECT id, 0, printf('ids%05d', id), 'ids', ids FROM entries")
-  raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 's:han', id FROM entries")
+  raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT tag, id FROM entries CROSS JOIN (SELECT 'all' AS tag UNION ALL SELECT 's:han')")
   const event = (q: string) => ({ url: new URL(`https://example.test/en?q=${encodeURIComponent(q)}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
   expect(await browseLoad(event('⿰木木'))).toMatchObject({ searchError: null, tiles: [{ id: 1 }] })
   expect(await browseLoad(event('⿰木⿰水⿰火⿰土⿰金石'))).toMatchObject({ searchError: null, tiles: [{ id: 3 }] })
