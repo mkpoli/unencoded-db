@@ -24,7 +24,7 @@
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { codePage, marksOf, registryLabel } from '$lib/registries'
-  import { COLLECTIONS, genreOf } from '$lib/genres'
+  import { COLLECTIONS, genreLabel } from '$lib/genres'
   import { boxesOf, evidenceFile } from '$lib/picture'
   import { CHECKS, readiness } from '$lib/readiness'
   import { parseSightingTypes } from '$lib/scripts'
@@ -71,7 +71,7 @@
   const ivd = $derived(valuesOf(claims, 'ivd')[0] ?? null)
   const encodings = $derived(encodingsOf(claims))
   const marks = $derived(marksOf(encodings))
-  const genres = $derived(valuesOf(claims, 'genre').map(genreOf).filter(genre => genre !== null))
+  const genres = $derived(valuesOf(claims, 'genre').map(value => ({ value, label: genreLabel(value) })))
   const collections = $derived(COLLECTIONS.filter(collection => valuesOf(claims, 'collection').includes(collection.slug)))
   const tags = $derived(valuesOf(claims, 'tag'))
   const brief = (text: string) => [...text].length > 40 ? [...text].slice(0, 39).join('') + '…' : text
@@ -133,7 +133,7 @@
     </div>
     {#if genres.length || collections.length || tags.length}
       <p class="chips">
-        {#each genres as genre (genre.slug)}<a class="chip-link" href={href(`?genre=${genre.slug}`)}>{genre.label}</a>{/each}
+        {#each genres as genre (genre.value)}<a class="chip-link" href={href(`?genre=${encodeURIComponent(genre.value)}`)}>{genre.label}</a>{/each}
         {#each collections as collection (collection.slug)}<a class="chip-link" href={href(`?collection=${collection.slug}`)}>{collection.label}</a>{/each}
         {#each tags as tag}<a class="chip-link tag" href={href(`?tag=${encodeURIComponent(tag)}`)}>#{tag}</a>{/each}
         <EditLink field="filing" name={t('field.filing')} />
@@ -183,7 +183,7 @@
         <div id="edit-senses"><SenseFields claims={editValues.claims} evidence={options} fill={filled} /></div>
         <details class="filing" id="edit-filing" open>
           <summary class="section-title">{t('field.filing')}</summary>
-          <div class="stack filed"><CategoryFields genres={valuesOf(editValues.claims, 'genre')} collections={valuesOf(editValues.claims, 'collection')} tags={valuesOf(editValues.claims, 'tag')} /></div>
+          <div class="stack filed"><CategoryFields known={data.customGenres} genres={valuesOf(editValues.claims, 'genre')} collections={valuesOf(editValues.claims, 'collection')} tags={valuesOf(editValues.claims, 'tag')} /></div>
         </details>
   {#if entry.status !== 'encoded'}
   <section class="panel stack">

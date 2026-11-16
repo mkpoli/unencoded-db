@@ -5,6 +5,7 @@
   "nav.browse": "기록",
   "nav.history": "이력",
   "nav.radicals": "부수",
+  "nav.categories": "분류",
   "nav.chronology": "연표",
   "nav.sources": "출처",
   "nav.about": "소개",
@@ -195,6 +196,7 @@
   "field.radicalStrokes": "부수와 획수",
   "form.save": "저장",
   "form.cancel": "취소",
+  "form.add": "추가",
   "form.summary": "변경 내용",
   "form.as": "{name} 이름으로 오늘 날짜에 기록됩니다.",
   "form.terms": "작성한 텍스트는 CC BY-SA 4.0으로 공개됩니다. 증거로 인용할 수 있는 자료만 올려 주세요.",
@@ -397,6 +399,9 @@
   "relationship.glyph": "자형",
   "relationship.usage": "용법",
   "field.genre": "분류",
+  "field.genreAdd": "분류 추가",
+  "field.genreParent": "상위 분류",
+  "field.genreTopLevel": "최상위",
   "field.collection": "컬렉션",
   "field.tags": "태그",
   "field.filing": "분류와 태그",
@@ -457,5 +462,6 @@
   "error.ids": "설명은 20개까지, 각각 200자 이내로 입력하세요.",
   "error.readings": "독음은 20개까지 각 200자 이내, 뜻은 20개까지 각 500자 이내로 입력하세요.",
   "error.links": "각 행에 연결한 뜻과 독음을 확인해 주세요. 증거는 행마다 20건까지 고를 수 있습니다.",
-  "error.tags": "태그는 30개까지, 각각 40자 이내로 입력하세요."
+  "error.tags": "태그는 30개까지, 각각 40자 이내로 입력하세요.",
+  "error.category": "이 분류는 추가할 수 없습니다."
 }

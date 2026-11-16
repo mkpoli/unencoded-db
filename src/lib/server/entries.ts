@@ -7,10 +7,10 @@ import { cleanIds, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
-import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
+import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, readClaims, valuesOf, type Claim, type ClaimError } from '$lib/claims'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
-import { genreOf } from '$lib/genres'
+import { ancestorsOf, categoryParents, ensureCategories } from './categories'
 import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
@@ -159,14 +159,14 @@ export function parseMarks(raw: string | null | undefined): string[] {
 }
 
 type TagInput = Pick<Entry, 'script' | 'status' | 'description' | 'script_other'>
-export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key' | 'radical' | 'first_year'>, hasSource: boolean, claims: readonly Claim[] = []) {
+export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key' | 'radical' | 'first_year'>, hasSource: boolean, claims: readonly Claim[] = [], parents: ReadonlyMap<string, string | null> = new Map()) {
   const filters = entry.status ? [`f:${entry.status}`] : []
   if (!entry.cover_key) filters.push('n:image')
   if (!entry.ids) filters.push('n:ids')
   if (!hasSource) filters.push('n:source')
   const own = new Set<string>()
   for (const claim of claims) {
-    if (claim.kind === 'genre') { own.add(`g:${claim.value}`); const parent = genreOf(claim.value)?.parent; if (parent) own.add(`g:${parent}`) }
+    if (claim.kind === 'genre') for (const value of [claim.value, ...ancestorsOf(claim.value, parents)]) own.add(`g:${value}`)
     else if (claim.kind === 'collection') own.add(`c:${claim.value}`)
     else if (claim.kind === 'tag') own.add(`t:${claim.value}`)
   }
@@ -258,8 +258,8 @@ function summarize(sightings: SightingState[]) {
   }
 }
 
-const tagsOf = (entry: Entry, claims: readonly Claim[], summary: ReturnType<typeof summarize>) =>
-  [...facetTags({ ...entry, status: statusOf(claims), ids: primaryIdsOf(claims), cover_key: summary.cover_key, first_year: summary.first_year }, summary.hasSource, claims), ...wordTags(entry, claims, summary.visible), ...partTags(claims)]
+const tagsOf = (entry: Entry, claims: readonly Claim[], summary: ReturnType<typeof summarize>, parents: ReadonlyMap<string, string | null>) =>
+  [...facetTags({ ...entry, status: statusOf(claims), ids: primaryIdsOf(claims), cover_key: summary.cover_key, first_year: summary.first_year }, summary.hasSource, claims, parents), ...wordTags(entry, claims, summary.visible), ...partTags(claims)]
 // Word and part rows are looked up by key and are no list of their own: they keep no count, year or tag count.
 const facet = (tag: string) => !/^[wp]:/.test(tag)
 const SIGHTING_SEQ = "(SELECT seq FROM sqlite_sequence WHERE name = 'sightings')"
@@ -273,7 +273,7 @@ const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summ
 async function reindex(db: D1Database, id: number, entry: Entry, claims: readonly Claim[], sightings: SightingState[]) {
   const summary = summarize(sightings)
   const live = !entry.merged_into && !entry.hidden_at
-  const next = live ? tagsOf(entry, claims, summary) : []
+  const next = live ? tagsOf(entry, claims, summary, await categoryParents(db, valuesOf(claims, 'genre'))) : []
   const { results } = await db.prepare('SELECT tag FROM entry_tags WHERE entry_id = ?').bind(id).all<{ tag: string }>()
   const current = new Set(results.map(row => row.tag)), wanted = new Set(next)
   const gone = [...current].filter(tag => !wanted.has(tag)), added = [...wanted].filter(tag => !current.has(tag))
@@ -377,7 +377,8 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
   const claims = mapSightings(fields.claims, place => Number.isInteger(place) && place >= 1 && place <= drafts.length ? place : null)
   const sources = await Promise.all(drafts.map(draft => sourceOf(db, draft.fields)))
   const summary = summarize(drafts.map(draft => ({ ...draft.fields, media: draft.media })))
-  const tags = [...new Set(tagsOf({ ...fields, merged_into: null, hidden_at: null } as unknown as Entry, claims, summary))]
+  await ensureCategories(db, valuesOf(claims, 'genre'), who)
+  const tags = [...new Set(tagsOf({ ...fields, merged_into: null, hidden_at: null } as unknown as Entry, claims, summary, await categoryParents(db, valuesOf(claims, 'genre'))))]
   // AUTOINCREMENT sequences are read inside the same transaction as the inserts.
   const results = await db.batch<{ id: number }>([
     db.prepare(`INSERT INTO entries(${ENTRY_FIELDS.join(', ')}, created_by, created_at, updated_at) VALUES(${ENTRY_FIELDS.map(() => '?').join(', ')}, ?, ?, ?) RETURNING id`)
@@ -416,6 +417,7 @@ const checkChanged = (db: D1Database, id: number, who: Who) => db.prepare(`INSER
 const redacted = async (db: D1Database, from: number | null) => from !== null && Boolean(await db.prepare('SELECT 1 FROM revisions WHERE id = ? AND redacted_at IS NOT NULL').bind(from).first())
 
 export async function editEntry(db: D1Database, id: number, baseRev: number, fields: EntryFields, who: Who, summary: string | null, kind: 'edit' | 'revert' = 'edit', from: number | null = null): Promise<EditResult> {
+  await ensureCategories(db, valuesOf(fields.claims, 'genre'), who)
   for (let attempt = 0; ; attempt++) {
     const mark = await revisionMark(db, id)
     if (await redacted(db, from)) return { ok: false, code: 'missing' }

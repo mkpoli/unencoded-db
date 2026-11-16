@@ -5,7 +5,7 @@
 // entry in this file and its form fields, and the database stays as it is.
 import { analyze, parseComposition, type Composition } from './composition'
 import { cleanCode, isRegistry, type Encoding } from './registries'
-import { genreOf, isCollection } from './genres'
+import { cleanGenre, isCollection } from './genres'
 import { IDS_LENGTH_MAX, IDS_MAX, splitIds } from './ids'
 import { carryLayout, cleanLayout, validLayout, type Layout } from './layout'
 import { ivdSequence } from './ivd'
@@ -86,7 +86,7 @@ export function validClaim(claim: unknown): claim is Claim {
     case 'encoding': return Boolean(data && typeof data.charset === 'string' && data.charset.length > 0 && data.charset.length <= 40)
     case 'relation': return Boolean(data && isRelationKind(data.relationship) && short(data.difference ?? '', 5000) && short(data.evidence ?? '', 5000))
     case 'ivd': return value === 'none' || ivdSequence(value) === value
-    case 'genre': return Boolean(genreOf(value))
+    case 'genre': return cleanGenre(value) === value
     case 'collection': return isCollection(value)
     case 'tag': return !/[\s,，、|]/u.test(value)
     case 'reading': return data === null || (Object.keys(data).length === 1 && cleanDoculect(data.doculect) === data.doculect)
@@ -282,8 +282,8 @@ export function readClaims(form: FormData, base: readonly Claim[] = []): { claim
   }
 
   if (form.has('genres_present')) {
-    const chosen = new Set(form.getAll('genre').map(clean))
-    next.set('genre', [...chosen].filter(slug => genreOf(slug)).slice(0, CLAIM_LIMITS.genre.max).map(slug => made('genre', slug)))
+    const chosen = new Set(form.getAll('genre').map(value => cleanGenre(clean(value))))
+    next.set('genre', [...chosen].filter(slug => slug !== null).slice(0, CLAIM_LIMITS.genre.max).map(slug => made('genre', slug)))
   }
   if (form.has('collections_present')) {
     const chosen = new Set(form.getAll('collection').map(clean))

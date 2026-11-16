@@ -5,6 +5,7 @@
   "nav.browse": "Danh mục",
   "nav.history": "Lịch sử",
   "nav.radicals": "Bộ thủ",
+  "nav.categories": "Phân loại",
   "nav.chronology": "Niên biểu",
   "nav.sources": "Nguồn",
   "nav.about": "Giới thiệu",
@@ -195,6 +196,7 @@
   "field.radicalStrokes": "Bộ thủ và số nét",
   "form.save": "Lưu",
   "form.cancel": "Hủy",
+  "form.add": "Thêm",
   "form.summary": "Nội dung thay đổi",
   "form.as": "Được ghi dưới tên {name} với ngày hôm nay.",
   "form.terms": "Văn bản của bạn được chia sẻ theo giấy phép CC BY-SA 4.0. Chỉ tải lên tài liệu được phép trích dẫn làm bằng chứng.",
@@ -397,6 +399,9 @@
   "relationship.glyph": "Tự hình",
   "relationship.usage": "Cách dùng",
   "field.genre": "Phân loại",
+  "field.genreAdd": "Thêm phân loại",
+  "field.genreParent": "Phân loại cha",
+  "field.genreTopLevel": "Cấp cao nhất",
   "field.collection": "Bộ sưu tập",
   "field.tags": "Thẻ",
   "field.filing": "Phân loại và thẻ",
@@ -457,5 +462,6 @@
   "error.ids": "Nhập tối đa 20 mô tả, mỗi mô tả không quá 200 ký tự.",
   "error.readings": "Nhập tối đa 20 cách đọc, mỗi cách không quá 200 ký tự, và 20 nghĩa, mỗi nghĩa không quá 500 ký tự.",
   "error.links": "Hãy kiểm tra nghĩa và cách đọc gắn với từng dòng; mỗi dòng chọn tối đa 20 bằng chứng.",
-  "error.tags": "Nhập tối đa 30 thẻ, mỗi thẻ không quá 40 ký tự."
+  "error.tags": "Nhập tối đa 30 thẻ, mỗi thẻ không quá 40 ký tự.",
+  "error.category": "Không thể thêm phân loại này."
 }

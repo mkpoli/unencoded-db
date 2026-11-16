@@ -5,7 +5,7 @@
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
   import Tile from '$lib/components/Tile.svelte'
-  import { COLLECTIONS, groupGenres } from '$lib/genres'
+  import { COLLECTIONS, arrangeGenres } from '$lib/genres'
   import { MARKED } from '$lib/registries'
   import { ORDER, PAGE, SORTS } from '$lib/order'
   import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
@@ -14,7 +14,7 @@
   import { TILE_SIZE_COOKIE, TILE_SIZES, tileSizeOf } from '$lib/tile-size'
   import type { Snapshot } from './$types'
   let { data } = $props()
-  const { standalone, groups } = groupGenres()
+  const { standalone, groups } = $derived(arrangeGenres(data.customGenres))
   // Further pages are appended as the list nears its end. They belong to the listing they were read for,
   // and a new listing starts again from its own first page.
   type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: string | null; partial: boolean; total: typeof data.total; idle: number; scanned: number }
@@ -170,8 +170,8 @@
     {:else}
       <div class="field"><label for="genre">{t('field.genre')}</label><select class="input" id="genre" name="genre" value={data.genre ?? ''}>
         <option value="">{t('browse.all')}</option>
-        {#each standalone as genre (genre.slug)}<option value={genre.slug}>{genre.label} ({count(`g:${genre.slug}`)})</option>{/each}
-        {#each groups as group (group.parent.slug)}<optgroup label={group.parent.label}><option value={group.parent.slug}>{group.parent.label} ({count(`g:${group.parent.slug}`)})</option>{#each group.children as genre (genre.slug)}<option value={genre.slug}>{genre.label} ({count(`g:${genre.slug}`)})</option>{/each}</optgroup>{/each}
+        {#each standalone as genre (genre.value)}<option value={genre.value}>{genre.label} ({count(`g:${genre.value}`)})</option>{/each}
+        {#each groups as group (group.root.value)}<optgroup label={group.root.label}><option value={group.root.value}>{group.root.label} ({count(`g:${group.root.value}`)})</option>{#each group.rows as genre (genre.value)}<option value={genre.value}>{'\u00a0\u00a0'.repeat(genre.depth - 1)}{genre.label} ({count(`g:${genre.value}`)})</option>{/each}</optgroup>{/each}
       </select></div>
     {/if}
     <div class="field decade"><label for="decade">{t('browse.decadeLabel')}</label><select class="input" id="decade" name="decade" value={data.decade ?? ''}>

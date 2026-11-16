@@ -5,6 +5,7 @@
   "nav.browse": "記録一覧",
   "nav.history": "履歴",
   "nav.radicals": "部首",
+  "nav.categories": "分類",
   "nav.chronology": "年表",
   "nav.sources": "出典",
   "nav.about": "このサイトについて",
@@ -195,6 +196,7 @@
   "field.radicalStrokes": "部首と画数",
   "form.save": "保存",
   "form.cancel": "キャンセル",
+  "form.add": "追加",
   "form.summary": "変更内容",
   "form.as": "{name}の名前と今日の日付で記録されます。",
   "form.terms": "入力した文章はCC BY-SA 4.0で公開されます。証拠として引用できるものだけをアップロードしてください。",
@@ -397,6 +399,9 @@
   "relationship.glyph": "字形",
   "relationship.usage": "用法",
   "field.genre": "分類",
+  "field.genreAdd": "分類を追加",
+  "field.genreParent": "上位の分類",
+  "field.genreTopLevel": "最上位",
   "field.collection": "コレクション",
   "field.tags": "タグ",
   "field.filing": "分類とタグ",
@@ -457,5 +462,6 @@
   "error.ids": "IDSは20件まで、それぞれ200文字以内で入力してください。",
   "error.readings": "読みは20件まで各200文字以内、意味は20件まで各500文字以内で入力してください。",
   "error.links": "各行に結び付けた意味と読みを確認してください。証拠は1行につき20件まで選べます。",
-  "error.tags": "タグは30個まで、それぞれ40文字以内で入力してください。"
+  "error.tags": "タグは30個まで、それぞれ40文字以内で入力してください。",
+  "error.category": "この分類は追加できません。"
 }

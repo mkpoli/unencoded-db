@@ -5,6 +5,7 @@
   "nav.browse": "记录",
   "nav.history": "历史",
   "nav.radicals": "部首",
+  "nav.categories": "类属",
   "nav.chronology": "年表",
   "nav.sources": "出处",
   "nav.about": "关于",
@@ -195,6 +196,7 @@
   "field.radicalStrokes": "部首和笔画数",
   "form.save": "保存",
   "form.cancel": "取消",
+  "form.add": "添加",
   "form.summary": "更改内容",
   "form.as": "将以{name}的名义和今天的日期记录。",
   "form.terms": "你的文字以CC BY-SA 4.0许可发布。请只上传可作为证据引用的材料。",
@@ -397,6 +399,9 @@
   "relationship.glyph": "字形",
   "relationship.usage": "用法",
   "field.genre": "类属",
+  "field.genreAdd": "添加类属",
+  "field.genreParent": "上级类属",
+  "field.genreTopLevel": "顶层",
   "field.collection": "合集",
   "field.tags": "标签",
   "field.filing": "类属和标签",
@@ -457,5 +462,6 @@
   "error.ids": "最多填写20个描述，每个不超过200个字符。",
   "error.readings": "读音最多20项，每项不超过200字；释义最多20项，每项不超过500字。",
   "error.links": "请检查各条目所对应的释义和读音，每条最多可选20项证据。",
-  "error.tags": "最多30个标签，每个不超过40个字符。"
+  "error.tags": "最多30个标签，每个不超过40个字符。",
+  "error.category": "无法添加此类属。"
 }
