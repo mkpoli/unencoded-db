@@ -1,7 +1,8 @@
 // The other ways to spell the same form as a description: a part written out as the description BabelStone gives
 // its character, or a run of parts folded back into the character that has that description.
-// ⿺⿱𡗗夂面 and ⿺𡕤面 are one form. Radical code points stay as typed.
-import { hasOverlay, hasStroke, plain, typedTree, write, type Tree } from './similar'
+// ⿺⿱𡗗夂面 and ⿺𡕤面 are one form. A part may also be swapped for one IWDS counts as the same component
+// (夂 and 夊), since BabelStone and contributors spell such parts either way. Radical code points stay as typed.
+import { groupMates, hasOverlay, hasStroke, plain, typedTree, write, type Tree } from './similar'
 
 export type Table = { encoded: ReadonlyMap<string, string>; described: ReadonlyMap<string, string> }
 /** Spellings at most, the one typed included. */
@@ -14,11 +15,11 @@ function wholeOf(leaf: string, table: Table): Tree | null {
   return tree && typeof tree !== 'string' && !hasOverlay(tree) && !hasStroke(tree) ? tree : null
 }
 
-// The trees one step from a tree: one leaf written out, or one node folded into its character.
+// The trees one step from a tree: one leaf written out or swapped for an IWDS mate, or one node folded into its character.
 function steps(tree: Tree, table: Table, root = true): Tree[] {
   if (typeof tree === 'string') {
     const inner = wholeOf(tree, table)
-    return inner ? [inner] : []
+    return [...(inner ? [inner] : []), ...groupMates(tree)]
   }
   const found: Tree[] = []
   tree.parts.forEach((part, at) => {

@@ -321,7 +321,7 @@
   "browse.searchSegmentEmpty": "Không có kết quả phù hợp trong phần này.",
   "browse.searched": "Đã tìm {n}/{of}",
   "browse.found": "Tìm thấy {n}",
-  "browse.alsoSearched": "Cũng đã tìm: {ids}",
+  "browse.alsoSearched": "Cũng đã tìm {n} cách viết khác",
   "browse.pageLeft": "Còn {n} trang",
   "browse.pagesLeft": "Còn {n} trang",
   "browse.continueSearch": "Tiếp tục tìm kiếm",

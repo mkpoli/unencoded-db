@@ -227,7 +227,7 @@
     <p class="muted" role="alert">{t(`browse.${data.searchError}`)}</p>
   {:else}
     {#if shown.total}<p class="found">{t('browse.found', { n: `${shown.total.n}${shown.total.floor ? '+' : ''}` })}</p>{/if}
-    {#if data.also.length}<p class="found also">{t('browse.alsoSearched', { ids: data.also.join(' ') })}</p>{/if}
+    {#if data.also.length}<details class="found also"><summary>{t('browse.alsoSearched', { n: data.also.length })}</summary><ul>{#each data.also as spelling}<li class="ids">{spelling}</li>{/each}</ul></details>{/if}
     {#if shown.tiles.length}
       <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
     {:else if !shown.partial || done}
@@ -258,7 +258,9 @@
   .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(var(--tile-size),100%),1fr)); gap:22px 16px }
   :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .tiles { gap:8px }
   .found { margin-bottom:-8px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
-  .also { margin-top:0; word-break:break-all }
+  .also { margin-top:0 }
+  .also summary { cursor:pointer; color:var(--muted) }
+  .also ul { display:flex; flex-wrap:wrap; gap:4px 12px; margin:6px 0 0; padding:0; list-style:none; overflow-wrap:anywhere }
   .ahead { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px }
   .empty { padding:48px 16px; text-align:center; color:var(--muted) } .empty a { display:inline-block; margin-top:12px; color:var(--ink) }
 </style>

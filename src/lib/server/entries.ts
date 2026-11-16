@@ -914,7 +914,8 @@ export function totalStatement(db: D1Database, listing: Listing, from: TotalRang
   const range = from.exact
     ? `SELECT entry_id FROM claims WHERE kind = 'ids' AND value IN (${from.exact.map(() => '?')}) LIMIT ${TOTAL_READ}`
     : `SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id LIMIT ${TOTAL_READ}`
-  return db.prepare(`SELECT count(DISTINCT d.entry_id) AS n FROM (${range}) d WHERE ${tests}`)
+  // A tag range holds each record once; only several spellings can name one record twice.
+  return db.prepare(`SELECT ${from.exact && from.exact.length > 1 ? 'count(DISTINCT d.entry_id)' : 'count(*)'} AS n FROM (${range}) d WHERE ${tests}`)
     .bind(...(from.exact ?? [from.tag]), ...(exact ?? []), ...tags)
 }
 
