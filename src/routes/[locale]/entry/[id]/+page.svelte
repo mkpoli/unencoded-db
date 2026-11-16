@@ -90,7 +90,7 @@
     spellings = []
     if (!first) return
     let live = true
-    describedTable().then(table => { if (live) spellings = equivalentSpellings(first, table).slice(1) }).catch(() => {})
+    describedTable().then(table => { if (live) spellings = equivalentSpellings(first, table, 5, false).slice(1) }).catch(() => {})
     return () => { live = false }
   })
   const others = $derived(spellings.filter(spelling => !sequences.some(held => cleanIds(held) === spelling)))

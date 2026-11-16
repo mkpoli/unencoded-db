@@ -50,3 +50,15 @@ test('a part BabelStone spells with an IWDS mate still meets the typed spelling'
   expect(equivalentSpellings('⿺𡕤面', table)).toContain('⿺⿱𡗗夂面')
   expect(equivalentSpellings('⿺⿱𡗗夂面', table)).toContain('⿺𡕤面')
 })
+
+test('without mates, only spellings of the very same form are given', () => {
+  const table = { encoded: new Map([['⿱𡗗夂', '𡕤']]), described: new Map([['𡕤', '⿱𡗗夂']]) }
+  expect(equivalentSpellings('⿺⿱𡗗夂面', table, 16, false)).toEqual(['⿺⿱𡗗夂面', '⿺𡕤面'])
+})
+
+test('a run folds into a character described with an IWDS-equivalent part, even without mates', () => {
+  const table = { encoded: new Map([['⿱𡗗夊', '𡕤']]), described: new Map([['𡕤', '⿱𡗗夊']]) }
+  const found = equivalentSpellings('⿺⿱𡗗夂面', table, 16, false)
+  expect(found.slice(0, 2)).toEqual(['⿺⿱𡗗夂面', '⿺𡕤面'])
+  for (const spelling of found) expect(spelling).not.toMatch(/[攵文攴]/u)
+})
