@@ -185,6 +185,11 @@
           <summary class="section-title">{t('field.filing')}</summary>
           <div class="stack filed"><CategoryFields known={data.customGenres} genres={valuesOf(editValues.claims, 'genre')} collections={valuesOf(editValues.claims, 'collection')} tags={valuesOf(editValues.claims, 'tag')} /></div>
         </details>
+      {/key}
+      <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" /></div>
+      {#if editing && form?.error === 'conflict'}<button class="button" type="submit" disabled>{t('form.save')}</button>{:else}<SubmitBar />{/if}
+    </form>
+  </details>
   {#if entry.status !== 'encoded'}
   <section class="panel stack">
     <h2>{t('ready.title')}</h2>
@@ -192,11 +197,6 @@
     <a class="text-link small" href="https://www.unicode.org/irg/pp/" target="_blank" rel="noopener">{t('ready.rules')} ↗</a>
   </section>
   {/if}
-      {/key}
-      <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" /></div>
-      {#if editing && form?.error === 'conflict'}<button class="button" type="submit" disabled>{t('form.save')}</button>{:else}<SubmitBar />{/if}
-    </form>
-  </details>
   <section class="stack"><h2>{t('entry.sightings')}</h2>
     {#each data.sightings as sighting (sighting.id)}
       {@const types = parseSightingTypes(sighting.types)}
