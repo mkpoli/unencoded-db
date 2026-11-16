@@ -8,6 +8,9 @@ export const MAX_WRITE_BODY = MAX_IMAGE + MAX_THUMB + 1024 * 1024
 // sightings, each prepared in the browser.
 export const MAX_PICTURES_BODY = PICTURES_BODY_MAX
 
+// An agent's message names its pictures by address, so it is text alone.
+export const MAX_AGENT_BODY = 1024 * 1024
+
 /** Read at most the limit before handing the request to a form parser. */
 export async function limitWriteBody(request: Request, limit = MAX_WRITE_BODY): Promise<Request | null> {
   const length = request.headers.get('content-length')
