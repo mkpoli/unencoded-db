@@ -1,6 +1,8 @@
 // The language or dialect a reading belongs to. The listed ones are stored as their ISO 639 code and named
 // from the message catalogues; any other doculect, such as a town's speech, is stored as the text given.
-export const DOCULECTS = ['cmn', 'yue', 'nan', 'hak', 'wuu', 'cdo', 'hsn', 'gan', 'cjy', 'ltc', 'och', 'ja', 'ko', 'vi', 'za', 'bca'] as const
+// Early Modern Chinese (近古漢語, the Song to Qing readings of the rhyme books and character dictionaries)
+// has no ISO 639 code, so it takes `qem` from the range ISO 639 reserves for local use (qaa–qtz).
+export const DOCULECTS = ['cmn', 'yue', 'nan', 'hak', 'wuu', 'cdo', 'hsn', 'gan', 'cjy', 'qem', 'ltc', 'och', 'ja', 'ko', 'vi', 'za', 'bca'] as const
 export type Doculect = (typeof DOCULECTS)[number]
 export const OTHER_DOCULECT = 'other'
 export const DOCULECT_MAX = 40
