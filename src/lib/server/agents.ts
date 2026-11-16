@@ -29,7 +29,9 @@ const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]'])
 const UNSAFE_SCHEMES = new Set(['javascript:', 'data:', 'vbscript:', 'file:', 'blob:', 'about:'])
 
 // Where a client may be sent back to: an https address, a loopback address of the person's own machine,
-// or an app's own scheme (RFC 8252). No fragment, and nothing a browser would run.
+// or an app's own scheme (RFC 8252). No fragment, and nothing a browser would run. Anyone may register
+// any such address, so a person is sent to one only by a button they press on the consent page, which
+// names it.
 function redirectUri(value: unknown): URL | null {
   if (typeof value !== 'string' || !value || value.length > URI_MAX) return null
   let url: URL
@@ -71,26 +73,31 @@ export async function clientOf(db: D1Database, id: string | null): Promise<Agent
 }
 
 export type AuthorizeRequest = { client: AgentClient; redirect: string; challenge: string; state: string | null }
-/** `client` names a request that must not be sent back anywhere; `request` one whose client is told why. */
-export type AuthorizeError = { at: 'client' } | { at: 'request'; redirect: string; state: string | null; error: 'invalid_request' | 'unsupported_response_type' | 'invalid_target' }
+export type AuthorizeError = 'invalid_client' | 'invalid_request' | 'unsupported_response_type' | 'invalid_target'
 
-/** What an address of the consent page asks for. */
+/**
+ * What an address of the consent page asks for, or what is wrong with it. A request that is wrong is
+ * shown as an error on this site and never sent on: registration is open, so sending it on would make
+ * the page a redirect to anywhere.
+ */
 export async function readAuthorize(db: D1Database, event: Pick<RequestEvent, 'url'>): Promise<AuthorizeRequest | AuthorizeError> {
   const params = event.url.searchParams
   const client = await clientOf(db, params.get('client_id'))
   const redirect = params.get('redirect_uri')
-  if (!client || !redirect || !client.redirect_uris.some(registered => sameRedirect(registered, redirect))) return { at: 'client' }
+  if (!client || !redirect || !client.redirect_uris.some(registered => sameRedirect(registered, redirect))) return 'invalid_client'
   const state = params.get('state')
-  const refuse = (error: (AuthorizeError & { at: 'request' })['error']): AuthorizeError => ({ at: 'request', redirect, state, error })
-  if ((state?.length ?? 0) > 500) return { at: 'client' }
-  if (params.get('response_type') !== 'code') return refuse('unsupported_response_type')
+  if ((state?.length ?? 0) > 500) return 'invalid_request'
+  if (params.get('response_type') !== 'code') return 'unsupported_response_type'
   const stated = params.get('code_challenge')
-  if (!stated || !/^[A-Za-z0-9_-]{43}$/.test(stated) || params.get('code_challenge_method') !== 'S256') return refuse('invalid_request')
+  if (!stated || !/^[A-Za-z0-9_-]{43}$/.test(stated) || params.get('code_challenge_method') !== 'S256') return 'invalid_request'
   // A token is for this site's endpoint alone (RFC 8707).
   const resource = params.get('resource')
-  if (resource && ![resourceOf(event), event.url.origin, `${event.url.origin}/`].includes(resource)) return refuse('invalid_target')
+  if (resource && ![resourceOf(event), event.url.origin, `${event.url.origin}/`].includes(resource)) return 'invalid_target'
   return { client, redirect, challenge: stated, state }
 }
+
+/** Whether an address is one a browser opens as a page, and so one a person can be sent back to without having allowed anything. */
+export const webAddress = (redirect: string) => /^https?:$/.test(new URL(redirect).protocol)
 
 /** The address a client is sent back to, with what it is told. */
 export function redirectBack(redirect: string, state: string | null, told: Record<string, string>) {
