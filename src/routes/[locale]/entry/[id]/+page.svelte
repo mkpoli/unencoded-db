@@ -114,9 +114,11 @@
     {#if sequences.length}
       <div class="identity">
         <ul class="styles" bind:this={plates}>{#each GLYPH_STYLES as style (style)}<li><span class="plate"><IdsGlyph ids={sequences[0]} layout={entry.layout} {style} /></span><span class="style-name">{t(`glyphStyle.${style}`)}</span></li>{/each}</ul>
-        <SpellingReport record={entry.id} sequence={sequences[0]} layout={entry.layout} drawing={style => plates?.children[GLYPH_STYLES.indexOf(style)]?.querySelector('svg') ?? null} />
         <ul class="sequences">{#each sequences as sequence}<li><span class="ids">{sequence}</span><CopyButton text={sequence} /></li>{/each}</ul>
         <EditLink field="ids" name={t('field.ids')} />
+      </div>
+      <div class="spelling">
+        <SpellingReport record={entry.id} sequence={sequences[0]} layout={entry.layout} drawing={style => plates?.children[GLYPH_STYLES.indexOf(style)]?.querySelector('svg') ?? null} />
       </div>
       <p class="sites">{#each descriptionLinks(sequences[0], at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</p>
     {:else}
