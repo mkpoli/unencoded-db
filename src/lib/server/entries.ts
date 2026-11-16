@@ -734,7 +734,7 @@ export async function mediaVisible(db: D1Database, key: string) {
   return Boolean(await db.prepare(`SELECT 1 FROM sighting_media x INDEXED BY sighting_media_by_image ${live} AND x.image_key = ?1 UNION ALL SELECT 1 FROM sighting_media x INDEXED BY sighting_media_by_thumb ${live} AND x.thumb_key = ?1 LIMIT 1`).bind(key).first())
 }
 
-export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; radical?: string | null; decade?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; order?: Order; seed?: number | null; after?: string | null; limit?: number }
+export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; radical?: string | null; decade?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; also?: readonly string[]; order?: Order; seed?: number | null; after?: string | null; limit?: number }
 export const SEARCH_WINDOW = 256
 
 // The one key a script and a filter name, or null for a filter that is not one.
@@ -776,12 +776,22 @@ export function exactSearchIds(query: string) {
   return isDescription(ids) ? ids : null
 }
 
+// Other spellings of the description searched for, found in the browser, are searched with it: at most
+// ALSO_MAX, each a description of its own, none the query itself.
+export const ALSO_MAX = 15
+export function alsoSearchIds(query: string, values: readonly string[] = []) {
+  const exact = exactSearchIds(query)
+  if (!exact) return []
+  return [...new Set(values.map(exactSearchIds).filter((ids): ids is string => ids !== null && ids !== exact))].slice(0, ALSO_MAX)
+}
+
 // The keys every row of a listing holds and the words it is searched for. Null names a listing that is not one.
-function listPlan({ script, filter, facet, radical, decade, within, without, query }: Listing) {
+function listPlan({ script, filter, facet, radical, decade, within, without, query, also }: Listing) {
   const base = listTag(script, filter), own = facetTag(facet), filed = radicalTag(radical), period = decadeTag(decade), marks = markTags(within, without)
   if (!base || own === undefined || filed === undefined || period === undefined || !marks) return null
   if ((query?.trim().length ?? 0) > SEARCH_LENGTH_MAX) return null
-  const exact = exactSearchIds(query ?? '')
+  const typed = exactSearchIds(query ?? '')
+  const exact = typed ? [typed, ...alsoSearchIds(query ?? '', also)] : null
   const words = exact ? [] : [...new Set(terms(query ?? ''))]
   if (!exact && (words.length > SEARCH_TERMS_MAX || (query?.trim() && !words.length))) return null
   const keys = [...(own ? [own] : []), ...(filed ? [filed] : []), ...(period ? [period] : []), ...marks, ...(base !== 'all' ? [base] : [])]
@@ -791,7 +801,7 @@ function listPlan({ script, filter, facet, radical, decade, within, without, que
 // One key is the range read and the others are tested on each row of it, with the words.
 function listRead(plan: NonNullable<ReturnType<typeof listPlan>>, range = plan.keys[0] ?? 'all') {
   const tests = [...plan.words, ...plan.keys.filter(key => key !== range)]
-  return { tag: range, tests, searching: Boolean(plan.exact) || tests.length > 0 }
+  return { tag: range, tests, searching: plan.exact !== null || tests.length > 0 }
 }
 
 const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind, e.marks'
@@ -843,12 +853,12 @@ export function listStatement(db: D1Database, listing: Listing, range?: string, 
   // The range drives the query. Tests are projections, not filters:
   // LIMIT therefore bounds candidates read even when no row passes.
   const tests = [
-    ...(plan.exact ? ["EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value = ? AND k.entry_id = t.entry_id)"] : []),
+    ...(plan.exact ? [`EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value IN (${plan.exact.map(() => '?')}) AND k.entry_id = t.entry_id)`] : []),
     ...read.tests.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = t.entry_id)'),
   ].join(' AND ') || '1'
   const { by, past, key } = order === 'random' ? { by: RANK, past: `${RANK} >= ? AND ${RANK} < ? AND ${LISTED}`, key: RANK } : ORDER_READS[order]
   return db.prepare(`SELECT ${TILE_COLUMNS}, ${key} AS counted, (${tests}) AS matches FROM entry_tags t CROSS JOIN entries e ON e.id = t.entry_id WHERE t.tag = ? AND ${past} ORDER BY ${by} LIMIT ?`)
-    .bind(...(plan.exact ? [plan.exact] : []), ...read.tests, read.tag, ...(ranks ?? cursor), (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1 - taken)
+    .bind(...(plan.exact ?? []), ...read.tests, read.tag, ...(ranks ?? cursor), (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1 - taken)
 }
 
 type TileRow = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind' | 'marks'>
@@ -888,23 +898,25 @@ export async function list(db: D1Database, listing: Listing) {
 // A search is counted once, from the shortest range it is tested against: a key, a word or the exact
 // description. At most TOTAL_READ records of that range are read; past that the count is a floor.
 export const TOTAL_READ = 1000
-type TotalRange = { tag: string; exact?: false } | { tag?: undefined; exact: string }
+type TotalRange = { tag: string; exact?: undefined } | { tag?: undefined; exact: readonly string[] }
 export const WORD_SIZE = `SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags WHERE tag = ? LIMIT ${TOTAL_READ + 1})`
-export const EXACT_SIZE = `SELECT count(*) AS n FROM (SELECT entry_id FROM claims WHERE kind = 'ids' AND value = ? GROUP BY entry_id LIMIT ${TOTAL_READ + 1})`
+export const exactSize = (spellings: number) => `SELECT count(*) AS n FROM (SELECT entry_id FROM claims WHERE kind = 'ids' AND value IN (${Array(spellings).fill('?')}) LIMIT ${TOTAL_READ + 1})`
 export function totalStatement(db: D1Database, listing: Listing, from: TotalRange) {
   const plan = listPlan(listing)
   if (!plan) return null
   const tags = [...(plan.keys.length ? plan.keys : ['all']), ...plan.words].filter(tag => tag !== from.tag)
   const exact = from.exact ? null : plan.exact
   const tests = [
-    ...(exact ? ["EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value = ? AND k.entry_id = d.entry_id)"] : []),
+    ...(exact ? [`EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value IN (${exact.map(() => '?')}) AND k.entry_id = d.entry_id)`] : []),
     ...tags.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = d.entry_id)'),
   ].join(' AND ') || '1'
+  // Several spellings are read unordered and each record counted once, since none of them is one range of the index.
   const range = from.exact
-    ? "SELECT entry_id FROM claims WHERE kind = 'ids' AND value = ? GROUP BY entry_id ORDER BY entry_id"
-    : 'SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id'
-  return db.prepare(`SELECT count(*) AS n FROM (${range} LIMIT ${TOTAL_READ}) d WHERE ${tests}`)
-    .bind(from.exact ?? from.tag, ...(exact ? [exact] : []), ...tags)
+    ? `SELECT entry_id FROM claims WHERE kind = 'ids' AND value IN (${from.exact.map(() => '?')}) LIMIT ${TOTAL_READ}`
+    : `SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id LIMIT ${TOTAL_READ}`
+  // A tag range holds each record once; only several spellings can name one record twice.
+  return db.prepare(`SELECT ${from.exact && from.exact.length > 1 ? 'count(DISTINCT d.entry_id)' : 'count(*)'} AS n FROM (${range}) d WHERE ${tests}`)
+    .bind(...(from.exact ?? [from.tag]), ...(exact ?? []), ...tags)
 }
 
 // How many records a search finds, and how many it looks through: the shortest of its keys, which `list`
@@ -916,7 +928,7 @@ export async function searchTotal(db: D1Database, listing: Listing): Promise<{ n
   const [known, ...read] = await db.batch<{ tag: string; n: number }>([
     db.prepare('SELECT tag, n FROM tag_counts WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(keys)),
     ...plan.words.map(word => db.prepare(WORD_SIZE).bind(word)),
-    ...(plan.exact ? [db.prepare(EXACT_SIZE).bind(plan.exact)] : []),
+    ...(plan.exact ? [db.prepare(exactSize(plan.exact.length)).bind(...plan.exact)] : []),
   ])
   const sizes = new Map(known.results.map(row => [row.tag, row.n]))
   const ranges: (TotalRange & { size: number })[] = [

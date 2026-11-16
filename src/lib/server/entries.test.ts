@@ -6,7 +6,7 @@ import { categoryParentsStatement, createCategory, customGenres, customGenresSta
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
-import { type Citation, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, WORD_SIZE, EXACT_SIZE, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { type Citation, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, WORD_SIZE, exactSize, alsoSearchIds, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -211,6 +211,26 @@ describe('search', () => {
     const variant = await createEntry(db, described('⿰𠀀󠄀木'), seen(), [], who)
     await createEntry(db, described('⿰𠀀木'), seen(), [], who)
     expect((await list(db, { query: '⿰𠀀󠄀木' }))!.tiles.map(tile => tile.id)).toEqual([variant])
+  })
+
+  test('other spellings are searched with the description, and bad or excess ones are dropped', async () => {
+    const folded = await createEntry(db, described('⿺𡕤面'), seen(), [], who)
+    const written = await createEntry(db, described('⿺⿱𡗗夂面'), seen(), [], who)
+    await createEntry(db, described('⿺木面'), seen(), [], who)
+    const both = await createEntry(db, described('⿺𡕤面', '⿺⿱𡗗夂面'), seen(), [], who)
+    const ids = async (query: string, also: string[]) => (await list(db, { query, also }))!.tiles.map(tile => tile.id).sort((a, b) => a - b)
+    expect(await ids('⿺⿱𡗗夂面', [])).toEqual([written, both])
+    expect(await ids('⿺⿱𡗗夂面', ['⿺𡕤面'])).toEqual([folded, written, both])
+    expect(await ids('⿺𡕤面', ['⿺⿱ 𡗗夂面'])).toEqual([folded, written, both])
+    expect(await searchTotal(db, { query: '⿺⿱𡗗夂面', also: ['⿺𡕤面'] })).toMatchObject({ n: 3 })
+    expect(await searchTotal(db, { query: '⿺⿱𡗗夂面' })).toMatchObject({ n: 2 })
+    // What is no description, the query itself and repeats are dropped, and so are the spellings past the limit.
+    expect(alsoSearchIds('⿺⿱𡗗夂面', ['面', '⿺⿱𡗗夂面', '⿺𡕤面', '⿺𡕤 面', 'word'])).toEqual(['⿺𡕤面'])
+    const many = Array.from({ length: ALSO_MAX + 5 }, (_, i) => `⿰木${String.fromCodePoint(0x4e00 + i)}`)
+    expect(alsoSearchIds('⿰木木', many)).toEqual(many.slice(0, ALSO_MAX))
+    // A query that is no whole description searches by its words and ignores them.
+    expect(alsoSearchIds('木', ['⿺𡕤面'])).toEqual([])
+    expect(await list(db, { query: '木', also: ['⿺𡕤面'] })).toEqual(await list(db, { query: '木' }))
   })
 
   test('exact IDS search pages through bounded candidates without skipping', async () => {
@@ -927,6 +947,14 @@ describe('query cost', () => {
     expect(plan(statement.sql, statement.values).join('\n')).toMatch(/SEARCH k USING COVERING INDEX claims_by_value \(kind=\? AND value=\? AND entry_id=\?\)/)
   })
 
+  test('an exact description search with other spellings reads the claims index by value for each', () => {
+    const statement = listStatement(db, { query: '⿰木木', also: ['⿱木木', '⿰木水'] }) as unknown as { sql: string; values: unknown[] }
+    expect(statement.values.slice(0, 3)).toEqual(['⿰木木', '⿱木木', '⿰木水'])
+    const details = plan(statement.sql, statement.values).join('\n')
+    expect(details).toMatch(/SEARCH k USING COVERING INDEX claims_by_value \(kind=\? AND value=\? AND entry_id=\?\)/)
+    expect(details).not.toMatch(/TEMP B-TREE FOR ORDER BY/)
+  })
+
   test('claims by value and a source page read their indexes', async () => {
     const plans: string[] = []
     const traced = { prepare(sql: string) {
@@ -1378,11 +1406,14 @@ describe('search total', () => {
     const statements = [
       totalStatement(db, { script: 'han', query: '亻 木' }, { tag: 'w:亻' }),
       totalStatement(db, { script: 'han', filter: 'variant', within: ['unicode'], query: '亻' }, { tag: 'r:unicode' }),
-      totalStatement(db, { script: 'han', query: '⿰木木' }, { exact: '⿰木木' }),
+      totalStatement(db, { script: 'han', query: '⿰木木' }, { exact: ['⿰木木'] }),
+      totalStatement(db, { script: 'han', query: '⿰木木', also: ['⿱木木', '⿰木水'] }, { exact: ['⿰木木', '⿱木木', '⿰木水'] }),
     ].map(statement => statement as unknown as { sql: string; values: unknown[] })
-    for (const { sql, values } of [...statements, { sql: WORD_SIZE, values: ['w:亻'] }, { sql: EXACT_SIZE, values: ['⿰木木'] }]) {
+    for (const { sql, values } of [...statements, { sql: WORD_SIZE, values: ['w:亻'] }, { sql: exactSize(1), values: ['⿰木木'] }, { sql: exactSize(3), values: ['⿰木木', '⿱木木', '⿰木水'] }]) {
       const details = plan(sql, values)
-      expect(details.join('\n')).not.toMatch(/TEMP B-TREE/)
+      // Counting records once uses a temporary tree, over the capped range alone; nothing is sorted or grouped.
+      expect(details.join('\n')).not.toMatch(/TEMP B-TREE FOR (ORDER BY|GROUP BY)/)
+      expect(details.filter(detail => /TEMP B-TREE/.test(detail))).toEqual(details.filter(detail => detail === 'USE TEMP B-TREE FOR count(DISTINCT)'))
       // Every table is searched by key; the one scan is of the capped range read just above it.
       for (const detail of details) expect(detail).not.toMatch(/^SCAN (?!d$|\(subquery-\d+\)$)/)
     }
