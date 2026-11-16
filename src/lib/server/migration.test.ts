@@ -431,3 +431,25 @@ test('0019 turns each via into the first link of a chain, in the rows and in pas
   expect(await restoreSighting(db, 1, 2, 1, sightingSnapshot(rows[0].snapshot)!, { actor: 'p', ip: null }, 1)).toEqual({ ok: true, rev: 2 })
   expect(raw.query('SELECT v.position, c.title, c.records FROM sighting_vias v JOIN sources c ON c.id = v.source_id WHERE v.sighting_id = 2').all()).toEqual([{ position: 0, title: 'A post', records: 1 }])
 })
+
+test('0022 dates each agent client by its latest token or code, so pruning a client leaves no row pointing at it', async () => {
+  const raw = new Database(':memory:')
+  raw.exec('PRAGMA foreign_keys = ON')
+  const migrations = join(import.meta.dir, '../../../migrations')
+  const names = readdirSync(migrations).sort()
+  for (const name of names.filter(name => name < '0022')) raw.exec(readFileSync(join(migrations, name), 'utf8'))
+  const old = '2026-01-01T00:00:00.000Z'
+  raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '${old}')`)
+  raw.exec(`INSERT INTO agent_clients(id, name, redirect_uris, created_at) VALUES ('token', null, '[]', '${old}'), ('code', null, '[]', '${old}'), ('neither', null, '[]', '${old}')`)
+  raw.exec(`INSERT INTO agent_tokens(token_hash, client, person, created_at) VALUES ('a', 'token', 'p', '2026-01-02T00:00:00.000Z'), ('b', 'token', 'p', '2026-01-03T00:00:00.000Z')`)
+  // Allowed, and the code never traded.
+  raw.exec(`INSERT INTO agent_codes(code_hash, client, person, redirect_uri, challenge, created_at) VALUES ('c', 'code', 'p', 'https://example.test/cb', 'x', '2026-01-04T00:00:00.000Z')`)
+  raw.exec(migration('0022_agent_client_use.sql'))
+  expect(raw.query('SELECT id, used_at FROM agent_clients ORDER BY id').all()).toEqual([{ id: 'code', used_at: '2026-01-04T00:00:00.000Z' }, { id: 'neither', used_at: null }, { id: 'token', used_at: '2026-01-03T00:00:00.000Z' }])
+  // A registration long after: the client nobody allowed goes, and the two that were allowed go with their rows.
+  const { registerClient, CLIENT_LIFE } = await import('./agents')
+  raw.exec(`UPDATE agent_clients SET used_at = '${new Date(Date.now() - CLIENT_LIFE - 1000).toISOString()}' WHERE used_at IS NOT NULL`)
+  expect(await registerClient(d1Over(raw), { redirect_uris: ['https://example.test/cb'] })).toMatchObject({ redirect_uris: ['https://example.test/cb'] })
+  expect(raw.query('SELECT count(*) AS n FROM agent_clients').get()).toEqual({ n: 1 })
+  expect(raw.query('SELECT (SELECT count(*) FROM agent_tokens) + (SELECT count(*) FROM agent_codes) AS n').get()).toEqual({ n: 0 })
+})

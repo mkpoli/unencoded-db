@@ -11,11 +11,14 @@ import type { Person } from './people'
 
 export const CODE_LIFE = 10 * 60 * 1000
 export const TOKEN_LIFE = 365 * 24 * 60 * 60 * 1000
-/** A client that no token names is forgotten after this long. */
-export const CLIENT_LIFE = 30 * 24 * 60 * 60 * 1000
+/** A client nobody has allowed is forgotten after this long. */
+export const UNUSED_CLIENT_LIFE = 90 * 24 * 60 * 60 * 1000
+/** A client is forgotten this long after a person last allowed it, when every token it was given has run out. */
+export const CLIENT_LIFE = TOKEN_LIFE + 35 * 24 * 60 * 60 * 1000
 export const REDIRECTS_MAX = 10
 const URI_MAX = 500
 const NAME_MAX = 100
+const PRUNE = 100
 
 const random = () => [...crypto.getRandomValues(new Uint8Array(32))].map(byte => byte.toString(16).padStart(2, '0')).join('')
 const ago = (life: number) => new Date(Date.now() - life).toISOString()
@@ -59,8 +62,16 @@ export async function registerClient(db: D1Database, metadata: unknown): Promise
   if (!Array.isArray(uris) || !uris.length || uris.length > REDIRECTS_MAX || !uris.every(redirectUri)) return null
   const name = typeof given.client_name === 'string' ? given.client_name.normalize('NFC').replace(/[\p{Cc}\p{Cf}]/gu, '').replace(/\s+/gu, ' ').trim().slice(0, NAME_MAX) || null : null
   const client = { id: crypto.randomUUID(), name, redirect_uris: uris as string[] }
+  // A registration clears out a bounded number of clients that are no longer of use: ones nobody ever
+  // allowed, which hold no code or token, and ones last allowed so long ago that their tokens have all run out.
+  // The rows that point at a client go before it, in the one batch, and all three statements read the same clients.
+  const stale = `SELECT id FROM agent_clients WHERE used_at IS NOT NULL AND used_at <= ?1 ORDER BY used_at LIMIT ${PRUNE}`
+  const cutoff = ago(CLIENT_LIFE)
   await db.batch([
-    db.prepare('DELETE FROM agent_clients WHERE id IN (SELECT c.id FROM agent_clients c WHERE c.created_at <= ? AND NOT EXISTS (SELECT 1 FROM agent_tokens t WHERE t.client = c.id) AND NOT EXISTS (SELECT 1 FROM agent_codes k WHERE k.client = c.id) ORDER BY c.created_at LIMIT 100)').bind(ago(CLIENT_LIFE)),
+    db.prepare(`DELETE FROM agent_clients WHERE id IN (SELECT id FROM agent_clients WHERE used_at IS NULL AND created_at <= ? ORDER BY created_at LIMIT ${PRUNE})`).bind(ago(UNUSED_CLIENT_LIFE)),
+    db.prepare(`DELETE FROM agent_tokens WHERE client IN (${stale})`).bind(cutoff),
+    db.prepare(`DELETE FROM agent_codes WHERE client IN (${stale})`).bind(cutoff),
+    db.prepare(`DELETE FROM agent_clients WHERE id IN (${stale})`).bind(cutoff),
     db.prepare('INSERT INTO agent_clients(id, name, redirect_uris, created_at) VALUES(?,?,?,?)').bind(client.id, client.name, JSON.stringify(client.redirect_uris), now()),
   ])
   return client
@@ -111,8 +122,9 @@ export function redirectBack(redirect: string, state: string | null, told: Recor
 export async function grantCode(db: D1Database, request: AuthorizeRequest, person: string) {
   const code = random()
   await db.batch([
-    db.prepare('DELETE FROM agent_codes WHERE code_hash IN (SELECT code_hash FROM agent_codes WHERE created_at <= ? ORDER BY created_at LIMIT 100)').bind(ago(CODE_LIFE)),
+    db.prepare(`DELETE FROM agent_codes WHERE code_hash IN (SELECT code_hash FROM agent_codes WHERE created_at <= ? ORDER BY created_at LIMIT ${PRUNE})`).bind(ago(CODE_LIFE)),
     db.prepare('INSERT INTO agent_codes(code_hash, client, person, redirect_uri, challenge, created_at) VALUES(?,?,?,?,?,?)').bind(await hashHex(code), request.client.id, person, request.redirect, request.challenge, now()),
+    db.prepare('UPDATE agent_clients SET used_at = ? WHERE id = ?').bind(now(), request.client.id),
   ])
   return code
 }
@@ -127,7 +139,7 @@ export async function redeemCode(db: D1Database, given: { code: string | null; c
   if (await challenge(given.verifier) !== row.challenge) return null
   const token = random()
   await db.batch([
-    db.prepare('DELETE FROM agent_tokens WHERE token_hash IN (SELECT token_hash FROM agent_tokens WHERE created_at <= ? ORDER BY created_at LIMIT 100)').bind(ago(TOKEN_LIFE)),
+    db.prepare(`DELETE FROM agent_tokens WHERE token_hash IN (SELECT token_hash FROM agent_tokens WHERE created_at <= ? ORDER BY created_at LIMIT ${PRUNE})`).bind(ago(TOKEN_LIFE)),
     db.prepare('INSERT INTO agent_tokens(token_hash, client, person, created_at) VALUES(?,?,?,?)').bind(await hashHex(token), row.client, row.person, now()),
   ])
   return token
