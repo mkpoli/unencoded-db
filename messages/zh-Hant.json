@@ -484,5 +484,13 @@
   "error.categoryChange": "無法儲存此變更。",
   "error.categoryExists": "此類屬已存在。",
   "error.categoryConflict": "已有他人先變更了這些類屬。",
-  "error.categoryTooLarge": "記錄太多，無法一次移動。"
+  "error.categoryTooLarge": "記錄太多，無法一次移動。",
+  "favourites.title": "收藏",
+  "favourites.add": "加入收藏",
+  "favourites.remove": "取消收藏",
+  "favourites.count.one": "{count}筆記錄",
+  "favourites.count.other": "{count}筆記錄",
+  "favourites.empty": "還沒有收藏。",
+  "favourites.hint": "在記錄頁面點選星號，即可收藏到這裡。",
+  "favourites.more": "顯示更多"
 }

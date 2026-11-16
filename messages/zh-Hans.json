@@ -484,5 +484,13 @@
   "error.categoryChange": "无法保存此更改。",
   "error.categoryExists": "此类属已存在。",
   "error.categoryConflict": "已有他人先更改了这些类属。",
-  "error.categoryTooLarge": "记录太多，无法一次移动。"
+  "error.categoryTooLarge": "记录太多，无法一次移动。",
+  "favourites.title": "收藏",
+  "favourites.add": "加入收藏",
+  "favourites.remove": "取消收藏",
+  "favourites.count.one": "{count}条记录",
+  "favourites.count.other": "{count}条记录",
+  "favourites.empty": "还没有收藏。",
+  "favourites.hint": "在记录页面点亮星标，即可收藏到这里。",
+  "favourites.more": "显示更多"
 }

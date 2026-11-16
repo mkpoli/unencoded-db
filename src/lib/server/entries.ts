@@ -825,7 +825,7 @@ function listRead(plan: NonNullable<ReturnType<typeof listPlan>>, range = plan.k
   return { tag: range, tests, searching: plan.exact !== null || tests.length > 0 }
 }
 
-const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind, e.marks'
+export const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind, e.marks'
 
 // Where each order reads its range, and the place a cursor names in it: the record alone for the orders
 // by record, the count and the record for the orders by count. Null names a cursor that is not one.
@@ -882,9 +882,9 @@ export function listStatement(db: D1Database, listing: Listing, range?: string, 
     .bind(...(plan.exact ?? []), ...read.tests, read.tag, ...(ranks ?? cursor), (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1 - taken)
 }
 
-type TileRow = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind' | 'marks'>
+export type TileRow = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind' | 'marks'>
 export type Tile = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status'> & { types: SightingType[]; firstYear: string | null; firstYearKind: YearKind | null; marks: string[] }
-const toTile = ({ types, first_year, first_year_kind, marks, ...row }: TileRow): Tile => ({ ...row, types: parseSightingTypes(types), firstYear: first_year, firstYearKind: first_year_kind, marks: parseMarks(marks) })
+export const toTile = ({ types, first_year, first_year_kind, marks, ...row }: TileRow): Tile => ({ ...row, types: parseSightingTypes(types), firstYear: first_year, firstYearKind: first_year_kind, marks: parseMarks(marks) })
 
 export async function list(db: D1Database, listing: Listing) {
   const plan = listPlan(listing)

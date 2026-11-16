@@ -484,5 +484,13 @@
   "error.categoryChange": "この変更は保存できません。",
   "error.categoryExists": "この分類はすでにあります。",
   "error.categoryConflict": "先にほかの人がこの分類を変更しました。",
-  "error.categoryTooLarge": "一度に移すには記録が多すぎます。"
+  "error.categoryTooLarge": "一度に移すには記録が多すぎます。",
+  "favourites.title": "お気に入り",
+  "favourites.add": "お気に入りに追加",
+  "favourites.remove": "お気に入りから削除",
+  "favourites.count.one": "記録{count}件",
+  "favourites.count.other": "記録{count}件",
+  "favourites.empty": "まだお気に入りはありません。",
+  "favourites.hint": "記録のページで星印を押すと、ここに保存されます。",
+  "favourites.more": "さらに表示"
 }

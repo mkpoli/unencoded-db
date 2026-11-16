@@ -484,5 +484,13 @@
   "error.categoryChange": "Không thể lưu thay đổi này.",
   "error.categoryExists": "Phân loại này đã có.",
   "error.categoryConflict": "Người khác đã đổi các phân loại này trước.",
-  "error.categoryTooLarge": "Quá nhiều mục từ để chuyển cùng lúc."
+  "error.categoryTooLarge": "Quá nhiều mục từ để chuyển cùng lúc.",
+  "favourites.title": "Yêu thích",
+  "favourites.add": "Thêm vào yêu thích",
+  "favourites.remove": "Bỏ khỏi yêu thích",
+  "favourites.count.one": "{count} bản ghi",
+  "favourites.count.other": "{count} bản ghi",
+  "favourites.empty": "Chưa có mục yêu thích nào.",
+  "favourites.hint": "Nhấn ngôi sao trên trang bản ghi để lưu vào đây.",
+  "favourites.more": "Xem thêm"
 }
