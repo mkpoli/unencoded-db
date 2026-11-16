@@ -1,5 +1,7 @@
 import { createCategory, customGenres } from '$lib/server/categories'
 import { error, fail, redirect } from '@sveltejs/kit'
+import { isDescription } from 'ids-input'
+import { cleanIds } from '$lib/ids'
 import { earliestSighting, editEntry, getEntry, radicalCounts, readEntryFields } from '$lib/server/entries'
 import { cleanGenre, readNewGenre } from '$lib/genres'
 import { newClaim } from '$lib/claims'
@@ -22,7 +24,10 @@ export const load: PageServerLoad = async (event) => {
   const sightings = found.sightings.filter(s => !s.hidden_at)
   // The record's earliest attestation, and which piece of evidence holds it.
   const earliest = earliestSighting(sightings)
-  return { entry: found.entry, claims: found.claims, sightings, filed, customGenres: await customGenres(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
+  // A description another page proposes to add, ?ids_add=: one, and only a whole one. It is added to the form, not saved.
+  const proposed = cleanIds(event.url.searchParams.get('ids_add') ?? '')
+  const idsAdd = isDescription(proposed) ? proposed : null
+  return { idsAdd, entry: found.entry, claims: found.claims, sightings, filed, customGenres: await customGenres(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
 }
 
 export const actions: Actions = {

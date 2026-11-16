@@ -13,6 +13,7 @@
   } = $props()
   let field = $state<IdsField>()
   export const focus = () => field?.focus()
+  export const append = (value?: string) => field?.append(value)
   let adjusting = $state(false)
   let chosen = $state.raw<number[] | null>(null)
 </script>
