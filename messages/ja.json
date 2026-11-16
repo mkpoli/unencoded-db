@@ -418,6 +418,7 @@
   "categories.change.move": "移動",
   "categories.change.rename": "名前を変更",
   "categories.change.delete": "削除",
+  "categories.undo": "元に戻す",
   "field.collection": "コレクション",
   "field.tags": "タグ",
   "field.filing": "分類とタグ",
@@ -481,5 +482,7 @@
   "error.tags": "タグは30個まで、それぞれ40文字以内で入力してください。",
   "error.category": "この分類は追加できません。",
   "error.categoryChange": "この変更は保存できません。",
-  "error.categoryExists": "この分類はすでにあります。"
+  "error.categoryExists": "この分類はすでにあります。",
+  "error.categoryConflict": "先にほかの人がこの分類を変更しました。",
+  "error.categoryTooLarge": "一度に移すには記録が多すぎます。"
 }

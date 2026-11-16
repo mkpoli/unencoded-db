@@ -1,11 +1,14 @@
 -- Every category is a row: the ones the site started with and the ones people added alike. `name` is what a
 -- record's claim stores and never changes; `label` is what is shown; `position` orders a category among the
--- categories under the same parent. A category the site started with has no author or date.
+-- categories under the same parent; `rev` is the id of the change that last wrote the row, 0 for none, and a
+-- write names the `rev` it read so that it lands only on the row it saw. A category the site started with
+-- has no author or date.
 CREATE TABLE categories_rows (
   name TEXT PRIMARY KEY,
   label TEXT NOT NULL,
   parent TEXT,
   position INTEGER NOT NULL,
+  rev INTEGER NOT NULL DEFAULT 0,
   created_by TEXT REFERENCES people(id),
   created_at TEXT
 ) WITHOUT ROWID;
@@ -57,4 +60,7 @@ CREATE INDEX categories_by_parent ON categories(parent, position);
 CREATE UNIQUE INDEX categories_by_label ON categories(label);
 
 -- What was done to the categories, newest last: `before` and `after` are JSON of the fields the change touched.
+-- A category's changes are read newest first to undo the latest, and a writer's moves of the last hour are counted.
 CREATE TABLE category_changes(id INTEGER PRIMARY KEY, name TEXT, kind TEXT, before TEXT, after TEXT, actor TEXT, at TEXT);
+CREATE INDEX category_changes_by_name ON category_changes(name, id);
+CREATE INDEX category_changes_by_actor ON category_changes(actor, kind, at);

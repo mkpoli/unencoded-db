@@ -418,6 +418,7 @@
   "categories.change.move": "移动",
   "categories.change.rename": "重命名",
   "categories.change.delete": "删除",
+  "categories.undo": "撤销",
   "field.collection": "合集",
   "field.tags": "标签",
   "field.filing": "类属和标签",
@@ -481,5 +482,7 @@
   "error.tags": "最多30个标签，每个不超过40个字符。",
   "error.category": "无法添加此类属。",
   "error.categoryChange": "无法保存此更改。",
-  "error.categoryExists": "此类属已存在。"
+  "error.categoryExists": "此类属已存在。",
+  "error.categoryConflict": "已有他人先更改了这些类属。",
+  "error.categoryTooLarge": "记录太多，无法一次移动。"
 }

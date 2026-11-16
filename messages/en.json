@@ -418,6 +418,7 @@
   "categories.change.move": "Moved",
   "categories.change.rename": "Renamed",
   "categories.change.delete": "Deleted",
+  "categories.undo": "Undo",
   "field.collection": "Collection",
   "field.tags": "Tags",
   "field.filing": "Categories and tags",
@@ -481,5 +482,7 @@
   "error.tags": "Use up to 30 tags of up to 40 characters each.",
   "error.category": "That category could not be added.",
   "error.categoryChange": "That change could not be saved.",
-  "error.categoryExists": "That category already exists."
+  "error.categoryExists": "That category already exists.",
+  "error.categoryConflict": "Someone changed these categories first.",
+  "error.categoryTooLarge": "Too many records to move at once."
 }

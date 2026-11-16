@@ -5,6 +5,6 @@ import type { PageServerLoad } from './$types'
 // The categories with their counts, and the latest changes for the board.
 export const load: PageServerLoad = async (event) => {
   const db = env(event).DB
-  const [categories, changes] = await Promise.all([categoryList(db), categoryChanges(db)])
+  const [categories, changes] = await Promise.all([categoryList(db, true), categoryChanges(db)])
   return { categories, changes }
 }

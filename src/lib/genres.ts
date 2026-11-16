@@ -1,7 +1,9 @@
 // The categories a character can be filed under, one row each in `categories`. A category with a parent is
 // browsed under it, and a record filed under a child is found under its parent too. `name` is what a claim
 // stores and never changes; `label` is what is shown.
-export type Category = { name: string; label: string; parent: string | null; position: number; n: number }
+// `rev` is the id of the change that last wrote the row, which a write names to land only on what it read.
+// `used` says whether any record names it, hidden and merged ones too, where a page reads that.
+export type Category = { name: string; label: string; parent: string | null; position: number; rev: number; n: number; used?: boolean }
 /** What the pure helpers need of a category. */
 export type CategoryRef = Pick<Category, 'name' | 'label' | 'parent' | 'position'>
 

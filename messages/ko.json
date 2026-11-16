@@ -418,6 +418,7 @@
   "categories.change.move": "이동",
   "categories.change.rename": "이름 변경",
   "categories.change.delete": "삭제",
+  "categories.undo": "되돌리기",
   "field.collection": "컬렉션",
   "field.tags": "태그",
   "field.filing": "분류와 태그",
@@ -481,5 +482,7 @@
   "error.tags": "태그는 30개까지, 각각 40자 이내로 입력하세요.",
   "error.category": "이 분류는 추가할 수 없습니다.",
   "error.categoryChange": "이 변경은 저장할 수 없습니다.",
-  "error.categoryExists": "이미 있는 분류입니다."
+  "error.categoryExists": "이미 있는 분류입니다.",
+  "error.categoryConflict": "다른 사람이 먼저 이 분류를 바꿨습니다.",
+  "error.categoryTooLarge": "한 번에 옮기기에는 기록이 너무 많습니다."
 }

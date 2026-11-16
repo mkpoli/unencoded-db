@@ -4,16 +4,18 @@
   // A category is moved by dragging its chip with a mouse or a pen, by picking it up with its grip and
   // clicking a tray, a chip or a gap (the touch path), or from the keyboard: Enter on the grip picks it up,
   // the arrows aim, Enter puts it down and Escape lets go. Every change shows at once and stands or is put
-  // back when the site answers.
+  // back when the site answers; a change someone made meanwhile refuses it, and the board reads them again.
+  // The latest change of each category can be undone from the list under the board.
   import { tick } from 'svelte'
   import { flip } from 'svelte/animate'
   import { crossfade } from 'svelte/transition'
   import { cubicOut } from 'svelte/easing'
   import { invalidateAll } from '$app/navigation'
   import { GENRE_DEPTH_MAX, GENRE_LENGTH_MAX, categoryTree, cleanGenre, flatten, moveRefusal, moved, validGenreName, type Category, type CategoryNode } from '$lib/genres'
-  import { t } from '$lib/t'
+  import type { CategoryChange } from '$lib/server/categories'
+  import { href, t, when } from '$lib/t'
 
-  let { categories }: { categories: Category[] } = $props()
+  let { categories, changes = [] }: { categories: Category[]; changes?: CategoryChange[] } = $props()
   // What the board shows before the site has answered; null once it has.
   let local = $state.raw<Category[] | null>(null)
   const shown = $derived(local ?? categories)
@@ -60,25 +62,32 @@
   // A chip on its way out of a tray is inert while it leaves; the one that stands is the other.
   const gripOf = (name: string) => [...board?.querySelectorAll<HTMLElement>(`[data-grip="${CSS.escape(name)}"]`) ?? []].find(grip => !grip.closest('[inert]'))
 
-  // A change shows at once; the site's answer keeps it, read again, or puts the board back.
-  async function save(fields: Record<string, string>, mark: string, change: () => void) {
+  // What the site's refusal says, by its code.
+  const SAID: Record<string, string> = { slow: 'slow', conflict: 'categoryConflict', too_large: 'categoryTooLarge', exists: 'categoryExists', used: 'categoryChange' }
+  // A change shows at once; the site's answer keeps it and reads the categories again, or puts the board
+  // back. A refusal reads them again too, so the board shows what stands now. Answers whether it was kept.
+  async function save(fields: Record<string, string | number>, mark: string, change: () => void = () => {}) {
     error = ''; busy = mark
     change()
+    let kept = false
     try {
       const body = new FormData()
-      for (const [name, value] of Object.entries(fields)) body.set(name, value)
+      for (const [name, value] of Object.entries(fields)) body.set(name, String(value))
       const response = await fetch('/api/categories', { method: 'POST', body })
       const answer = await response.json().catch(() => ({})) as { code?: string; created?: boolean }
-      if (response.status === 429) throw new Error('slow')
-      if (!response.ok) throw new Error(answer.code === 'exists' ? 'categoryExists' : fields.action === 'create' ? 'category' : 'categoryChange')
-      if (fields.action === 'create' && !answer.created) throw new Error('categoryExists')
-      await invalidateAll()
-    } catch (failure) {
-      error = t(`error.${failure instanceof Error && /^[a-zA-Z]+$/.test(failure.message) ? failure.message : 'categoryChange'}`)
-    } finally {
-      local = null; busy = null
+      const code = response.status === 429 ? 'slow' : answer.code
+      if (!response.ok) error = t(`error.${SAID[code ?? ''] ?? (fields.action === 'create' ? 'category' : 'categoryChange')}`)
+      else if (fields.action === 'create' && !answer.created) error = t('error.categoryExists')
+      else kept = true
+    } catch {
+      error = t('error.categoryChange')
     }
+    try { await invalidateAll() } catch { /* the board keeps what it read */ }
+    local = null; busy = null
+    return kept
   }
+  const revOf = (name: string) => nodeOf(name)?.rev ?? 0
+  const focusAdd = (parent: string | null) => [...board?.querySelectorAll<HTMLElement>(`[data-add="${CSS.escape(keyOf(parent))}"]`) ?? []].find(button => !button.closest('[inert]'))?.focus({ preventScroll: true })
 
   function release() { held = null; over = null; dragging = false; said = '' }
   function pick(name: string) {
@@ -91,7 +100,7 @@
     release()
     if (!name || !place) return
     said = `${nodeOf(name)?.label ?? name} · ${offer(key)}`
-    await save({ action: 'move', name, parent: place.parent ?? '', position: String(place.position) }, name, () => { local = moved(shown, name, place.parent, place.position) })
+    await save({ action: 'move', name, rev: revOf(name), parent: place.parent ?? '', position: place.position }, name, () => { local = moved(shown, name, place.parent, place.position) })
     await tick()
     gripOf(name)?.focus({ preventScroll: true })
   }
@@ -217,7 +226,9 @@
     const label = value.normalize('NFC').trim()
     if (cancelled || !label || label === node.label) { await tick(); gripOf(node.name)?.focus({ preventScroll: true }); return }
     if (!validGenreName(label)) { error = t('error.categoryChange'); return }
-    await save({ action: 'rename', name: node.name, label }, node.name, () => { local = shown.map(category => category.name === node.name ? { ...category, label } : category) })
+    await save({ action: 'rename', name: node.name, rev: node.rev, label }, node.name, () => { local = shown.map(category => category.name === node.name ? { ...category, label } : category) })
+    await tick()
+    gripOf(node.name)?.focus({ preventScroll: true })
   }
   function startAdd(parent: string | null) {
     if (held || busy) return
@@ -226,15 +237,45 @@
   async function add(parent: string | null, value: string) {
     adding = null
     const typedName = value.normalize('NFC').trim()
-    if (cancelled || !typedName) return
     const name = cleanGenre(typedName, shown)
-    if (!name) { error = t('error.category'); return }
-    if (shown.some(category => category.name === name)) { error = t('error.categoryExists'); return }
-    await save({ action: 'create', name, parent: parent ?? '' }, name, () => { local = [...shown, { name, label: name, parent, position: Number.MAX_SAFE_INTEGER, n: 0 }] })
+    if (cancelled || !typedName || !name || shown.some(category => category.name === name)) {
+      if (!cancelled && typedName) error = t(name ? 'error.categoryExists' : 'error.category')
+      await tick(); focusAdd(parent); return
+    }
+    const kept = await save({ action: 'create', name, parent: parent ?? '' }, name, () => { local = [...shown, { name, label: name, parent, position: Number.MAX_SAFE_INTEGER, rev: 0, n: 0, used: false }] })
+    await tick()
+    if (kept) gripOf(name)?.focus({ preventScroll: true })
+    else focusAdd(parent)
   }
-  function remove(node: CategoryNode<Category>) {
+  async function remove(node: CategoryNode<Category>) {
     if (held || busy) return
-    void save({ action: 'delete', name: node.name }, node.name, () => { local = shown.filter(category => category.name !== node.name) })
+    const parent = parentOf(node.name)
+    const kept = await save({ action: 'delete', name: node.name, rev: node.rev }, node.name, () => { local = shown.filter(category => category.name !== node.name) })
+    await tick()
+    if (kept) focusAdd(parent)
+    else gripOf(node.name)?.focus({ preventScroll: true })
+  }
+
+  // ---------- The latest changes ----------
+  // A change names its category by the label it has now, else by the one the change recorded.
+  type Fields = { label?: string; parent?: string | null; position?: number }
+  const fieldsOf = (raw: string | null): Fields => { try { return raw ? JSON.parse(raw) : {} } catch { return {} } }
+  const parentLabel = (parent: string | null | undefined) => parent ? nodeOf(parent)?.label ?? parent : top
+  function described(change: CategoryChange) {
+    const before = fieldsOf(change.before), after = fieldsOf(change.after)
+    const name = nodeOf(change.name)?.label ?? after.label ?? before.label ?? change.name
+    switch (change.kind) {
+      case 'rename': return `${before.label ?? change.name} → ${after.label ?? change.name}`
+      case 'move': return before.parent === after.parent ? `${name} · ${parentLabel(after.parent)}` : `${name} · ${parentLabel(before.parent)} → ${parentLabel(after.parent)}`
+      case 'create': return after.parent ? `${name} · ${parentLabel(after.parent)}` : name
+      default: return before.label ?? name
+    }
+  }
+  // Only a category's latest change is undone; the list is newest first, so it is the first row naming it.
+  const undoable = $derived(new Set(changes.filter((change, index) => changes.findIndex(other => other.name === change.name) === index).map(change => change.id)))
+  async function undo(change: CategoryChange) {
+    if (held || busy) return
+    await save({ action: 'undo', id: change.id }, change.name)
   }
 </script>
 
@@ -255,7 +296,7 @@
         onclick={event => { if (held) return; event.stopPropagation(); startRename(node.name) }}>{node.label}</button>
     {/if}
     <span class="count">{node.n}</span>
-    {#if node.n === 0 && !node.children.length}
+    {#if !node.used && !node.children.length}
       <button type="button" class="remove" aria-label={t('categories.delete', { name: node.label })} title={t('categories.delete', { name: node.label })} disabled={Boolean(held || busy)}
         onclick={event => { event.stopPropagation(); remove(node) }}>×</button>
     {/if}
@@ -267,7 +308,7 @@
     <input class="adding" maxlength={GENRE_LENGTH_MAX} autocomplete="off" aria-label={t('categories.addUnder', { name: labelOf(parent) })}
       onkeydown={typed} onblur={event => add(parent, event.currentTarget.value)} use:focus />
   {:else}
-    <button type="button" class="add" aria-label={t('categories.addUnder', { name: labelOf(parent) })} title={t('categories.addUnder', { name: labelOf(parent) })}
+    <button type="button" class="add" data-add={keyOf(parent)} aria-label={t('categories.addUnder', { name: labelOf(parent) })} title={t('categories.addUnder', { name: labelOf(parent) })}
       disabled={Boolean(held || busy)} onclick={event => { event.stopPropagation(); startAdd(parent) }}>+</button>
   {/if}
 {/snippet}
@@ -301,6 +342,22 @@
 </div>
 {#if error}<p class="notice bad" role="alert">{error}</p>{/if}
 <p class="sr-only" aria-live="polite">{said}</p>
+{#if changes.length}
+  <section class="changes">
+    <h2>{t('categories.changes')}</h2>
+    <ol>
+      {#each changes as change (change.id)}
+        <li>
+          <time datetime={change.at}>{when(change.at)}</time>
+          <span class="who">{#if change.by_id}<a class="text-link" href={href(`/u/${change.by_id}`)}>{change.by_name}</a>{:else}—{/if}</span>
+          <span class="kind">{t(`categories.change.${change.kind}`)}</span>
+          <span class="what">{described(change)}</span>
+          <span class="act">{#if undoable.has(change.id)}<button type="button" class="text-button" disabled={Boolean(held || busy)} onclick={() => undo(change)}>{t('categories.undo')}</button>{/if}</span>
+        </li>
+      {/each}
+    </ol>
+  </section>
+{/if}
 
 <style>
   .board { min-width: 0 }
@@ -345,6 +402,16 @@
   .holding .tray.target, .holding .chip.target { outline: 2px dashed var(--accent); outline-offset: 2px; cursor: copy }
   .tray.over, .chip.over { outline-style: solid !important; background: var(--accent-light) }
   .notice { margin: 0 }
+  .changes { display: flex; flex-direction: column; gap: 10px }
+  .changes h2 { font-size: 15px }
+  .changes ol { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line) }
+  .changes li { display: grid; grid-template-columns: 150px 140px 100px minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; min-height: 40px; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 13px }
+  .changes time, .changes .kind { color: var(--muted); font-variant-numeric: tabular-nums }
+  .changes .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .changes .what { overflow-wrap: anywhere }
+  .changes .text-button { font-size: 13px }
+  .changes .text-button:disabled { opacity: .5; cursor: default }
+  @media (max-width: 700px) { .changes li { grid-template-columns: minmax(0, 1fr) auto } .changes .kind { grid-column: 1 } .changes .what { grid-column: 1 } .changes .act { grid-column: 2; grid-row: 2 / span 2 } }
   @media (max-width: 500px) { .tray { padding: 8px } .tray.root { padding: 10px } .item.tray-item { flex: 1 1 100% } }
   @media (prefers-reduced-motion: reduce) { .tray, .chip { transition: none } }
 </style>
