@@ -4,6 +4,8 @@ A Glyph Atlas evidence wiki for rare characters: ones Unicode lacks, variants, m
 
 What goes in and how records are written is set out in [docs/principles.md](docs/principles.md).
 
+When two records are the same character, and how to merge them, is set out in [docs/unification.md](docs/unification.md).
+
 ## Local development
 
 Install [Bun](https://bun.sh/) and run:
