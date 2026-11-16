@@ -101,15 +101,18 @@ test('an agent signs in and writes as the person who allowed it', async () => {
 test('a token that names no one is refused, and a caller without one stays anonymous', async () => {
   const { form, call, signIn, count } = fixture()
   const access = await signIn()
-  for (const authorization of ['Bearer nothing', `Bearer ${'0'.repeat(64)}`, `Basic ${access}`]) {
-    const refused = await call('add_record', record('⿰山東'), { authorization })
+  // Not even beside the id of a connection that has a name: a caller that claims a token is that token's person or no one.
+  const connection = { 'mcp-session-id': 'a'.repeat(64) }
+  expect((await call('add_record', record('⿰山南'), connection)).status).toBe(200)
+  for (const authorization of ['Bearer nothing', `Bearer ${'0'.repeat(64)}`, `Basic ${access}`, 'Bearer']) {
+    const refused = await call('add_record', record('⿰山東'), { authorization, ...connection })
     expect(refused.status).toBe(401)
     expect(refused.headers.get('www-authenticate')).toBe(`Bearer error="invalid_token", resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource/mcp"`)
   }
-  expect(count('entries')).toBe(0)
-  expect((await call('add_record', record('⿰山東'))).status).toBe(200)
   expect(count('entries')).toBe(1)
-  expect(count('people')).toBe(2)
+  expect((await call('add_record', record('⿰山東'))).status).toBe(200)
+  expect(count('entries')).toBe(2)
+  expect(count('people')).toBe(3)
 
   // A token handed back names no one from then on.
   expect((await call('search_records', {}, { authorization: `Bearer ${access}` })).status).toBe(200)
