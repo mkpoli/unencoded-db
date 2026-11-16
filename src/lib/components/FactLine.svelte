@@ -5,12 +5,12 @@
   import type { Snippet } from 'svelte'
   import { t } from '$lib/t'
 
-  let { label, labelId, stated = false, open = $bindable(false), value, children }: {
-    label: string; labelId?: string; stated?: boolean; open?: boolean; value?: Snippet; children: Snippet
+  let { id, label, labelId, stated = false, open = $bindable(false), value, children }: {
+    id?: string; label: string; labelId?: string; stated?: boolean; open?: boolean; value?: Snippet; children: Snippet
   } = $props()
 </script>
 
-<details class="fact" bind:open>
+<details class="fact" {id} bind:open>
   <summary>
     <span class="label" id={labelId}>{label}</span>
     <span class="value" class:none={!stated} aria-live="polite">{#if stated && value}{@render value()}{:else}{t('field.notSet')}{/if}</span>

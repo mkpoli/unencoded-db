@@ -32,14 +32,15 @@ export const descriptionsStatement = (db: D1Database, ids: readonly number[]) =>
 export const loadStatement = (db: D1Database, ids: readonly number[]) =>
   db.prepare(`SELECT id, ids, layout, cover_key FROM entries WHERE id IN (${ids.map(() => '?').join(',')}) AND merged_into IS NULL AND hidden_at IS NULL`).bind(...ids)
 
-/** Up to `CANDIDATES_MAX` visible records: those described by exactly this sequence, then those sharing the most distinct parts with it, newest first among equals. */
-export async function candidates(db: D1Database, ids: string, expansion: readonly string[] = []): Promise<Candidate[]> {
-  const exact = await sameIds(db, ids, SAME_MAX)
+/** Up to `CANDIDATES_MAX` visible records, never `exclude` (the record being edited): those described by exactly this sequence, then those sharing the most distinct parts with it, newest first among equals. */
+export async function candidates(db: D1Database, ids: string, expansion: readonly string[] = [], exclude: number | null = null): Promise<Candidate[]> {
+  const exact = (await sameIds(db, ids, SAME_MAX + 1)).filter(record => record.id !== exclude).slice(0, SAME_MAX)
   const tags = spellings(ids, expansion)
   const hits = new Map<number, number>()
   if (tags.length) {
     const read = await db.batch(tags.map(tag => spellingStatement(db, tag)))
     for (const { results } of read as { results: { entry_id: number }[] }[]) for (const { entry_id } of results) hits.set(entry_id, (hits.get(entry_id) ?? 0) + 1)
+    if (exclude !== null) hits.delete(exclude)
   }
   const exactIds = new Set(exact.map(record => record.id))
   const top = [...hits].filter(([id]) => !exactIds.has(id)).sort((a, b) => b[1] - a[1] || b[0] - a[0]).slice(0, CANDIDATES_MAX - exact.length).map(([id]) => id)

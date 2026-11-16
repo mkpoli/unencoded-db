@@ -64,6 +64,13 @@ test('each part reads the newest records first', async () => {
   expect(found.map(record => record.id)).not.toContain(100)
 })
 
+test('the record being edited is never its own candidate, as an exact match or by shared parts', async () => {
+  const { event } = fixture()
+  expect((await ask(event, `${q('⿰亻木')}&exclude=1`)).map(record => record.id)).toEqual([5, 2])
+  expect((await ask(event, `${q('⿰亻木')}&exclude=5`)).map(record => record.id)).toEqual([1, 2])
+  expect((await ask(event, `${q('⿰亻木')}&exclude=nope`)).map(record => record.id)).toEqual([1, 5, 2])
+})
+
 test('a short or oversized query answers nothing', async () => {
   const { event } = fixture()
   expect(await ask(event, 'ids=木')).toEqual([])

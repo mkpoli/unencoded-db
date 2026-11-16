@@ -11,7 +11,7 @@
 
   // `fill` is what is known of an encoded character typed as the description; it fills the fields left
   // empty and opens their lines.
-  let { claims = [], radical = null, strokes = null, fill = null }: { claims?: Claim[]; radical?: string | null; strokes?: number | null; fill?: CharacterFacts | null } = $props()
+  let { claims = [], radical = null, strokes = null, fill = null, anchor }: { anchor?: string; claims?: Claim[]; radical?: string | null; strokes?: number | null; fill?: CharacterFacts | null } = $props()
 
   const uid = $props.id()
   const ivd = untrack(() => valuesOf(claims, 'ivd')[0] ?? '')
@@ -40,7 +40,7 @@
   })
 </script>
 
-<FactLine label={t('field.radicalStrokes')} stated={indexed} bind:open={indexOpen}>
+<FactLine id={anchor} label={t('field.radicalStrokes')} stated={indexed} bind:open={indexOpen}>
   {#snippet value()}<span>{radicalValue.trim() || '—'}</span><span class="muted">·</span><span>{counted ? strokesValue : '—'}</span>{/snippet}
   <div class="pair">
     <div class="field"><label for="{uid}-radical">{t('field.radical')}</label><input id="{uid}-radical" class="input" name="radical" maxlength="20" bind:value={radicalValue} autocomplete="off" /></div>

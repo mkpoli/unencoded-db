@@ -20,8 +20,8 @@
   import IdsGlyph from './IdsGlyph.svelte'
   import IdsLine from './IdsLine.svelte'
 
-  let { values = [], primary = $bindable(''), chosen = $bindable(null), onfill }: {
-    values?: string[]; primary?: string; chosen?: number[] | null; onfill?: (facts: CharacterFacts) => void
+  let { values = [], primary = $bindable(''), chosen = $bindable(null), exclude = null, anchor, onfill }: {
+    values?: string[]; primary?: string; chosen?: number[] | null; exclude?: number | null; anchor?: string; onfill?: (facts: CharacterFacts) => void
   } = $props()
 
   const uid = $props.id()
@@ -34,6 +34,7 @@
   $effect.pre(() => { primary = sequence })
 
   let main = $state<IdsLine>()
+  export const focus = () => main?.focus()
   const lines: Record<number, IdsLine | null> = {}
   let hydrated = $state(false)
   onMount(() => { hydrated = true })
@@ -109,7 +110,7 @@
       encodedCandidates(ids).then(found => { if (live) encodedHits = found }).catch(() => {})
       ;(async () => {
         const leaves = [...new Set(await expandedParts(ids))].slice(0, 12).join('')
-        const answer = await fetch(`/api/candidates?ids=${encodeURIComponent(ids)}${leaves ? `&leaves=${encodeURIComponent(leaves)}` : ''}`, { signal: controller.signal }).then(r => r.ok ? r.json() : [])
+        const answer = await fetch(`/api/candidates?ids=${encodeURIComponent(ids)}${leaves ? `&leaves=${encodeURIComponent(leaves)}` : ''}${exclude ? `&exclude=${exclude}` : ''}`, { signal: controller.signal }).then(r => r.ok ? r.json() : [])
         const records = Array.isArray(answer) ? answer.filter((item): item is RecordCandidate => typeof item?.id === 'number') : []
         const tiered = await tierRecords(ids, records)
         if (live) recordHits = tiered
@@ -119,7 +120,7 @@
   })
 </script>
 
-<div class="descriptions" bind:this={root}>
+<div class="descriptions" id={anchor} bind:this={root}>
   <div class="main">
     <IdsLine bind:this={main} bind:value={first} label={t('field.ids')} titled adapter={tools?.adapter} oneditor={found => editor = found} />
     <button type="button" class="button build" aria-expanded={building} aria-controls="{uid}-tools" disabled={!hydrated} onclick={build}>{t('field.idsBuild')}<span class="chevron" aria-hidden="true">⌄</span></button>
