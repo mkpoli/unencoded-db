@@ -8,8 +8,8 @@ import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async (event) => {
   const { searchParams } = event.url
-  // Records are Han only until other scripts are opened for browsing.
-  const script = 'han'
+  // A script keeps the list to the records written in it: ?script=nom. Without one, every script is listed.
+  const script = searchParams.get('script') || null
   const filter = searchParams.get('filter') || null
   // A category, a collection or a tag narrows the list: ?genre=, ?collection=, ?tag=.
   const genre = searchParams.get('genre'), collection = searchParams.get('collection'), tag = searchParams.get('tag')
@@ -48,5 +48,5 @@ export const load: PageServerLoad = async (event) => {
   const [page, totals, total] = await Promise.all([searchError ? null : list(db, listing), counts(db), searchError || after !== null ? null : searchTotal(db, listing)])
   if (!page && !searchError) error(404)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, page?.tiles ?? [], event.locals.glyphStyle)
-  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, total, glyphs, filter, genre, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, searchError, order, seed, continued: after !== null && query.length > 0 }
+  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, total, glyphs, script, filter, genre, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, searchError, order, seed, continued: after !== null && query.length > 0 }
 }

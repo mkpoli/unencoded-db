@@ -8,7 +8,7 @@
   import { COLLECTIONS, groupGenres } from '$lib/genres'
   import { MARKED } from '$lib/registries'
   import { ORDER, PAGE, SORTS } from '$lib/order'
-  import { STATUSES, NEEDS } from '$lib/scripts'
+  import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
   import { href, t } from '$lib/t'
   import { TILE_SIZE_COOKIE, TILE_SIZES, tileSizeOf } from '$lib/tile-size'
   import type { Snapshot } from './$types'
@@ -162,6 +162,7 @@
   </div>
   <form class="filters" method="GET">
     <div class="search field"><label for="q">{t('browse.searchLabel')}</label><input class="input" id="q" name="q" value={data.query ?? ''} placeholder={t('browse.search')} aria-describedby="search-hint" /></div>
+    <div class="field"><label for="script">{t('field.script')}</label><select class="input" id="script" name="script" value={data.script ?? ''}><option value="">{t('browse.all')}</option>{#each SCRIPTS as script (script.id)}{#if count(`s:${script.id}`) || data.script === script.id}<option value={script.id}>{t(`script.${script.id}`)} ({count(`s:${script.id}`)})</option>{/if}{/each}</select></div>
     <div class="field"><label for="filter">{t('browse.needs')}</label><select class="input" id="filter" name="filter" value={NEEDS.includes(data.filter as never) ? data.filter : ''}><option value="">{t('browse.all')}</option>{#each NEEDS as need}<option value={need}>{t(`needs.${need}`)} ({count(`n:${need}`)})</option>{/each}</select></div>
     {#if pinned}
       <div class="field"><span class="label">{t(pinned.name === 'tag' ? 'field.tags' : 'field.collection')}</span><input type="hidden" name={pinned.name} value={pinned.value} /><a class="pinned" href={unpinned} aria-label="{pinned.label} ×">{pinned.label} <span aria-hidden="true">×</span></a></div>
@@ -210,7 +211,7 @@
     {#if shown.tiles.length}
       <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
     {:else if !shown.partial || done}
-      <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.filter || data.genre || data.collection || data.tag || data.radical || data.decade || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
+      <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.script || data.filter || data.genre || data.collection || data.tag || data.radical || data.decade || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
     {/if}
   {/if}
   {#if shown.next !== null && !done}<div class="ahead" bind:this={sentinel}>{#if shown.partial && shown.total}<p class="muted">{t('browse.searched', { n: Math.min(shown.scanned, shown.total.pool), of: shown.total.pool })}</p>{/if}{#if pagesLeft !== null}<p class="muted">{t(pagesLeft === 1 && !shown.total?.floor ? 'browse.pageLeft' : 'browse.pagesLeft', { n: `${pagesLeft}${shown.total?.floor ? '+' : ''}` })}</p>{/if}<a class="button" href={more} aria-busy={busy} onclick={appendOnClick}>{t(shown.partial ? 'browse.continueSearch' : 'browse.more')}</a></div>{/if}
