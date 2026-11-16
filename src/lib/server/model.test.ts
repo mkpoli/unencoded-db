@@ -524,7 +524,7 @@ describe('doculect rows', () => {
     const written = rows(raw), counted = tally(raw)
     expect(written).toHaveLength(4)
     raw.exec("DELETE FROM entry_tags WHERE tag GLOB 'd:*'; DELETE FROM tag_counts WHERE tag GLOB 'd:*'; DROP INDEX tag_counts_doculects")
-    raw.exec(migration('0021_doculect_tags.sql'))
+    raw.exec(migration('0022_doculect_tags.sql'))
     expect(rows(raw)).toEqual(written)
     expect(tally(raw)).toEqual(counted)
   })
