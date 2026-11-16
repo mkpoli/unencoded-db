@@ -1,9 +1,9 @@
-import { readBoxes, SIGHTING_FIELDS, type StoredImage } from '$lib/server/entries'
+import { readBoxes, SIGHTING_FIELDS, VIA_INPUTS, type StoredImage } from '$lib/server/entries'
 import { MAX_IMAGE, MAX_THUMB, prepareImage, storeImage } from '$lib/server/image'
 import { MEDIA_MAX } from '$lib/limits'
 import { SIGHTING_START } from '$lib/scripts'
 
-const SIGHTING_NAMES = new Set<string>([...SIGHTING_FIELDS, 'image', 'thumb', 'box'])
+const SIGHTING_NAMES = new Set<string>([...SIGHTING_FIELDS, ...VIA_INPUTS, 'image', 'thumb', 'box'])
 
 // The sightings of a form, in the order of the page: one form of its own for each, with the fields and
 // pictures between its opening field and the next. Fields of the record itself are left out, wherever

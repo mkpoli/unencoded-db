@@ -133,6 +133,8 @@
   "field.source": "出處詳情",
   "field.via": "經由的資料",
   "field.viaHint": "發現它的途徑，例如拍下書頁的貼文。",
+  "field.viaAdd": "新增經由",
+  "field.viaRemove": "移除",
   "field.sourceTypes": "出處類型",
   "evidence.type.mention": "提及",
   "evidence.type.mention.hint": "以該字本身為話題的記述。",

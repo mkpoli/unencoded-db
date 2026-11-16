@@ -49,6 +49,8 @@ export const scriptName = (locale: string, script: string, other?: string | null
 export const STATUSES = ['encoded', 'unifiable', 'homograph', 'variant'] as const
 export type Status = (typeof STATUSES)[number]
 
+// The most vias a sighting's chain holds.
+export const VIAS_MAX = 4
 export const CONTEXTS = ['running_text', 'heading', 'logo', 'handwriting', 'other'] as const
 export const STYLES = ['regular', 'semi_cursive', 'seal', 'clerical', 'other'] as const
 

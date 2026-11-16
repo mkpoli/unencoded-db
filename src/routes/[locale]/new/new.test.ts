@@ -41,7 +41,7 @@ test('the form starts from a visible sighting', async () => {
   const { db, raw, event } = fixture()
   const form = page([{ place: 'A dictionary', url: 'https://example.test/book', title: 'Book', page: '12', original_date: '1617', note: 'only this character' }])
   await expect(actions.default(event(form))).rejects.toMatchObject({ status: 303 })
-  expect(await load(event(undefined, '?sighting=1'))).toEqual({ seed: { values: { url: 'https://example.test/book', title: 'Book', author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, place: 'A dictionary', original_date: '1617', page: '12' }, pictures: [] } })
+  expect(await load(event(undefined, '?sighting=1'))).toEqual({ seed: { values: { url: 'https://example.test/book', title: 'Book', author: null, publisher: null, report_date: null, vias: [], place: 'A dictionary', original_date: '1617', page: '12' }, pictures: [] } })
   expect(await load(event())).toEqual({ seed: null })
   expect(await load(event(undefined, '?sighting=9'))).toEqual({ seed: null })
   const moderator = (raw.query('SELECT id FROM people LIMIT 1').get() as { id: string }).id
@@ -57,7 +57,7 @@ test('a via link satisfies the picture or link rule, must be a web link, and is 
   expect(await actions.default(event(page([sighting])))).toMatchObject({ status: 400, data: { error: 'evidence', sighting: 1 } })
   sighting.via_url = 'https://example.test/post/1'; sighting.title = 'Book'
   await expect(actions.default(event(page([sighting])))).rejects.toMatchObject({ status: 303 })
-  expect((await load(event(undefined, '?sighting=1')) as any).seed.values).toMatchObject({ title: 'Book', via_url: 'https://example.test/post/1', via_title: 'A post' })
+  expect((await load(event(undefined, '?sighting=1')) as any).seed.values).toMatchObject({ title: 'Book', vias: [{ url: 'https://example.test/post/1', title: 'A post', author: null, publisher: null, report_date: null }] })
 })
 
 test('each description is a value of its own, in the order given', async () => {

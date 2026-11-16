@@ -1,13 +1,14 @@
 <script lang="ts">
   // Where a character was seen. A picture or a link is enough; the reference IRG wants stays folded.
   // A post link fills the place, title and author from the post, and hands its photos to `onphotos`. When the
-  // post's author names the book the picture is from, the book becomes the source and the post the via source.
+  // post's author names the book the picture is from, the book becomes the source and the post the last via of the chain.
   import { untrack } from 'svelte'
   import { CONTEXTS, SIGHTING_TYPES, STYLES, parseSightingTypes } from '$lib/scripts'
   import { cleanLinkInput } from '$lib/link-input'
   import { fetchPost, postId, type PostInfo } from '$lib/source-url'
   import { t } from '$lib/t'
-  import type { SightingFields } from '$lib/server/entries'
+  import type { Citation, SightingFields } from '$lib/server/entries'
+  import { VIAS_MAX } from '$lib/scripts'
 
   let { values = {}, onphotos }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void } = $props()
   const uid = $props.id()
@@ -19,17 +20,24 @@
   let title = $state(untrack(() => values.title ?? ''))
   let author = $state(untrack(() => values.author ?? ''))
   let open = $state(untrack(() => filled))
-  const viaFilled = $derived(Boolean(values.via_url || values.via_title || values.via_author || values.via_publisher || values.via_report_date))
-  let viaOpen = $state(untrack(() => viaFilled))
   let fetching = $state(false), failed = $state(false)
 
   let page = $state(untrack(() => values.page ?? ''))
   let publisher = $state(untrack(() => values.publisher ?? ''))
-  let viaPublisher = $state(untrack(() => values.via_publisher ?? ''))
-  let viaUrl = $state(untrack(() => values.via_url ?? ''))
-  let viaTitle = $state(untrack(() => values.via_title ?? ''))
-  let viaAuthor = $state(untrack(() => values.via_author ?? ''))
-  let viaDate = $state(untrack(() => values.via_report_date ?? ''))
+
+  // The chain, nearest the cited work first. One empty row is always there to fill.
+  type Via = { key: number; url: string; title: string; author: string; publisher: string; date: string }
+  let nextKey = 0
+  const via = (from?: Partial<Citation>): Via => ({ key: nextKey++, url: from?.url ?? '', title: from?.title ?? '', author: from?.author ?? '', publisher: from?.publisher ?? '', date: from?.report_date ?? '' })
+  let vias = $state<Via[]>(untrack(() => values.vias?.length ? values.vias.map(via) : [via()]))
+  let viaOpen = $state(untrack(() => Boolean(values.vias?.length)))
+  const blankVia = (row: Via) => !(row.url || row.title || row.author || row.publisher || row.date)
+  function removeVia(key: number) {
+    vias = vias.filter(row => row.key !== key)
+    if (!vias.length) vias = [via()]
+  }
+  // The row a post filled, so the next post replaces it.
+  let postedKey: number | null = null
 
   // The fields keep what someone typed; a value the last post gave is replaced by the next post's.
   const blank = { place: '', title: '', author: '', publisher: '', page: '', viaUrl: '', viaTitle: '', viaAuthor: '', viaPublisher: '', viaDate: '' }
@@ -42,12 +50,23 @@
       : { ...blank, place: info.place, title: info.title, author: info.author ?? '', publisher: info.publisher }
     const keep = (current: string, name: keyof Filled) => !current || current === posted?.[name] ? next?.[name] ?? '' : current
     place = keep(place, 'place'); title = keep(title, 'title'); author = keep(author, 'author'); page = keep(page, 'page')
-    publisher = keep(publisher, 'publisher'); viaPublisher = keep(viaPublisher, 'viaPublisher')
-    viaUrl = keep(viaUrl, 'viaUrl'); viaTitle = keep(viaTitle, 'viaTitle'); viaAuthor = keep(viaAuthor, 'viaAuthor'); viaDate = keep(viaDate, 'viaDate')
+    publisher = keep(publisher, 'publisher')
+    // The post is what the contributor saw, so it is the last link of the chain.
+    let row = vias.find(item => item.key === postedKey)
+    const found = Boolean(next && (next.viaUrl || next.viaTitle || next.viaAuthor || next.viaPublisher || next.viaDate))
+    if (!row && found) {
+      if (!blankVia(vias.at(-1)!) && vias.length < VIAS_MAX) vias.push(via())
+      if (blankVia(vias.at(-1)!)) row = vias.at(-1)
+    }
+    if (row) {
+      row.url = keep(row.url, 'viaUrl'); row.title = keep(row.title, 'viaTitle'); row.author = keep(row.author, 'viaAuthor')
+      row.publisher = keep(row.publisher, 'viaPublisher'); row.date = keep(row.date, 'viaDate')
+      postedKey = found ? row.key : null
+      if (row.url) viaOpen = true
+      // The post is where the character was found, so its link moves out of the source's own link.
+      if (next?.viaUrl && row.url === next.viaUrl) { url = ''; lookedUp = '' }
+    }
     if (title || author || publisher || page) open = true
-    if (viaUrl) viaOpen = true
-    // The post is where the character was found, so its link moves out of the source's own link.
-    if (next?.viaUrl && viaUrl === next.viaUrl) { url = ''; lookedUp = '' }
     posted = next
   }
 
@@ -116,13 +135,19 @@
 <details class="more" bind:open={viaOpen}>
   <summary>{t('field.via')}</summary>
   <p class="hint">{t('field.viaHint')}</p>
-  <div class="field"><label for="{uid}-via_url">{t('field.url')}</label><input id="{uid}-via_url" class="input" type="url" name="via_url" bind:value={viaUrl} use:cleanLinkInput placeholder="https://" maxlength="1000" autocorrect="off" autocapitalize="none" spellcheck="false" /></div>
-  <div class="grid-2">
-    <div class="field"><label for="{uid}-via_title">{t('field.title')}</label><input id="{uid}-via_title" class="input" name="via_title" bind:value={viaTitle} maxlength="300" /></div>
-    <div class="field"><label for="{uid}-via_author">{t('field.author')}</label><input id="{uid}-via_author" class="input" name="via_author" bind:value={viaAuthor} maxlength="300" /></div>
-    <div class="field"><label for="{uid}-via_publisher">{t('field.publisher')}</label><input id="{uid}-via_publisher" class="input" name="via_publisher" bind:value={viaPublisher} maxlength="300" /></div>
-    <div class="field"><label for="{uid}-via_report_date">{t('field.reportDate')}</label><input id="{uid}-via_report_date" class="input" name="via_report_date" bind:value={viaDate} maxlength="40" /></div>
-  </div>
+  {#each vias as row (row.key)}
+    <fieldset class="via">
+      <div class="field"><label for="{uid}-via_url-{row.key}">{t('field.url')}</label><input id="{uid}-via_url-{row.key}" class="input" type="url" name="via_url" bind:value={row.url} use:cleanLinkInput placeholder="https://" maxlength="1000" autocorrect="off" autocapitalize="none" spellcheck="false" /></div>
+      <div class="grid-2">
+        <div class="field"><label for="{uid}-via_title-{row.key}">{t('field.title')}</label><input id="{uid}-via_title-{row.key}" class="input" name="via_title" bind:value={row.title} maxlength="300" /></div>
+        <div class="field"><label for="{uid}-via_author-{row.key}">{t('field.author')}</label><input id="{uid}-via_author-{row.key}" class="input" name="via_author" bind:value={row.author} maxlength="300" /></div>
+        <div class="field"><label for="{uid}-via_publisher-{row.key}">{t('field.publisher')}</label><input id="{uid}-via_publisher-{row.key}" class="input" name="via_publisher" bind:value={row.publisher} maxlength="300" /></div>
+        <div class="field"><label for="{uid}-via_report_date-{row.key}">{t('field.reportDate')}</label><input id="{uid}-via_report_date-{row.key}" class="input" name="via_report_date" bind:value={row.date} maxlength="40" /></div>
+      </div>
+      <div><button type="button" class="text-button" onclick={() => removeVia(row.key)}>{t('field.viaRemove')}</button></div>
+    </fieldset>
+  {/each}
+  {#if vias.length < VIAS_MAX}<div><button type="button" class="button" onclick={() => vias.push(via())}>{t('field.viaAdd')}</button></div>{/if}
 </details>
 
 <style>
@@ -136,6 +161,7 @@
   .type-text { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
   .type-name { font-size: 13.5px; font-weight: 500 }
   .type .hint { font-size: 12px }
+  .via { display: flex; flex-direction: column; gap: 12px; min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 7px }
   .more { display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 12px }
   .more[open] > :global(* + *) { margin-top: 12px }
   summary { font-weight: 500; cursor: pointer }

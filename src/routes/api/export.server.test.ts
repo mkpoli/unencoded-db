@@ -43,16 +43,19 @@ test('export gives source types as a list in JSON and a readable cell in CSV', a
   expect(await csvResponse.text()).toContain('"mention, definition"')
 })
 
-test('export carries the via citation in JSON and CSV', async () => {
+test('export carries the via chain in JSON and CSV', async () => {
   const { db, raw } = fixture()
-  raw.exec("INSERT INTO sources(hash, title) VALUES ('a', 'Book'), ('b', 'A post')")
-  raw.exec("UPDATE sightings SET source_id = 1, via_id = 2 WHERE entry_id = 1 AND place = 'source 0'")
+  raw.exec("INSERT INTO sources(hash, title) VALUES ('a', 'Book'), ('b', 'A post'), ('c', 'A thread')")
+  raw.exec("UPDATE sightings SET source_id = 1 WHERE entry_id = 1 AND place = 'source 0'")
+  raw.exec("INSERT INTO sighting_vias(sighting_id, position, source_id) SELECT id, 1, 3 FROM sightings WHERE place = 'source 0'; INSERT INTO sighting_vias(sighting_id, position, source_id) SELECT id, 0, 2 FROM sightings WHERE place = 'source 0'")
   const body = await (await exportGet({ url: new URL('https://example.test/api/entries?limit=5&format=json'), platform: { env: { DB: db } } } as any)).json() as any
-  expect(body.entries[0].evidence[0]).toMatchObject({ title: 'Book', via_id: 2, via_title: 'A post', via_url: null })
+  const via = (id: number, title: string) => ({ id, url: null, title, author: null, publisher: null, report_date: null })
+  expect(body.entries[0].evidence[0]).toMatchObject({ title: 'Book', vias: [via(2, 'A post'), via(3, 'A thread')] })
+  expect(body.entries[0].evidence[1].vias).toEqual([])
   const csv = await (await exportGet({ url: new URL('https://example.test/api/entries?limit=5&format=csv'), platform: { env: { DB: db } } } as any)).text()
   const [head, first] = csv.split('\r\n')
-  expect(head).toContain('"via_url","via_title","via_author","via_publisher","via_report_date"')
-  expect(first).toContain('A post')
+  expect(head).toContain('"vias"')
+  expect(first).toContain('A thread')
 })
 
 test('export links preserve the sighting cursor in JSON and CSV', async () => {
@@ -137,6 +140,7 @@ test('export and exact match use their indexes without temporary sorts', async (
   expect(plans.flat().join('\n')).toContain('entries_live_export')
   expect(plans.flat().join('\n')).toContain('sightings_visible_export')
   expect(plans.flat().join('\n')).toContain('SEARCH sighting_media USING PRIMARY KEY (sighting_id=?)')
+  expect(plans.flat().join('\n')).toContain('SEARCH v USING PRIMARY KEY (sighting_id=?)')
   expect(plans.flat().join('\n')).toContain('claims_by_value (kind=? AND value=?')
   for (const index of ['entries_live_export', 'sightings_visible_export']) {
     const missing = fixture()

@@ -133,6 +133,8 @@
   "field.source": "出处详情",
   "field.via": "经由的资料",
   "field.viaHint": "发现它的途径，例如拍下书页的帖子。",
+  "field.viaAdd": "添加经由",
+  "field.viaRemove": "移除",
   "field.sourceTypes": "出处类型",
   "evidence.type.mention": "提及",
   "evidence.type.mention.hint": "以该字本身为话题的记述。",

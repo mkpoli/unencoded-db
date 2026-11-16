@@ -133,6 +133,8 @@
   "field.source": "출처 상세 정보",
   "field.via": "거쳐 찾은 자료",
   "field.viaHint": "책의 한 면을 실은 게시물 등, 찾게 된 경로.",
+  "field.viaAdd": "경로 추가",
+  "field.viaRemove": "삭제",
   "field.sourceTypes": "출처 유형",
   "evidence.type.mention": "언급",
   "evidence.type.mention.hint": "글자 자체를 주제로 다룬 기록.",

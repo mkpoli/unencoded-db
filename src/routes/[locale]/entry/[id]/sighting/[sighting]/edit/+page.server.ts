@@ -1,5 +1,5 @@
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
-import { editSighting, getEntryRow, getSighting, readSightingFields } from '$lib/server/entries'
+import { editSighting, hasLink, getEntryRow, getSighting, readSightingFields } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { writer } from '$lib/server/people'
 import { MEDIA_MAX } from '$lib/limits'
@@ -40,7 +40,7 @@ export const actions: Actions = {
     if (read === 'invalid') return fail(400, { error: 'image', values, summary, removeMedia, marks })
     const added = await uploadedImages(form, MEDIA)
     if (added === 'invalid' || keptCount + added.length > MEDIA_MAX) return fail(400, { error: 'image', values, summary, removeMedia, marks })
-    if (!keptCount && !added.length && !values.url && !values.via_url && !values.place) return fail(400, { error: 'evidence', values, summary, removeMedia, marks })
+    if (!keptCount && !added.length && !hasLink(values) && !values.place) return fail(400, { error: 'evidence', values, summary, removeMedia, marks })
     const kept = await keptPictures(MEDIA, sighting.media, read, gone)
     const media = read || added.length || kept.length !== sighting.media.length ? [...kept, ...added] : null
     const person = await writer(event, DB)

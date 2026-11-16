@@ -1,9 +1,9 @@
 import { Database } from 'bun:sqlite'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
 import { isClaimKey, newClaim, parseClaims, type Claim } from '$lib/claims'
-import { createEntry, getEntry, revertEntry, setHidden } from './entries'
+import { createEntry, getEntry, restoreSighting, revertEntry, setHidden } from './entries'
 import { entrySnapshot, sightingSnapshot } from './revisions'
 import { createPerson } from './people'
 import { d1Over, openTestDb } from './testdb'
@@ -24,8 +24,9 @@ test('a sighting snapshot written before 0002 is restorable after it', () => {
   insert.run(null, 'hide', '{}')
   insert.run(1, 'redact', '{"revision":1}')
   raw.exec(migration('0002_sighting_via.sql'))
+  raw.exec(migration('0019_via_chain.sql'))
   const rows = raw.query('SELECT kind, snapshot FROM revisions ORDER BY id').all() as { kind: string; snapshot: string }[]
-  for (const row of rows.slice(0, 2)) expect(sightingSnapshot(row.snapshot)).toMatchObject({ place: 'A shop', title: 'Book', via_url: null, via_title: null, via_report_date: null })
+  for (const row of rows.slice(0, 2)) expect(sightingSnapshot(row.snapshot)).toMatchObject({ place: 'A shop', title: 'Book', vias: [] })
   expect(rows.slice(2).map(row => row.snapshot)).toEqual(['{}', '{"revision":1}'])
 })
 
@@ -40,8 +41,9 @@ test('0002 and 0003 together give an old sighting snapshot the via fields and ar
   raw.prepare("INSERT INTO revisions(entry_id, sighting_id, kind, rev, snapshot, actor, at) VALUES (1, 1, 'sighting_edit', 1, ?, 'p', '2026')").run(old)
   raw.exec(migration('0002_sighting_via.sql'))
   raw.exec(migration('0003_media_boxes.sql'))
+  raw.exec(migration('0019_via_chain.sql'))
   const row = raw.query('SELECT snapshot FROM revisions').get() as { snapshot: string }
-  expect(sightingSnapshot(row.snapshot)).toMatchObject({ place: 'A shop', via_url: null })
+  expect(sightingSnapshot(row.snapshot)).toMatchObject({ place: 'A shop', vias: [] })
   expect(JSON.parse(row.snapshot).media.map((image: { box: string | null }) => image.box)).toEqual(['[[1,2,10,10]]', null])
   expect((raw.query('SELECT box FROM sighting_media ORDER BY position').all() as { box: string | null }[]).map(image => image.box)).toEqual(['[[1,2,10,10]]', null])
 })
@@ -101,7 +103,7 @@ function before0005() {
   for (const [entry, claims] of [[1, live], [2, other]] as const) claims.forEach((claim, position) => insert.run(entry, position, claim.kind, claim.value, claim.data ? JSON.stringify(claim.data) : null, claim.sighting_id))
   const snapshot = (claims: Old[]) => JSON.stringify({ script: 'han', script_other: null, description: null, status: 'unchecked', radical: null, strokes: null, claims })
   const revision = raw.prepare("INSERT INTO revisions(entry_id, sighting_id, kind, rev, snapshot, actor, at, redacted_at) VALUES (?, ?, ?, ?, ?, 'p', '2026', ?)")
-  const sighting = JSON.stringify({ place: 'A shop', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null, media: [] })
+  const sighting = JSON.stringify({ place: 'A shop', url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, note: null, media: [] })
   revision.run(1, null, 'create', 1, snapshot(versions[0]), null)
   revision.run(1, 1, 'sighting', 1, sighting, null)
   revision.run(1, null, 'edit', 2, snapshot(versions[1]), null)
@@ -180,7 +182,7 @@ test('0005 gives every claim a key, a list of sightings and a scope, in claims a
   expect(journal.filter(row => !versions.some(version => version.id === row.id)).map(row => row.snapshot)).toEqual([sighting, '{}', '{"revision":4}', '{}', '{"from":3}'])
 
   // An old version is restored through the store, with its keys and the sighting it rested on.
-  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0016_tag_year.sql', '0018_first_sighting.sql']) raw.exec(migration(name))
+  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0019_via_chain.sql', '0016_tag_year.sql', '0018_first_sighting.sql']) raw.exec(migration(name))
   const db = d1Over(raw)
   expect(await revertEntry(db, 1, 1, { actor: 'p', ip: null })).toEqual({ ok: true, rev: 5 })
   expect((await getEntry(db, 1))!.claims).toEqual(first)
@@ -201,7 +203,7 @@ test('0005 leaves a database without claims with the new table', () => {
 test('0006 counts every listed record in or out of each marked work, as the app does', async () => {
   const { db, raw } = openTestDb()
   const who = { actor: (await createPerson(db)).id, ip: null }
-  const seen = { place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
+  const seen = { place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, note: null }
   const codes = [
     [['unicode', 'U+2D6DD']], [['unicode', 'u+5d20']], [['unicode', 'U+004E00']], [['unicode', 'U+FA0E']], [['unicode', 'U+3042']], [['unicode', 'U+1B000']], [['unicode', 'pending']],
     [['unicode', 'U+4E00 U+E0100']], [['unicode', 'U+5650 (compat)']], [['unicode', 'U+2A6D6,U+2A6D7']], [['unicode', 'U+4E00g']], [['unicode', 'U+4E00000']], [['unicode', 'U+0000']], [['unicode', 'U+D800']], [['unicode', 'U+110000']], [['unicode', 'U+10FFFF']], [['unicode', 'U+001F']], [['unicode', 'U+0020']], [['unicode', 'U+2FFFD']],
@@ -224,7 +226,7 @@ test('0006 counts every listed record in or out of each marked work, as the app 
 test('0007 gives each record the marked works it is in, as the app writes them', async () => {
   const { db, raw } = openTestDb()
   const who = { actor: (await createPerson(db)).id, ip: null }
-  const seen = { place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null }
+  const seen = { place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, note: null }
   const codes = [[['unicode', 'U+2D6DD'], ['mj', 'MJ059588']], [['mj', 'MJ059588'], ['glyphwiki', 'irg2021-03300'], ['zitools', '⿰魚它']], [['unicode', 'U+3042']], [['big5', 'A140']], []]
   for (const rows of codes) await createEntry(db, { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: rows.map(([charset, code]) => newClaim('encoding', code, { charset })) }, seen, [], who)
   const marks = () => (raw.query('SELECT marks FROM entries ORDER BY id').all() as { marks: string | null }[]).map(row => row.marks)
@@ -394,4 +396,38 @@ test('0014 reads each source\'s year as a record\'s first year is read, and coun
   const rows = raw.query('SELECT report_date, year, records FROM sources ORDER BY id').all() as { report_date: string | null; year: number | null; records: number }[]
   expect(rows.map(row => row.year)).toEqual(dates.map(date => { const match = date?.match(/\d{3,4}/); return match ? Number(match[0]) : null }))
   expect(rows.slice(0, 4).map(row => row.records)).toEqual([2, 0, 1, 1])
+})
+
+test('0019 turns each via into the first link of a chain, in the rows and in past versions', async () => {
+  const raw = new Database(':memory:')
+  for (const name of readdirSync(join(import.meta.dir, '../../../migrations')).sort().filter(name => name < '0019')) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec("INSERT INTO entries(script, created_by, created_at, updated_at) VALUES ('han', 'p', '2026', '2026')")
+  raw.exec("INSERT INTO sources(hash, title) VALUES ('a', 'Book'), ('b', 'A post')")
+  raw.exec("INSERT INTO sightings(entry_id, first_entry, source_id, via_id, place, created_by, created_at, updated_at) VALUES (1, 1, 1, 2, 'with a via', 'p', '2026', '2026'), (1, 1, 1, NULL, 'without', 'p', '2026', '2026')")
+  const flat = { place: 'x', url: null, title: 'Book', author: null, publisher: null, report_date: null, original_date: null, page: null, context: null, style: null, types: null, note: null, media: [] }
+  const withVia = JSON.stringify({ ...flat, via_url: 'https://example.test/post', via_title: 'A post', via_author: null, via_publisher: null, via_report_date: '2026-05-01' })
+  const withoutVia = JSON.stringify({ ...flat, via_url: null, via_title: null, via_author: null, via_publisher: null, via_report_date: null })
+  const insert = raw.prepare("INSERT INTO revisions(entry_id, sighting_id, kind, rev, snapshot, actor, at, redacted_at) VALUES (1, ?, ?, 1, ?, 'p', '2026', ?)")
+  insert.run(1, 'sighting', withVia, null); insert.run(1, 'sighting_edit', withoutVia, null); insert.run(1, 'sighting_edit', withVia, '2026'); insert.run(null, 'hide', '{}', null)
+  raw.exec(migration('0019_via_chain.sql'))
+
+  expect(raw.query('SELECT sighting_id, position, source_id FROM sighting_vias').all()).toEqual([{ sighting_id: 1, position: 0, source_id: 2 }])
+  expect((raw.query("SELECT name FROM pragma_table_info('sightings')").all() as { name: string }[]).map(column => column.name)).not.toContain('via_id')
+  expect(raw.query("SELECT name FROM sqlite_master WHERE name IN ('sightings_by_via', 'sighting_vias_by_source') ORDER BY name").all()).toEqual([{ name: 'sighting_vias_by_source' }])
+  expect(raw.query('PRAGMA foreign_key_check').all()).toEqual([])
+  const rows = raw.query('SELECT snapshot FROM revisions ORDER BY id').all() as { snapshot: string }[]
+  const post = { url: 'https://example.test/post', title: 'A post', author: null, publisher: null, report_date: '2026-05-01' }
+  expect(JSON.parse(rows[0].snapshot).vias).toEqual([post])
+  expect(JSON.parse(rows[1].snapshot).vias).toEqual([])
+  for (const row of rows.slice(0, 2)) expect(Object.keys(JSON.parse(row.snapshot)).filter(key => key.startsWith('via_'))).toEqual([])
+  expect(rows[2].snapshot).toBe(withVia)
+  expect(sightingSnapshot(rows[0].snapshot)!.vias).toEqual([post])
+  expect(sightingSnapshot(rows[1].snapshot)!.vias).toEqual([])
+  expect(rows[3].snapshot).toBe('{}')
+
+  // The old version is restorable: the chain is written back as a row of the new table.
+  const db = d1Over(raw)
+  expect(await restoreSighting(db, 1, 2, 1, sightingSnapshot(rows[0].snapshot)!, { actor: 'p', ip: null }, 1)).toEqual({ ok: true, rev: 2 })
+  expect(raw.query('SELECT v.position, c.title, c.records FROM sighting_vias v JOIN sources c ON c.id = v.source_id WHERE v.sighting_id = 2').all()).toEqual([{ position: 0, title: 'A post', records: 1 }])
 })
