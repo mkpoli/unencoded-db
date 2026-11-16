@@ -2,6 +2,8 @@
 
 A Glyph Atlas evidence wiki for rare characters: ones Unicode lacks, variants, misprints and uncertain forms, each recorded with where it was seen. The records can support proposals to IRG. Records can be created and edited anonymously; each change is attributed to a browser identity.
 
+What goes in and how records are written is set out in [docs/principles.md](docs/principles.md).
+
 ## Local development
 
 Install [Bun](https://bun.sh/) and run:
