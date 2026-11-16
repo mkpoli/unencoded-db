@@ -1304,7 +1304,7 @@ describe('categories', () => {
     const reads: [string, string, RegExp][] = [
       ['used', plan(categoriesStatement(db, true)), /SEARCH t USING PRIMARY KEY \(tag=\?\)[\s\S]*SEARCH claims USING COVERING INDEX claims_by_value \(kind=\? AND value=\?\)/],
       ['move size', plan(moveSizeStatement(db, '甲')), /SEARCH tag_counts USING PRIMARY KEY \(tag=\?\)/],
-      ['recent moves', plan(recentMovesStatement(db, who.actor, '2026')), /SEARCH category_changes USING COVERING INDEX category_changes_by_actor \(actor=\? AND kind=\? AND at>\?\)/],
+      ['recent moves', plan(recentMovesStatement(db, who.actor, '2026')), /SEARCH category_changes USING (COVERING )?INDEX category_changes_by_actor \(actor=\? AND kind=\? AND at>\?\)/],
       ['latest change', plan(latestChangeStatement(db, '甲')), /SEARCH category_changes USING COVERING INDEX category_changes_by_name \(name=\?\)/],
       ['changes', plan(changesStatement(db)), /SCAN c[\s\S]*SEARCH p USING INDEX sqlite_autoindex_people_1 \(id=\?\)/],
       ...refileStatements(db, '甲').map((statement, index): [string, string, RegExp] => [`refile ${index}`, plan(statement), /^(?=[\s\S]*SEARCH c USING (COVERING )?INDEX categories_by_parent \(parent=\?\))(?=[\s\S]*SEARCH cl USING (COVERING )?INDEX claims_by_value \(kind=\? AND value=\?\))/]),
@@ -1376,8 +1376,24 @@ describe('categories', () => {
   test('a writer moves at most so many categories an hour', async () => {
     for (let move = 0; move < MOVES_PER_HOUR; move += 1) expect(await moveCategory(db, await listed(), { name: 'music', parent: null, position: move % 2 }, who)).toEqual({ ok: true })
     expect(await moveCategory(db, await listed(), { name: 'music', parent: null, position: 3 }, who)).toEqual({ ok: false, code: 'slow' })
+    // An undo is not counted, and does not count.
+    expect(await undoChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(raw.query("SELECT count(*) AS n FROM category_changes WHERE kind = 'move' AND json_extract(after, '$.undo') IS NOT NULL").get()).toEqual({ n: 1 })
+    expect(await moveCategory(db, await listed(), { name: 'music', parent: null, position: 3 }, who)).toEqual({ ok: false, code: 'slow' })
     const other = { actor: (await createPerson(db)).id, ip: null }
     expect(await moveCategory(db, await listed(), { name: 'music', parent: null, position: 3 }, other)).toEqual({ ok: true })
+  })
+
+  test('the hourly count is taken again as a move is written, so moves at once cannot pass it together', async () => {
+    for (let move = 0; move < MOVES_PER_HOUR - 1; move += 1) expect(await moveCategory(db, await listed(), { name: 'music', parent: null, position: move % 2 }, who)).toEqual({ ok: true })
+    // Another move of the same writer lands between this one's count and its write.
+    const racing = { prepare: (sql: string) => db.prepare(sql), batch: async (statements: never[]) => {
+      raw.run("INSERT INTO category_changes(name, kind, before, after, actor, at) VALUES ('medicine', 'move', '{}', '{}', ?, ?)", [who.actor, new Date().toISOString()])
+      return db.batch(statements)
+    } } as unknown as D1Database
+    const before = raw.query('SELECT * FROM categories ORDER BY name').all()
+    expect(await moveCategory(racing, await listed(), { name: 'chemistry', parent: null, position: 0 }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(raw.query('SELECT * FROM categories ORDER BY name').all()).toEqual(before)
   })
 
   test('a record written while a category moves is filed under the parents the category has when it lands', async () => {
@@ -1447,6 +1463,49 @@ describe('categories', () => {
         if (/INSERT OR IGNORE INTO entry_tags/.test(statement.sql)) expect(details).toMatch(/SEARCH cl USING INDEX claims_by_entry \(entry_id=\?\)[\s\S]*SEARCH e USING INTEGER PRIMARY KEY \(rowid=\?\)/)
       }
     }
+  })
+
+  test('a reorder read before a category moved elsewhere leaves that category where it went', async () => {
+    await made('P'); await made('Q'); await made('a', 'P'); await made('b', 'P'); await made('q1', 'Q'); await made('q2', 'Q')
+    const stale = await listed()
+    const under = (parent: string) => (raw.query('SELECT name FROM categories WHERE parent IS ? ORDER BY position, name').all(parent) as { name: string }[]).map(row => row.name)
+    expect(await moveCategory(db, await listed(), { name: 'b', parent: 'Q', position: 2 }, who)).toEqual({ ok: true })
+    expect(await moveCategory(db, stale, { name: 'a', parent: 'P', position: 1 }, who)).toEqual({ ok: true })
+    expect(under('Q')).toEqual(['q1', 'q2', 'b'])
+    expect(under('P')).toEqual(['a'])
+  })
+
+  test('undoing a move puts a category back at its exact place, out of its tray and within it, past a gap in the numbering', async () => {
+    const under = (parent: string) => (raw.query('SELECT name FROM categories WHERE parent IS ? ORDER BY position, name').all(parent) as { name: string }[]).map(row => row.name)
+    await made('P'); await made('Q')
+    for (const name of ['c0', 'c1', 'c2', 'c3', 'c4']) await made(name, 'P')
+    expect(await deleteCategory(db, await listed(), { name: 'c1' }, who)).toEqual({ ok: true })
+    const before = under('P')
+    expect(before).toEqual(['c0', 'c2', 'c3', 'c4'])
+    expect(await moveCategory(db, await listed(), { name: 'c3', parent: 'Q', position: 0 }, who)).toEqual({ ok: true })
+    expect(await undoChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(under('P')).toEqual(before)
+    expect(await moveCategory(db, await listed(), { name: 'c3', parent: 'P', position: 0 }, who)).toEqual({ ok: true })
+    expect(under('P')).toEqual(['c3', 'c0', 'c2', 'c4'])
+    expect(await undoChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(under('P')).toEqual(before)
+  })
+
+  test('a change id is never used twice, so a stale write is refused even after a log row is gone', async () => {
+    await made('X'); await made('Y'); await made('Z', 'X')
+    await createEntry(db, fields({ claims: [claim('genre', 'Z')] }), seen(), [], who)
+    const stale = await listed()
+    expect(await moveCategory(db, await listed(), { name: 'Z', parent: 'Y', position: 0 }, who)).toEqual({ ok: true })
+    raw.run('DELETE FROM category_changes WHERE id = (SELECT MAX(id) FROM category_changes)')
+    const after = everything()
+    const z = stale.find(category => category.name === 'Z')!
+    expect(await moveCategory(db, await listed(), { name: 'Z', parent: null, position: 0, rev: z.rev }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(await moveCategory(db, stale, { name: 'Z', parent: null, position: 0 }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(everything()).toEqual(after)
+    // Read afresh, the row names the id the deleted log row had; the next write stamps a new one.
+    expect(await moveCategory(db, await listed(), { name: 'Z', parent: null, position: 0 }, who)).toEqual({ ok: true })
+    expect(everything()).not.toEqual(after)
+    expect((raw.query("SELECT rev FROM categories WHERE name = 'Z'").get() as { rev: number }).rev).toBe(latest())
   })
 
   test('undoing a move and a rename puts the categories, rows and counts back as a full refresh would', async () => {

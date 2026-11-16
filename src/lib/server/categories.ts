@@ -25,7 +25,8 @@ export async function categoryChanges(db: D1Database) {
 // A write that lands only where it read: it stamps what it changes with the id its log row is about to take
 // (`STAMP`), every statement after it in the batch runs only while that stamp stands, and the log row comes
 // last. Nothing else writes in between, so a write refused by its guard changes nothing at all.
-const LAST_CHANGE = '(SELECT COALESCE(MAX(id), 0) FROM category_changes)'
+// The ids come from the table's sequence, which never goes back, so a stamp is never an id used before.
+const LAST_CHANGE = "(SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'category_changes'), 0))"
 const STAMP = `(${LAST_CHANGE} + 1)`
 const stamped = (slot: string) => `(SELECT rev FROM categories WHERE name = ${slot}) = ${STAMP}`
 const logEntry = (db: D1Database, guard: string, name: string, kind: CategoryChange['kind'], before: unknown, after: unknown, who: Who) =>
@@ -169,18 +170,23 @@ export function refileStatements(db: D1Database, name: string) {
   ]
 }
 
-/** Renumbers the categories under one parent in the order given, while the move's stamp stands. */
-const renumbered = (db: D1Database, name: string, names: readonly string[]) =>
-  db.prepare(`UPDATE categories SET position = (SELECT key FROM json_each(?2) WHERE value = categories.name) WHERE name IN (SELECT value FROM json_each(?2)) AND ${stamped('?1')}`).bind(name, JSON.stringify(names))
+/**
+ * Renumbers the categories under one parent in the order given, while the move's stamp stands. A category
+ * that has gone to another parent since the order was read keeps its place there.
+ */
+const renumbered = (db: D1Database, name: string, parent: string | null, names: readonly string[]) =>
+  db.prepare(`UPDATE categories SET position = (SELECT key FROM json_each(?2) WHERE value = categories.name) WHERE name IN (SELECT value FROM json_each(?2)) AND parent IS ?3 AND ${stamped('?1')}`).bind(name, JSON.stringify(names), parent)
 
 // A move files again every record under the category it moves, so it is refused past this many, and a
-// writer makes at most `MOVES_PER_HOUR` of them an hour. The address limits of `guard.ts` count a window
-// of a minute at most, so this one is counted from the log, by its writer index.
+// writer makes at most `MOVES_PER_HOUR` of them an hour, undoing not counted. The address limits of
+// `guard.ts` count a window of a minute at most, so this one is counted from the log, by its writer index,
+// once to answer why and again inside the guarded write, so two moves at once cannot both pass it. The
+// undone moves of the hour are read and passed over; the address limit keeps them to a few hundred.
 export const MOVE_RECORDS_MAX = 1000
 export const MOVES_PER_HOUR = 10
 export const moveSizeStatement = (db: D1Database, name: string) => db.prepare("SELECT COALESCE((SELECT n FROM tag_counts WHERE tag = 'g:' || ?), 0) AS n").bind(name)
-export const recentMovesStatement = (db: D1Database, actor: string, since: string) =>
-  db.prepare(`SELECT count(*) AS n FROM (SELECT 1 FROM category_changes WHERE actor = ? AND kind = 'move' AND at > ? LIMIT ${MOVES_PER_HOUR})`).bind(actor, since)
+const RECENT_MOVES = (actor: string, since: string) => `(SELECT count(*) FROM (SELECT 1 FROM category_changes WHERE actor = ${actor} AND kind = 'move' AND at > ${since} AND json_extract(after, '$.undo') IS NULL LIMIT ${MOVES_PER_HOUR}))`
+export const recentMovesStatement = (db: D1Database, actor: string, since: string) => db.prepare(`SELECT ${RECENT_MOVES('?1', '?2')} AS n`).bind(actor, since)
 
 /**
  * Puts a category under another, or at the top, at `position` among the categories there; the others there
@@ -196,10 +202,13 @@ export async function moveCategory(db: D1Database, categories: readonly Category
   const refusal = moveRefusal(nodes, input.name, parent)
   if (refusal) return refused(refusal)
   if (!Number.isInteger(input.position) || input.position < 0) return refused('invalid')
-  const [size, recent] = await Promise.all([moveSizeStatement(db, found.name).first<{ n: number }>(), recentMovesStatement(db, who.actor, new Date(Date.now() - 3600_000).toISOString()).first<{ n: number }>()])
+  const since = new Date(Date.now() - 3600_000).toISOString(), limited = !input.undo
+  const [size, recent] = await Promise.all([moveSizeStatement(db, found.name).first<{ n: number }>(), recentMovesStatement(db, who.actor, since).first<{ n: number }>()])
   if ((size?.n ?? 0) > MOVE_RECORDS_MAX) return refused('too_large')
-  if ((recent?.n ?? 0) >= MOVES_PER_HOUR) return refused('slow')
+  if (limited && (recent?.n ?? 0) >= MOVES_PER_HOUR) return refused('slow')
   const { from, order, left } = placement(roots, found.name, parent, input.position)
+  // Its place as the tree showed it, which an undo puts it back at exactly.
+  const was = (from === null ? roots : nodes.find(node => node.name === from)!.children).findIndex(node => node.name === found.name)
   // The records are filed again when the stored parent changes, a parent the tree could not place included.
   const refile = found.parent !== parent
   const wrote = await landed(db, [
@@ -212,11 +221,12 @@ export async function moveCategory(db: D1Database, categories: readonly Category
         AND (?2 IS NULL OR EXISTS (SELECT 1 FROM up))
         AND NOT EXISTS (SELECT 1 FROM up WHERE name = ?1)
         AND (SELECT count(*) FROM up) + (SELECT max(depth) FROM down) <= ${GENRE_DEPTH_MAX}
-        AND COALESCE((SELECT n FROM tag_counts WHERE tag = 'g:' || ?1), 0) <= ${MOVE_RECORDS_MAX}`).bind(found.name, parent, order.indexOf(found.name), found.rev),
-    renumbered(db, found.name, order),
-    ...(from !== parent ? [renumbered(db, found.name, left)] : []),
+        AND COALESCE((SELECT n FROM tag_counts WHERE tag = 'g:' || ?1), 0) <= ${MOVE_RECORDS_MAX}
+        AND (NOT ?7 OR ${RECENT_MOVES('?5', '?6')} < ${MOVES_PER_HOUR})`).bind(found.name, parent, order.indexOf(found.name), found.rev, who.actor, since, limited ? 1 : 0),
+    renumbered(db, found.name, parent, order),
+    ...(from !== parent ? [renumbered(db, found.name, from, left)] : []),
     ...(refile ? refileStatements(db, found.name) : []),
-    logEntry(db, stamped('?1'), found.name, 'move', { parent: found.parent, position: found.position }, { parent, position: order.indexOf(found.name), ...(input.undo ? { undo: input.undo } : {}) }, who),
+    logEntry(db, stamped('?1'), found.name, 'move', { parent: found.parent, position: was }, { parent, position: order.indexOf(found.name), ...(input.undo ? { undo: input.undo } : {}) }, who),
   ])
   return wrote ? { ok: true } : refused('conflict')
 }

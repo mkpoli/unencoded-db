@@ -60,7 +60,8 @@ CREATE INDEX categories_by_parent ON categories(parent, position);
 CREATE UNIQUE INDEX categories_by_label ON categories(label);
 
 -- What was done to the categories, newest last: `before` and `after` are JSON of the fields the change touched.
+-- An id is never used twice, so the id a write stamps a category with names that write alone.
 -- A category's changes are read newest first to undo the latest, and a writer's moves of the last hour are counted.
-CREATE TABLE category_changes(id INTEGER PRIMARY KEY, name TEXT, kind TEXT, before TEXT, after TEXT, actor TEXT, at TEXT);
+CREATE TABLE category_changes(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, kind TEXT, before TEXT, after TEXT, actor TEXT, at TEXT);
 CREATE INDEX category_changes_by_name ON category_changes(name, id);
 CREATE INDEX category_changes_by_actor ON category_changes(actor, kind, at);
