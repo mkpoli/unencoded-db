@@ -391,7 +391,8 @@
   "relationship.usage": "Cách dùng",
   "field.genre": "Phân loại",
   "field.genreAdd": "Thêm phân loại",
-  "categories.custom": "Phân loại do người dùng thêm",
+  "field.genreParent": "Phân loại cha",
+  "field.genreTopLevel": "Cấp cao nhất",
   "field.collection": "Bộ sưu tập",
   "field.tags": "Thẻ",
   "field.filing": "Phân loại và thẻ",
@@ -452,5 +453,6 @@
   "error.ids": "Nhập tối đa 20 mô tả, mỗi mô tả không quá 200 ký tự.",
   "error.readings": "Nhập tối đa 20 cách đọc, mỗi cách không quá 200 ký tự, và 20 nghĩa, mỗi nghĩa không quá 500 ký tự.",
   "error.links": "Hãy kiểm tra nghĩa và cách đọc gắn với từng dòng; mỗi dòng chọn tối đa 20 bằng chứng.",
-  "error.tags": "Nhập tối đa 30 thẻ, mỗi thẻ không quá 40 ký tự."
+  "error.tags": "Nhập tối đa 30 thẻ, mỗi thẻ không quá 40 ký tự.",
+  "error.category": "Không thể thêm phân loại này."
 }

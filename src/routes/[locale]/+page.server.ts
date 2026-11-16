@@ -1,5 +1,6 @@
+import { customGenres } from '$lib/server/categories'
 import { error, redirect } from '@sveltejs/kit'
-import { counts, cursorOf, customGenres, decadeTag, exactSearchIds, facetTag, list, listTag, markTags, radicalTag, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, searchTotal, terms } from '$lib/server/entries'
+import { counts, cursorOf, decadeTag, exactSearchIds, facetTag, list, listTag, markTags, radicalTag, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, searchTotal, terms } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
 import { tileGlyphs } from '$lib/server/glyphs'
 import { parseRecordCode } from '$lib/code'

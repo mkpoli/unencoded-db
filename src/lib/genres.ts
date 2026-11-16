@@ -64,3 +64,44 @@ export function groupGenres(genres: readonly Genre[] = GENRES): { standalone: Ge
   const parents = genres.filter(genre => !genre.parent).map(parent => ({ parent, children: genres.filter(genre => genre.parent === parent.slug) }))
   return { standalone: parents.filter(group => !group.children.length).map(group => group.parent), groups: parents.filter(group => group.children.length) }
 }
+
+/** A category people added: its name, the category it sits under (a built-in slug, another custom name, or none) and its records. */
+export type CustomGenre = { value: string; parent: string | null; n: number }
+/** A category as one line of a list, `depth` 0 for the top of a group. */
+export type GenreRow = { value: string; label: string; depth: number }
+
+/** The most levels a chain of categories has, the category itself included. */
+export const GENRE_DEPTH_MAX = 4
+
+/**
+ * Every category as a list: the ones without children, then one block per category with children. Built-in
+ * children come first and custom ones follow, each custom category under its parent, nested by depth.
+ */
+export function arrangeGenres(custom: readonly CustomGenre[] = []): { standalone: GenreRow[]; groups: { root: GenreRow; rows: GenreRow[] }[] } {
+  const known = new Set([...GENRES.map(genre => genre.slug), ...custom.map(item => item.value)])
+  const under = (parent: string) => [
+    ...GENRES.filter(genre => genre.parent === parent).map(genre => genre.slug),
+    ...custom.filter(item => item.parent === parent).map(item => item.value),
+  ]
+  const roots = [
+    ...GENRES.filter(genre => !genre.parent).map(genre => genre.slug),
+    ...custom.filter(item => !item.parent || !known.has(item.parent)).map(item => item.value),
+  ]
+  const seen = new Set<string>()
+  const walk = (value: string, depth: number): GenreRow[] => {
+    if (seen.has(value) || depth > GENRE_DEPTH_MAX) return []
+    seen.add(value)
+    return [{ value, label: genreLabel(value), depth }, ...under(value).flatMap(child => walk(child, depth + 1))]
+  }
+  const blocks = roots.map(root => walk(root, 0)).filter(block => block.length)
+  return { standalone: blocks.filter(block => block.length === 1).map(block => block[0]), groups: blocks.filter(block => block.length > 1).map(block => ({ root: block[0], rows: block.slice(1) })) }
+}
+
+/** The new category a form asks for: its name as it would be stored and where it goes, null when it asks for none, or 'invalid'. */
+export function readNewGenre(form: FormData): { name: string; parent: string | null } | null | 'invalid' {
+  const typed = String(form.get('genre_new') ?? '').trim()
+  if (!typed) return null
+  const name = cleanGenre(typed)
+  if (!name) return 'invalid'
+  return { name, parent: String(form.get('genre_new_parent') ?? '').trim().normalize('NFC') || null }
+}

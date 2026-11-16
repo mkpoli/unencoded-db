@@ -391,7 +391,8 @@
   "relationship.usage": "用法",
   "field.genre": "分類",
   "field.genreAdd": "分類を追加",
-  "categories.custom": "追加された分類",
+  "field.genreParent": "上位の分類",
+  "field.genreTopLevel": "最上位",
   "field.collection": "コレクション",
   "field.tags": "タグ",
   "field.filing": "分類とタグ",
@@ -452,5 +453,6 @@
   "error.ids": "IDSは20件まで、それぞれ200文字以内で入力してください。",
   "error.readings": "読みは20件まで各200文字以内、意味は20件まで各500文字以内で入力してください。",
   "error.links": "各行に結び付けた意味と読みを確認してください。証拠は1行につき20件まで選べます。",
-  "error.tags": "タグは30個まで、それぞれ40文字以内で入力してください。"
+  "error.tags": "タグは30個まで、それぞれ40文字以内で入力してください。",
+  "error.category": "この分類は追加できません。"
 }

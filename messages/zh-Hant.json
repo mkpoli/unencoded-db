@@ -391,7 +391,8 @@
   "relationship.usage": "用法",
   "field.genre": "類屬",
   "field.genreAdd": "新增類屬",
-  "categories.custom": "使用者新增的類屬",
+  "field.genreParent": "上級類屬",
+  "field.genreTopLevel": "頂層",
   "field.collection": "合集",
   "field.tags": "標籤",
   "field.filing": "類屬和標籤",
@@ -452,5 +453,6 @@
   "error.ids": "最多填寫20個描述，每個不超過200個字元。",
   "error.readings": "讀音最多20項，每項不超過200字；釋義最多20項，每項不超過500字。",
   "error.links": "請檢查各條目所對應的釋義和讀音，每條最多可選20項證據。",
-  "error.tags": "最多30個標籤，每個不超過40個字元。"
+  "error.tags": "最多30個標籤，每個不超過40個字元。",
+  "error.category": "無法新增此類屬。"
 }

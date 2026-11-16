@@ -391,7 +391,8 @@
   "relationship.usage": "Usage",
   "field.genre": "Category",
   "field.genreAdd": "Add a category",
-  "categories.custom": "Added by others",
+  "field.genreParent": "Parent category",
+  "field.genreTopLevel": "Top level",
   "field.collection": "Collection",
   "field.tags": "Tags",
   "field.filing": "Categories and tags",
@@ -452,5 +453,6 @@
   "error.ids": "Use up to 20 descriptions, each 200 characters or fewer.",
   "error.readings": "Use up to 20 readings of up to 200 characters, and 20 meanings of up to 500.",
   "error.links": "Check the meanings and readings each row is tied to, and choose up to 20 pieces of evidence for each.",
-  "error.tags": "Use up to 30 tags of up to 40 characters each."
+  "error.tags": "Use up to 30 tags of up to 40 characters each.",
+  "error.category": "That category could not be added."
 }
