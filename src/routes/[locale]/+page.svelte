@@ -9,6 +9,7 @@
   import { MARKED } from '$lib/registries'
   import { ORDER, PAGE, SORTS } from '$lib/order'
   import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
+  import ChatLinks from '$lib/components/ChatLinks.svelte'
   import { href, t } from '$lib/t'
   import { TILE_SIZE_COOKIE, TILE_SIZES, tileSizeOf } from '$lib/tile-size'
   import type { Snapshot } from './$types'
@@ -157,7 +158,7 @@
 <Seo />
 <div class="page stack">
   <div class="heading">
-    <div class="stack intro"><h1>{t('nav.browse')}</h1><p class="muted">{t('browse.intro')}</p></div>
+    <div class="stack intro"><h1>{t('nav.browse')}</h1><p class="muted">{t('browse.intro')}</p><p class="chats"><ChatLinks /></p></div>
     <a class="button primary" href={href('/new')}>{t('browse.addOne')}</a>
   </div>
   <form class="filters" method="GET">
@@ -217,6 +218,8 @@
   {#if shown.next !== null && !done}<div class="ahead" bind:this={sentinel}>{#if shown.partial && shown.total}<p class="muted">{t('browse.searched', { n: Math.min(shown.scanned, shown.total.pool), of: shown.total.pool })}</p>{/if}{#if pagesLeft !== null}<p class="muted">{t(pagesLeft === 1 && !shown.total?.floor ? 'browse.pageLeft' : 'browse.pagesLeft', { n: `${pagesLeft}${shown.total?.floor ? '+' : ''}` })}</p>{/if}<a class="button" href={more} aria-busy={busy} onclick={appendOnClick}>{t(shown.partial ? 'browse.continueSearch' : 'browse.more')}</a></div>{/if}
 </div>
 <style>
+  /* The list loads on as it scrolls, so its footer is out of reach; the chats sit under the heading. */
+  .chats { margin:0; font-size:12.5px; color:var(--muted) }
   .heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:start; gap:20px }
   .intro { gap:8px; max-width:720px }
   .filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:16px; border:1px solid var(--line); border-radius:9px; background:var(--surface) }

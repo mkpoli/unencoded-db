@@ -1,7 +1,7 @@
 <script lang="ts">
   import Seo from '$lib/components/Seo.svelte'
-  import { locale, t } from '$lib/t'
-  import { CHATS, contactPage } from '$lib/community'
+  import { t } from '$lib/t'
+  import ChatLinks from '$lib/components/ChatLinks.svelte'
 </script>
 
 <Seo title={t('about.title')} />
@@ -16,6 +16,6 @@
   </section>
   <section class="stack">
     <h2>{t('footer.community')}</h2>
-    <div class="row">{#each CHATS as chat (chat.name)}<a class="text-link" href={chat.href} target="_blank" rel="noopener">{chat.name}</a>{/each}<a class="text-link" href={contactPage(locale())} target="_blank" rel="noopener">{t('footer.contact')}</a></div>
+    <p><ChatLinks /></p>
   </section>
 </div>

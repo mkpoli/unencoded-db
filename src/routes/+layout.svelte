@@ -5,7 +5,7 @@
   import { GLYPH_STYLE_COOKIE, GLYPH_STYLES, type GlyphStyle } from '$lib/composer'
   import { LOCALES, LOCALE_NAMES, LOCALE_COOKIE } from '$lib/i18n'
   import { href, locale, t } from '$lib/t'
-  import { CHATS, contactPage } from '$lib/community'
+  import ChatLinks from '$lib/components/ChatLinks.svelte'
   let { data, children } = $props()
 
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
@@ -78,9 +78,8 @@
     · {t('footer.images')} · {t('footer.code')}
     · <a class="text-link" href="https://glyphatlas.org/" target="_blank" rel="noopener">Glyph Atlas</a>
     · <a class="text-link" href="/api/entries">{t('footer.data')}</a>
-    · <a class="text-link" href={contactPage(locale())} target="_blank" rel="noopener">{t('footer.contact')}</a>
   </p>
-  <p>{t('footer.community')}{#each CHATS as chat (chat.name)}{' · '}<a class="text-link" href={chat.href} target="_blank" rel="noopener">{chat.name}</a>{/each}</p>
+  <p><ChatLinks /></p>
 </footer>
 
 <style>
