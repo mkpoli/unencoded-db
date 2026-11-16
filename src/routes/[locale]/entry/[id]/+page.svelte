@@ -1,13 +1,14 @@
 <script lang="ts">
   import { page } from '$app/state'
   import { claimLabel } from '$lib/claim-label'
-  import { untrack } from 'svelte'
+  import { tick, untrack } from 'svelte'
   import Seo from '$lib/components/Seo.svelte'
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import CharacterFields from '$lib/components/CharacterFields.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
   import CopyButton from '$lib/components/CopyButton.svelte'
+  import EditLink from '$lib/components/EditLink.svelte'
   import { characterLinks, descriptionLinks } from '$lib/links'
   import { encodedCharacter } from '$lib/ids'
   import CompositionField from '$lib/components/CompositionField.svelte'
@@ -34,6 +35,30 @@
   const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
   const editValues = $derived(editing && form?.values && 'script' in form.values ? form.values : { ...entry, claims })
   let filled = $state<CharacterFacts | null>(null)
+  let editOpen = $state(untrack(() => editing))
+  $effect(() => { if (editing) editOpen = true })
+  let fields = $state<CharacterFields>()
+  // The links to a field open the form and focus the field's first control; without scripts the browser
+  // opens the form around the fragment target.
+  async function edit(event: MouseEvent) {
+    const link = (event.target as Element).closest<HTMLAnchorElement>('a[data-edit]')
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    const field = link.dataset.edit!
+    editOpen = true
+    await tick()
+    const target = document.getElementById(`edit-${field}`)
+    if (!target) return
+    if (target instanceof HTMLDetailsElement) {
+      // The radical line and the line of encodings after it share `edit-identity`.
+      target.open = true
+      for (let line = target.nextElementSibling; line instanceof HTMLDetailsElement && line.classList.contains('fact'); line = line.nextElementSibling) line.open = true
+    }
+    history.replaceState(history.state, '', `#edit-${field}`)
+    target.scrollIntoView({ block: 'center' })
+    if (field === 'ids') fields?.focus()
+    else target.querySelector<HTMLElement>('input:not([type=hidden]), textarea, select')?.focus({ preventScroll: true })
+  }
   const editIds = $derived(valuesOf(editValues.claims, 'ids'))
   let primary = $state(untrack(() => editIds[0] ?? ''))
   const editComposition = $derived.by(() => { const found = compositionOf(editValues.claims); return found ? JSON.stringify(found) : '' })
@@ -74,6 +99,7 @@
   }
 </script>
 
+<svelte:window onclick={edit} />
 <Seo title={`${recordCode(entry.id)} ${recordName(entry.id)}`} image={entry.cover_key ? media(entry.cover_key) : null} />
 <div class="page narrow stack">
   <div class="row"><a class="text-link back" href={href()}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
@@ -81,24 +107,33 @@
   {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
   {#if entry.merged_into}<p class="notice quiet"><a class="text-link" href={href(`/entry/${entry.merged_into}`)}>{t('entry.mergedInto', { id: recordCode(entry.merged_into) })}</a></p>{/if}
   <section class="panel stack">
-    <h2>{t('entry.about')}</h2>
+    <div class="head"><h2>{t('entry.about')}</h2><a class="button small" href="#edit-ids" data-edit="ids">{t('entry.edit')}</a></div>
     {#if sequences.length}
       <div class="identity">
         <span class="plate"><IdsGlyph ids={sequences[0]} layout={entry.layout} /></span>
         <ul class="sequences">{#each sequences as sequence}<li><span class="ids">{sequence}</span><CopyButton text={sequence} /></li>{/each}</ul>
+        <EditLink field="ids" name={t('field.ids')} />
       </div>
       <p class="sites">{#each descriptionLinks(sequences[0], at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</p>
+    {:else}
+      <p><EditLink field="ids" name={t('entry.addIds')} add /></p>
     {/if}
     {#if analysis?.tagged}
       <p class="formation"><span class="label">{t('field.formation')}</span><span class="method">{formationLabel(at, analysis.formation)}</span>{#each analysis.parts.filter(part => part.role) as part, index (index)}<span class="part">{part.part} · {roleLabel(at, part.role)}</span>{/each}</p>
     {/if}
-    <p class:muted={!entry.description} class="description">{entry.description || t('entry.noDescription')}</p>
+    <div class="line">
+      {#if entry.description}<p class="description">{entry.description}</p><EditLink field="description" name={t('field.description')} />
+      {:else}<EditLink field="description" name={t('entry.addDescription')} add />{/if}
+    </div>
     {#if genres.length || collections.length || tags.length}
       <p class="chips">
         {#each genres as genre (genre.slug)}<a class="chip-link" href={href(`?genre=${genre.slug}`)}>{genre.label}</a>{/each}
         {#each collections as collection (collection.slug)}<a class="chip-link" href={href(`?collection=${collection.slug}`)}>{collection.label}</a>{/each}
         {#each tags as tag}<a class="chip-link tag" href={href(`?tag=${encodeURIComponent(tag)}`)}>#{tag}</a>{/each}
+        <EditLink field="filing" name={t('field.filing')} />
       </p>
+    {:else}
+      <p><EditLink field="filing" name={t('entry.addCategory')} add /></p>
     {/if}
     <ul class="marks" aria-label={t('field.encodings')}>
       {#each marks as mark (mark.registry.id)}
@@ -106,6 +141,7 @@
         {@const text = mark.code === null ? t('registry.out', { name }) : mark.since ? t('registry.since', { version: mark.since }) : t('registry.in', { name })}
         <li>{#if mark.href}<a class="badge encoded" href={mark.href} target="_blank" rel="noopener" title={mark.registry.label}>{text}</a>{:else}<span class="badge" class:encoded={mark.code !== null} title={mark.registry.label}>{text}</span>{/if}</li>
       {/each}
+      <li><EditLink field="identity" name={t('field.encodings')} /></li>
     </ul>
     <dl class="facts">
       {#each encodings as encoding (encoding.charset + '|' + encoding.code)}
@@ -114,12 +150,35 @@
         <div><dt>{registryLabel(encoding.charset)}</dt><dd>{#if character}<span class="character encoded">{character}</span><CopyButton text={character} /> {/if}{#if page}<a class="mono text-link" href={page} target="_blank" rel="noopener">{encoding.code} ↗</a>{:else}<span class="mono">{encoding.code}</span>{/if}{#if character}<span class="sites">{#each characterLinks(character, at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</span>{/if}</dd></div>
       {/each}
       {#if ivd}<div><dt>{t('field.ivd')}</dt><dd class:mono={ivd !== 'none'}>{ivd === 'none' ? t('field.ivdNone') : ivd}</dd></div>{/if}
-      {#if data.filed.length}<div><dt>{t('field.radical')}</dt><dd class="radicals">{#each data.filed as radical, index (radical.path)}{#if index}<span class="muted" aria-hidden="true">›</span>{/if}<a class="character text-link" href={href(`?radical=${encodeURIComponent(radical.path)}`)}>{radical.radical}</a>{/each}</dd></div>{:else if entry.radical}<div><dt>{t('field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}
+      {#if data.filed.length}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd class="radicals">{#each data.filed as radical, index (radical.path)}{#if index}<span class="muted" aria-hidden="true">›</span>{/if}<a class="character text-link" href={href(`?radical=${encodeURIComponent(radical.path)}`)}>{radical.radical}</a>{/each}</dd></div>{:else if entry.radical}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd>{entry.radical}</dd></div>{:else}<div><dt>{t('field.radical')}</dt><dd><EditLink field="identity" name={t('entry.addRadical')} add /></dd></div>{/if}
       {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
     </dl>
-    <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} />
+    <div class="senses">
+      <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} />
+      {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
+      {:else}<EditLink field="senses" name={t('entry.addSenses')} add />{/if}
+    </div>
     {#if entry.by_name && entry.created_at}<p class="hint">{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</p>{/if}
   </section>
+  <details class="panel" id="edit" bind:open={editOpen}>
+    <summary>{t('entry.edit')}</summary>
+    <form class="stack form" method="POST" action="?/edit">
+      {#if editing}<p class="notice bad" role="alert">{t(`error.${form?.error}`)}</p>{/if}
+      <input type="hidden" name="rev" value={entry.rev} />
+      {#key `${entry.id}:${entry.rev}:${editing}`}
+        <CharacterFields bind:this={fields} anchor="edit-ids" exclude={entry.id} values={editIds} layout={primaryLayoutOf(editValues.claims)} bind:primary onfill={facts => filled = facts}>
+          <div class="sheet">
+            <CompositionField ids={primary} value={editComposition} />
+            <ScriptPicker value={editValues.script} other={editValues.script_other} />
+            <IdentityFields anchor="edit-identity" claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} fill={filled} />
+          </div>
+        </CharacterFields>
+        <div class="field" id="edit-description"><label for="description">{t('field.description')}</label><textarea id="description" class="input" name="description">{editValues.description ?? ''}</textarea></div>
+        <div id="edit-senses"><SenseFields claims={editValues.claims} evidence={options} fill={filled} /></div>
+        <details class="filing" id="edit-filing" open>
+          <summary class="section-title">{t('field.filing')}</summary>
+          <div class="stack filed"><CategoryFields genres={valuesOf(editValues.claims, 'genre')} collections={valuesOf(editValues.claims, 'collection')} tags={valuesOf(editValues.claims, 'tag')} /></div>
+        </details>
   {#if entry.status !== 'encoded'}
   <section class="panel stack">
     <h2>{t('ready.title')}</h2>
@@ -127,25 +186,6 @@
     <a class="text-link small" href="https://www.unicode.org/irg/pp/" target="_blank" rel="noopener">{t('ready.rules')} ↗</a>
   </section>
   {/if}
-  <details class="panel" open={editing}>
-    <summary>{t('entry.edit')}</summary>
-    <form class="stack form" method="POST" action="?/edit">
-      {#if editing}<p class="notice bad" role="alert">{t(`error.${form?.error}`)}</p>{/if}
-      <input type="hidden" name="rev" value={entry.rev} />
-      {#key `${entry.id}:${entry.rev}:${editing}`}
-        <CharacterFields values={editIds} layout={primaryLayoutOf(editValues.claims)} bind:primary onfill={facts => filled = facts}>
-          <div class="sheet">
-            <CompositionField ids={primary} value={editComposition} />
-            <ScriptPicker value={editValues.script} other={editValues.script_other} />
-            <IdentityFields claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} fill={filled} />
-          </div>
-        </CharacterFields>
-        <div class="field"><label for="description">{t('field.description')}</label><textarea id="description" class="input" name="description">{editValues.description ?? ''}</textarea></div>
-        <SenseFields claims={editValues.claims} evidence={options} fill={filled} />
-        <details class="filing" open>
-          <summary class="section-title">{t('field.filing')}</summary>
-          <div class="stack filed"><CategoryFields genres={valuesOf(editValues.claims, 'genre')} collections={valuesOf(editValues.claims, 'collection')} tags={valuesOf(editValues.claims, 'tag')} /></div>
-        </details>
       {/key}
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" /></div>
       {#if editing && form?.error === 'conflict'}<button class="button" type="submit" disabled>{t('form.save')}</button>{:else}<SubmitBar />{/if}
@@ -196,6 +236,10 @@
   </section>
 </div>
 <style>
+  .head { display:flex; align-items:center; justify-content:space-between; gap:12px }
+  .line { display:flex; align-items:flex-start; gap:6px } .line .description { margin:0; min-width:0 }
+  .senses { position:relative; display:flex; flex-direction:column; gap:8px } .senses > .pen { position:absolute; inset-block-start:-2px; inset-inline-end:0 }
+  dt :global(.pencil) { margin-inline-start:4px; vertical-align:-6px }
   summary { cursor:pointer; font-weight:600 } .form { margin-top:18px }
   .sheet { display:flex; flex-direction:column; gap:10px; padding-top:10px; border-top:1px dashed var(--line) } .filed { margin-top:14px }
   .back { align-self:start; color:var(--muted) } .title { gap:8px } .code { font-variant-numeric:tabular-nums } .code-name { margin-inline-start:6px; font-weight:400; color:var(--muted) } .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }

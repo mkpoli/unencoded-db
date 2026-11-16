@@ -8,9 +8,11 @@
   import IdsDrawing from './IdsDrawing.svelte'
   import IdsField from './IdsField.svelte'
 
-  let { values = [], layout = null, primary = $bindable(''), onfill, children }: {
-    values?: string[]; layout?: Layout | null; primary?: string; onfill?: (facts: CharacterFacts) => void; children?: Snippet
+  let { values = [], layout = null, primary = $bindable(''), exclude = null, anchor, onfill, children }: {
+    values?: string[]; layout?: Layout | null; primary?: string; exclude?: number | null; anchor?: string; onfill?: (facts: CharacterFacts) => void; children?: Snippet
   } = $props()
+  let field = $state<IdsField>()
+  export const focus = () => field?.focus()
   let adjusting = $state(false)
   let chosen = $state.raw<number[] | null>(null)
 </script>
@@ -18,7 +20,7 @@
 <div class="character" class:adjusting>
   <div class="plate"><IdsDrawing ids={primary} {layout} {chosen} bind:adjusting /></div>
   <div class="described">
-    <IdsField {values} bind:primary bind:chosen {onfill} />
+    <IdsField bind:this={field} {values} bind:primary bind:chosen {exclude} {anchor} {onfill} />
     {@render children?.()}
   </div>
 </div>
