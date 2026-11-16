@@ -10,8 +10,8 @@ import { TILE_SIZE_COOKIE, tileSizeOf } from '$lib/tile-size'
 const UNPREFIXED = /^\/(media|api|auth|mcp|oauth\/(register|token|revoke)$|\.well-known\/|_app|robots\.txt|favicon)/
 
 // A form post changes things under the visitor's cookie, so it must come from this site's own pages: the
-// rule SvelteKit applies by itself when left to. The token endpoints of agent sign-in read no cookie and
-// are posted to by clients outside any browser, which send no origin.
+// rule SvelteKit applies by itself when left to. The token endpoints of agent sign-in are posted to by
+// clients outside any browser, which send no origin, and do nothing on the strength of a cookie.
 const FORM_TYPES = ['application/x-www-form-urlencoded', 'multipart/form-data', 'text/plain', 'application/x-sveltekit-formdata']
 const OPEN_FORMS = ['/oauth/token', '/oauth/revoke']
 function foreignForm(event: Pick<RequestEvent, 'request' | 'url' | 'route'>) {
@@ -37,8 +37,9 @@ export const handle: Handle = async ({ event, resolve }) => {
   // A browser names itself by its cookie. An agent names itself by the token it signed in for, or else by
   // its connection's own.
   const agent = event.route.id === '/mcp'
-  const bearer = agent ? bearerOf(event.request) : undefined
-  event.locals.person = !db || pathname.startsWith('/media/') ? null : bearer ? await tokenPerson(db, bearer) : await personOf(db, agent ? agentToken(event.request) : event.cookies.get(sessionName(event)))
+  // A request that claims a token is that token's person or no one, never its connection's.
+  const claims = agent && event.request.headers.has('authorization')
+  event.locals.person = !db || pathname.startsWith('/media/') ? null : claims ? await tokenPerson(db, bearerOf(event.request)) : await personOf(db, agent ? agentToken(event.request) : event.cookies.get(sessionName(event)))
   if (!['GET', 'HEAD', 'OPTIONS'].includes(event.request.method) && !(event.route.id === '/auth/sign-out' && event.request.method === 'POST')) {
     // An agent's request says in its body whether it writes, so the endpoint guards each writing tool itself.
     if (!agent) {
