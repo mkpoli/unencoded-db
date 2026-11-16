@@ -11,6 +11,7 @@ declare global {
         DB: D1Database
         MEDIA: R2Bucket
         ASSETS: Fetcher
+        REPORT?: Fetcher
         ADDS?: RateLimit
         EDITS?: RateLimit
         ATLAS_ISSUER?: string
