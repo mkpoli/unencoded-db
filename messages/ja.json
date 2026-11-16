@@ -28,6 +28,7 @@
   "footer.code": "コード：MIT",
   "footer.data": "データ",
   "footer.contact": "お問い合わせ",
+  "footer.community": "コミュニティ",
   "browse.intro": "Unicodeにない文字を見つけたら、画像と見つけた場所を添えて登録してください。異体字や誤植、判断に迷う文字も歓迎します。足りない情報は後から誰でも追加できます。",
   "browse.drop": "画像をドロップまたは貼り付けるか、ファイルを選択",
   "browse.search": "部品、場所、書名、読みなどで検索…",
