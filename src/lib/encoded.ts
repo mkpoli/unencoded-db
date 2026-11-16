@@ -14,16 +14,14 @@ async function read(address: string) {
   return compressed ? new Response(compressed).text() : response.text()
 }
 
-export async function encodedMatch(ids: string) {
-  descriptions ??= read(url).then(parseDescriptions)
-  return (await descriptions).encoded.get(ids) ?? null
-}
+/** BabelStone's descriptions, read once. */
+export const describedTable = () => descriptions ??= read(url).then(parseDescriptions)
 
 export async function characterFacts(char: string) {
   if ([...char].length !== 1) return null
-  descriptions ??= read(url).then(parseDescriptions)
+  const table = describedTable()
   const block = unihanBlock(char)
   let rows = unihan.get(block)
   if (!rows) unihan.set(block, rows = fetch(`/unihan/${block}.tsv`).then(response => response.ok ? response.text() : '').then(parseUnihan))
-  return factsOf(char, await descriptions, await rows)
+  return factsOf(char, await table, await rows)
 }

@@ -850,8 +850,8 @@ describe('order', () => {
   })
 
   test('a record keeps its first year on every row it is listed under, and its words keep none', async () => {
-    const dated = (id: number) => raw.query("SELECT DISTINCT year FROM entry_tags WHERE entry_id = ? AND tag NOT GLOB 'w:*'").all(id)
-    const words = (id: number) => raw.query("SELECT DISTINCT year FROM entry_tags WHERE entry_id = ? AND tag GLOB 'w:*'").all(id)
+    const dated = (id: number) => raw.query("SELECT DISTINCT year FROM entry_tags WHERE entry_id = ? AND tag NOT GLOB '[wp]:*'").all(id)
+    const words = (id: number) => raw.query("SELECT DISTINCT year FROM entry_tags WHERE entry_id = ? AND tag GLOB '[wp]:*'").all(id)
     const id = await createEntry(db, fields(), seen({ place: 'A shop sign', report_date: '1999' }), [], who)
     expect(dated(id)).toEqual([{ year: 1999 }])
     expect(words(id)).toEqual([{ year: null }])
@@ -861,8 +861,8 @@ describe('order', () => {
   })
 
   test('a record keeps its count on every row it is listed under, and its words keep none', async () => {
-    const counted = (id: number) => raw.query("SELECT DISTINCT sightings FROM entry_tags WHERE entry_id = ? AND tag NOT GLOB 'w:*'").all(id)
-    const words = (id: number) => raw.query("SELECT DISTINCT sightings FROM entry_tags WHERE entry_id = ? AND tag GLOB 'w:*'").all(id)
+    const counted = (id: number) => raw.query("SELECT DISTINCT sightings FROM entry_tags WHERE entry_id = ? AND tag NOT GLOB '[wp]:*'").all(id)
+    const words = (id: number) => raw.query("SELECT DISTINCT sightings FROM entry_tags WHERE entry_id = ? AND tag GLOB '[wp]:*'").all(id)
     const id = await createEntry(db, fields(), seen({ place: 'A shop sign' }), [], who)
     expect(counted(id)).toEqual([{ sightings: 1 }])
     expect(words(id)).toEqual([{ sightings: 0 }])
