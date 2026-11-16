@@ -182,7 +182,7 @@ test('0005 gives every claim a key, a list of sightings and a scope, in claims a
   expect(journal.filter(row => !versions.some(version => version.id === row.id)).map(row => row.snapshot)).toEqual([sighting, '{}', '{"revision":4}', '{}', '{"from":3}'])
 
   // An old version is restored through the store, with its keys and the sighting it rested on.
-  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0019_via_chain.sql', '0016_tag_year.sql', '0018_first_sighting.sql']) raw.exec(migration(name))
+  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0019_via_chain.sql', '0016_tag_year.sql', '0018_first_sighting.sql', '0023_categories.sql', '0024_category_rows.sql']) raw.exec(migration(name))
   const db = d1Over(raw)
   expect(await revertEntry(db, 1, 1, { actor: 'p', ip: null })).toEqual({ ok: true, rev: 5 })
   expect((await getEntry(db, 1))!.claims).toEqual(first)
@@ -426,7 +426,8 @@ test('0019 turns each via into the first link of a chain, in the rows and in pas
   expect(sightingSnapshot(rows[1].snapshot)!.vias).toEqual([])
   expect(rows[3].snapshot).toBe('{}')
 
-  // The old version is restorable: the chain is written back as a row of the new table.
+  // The old version is restorable: the chain is written back as a row of the new table, on the schema every migration leaves.
+  for (const name of readdirSync(join(import.meta.dir, '../../../migrations')).sort().filter(name => name.slice(0, 4) > '0019')) raw.exec(migration(name))
   const db = d1Over(raw)
   expect(await restoreSighting(db, 1, 2, 1, sightingSnapshot(rows[0].snapshot)!, { actor: 'p', ip: null }, 1)).toEqual({ ok: true, rev: 2 })
   expect(raw.query('SELECT v.position, c.title, c.records FROM sighting_vias v JOIN sources c ON c.id = v.source_id WHERE v.sighting_id = 2').all()).toEqual([{ position: 0, title: 'A post', records: 1 }])

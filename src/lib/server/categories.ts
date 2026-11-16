@@ -13,26 +13,6 @@ export async function categoryList(db: D1Database, used = false): Promise<Catego
   return used ? results.map(row => ({ ...row, used: Boolean(row.used) })) : results
 }
 
-// What each given category sits under, with everything above it, read by key one level at a time and no
-// deeper than a chain can go.
-export const categoryParentsStatement = (db: D1Database, names: readonly string[]) => db.prepare(`WITH RECURSIVE up(name, parent, depth) AS (
-  SELECT name, parent, 1 FROM categories WHERE name IN (SELECT value FROM json_each(?))
-  UNION SELECT c.name, c.parent, up.depth + 1 FROM categories c JOIN up ON c.name = up.parent WHERE up.depth < ${GENRE_DEPTH_MAX}
-) SELECT name, parent FROM up`).bind(JSON.stringify(names))
-export async function categoryParents(db: D1Database, names: readonly string[]) {
-  const asked = [...new Set(names)]
-  if (!asked.length) return new Map<string, string | null>()
-  const { results } = await categoryParentsStatement(db, asked).all<{ name: string; parent: string | null }>()
-  return new Map(results.map(row => [row.name, row.parent]))
-}
-
-/** The categories a category is filed under, nearest first, as far up as the chain goes. */
-export function ancestorsOf(value: string, parents: ReadonlyMap<string, string | null>) {
-  const chain: string[] = []
-  for (let next = parents.get(value); next && chain.length < GENRE_DEPTH_MAX; next = parents.get(next)) chain.push(next)
-  return chain
-}
-
 // The changes of the categories, newest first, with who made each: a range of the key from the end.
 export const CHANGES_SHOWN = 20
 export type CategoryChange = { id: number; name: string; kind: 'create' | 'move' | 'rename' | 'delete'; before: string | null; after: string | null; at: string; by_id: string | null; by_name: string | null }
@@ -160,12 +140,19 @@ const MOVED = `WITH RECURSIVE down(name, depth) AS (
   SELECT cl.entry_id FROM claims cl JOIN entries e ON e.id = cl.entry_id
   WHERE cl.kind = 'genre' AND cl.value IN (SELECT name FROM down) AND e.merged_into IS NULL AND e.hidden_at IS NULL
 )`
-// A record's category rows are each category it names with every category above it, as `facetTags` files
-// them, and each carries the record's sightings and year, as `reindex` writes them.
-const FILED = `, up(entry_id, name, depth) AS (
-  SELECT cl.entry_id, cl.value, 1 FROM claims cl WHERE cl.kind = 'genre' AND cl.entry_id IN (SELECT entry_id FROM moved)
+/**
+ * A record's category rows, as `up(entry_id, name)`: each category its claims name and every category above
+ * it, read from `categories` as the batch that writes them runs. `records` completes `cl.entry_id …`, as
+ * `= ?` for one record or `IN (…)` for several; the claims are read by record, through `claims_by_entry`.
+ */
+export const filedUnder = (records: string) => `up(entry_id, name, depth) AS (
+  SELECT cl.entry_id, cl.value, 1 FROM claims cl WHERE +cl.kind = 'genre' AND cl.entry_id ${records}
   UNION SELECT up.entry_id, c.parent, up.depth + 1 FROM up JOIN categories c ON c.name = up.name WHERE c.parent IS NOT NULL AND up.depth <= ${GENRE_DEPTH_MAX}
 )`
+/** Writes a record's category rows from `up`, each with the record's sightings and year, as `reindex` writes its other rows. */
+// The record is joined after `up`, by its key, whatever the planner's statistics say.
+export const FILE_ROWS = "INSERT OR IGNORE INTO entry_tags(tag, entry_id, sightings, year) SELECT 'g:' || up.name, up.entry_id, e.sightings, CAST(e.first_year AS INTEGER) FROM up CROSS JOIN entries e ON e.id = up.entry_id"
+const FILED = `, ${filedUnder('IN (SELECT entry_id FROM moved)')}`
 const MOVED_ROWS = "SELECT tag, entry_id FROM entry_tags WHERE entry_id IN (SELECT entry_id FROM moved) AND tag >= 'g:' AND tag < 'g;'"
 
 /**
@@ -177,7 +164,7 @@ export function refileStatements(db: D1Database, name: string) {
   return [
     db.prepare(`${MOVED}, rows AS (${MOVED_ROWS}) UPDATE tag_counts SET n = n - (SELECT count(*) FROM rows WHERE rows.tag = tag_counts.tag) WHERE tag IN (SELECT tag FROM rows) AND ${guard}`).bind(name),
     db.prepare(`${MOVED} DELETE FROM entry_tags WHERE entry_id IN (SELECT entry_id FROM moved) AND tag >= 'g:' AND tag < 'g;' AND ${guard}`).bind(name),
-    db.prepare(`${MOVED}${FILED} INSERT OR IGNORE INTO entry_tags(tag, entry_id, sightings, year) SELECT 'g:' || up.name, up.entry_id, e.sightings, CAST(e.first_year AS INTEGER) FROM up JOIN entries e ON e.id = up.entry_id WHERE ${guard}`).bind(name),
+    db.prepare(`${MOVED}${FILED} ${FILE_ROWS} WHERE ${guard}`).bind(name),
     db.prepare(`${MOVED} INSERT INTO tag_counts(tag, n) SELECT tag, count(*) FROM (${MOVED_ROWS}) WHERE ${guard} GROUP BY tag ON CONFLICT(tag) DO UPDATE SET n = n + excluded.n`).bind(name),
   ]
 }

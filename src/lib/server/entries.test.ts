@@ -3,7 +3,7 @@ import { Database } from 'bun:sqlite'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { categoryTree, flatten, genreLabels } from '$lib/genres'
-import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, categoriesStatement, categoryList, categoryParentsStatement, changesStatement, createCategory, deleteCategory, ensureCategories, latestChangeStatement, moveCategory, moveSizeStatement, recentMovesStatement, refileStatements, renameCategory, undoChange } from './categories'
+import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, categoriesStatement, categoryList, changesStatement, createCategory, deleteCategory, ensureCategories, latestChangeStatement, moveCategory, moveSizeStatement, recentMovesStatement, refileStatements, renameCategory, undoChange } from './categories'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
@@ -1294,21 +1294,27 @@ describe('categories', () => {
     await moveCategory(spy, await listed(), { name: '乙', parent: 'dialect', position: 1 }, who)
     await deleteCategory(spy, await listed(), { name: '乙' }, who)
     await undoChange(spy, await listed(), (raw.query('SELECT MAX(id) AS id FROM category_changes').get() as { id: number }).id, who)
+    // A record's category rows are written in its own batch, by record.
+    const filedRecord = await createEntry(spy, fields({ claims: [claim('genre', '甲')] }), seen(), [], who)
+    await editEntry(spy, filedRecord, 1, fields({ claims: [claim('genre', 'music')] }), who, null)
     expect(sent.length).toBeGreaterThan(12)
-    for (const statement of sent) expect(`${statement.sql}: ${plan(statement)}`).not.toMatch(/AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (categories|tag_counts|claims|entries|entry_tags|people|cl|e|t|c)\b/)
+    // The record writes' other statements have tests of their own.
+    for (const statement of sent.filter(statement => /categor|'g:'/.test(statement.sql))) expect(`${statement.sql}: ${plan(statement)}`).not.toMatch(/claims_by_value \(kind=\?\)|AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (categories|tag_counts|claims|entries|entry_tags|people|cl|e|t|c)\b/)
     // Each pattern names the index a read needs; dropping that index makes the read scan.
     const reads: [string, string, RegExp][] = [
       ['used', plan(categoriesStatement(db, true)), /SEARCH t USING PRIMARY KEY \(tag=\?\)[\s\S]*SEARCH claims USING COVERING INDEX claims_by_value \(kind=\? AND value=\?\)/],
       ['move size', plan(moveSizeStatement(db, '甲')), /SEARCH tag_counts USING PRIMARY KEY \(tag=\?\)/],
       ['recent moves', plan(recentMovesStatement(db, who.actor, '2026')), /SEARCH category_changes USING COVERING INDEX category_changes_by_actor \(actor=\? AND kind=\? AND at>\?\)/],
       ['latest change', plan(latestChangeStatement(db, '甲')), /SEARCH category_changes USING COVERING INDEX category_changes_by_name \(name=\?\)/],
-      ['parents', plan(categoryParentsStatement(db, ['甲'])), /SEARCH categories USING PRIMARY KEY \(name=\?\)/],
       ['changes', plan(changesStatement(db)), /SCAN c[\s\S]*SEARCH p USING INDEX sqlite_autoindex_people_1 \(id=\?\)/],
       ...refileStatements(db, '甲').map((statement, index): [string, string, RegExp] => [`refile ${index}`, plan(statement), /^(?=[\s\S]*SEARCH c USING (COVERING )?INDEX categories_by_parent \(parent=\?\))(?=[\s\S]*SEARCH cl USING (COVERING )?INDEX claims_by_value \(kind=\? AND value=\?\))/]),
       ['next position', plan(db.prepare('SELECT COALESCE(MAX(position) + 1, 0) FROM categories WHERE parent IS ?').bind('music')), /SEARCH categories USING (COVERING )?INDEX categories_by_parent \(parent=\?\)/],
       ['label', plan(db.prepare('SELECT 1 FROM categories WHERE label = ?').bind('甲')), /SEARCH categories USING COVERING INDEX categories_by_label \(label=\?\)/],
       ['unused', plan(db.prepare("SELECT NOT EXISTS (SELECT 1 FROM categories WHERE parent = ?1) AND NOT EXISTS (SELECT 1 FROM claims WHERE kind = 'genre' AND value = ?1)").bind('甲')), /categories_by_parent \(parent=\?\)[\s\S]*claims_by_value \(kind=\? AND value=\?\)/],
     ]
+    // A record's categories are read from its own claims, by record: a search by kind alone reads every category claim.
+    expect(plan(refileStatements(db, '甲')[2])).toMatch(/SEARCH cl USING INDEX claims_by_entry \(entry_id=\?\)/)
+    for (const [name, details] of reads) expect(`${name}: ${details}`).not.toMatch(/claims_by_value \(kind=\?\)/)
     // The one temporary tree is a refile's count, grouping by tag the rows that batch has just written.
     for (const [name, details, wanted] of reads) {
       expect(`${name}: ${details}`).toMatch(wanted)
@@ -1372,6 +1378,75 @@ describe('categories', () => {
     expect(await moveCategory(db, await listed(), { name: 'music', parent: null, position: 3 }, who)).toEqual({ ok: false, code: 'slow' })
     const other = { actor: (await createPerson(db)).id, ip: null }
     expect(await moveCategory(db, await listed(), { name: 'music', parent: null, position: 3 }, other)).toEqual({ ok: true })
+  })
+
+  test('a record written while a category moves is filed under the parents the category has when it lands', async () => {
+    await made('P1'); await made('P2'); await made('C', 'P1')
+    const id = await createEntry(db, fields(), seen(), [], who)
+    // The move lands after the edit has read the record and before its batch runs.
+    let moves = 1
+    const racing = { prepare: (sql: string) => db.prepare(sql), batch: async (statements: { sql: string }[]) => {
+      if (moves && statements.some(statement => /UPDATE entries SET/.test(statement.sql))) { moves -= 1; expect(await moveCategory(db, await listed(), { name: 'C', parent: 'P2', position: 0 }, who)).toEqual({ ok: true }) }
+      return db.batch(statements as never[])
+    } } as unknown as D1Database
+    expect(await editEntry(racing, id, 1, fields({ claims: [claim('genre', 'C')] }), who, null)).toMatchObject({ ok: true })
+    expect(tagsOf(id)).toEqual(['g:C', 'g:P2'])
+    const edited = filed()
+    await refreshAll()
+    expect(filed()).toEqual(edited)
+    // The same for a record being added.
+    moves = 1
+    expect(await moveCategory(db, await listed(), { name: 'C', parent: 'P1', position: 0 }, who)).toEqual({ ok: true })
+    const added = await createEntry(racing, fields({ claims: [claim('genre', 'C')] }), seen({ report_date: '1700' }), [], who)
+    expect(tagsOf(added)).toEqual(['g:C', 'g:P2'])
+    const both = filed()
+    await refreshAll()
+    expect(filed()).toEqual(both)
+  })
+
+  test('a refresh that read a record before an edit gave it a category leaves the edit filed', async () => {
+    await made('A')
+    const id = await createEntry(db, fields(), seen(), [], who)
+    // The edit lands after the refresh has read the record and before its batch runs.
+    let edits = 1
+    const racing = { prepare: (sql: string) => db.prepare(sql), batch: async (statements: { sql: string }[]) => {
+      if (edits && statements.some(statement => /UPDATE entries SET ids/.test(statement.sql))) { edits -= 1; expect(await editEntry(db, id, 1, fields({ claims: [claim('genre', 'A')] }), who, null)).toMatchObject({ ok: true }) }
+      return db.batch(statements as never[])
+    } } as unknown as D1Database
+    await refresh(racing, id)
+    expect(tagsOf(id)).toEqual(['g:A'])
+    expect(countOf('g:A')).toBe(1)
+    const raced = filed()
+    await refreshAll()
+    expect(filed()).toEqual(raced)
+  })
+
+  test("a record's category rows are written by record and by key, with the planner's statistics or without", async () => {
+    raw.run('PRAGMA foreign_keys = OFF')
+    raw.transaction(() => {
+      for (let id = 1000; id < 4000; id += 1) {
+        raw.run("INSERT INTO entries(id, script, created_by, created_at, updated_at, sightings, first_year) VALUES (?, 'han', 'p', 'x', 'x', 1, '1700')", [id])
+        for (let position = 0; position < 4; position += 1) raw.run("INSERT INTO claims(entry_id, position, key, kind, value, data, sightings, under) VALUES (?, ?, ?, ?, ?, NULL, '[]', '[]')", [id, position, `key${position}000`, position ? 'ids' : 'genre', position ? `v${id}-${position}` : id % 3 ? 'wu' : 'music'])
+      }
+    })()
+    raw.run('PRAGMA foreign_keys = ON')
+    await made('甲', 'wu')
+    const sent: { sql: string; values: unknown[] }[] = []
+    const spy = { prepare: (sql: string) => db.prepare(sql), batch: (statements: never[]) => { sent.push(...statements); return db.batch(statements) } } as unknown as D1Database
+    const id = await createEntry(spy, fields({ claims: [claim('genre', '甲')] }), seen(), [], who)
+    await editEntry(spy, id, 1, fields({ claims: [claim('genre', 'music')] }), who, null)
+    await refresh(spy, id)
+    const writes = [...new Map(sent.filter(statement => /'g:'/.test(statement.sql)).map(statement => [statement.sql, statement])).values(), ...refileStatements(db, 'wu') as unknown as { sql: string; values: unknown[] }[]]
+    expect(writes.length).toBeGreaterThan(6)
+    for (const analyzed of [false, true]) {
+      if (analyzed) raw.run('ANALYZE')
+      for (const statement of writes) {
+        const details = `${analyzed ? 'analyzed' : 'bare'}: ${statement.sql}: ${plan(statement)}`
+        expect(details).not.toMatch(/SCAN (categories|tag_counts|claims|entries|entry_tags|cl|e|c)\b|AUTOMATIC|claims_by_value \(kind=\?\)/)
+        // The rows are read from each record's claims, and the record is then found by its key.
+        if (/INSERT OR IGNORE INTO entry_tags/.test(statement.sql)) expect(details).toMatch(/SEARCH cl USING INDEX claims_by_entry \(entry_id=\?\)[\s\S]*SEARCH e USING INTEGER PRIMARY KEY \(rowid=\?\)/)
+      }
+    }
   })
 
   test('undoing a move and a rename puts the categories, rows and counts back as a full refresh would', async () => {
