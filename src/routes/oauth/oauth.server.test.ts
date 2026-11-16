@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test'
 import { handle } from '../../hooks.server'
 import { challenge, nextPage, parseFlow, random } from '$lib/server/atlas'
-import { CLIENT_LIFE, CODE_LIFE, TOKEN_LIFE } from '$lib/server/agents'
+import { CLIENT_LIFE, CODE_LIFE, TOKEN_LIFE, UNUSED_CLIENT_LIFE } from '$lib/server/agents'
+import { hashHex } from '$lib/server/image'
 import { openTestDb } from '$lib/server/testdb'
 import { GET as resourceMetadata } from '../.well-known/oauth-protected-resource/[...rest]/+server'
 import { GET as serverMetadata } from '../.well-known/oauth-authorization-server/+server'
@@ -89,7 +90,9 @@ test('an agent signs in and writes as the person who allowed it', async () => {
   const { access_token, token_type, expires_in } = await answer.json()
   expect({ token_type, expires_in }).toEqual({ token_type: 'Bearer', expires_in: TOKEN_LIFE / 1000 })
   expect(access_token).toMatch(/^[0-9a-f]{64}$/)
-  expect(raw.query('SELECT count(*) AS n FROM agent_tokens WHERE token_hash = ?').get(access_token)).toEqual({ n: 0 })
+  // The site keeps the token's hash, and the client's row says it has been allowed.
+  expect(raw.query('SELECT token_hash FROM agent_tokens').all()).toEqual([{ token_hash: await hashHex(access_token) }])
+  expect(raw.query('SELECT used_at IS NOT NULL AS used FROM agent_clients').get()).toEqual({ used: 1 })
 
   // The token names the person on /mcp, whatever connection id comes with it.
   expect((await (await call('add_record', record('⿰山東'), { authorization: `Bearer ${access_token}`, 'mcp-session-id': 'a'.repeat(64) })).json()).result.isError).toBeUndefined()
@@ -176,12 +179,20 @@ test('a client registers only addresses a person can safely be sent to', async (
   for (const uri of ['https://example.org/callback', 'http://127.0.0.1:8080/cb', 'http://[::1]/cb', 'cursor://anysphere.cursor-mcp/oauth/callback']) expect((await client([uri]) as any).redirect_uris).toEqual([uri])
   expect((await client(['https://example.org/callback'], 'A\u0000 long\n\tname ' + 'x'.repeat(200)) as any).client_name).toHaveLength(100)
 
-  // A client no token names is forgotten a month on; one that signed someone in is kept.
-  await signIn()
-  raw.exec(`UPDATE agent_clients SET created_at = '${new Date(Date.now() - CLIENT_LIFE - 1000).toISOString()}'`)
+  // A client nobody allowed is forgotten after three months. One that signed someone in is kept until its
+  // tokens have run out, and then goes with them.
+  raw.exec('DELETE FROM agent_clients')
   await client()
-  expect(count('agent_clients')).toBe(2)
+  await signIn()
+  const old = (life: number) => new Date(Date.now() - life - 1000).toISOString()
+  raw.exec(`UPDATE agent_clients SET created_at = '${old(UNUSED_CLIENT_LIFE)}'`)
+  await client()
+  expect(raw.query('SELECT used_at IS NOT NULL AS used FROM agent_clients ORDER BY created_at').all()).toEqual([{ used: 1 }, { used: 0 }])
   expect(count('agent_tokens')).toBe(1)
+  raw.exec(`UPDATE agent_clients SET used_at = '${old(CLIENT_LIFE)}' WHERE used_at IS NOT NULL`)
+  await client()
+  expect(raw.query('SELECT used_at FROM agent_clients').all()).toEqual([{ used_at: null }, { used_at: null }])
+  expect(count('agent_tokens')).toBe(0)
 })
 
 test('a token follows its person into the account they sign in to, and stops at a ban or a year', async () => {
