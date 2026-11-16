@@ -6,6 +6,7 @@
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import CharacterFields from '$lib/components/CharacterFields.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
+  import { GLYPH_STYLES } from '$lib/composer'
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
   import CopyButton from '$lib/components/CopyButton.svelte'
   import { characterLinks, descriptionLinks } from '$lib/links'
@@ -87,6 +88,7 @@
         <span class="plate"><IdsGlyph ids={sequences[0]} layout={entry.layout} /></span>
         <ul class="sequences">{#each sequences as sequence}<li><span class="ids">{sequence}</span><CopyButton text={sequence} /></li>{/each}</ul>
       </div>
+      <ul class="styles">{#each GLYPH_STYLES as style (style)}<li><span class="plate small"><IdsGlyph ids={sequences[0]} layout={entry.layout} {style} /></span><span class="style-name">{t(`glyphStyle.${style}`)}</span></li>{/each}</ul>
       <p class="sites">{#each descriptionLinks(sequences[0], at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</p>
     {/if}
     {#if analysis?.tagged}
@@ -202,6 +204,11 @@
   h3 { font-size:14px; font-weight:600 }
   .identity { display:flex; align-items:center; gap:18px; min-width:0 }
   .plate { flex:none; display:grid; place-items:center; width:96px; height:96px; border-radius:8px; background:var(--surface-tile) }
+  /* The description drawn in each style the site composes, side by side. */
+  .styles { display:flex; flex-wrap:wrap; gap:12px; margin:0; padding:0; list-style:none }
+  .styles li { display:flex; flex-direction:column; align-items:center; gap:4px }
+  .plate.small { width:64px; height:64px }
+  .style-name { font-size:12px; color:var(--muted) }
   .sites { display:flex; flex-wrap:wrap; gap:4px 12px; margin:0 } dd .sites { margin-top:4px }
   .sequences { display:flex; flex-direction:column; gap:2px; min-width:0; margin:0; padding:0; list-style:none }
   .sequences li { display:flex; align-items:center; gap:4px; font-size:22px; line-height:1.35 } .sequences li + li { font-size:16px; color:var(--muted) }
