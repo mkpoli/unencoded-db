@@ -143,27 +143,36 @@ test('a code is good once, for its own client, address and verifier, for ten min
   expect(count('agent_tokens')).toBe(1)
 })
 
-test('the consent page sends a client back only where it registered', async () => {
-  const { send, client, consent, decide, count } = fixture()
+test('the consent page sends a browser on only when a button is pressed', async () => {
+  const { send, form, client, consent, decide, count } = fixture()
   const { client_id } = await client(), verifier = random()
   const page = await consent(client_id, verifier)
-  const opened = (path: string) => send(CONSENT, path).then(() => 'shown', (thrown: any) => thrown.location ? new URL(thrown.location).searchParams.get('error') : thrown.status)
+  // What a request that cannot be served is answered with: an error on this site, and no address to go to.
+  const opened = (path: string) => send(CONSENT, path).then(() => 'shown', (thrown: any) => { expect(thrown.location).toBeUndefined(); expect(thrown.status).toBe(400); return thrown.body.message })
   expect(await opened(page)).toBe('shown')
   // A native app picks its loopback port when it starts.
   expect(await opened(page.replace('33418', '50000'))).toBe('shown')
-  expect(await opened(await consent(crypto.randomUUID(), verifier))).toBe(400)
-  expect(await opened(await consent(client_id, verifier, { redirect_uri: 'https://evil.example/callback' }))).toBe(400)
-  expect(await opened(await consent(client_id, verifier, { redirect_uri: 'http://localhost:33418/other' }))).toBe(400)
+  expect(await opened(await consent(crypto.randomUUID(), verifier))).toBe('invalid_client')
+  expect(await opened(await consent(client_id, verifier, { redirect_uri: 'https://evil.example/callback' }))).toBe('invalid_client')
+  expect(await opened(await consent(client_id, verifier, { redirect_uri: 'http://localhost:33418/other' }))).toBe('invalid_client')
   expect(await opened(await consent(client_id, verifier, { response_type: 'token' }))).toBe('unsupported_response_type')
   expect(await opened(await consent(client_id, verifier, { code_challenge_method: 'plain' }))).toBe('invalid_request')
   expect(await opened(await consent(client_id, verifier, { code_challenge: 'short' }))).toBe('invalid_request')
+  expect(await opened(await consent(client_id, verifier, { state: 'x'.repeat(501) }))).toBe('invalid_request')
   expect(await opened(await consent(client_id, verifier, { resource: 'https://other.example/mcp' }))).toBe('invalid_target')
   expect(await opened(await consent(client_id, verifier, { resource: `${ORIGIN}/mcp` }))).toBe('shown')
+  // Pressing a button on a request that cannot be served goes nowhere either.
+  await expect(form(CONSENT, await consent(client_id, verifier, { response_type: 'token' }), { decision: 'allow' }, { origin: ORIGIN })).rejects.toMatchObject({ status: 400 })
 
   const back = await decide(page, 'deny')
   expect(Object.fromEntries(back.searchParams)).toEqual({ error: 'access_denied', state: 'xyz' })
-  expect(count('agent_codes')).toBe(0)
-  expect(count('people')).toBe(0)
+  // Declining a client that is an app opens no app.
+  const app = 'someapp://oauth/callback', registered = await client([app])
+  const appPage = await consent(registered.client_id, verifier, { redirect_uri: app })
+  expect((await (await send(CONSENT, appPage)).json()).to).toBe('someapp:')
+  await expect(form(CONSENT, appPage, { decision: 'deny' }, { origin: ORIGIN })).rejects.toMatchObject({ status: 303, location: '/en' })
+  await expect(form(CONSENT, appPage, { decision: 'allow' }, { origin: ORIGIN })).rejects.toMatchObject({ status: 303, location: expect.stringMatching(/^someapp:\/\/oauth\/callback\?code=[0-9a-f]{64}&state=xyz$/) })
+  expect(count('agent_codes')).toBe(1)
 })
 
 test('a client registers only addresses a person can safely be sent to', async () => {
