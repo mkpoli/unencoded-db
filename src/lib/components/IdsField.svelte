@@ -57,6 +57,19 @@
     await tick()
     lines[added.key]?.focus()
   }
+  /** Adds a description as a row under the first, empty when none is given, and focuses it. One already held is focused instead. */
+  export async function append(value = '') {
+    const text = cleanIds(value)
+    if (text && cleanIds(first) === text) { main?.focus(); return }
+    let target = text ? rest.find(item => cleanIds(item.value) === text) : undefined
+    if (!target) {
+      if (rest.length >= IDS_MAX - 1) return
+      target = row(text)
+      rest.push(target)
+    }
+    await tick()
+    lines[target.key]?.focus()
+  }
   async function remove(key: number) {
     const at = rest.findIndex(item => item.key === key)
     rest.splice(at, 1)
@@ -144,7 +157,7 @@
                     {:else if item.record.cover_key}<img src={media(item.record.cover_key)} alt="" loading="lazy" decoding="async" />{/if}
                   </span>
                   <span class="body">
-                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier !== 'similar'} <a class="text-link" href={href(`/entry/${item.record.id}/sighting/new`)} target="_blank">{t('field.candidateAdd')}</a>{/if}</span>
+                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier !== 'similar'} <a class="text-link" href={href(`/entry/${item.record.id}/sighting/new`)} target="_blank">{t('field.candidateAdd')}</a>{/if}{#if group.tier !== 'same'} <a class="text-link" href={href(`/entry/${item.record.id}?ids_add=${encodeURIComponent(sequence)}#edit-ids`)} target="_blank">{t('field.candidateAddIds')}</a>{/if}</span>
                     <span class="ids">{item.record.ids ?? ''}</span>
                   </span>
                 {:else}

@@ -234,8 +234,8 @@ test('the radicals page lists the radicals in use, browse narrows by one and the
   expect(await browseLoad(event(`radical=${encodeURIComponent('口')}`))).toMatchObject({ tiles: [{ id: 2 }] })
   expect(await browseLoad(event(`radical=${encodeURIComponent('ㄏ')}`))).toMatchObject({ tiles: [{ id: 3 }] })
   await expect(browseLoad(event(`radical=${encodeURIComponent('克')}`))).rejects.toMatchObject({ status: 404 })
-  expect(await detailLoad({ params: { id: '3', locale: 'en' }, platform } as any)).toMatchObject({ filed: [{ path: 'ㄏ', radical: 'ㄏ' }] })
-  expect(await detailLoad({ params: { id: '1', locale: 'en' }, platform } as any)).toMatchObject({ filed: [{ path: '儿', radical: '儿' }] })
+  expect(await detailLoad({ params: { id: '3', locale: 'en' }, url: new URL('https://example.test/en/entry/3'), platform } as any)).toMatchObject({ filed: [{ path: 'ㄏ', radical: 'ㄏ' }] })
+  expect(await detailLoad({ params: { id: '1', locale: 'en' }, url: new URL('https://example.test/en/entry/1'), platform } as any)).toMatchObject({ filed: [{ path: '儿', radical: '儿' }] })
 })
 
 test('a record code typed into search opens its record', async () => {
