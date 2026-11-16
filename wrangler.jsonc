@@ -23,6 +23,8 @@
     }
   ],
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "unencoded-db" }],
+  // Composition reports are forwarded to the intake Worker, which files them on mkpoli/han-compose.
+  "services": [{ "binding": "REPORT", "service": "ids-reports" }],
   // An open upload needs a ceiling: each address gets this many writes a minute.
   "ratelimits": [
     { "name": "ADDS", "namespace_id": "5101", "simple": { "limit": 10, "period": 60 } },

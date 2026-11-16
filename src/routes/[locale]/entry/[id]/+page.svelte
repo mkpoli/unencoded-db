@@ -6,6 +6,7 @@
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import CharacterFields from '$lib/components/CharacterFields.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
+  import SpellingReport from '$lib/components/SpellingReport.svelte'
   import { GLYPH_STYLES } from '$lib/composer'
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
   import CopyButton from '$lib/components/CopyButton.svelte'
@@ -39,6 +40,7 @@
   let editOpen = $state(untrack(() => editing))
   $effect(() => { if (editing) editOpen = true })
   let fields = $state<CharacterFields>()
+  let plates = $state<HTMLElement>()
   // The links to a field open the form and focus the field's first control; without scripts the browser
   // opens the form around the fragment target.
   async function edit(event: MouseEvent) {
@@ -111,9 +113,12 @@
     <div class="head"><h2>{t('entry.about')}</h2><a class="button small" href="#edit-ids" data-edit="ids">{t('entry.edit')}</a></div>
     {#if sequences.length}
       <div class="identity">
-        <ul class="styles">{#each GLYPH_STYLES as style (style)}<li><span class="plate"><IdsGlyph ids={sequences[0]} layout={entry.layout} {style} /></span><span class="style-name">{t(`glyphStyle.${style}`)}</span></li>{/each}</ul>
+        <ul class="styles" bind:this={plates}>{#each GLYPH_STYLES as style (style)}<li><span class="plate"><IdsGlyph ids={sequences[0]} layout={entry.layout} {style} /></span><span class="style-name">{t(`glyphStyle.${style}`)}</span></li>{/each}</ul>
         <ul class="sequences">{#each sequences as sequence}<li><span class="ids">{sequence}</span><CopyButton text={sequence} /></li>{/each}</ul>
         <EditLink field="ids" name={t('field.ids')} />
+      </div>
+      <div class="spelling">
+        <SpellingReport record={entry.id} sequence={sequences[0]} layout={entry.layout} drawing={style => plates?.children[GLYPH_STYLES.indexOf(style)]?.querySelector('svg') ?? null} />
       </div>
       <p class="sites">{#each descriptionLinks(sequences[0], at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</p>
     {:else}
