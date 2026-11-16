@@ -44,14 +44,17 @@ export const groupKey = (part: string) => { const first = groupsOf.get(part)?.[0
 const mapRadicals = (text: string) => [...text.normalize('NFC').replace(/\s+/gu, '')].map(radicalEquivalent).join('')
 const toTree = (part: IdsPart): Tree => typeof part === 'string' ? part : part === null || part === undefined ? '⬚' : { op: part.op, parts: part.parts.map(toTree) }
 
-/** A description as a tree with radical code points mapped, or null when it is no description. */
-export function treeOf(text: string): Tree | null {
-  const found = parse(mapRadicals(text))
+/** A description as a tree, radical code points as typed, or null when it is no description. */
+export function typedTree(text: string): Tree | null {
+  const found = parse(plain(text))
   return found.problem || found.tree === undefined ? null : toTree(found.tree)
 }
 
-const hasOverlay = (tree: Tree): boolean => typeof tree !== 'string' && (tree.op === '⿻' || tree.parts.some(hasOverlay))
-const hasStroke = (tree: Tree): boolean => typeof tree === 'string' ? isStroke(tree) : tree.parts.some(hasStroke)
+/** A description as a tree with radical code points mapped, or null when it is no description. */
+export const treeOf = (text: string): Tree | null => typedTree(mapRadicals(text))
+
+export const hasOverlay = (tree: Tree): boolean => typeof tree !== 'string' && (tree.op === '⿻' || tree.parts.some(hasOverlay))
+export const hasStroke = (tree: Tree): boolean => typeof tree === 'string' ? isStroke(tree) : tree.parts.some(hasStroke)
 // What a description expands to, or null when it is not made of whole components.
 const wholes = new Map<string, Tree | null>()
 /** Forgets the expansions kept for the descriptions read so far; they are read again when needed. */
@@ -77,7 +80,7 @@ export function expand(ids: string, data: Data): Tree | null {
   return tree && expandTree(tree, data, EXPAND_DEPTH)
 }
 
-const write = (tree: Tree, part: (leaf: string) => string = leaf => leaf): string => typeof tree === 'string' ? part(tree) : tree.op + tree.parts.map(inner => write(inner, part)).join('')
+export const write = (tree: Tree, part: (leaf: string) => string = leaf => leaf): string => typeof tree === 'string' ? part(tree) : tree.op + tree.parts.map(inner => write(inner, part)).join('')
 const leavesOf = (tree: Tree): string[] => typeof tree === 'string' ? [tree] : tree.parts.flatMap(leavesOf)
 
 /** A description in its normal form: normalised, with every expandable part expanded. */

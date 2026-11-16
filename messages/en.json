@@ -321,6 +321,7 @@
   "browse.searchSegmentEmpty": "No matches in this set.",
   "browse.searched": "Searched {n} of {of}",
   "browse.found": "{n} found",
+  "browse.alsoSearched": "Also searched: {ids}",
   "browse.pageLeft": "{n} more page",
   "browse.pagesLeft": "{n} more pages",
   "browse.continueSearch": "Continue search",

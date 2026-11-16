@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import { afterNavigate, preloadData } from '$app/navigation'
+  import { afterNavigate, goto, preloadData } from '$app/navigation'
   import { browser } from '$app/environment'
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
@@ -9,6 +9,10 @@
   import { MARKED } from '$lib/registries'
   import { ORDER, PAGE, SORTS } from '$lib/order'
   import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
+  import { describedTable } from '$lib/encoded'
+  import { cleanIds } from '$lib/ids'
+  import { equivalentSpellings } from '$lib/ids-variants'
+  import { isDescription } from 'ids-input'
   import ChatLinks from '$lib/components/ChatLinks.svelte'
   import { href, t } from '$lib/t'
   import { TILE_SIZE_COOKIE, TILE_SIZES, tileSizeOf } from '$lib/tile-size'
@@ -111,6 +115,20 @@
     document.cookie = `${TILE_SIZE_COOKIE}=${tileSize};path=/;max-age=31536000;samesite=lax`
     document.documentElement.dataset.tileSize = String(tileSize)
   }
+  // A whole description is also searched under its other spellings, which the table in the browser knows. Without
+  // the table, or without scripts, it is searched as typed.
+  async function search(event: SubmitEvent) {
+    const form = event.currentTarget as HTMLFormElement
+    const values = new FormData(form)
+    const query = cleanIds(String(values.get('q') ?? ''))
+    if (!isDescription(query)) return
+    event.preventDefault()
+    const params = new URLSearchParams(values as unknown as Record<string, string>)
+    let spellings: string[] = []
+    try { spellings = equivalentSpellings(query, await describedTable()).slice(1) } catch { /* searched as typed */ }
+    for (const spelling of spellings) params.append('also', spelling)
+    await goto(`?${params}`)
+  }
   const count = (key: string) => data.counts?.[key] ?? 0
   // The decades records were first seen in, by century, oldest first.
   const centuries = $derived.by(() => {
@@ -161,7 +179,7 @@
     <div class="stack intro"><h1>{t('nav.browse')}</h1><p class="muted">{t('browse.intro')}</p><p class="chats"><ChatLinks /></p></div>
     <a class="button primary" href={href('/new')}>{t('browse.addOne')}</a>
   </div>
-  <form class="filters" method="GET">
+  <form class="filters" method="GET" onsubmit={search}>
     <div class="search field"><label for="q">{t('browse.searchLabel')}</label><input class="input" id="q" name="q" value={data.query ?? ''} placeholder={t('browse.search')} aria-describedby="search-hint" /></div>
     <div class="field"><label for="script">{t('field.script')}</label><select class="input" id="script" name="script" value={data.script ?? ''}><option value="">{t('browse.all')}</option>{#each SCRIPTS as script (script.id)}{#if count(`s:${script.id}`) || data.script === script.id}<option value={script.id}>{t(`script.${script.id}`)} ({count(`s:${script.id}`)})</option>{/if}{/each}</select></div>
     <div class="field"><label for="filter">{t('browse.needs')}</label><select class="input" id="filter" name="filter" value={NEEDS.includes(data.filter as never) ? data.filter : ''}><option value="">{t('browse.all')}</option>{#each NEEDS as need}<option value={need}>{t(`needs.${need}`)} ({count(`n:${need}`)})</option>{/each}</select></div>
@@ -209,6 +227,7 @@
     <p class="muted" role="alert">{t(`browse.${data.searchError}`)}</p>
   {:else}
     {#if shown.total}<p class="found">{t('browse.found', { n: `${shown.total.n}${shown.total.floor ? '+' : ''}` })}</p>{/if}
+    {#if data.also.length}<p class="found also">{t('browse.alsoSearched', { ids: data.also.join(' ') })}</p>{/if}
     {#if shown.tiles.length}
       <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
     {:else if !shown.partial || done}
@@ -239,6 +258,7 @@
   .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(var(--tile-size),100%),1fr)); gap:22px 16px }
   :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .tiles { gap:8px }
   .found { margin-bottom:-8px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
+  .also { margin-top:0; word-break:break-all }
   .ahead { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px }
   .empty { padding:48px 16px; text-align:center; color:var(--muted) } .empty a { display:inline-block; margin-top:12px; color:var(--ink) }
 </style>
