@@ -37,6 +37,24 @@ export const GENRES: readonly Genre[] = [
 export const COLLECTIONS = [{ slug: 'extension-e', label: 'Extension E' }] as const
 
 export const genreOf = (slug: string) => GENRES.find(genre => genre.slug === slug) ?? null
+/** What a stored category shows as: a built-in's label, or a custom name as written. */
+export const genreLabel = (value: string) => genreOf(value)?.label ?? value
+
+export const GENRE_LENGTH_MAX = 40
+
+/**
+ * The value a category is stored as, or null when it is neither a built-in nor a valid custom name.
+ * A custom name that spells a built-in's label is that built-in. A custom name has no parent.
+ */
+export function cleanGenre(value: string): string | null {
+  const name = value.normalize('NFC').trim()
+  if (!name || name.length > GENRE_LENGTH_MAX) return null
+  if (genreOf(name)) return name
+  const named = GENRES.find(genre => genre.label === name)
+  if (named) return named.slug
+  return /[\s|,，、\p{Cc}]/u.test(name) ? null : name
+}
+
 export const isCollection = (slug: string) => COLLECTIONS.some(collection => collection.slug === slug)
 
 export type GenreGroup = { parent: Genre; children: Genre[] }

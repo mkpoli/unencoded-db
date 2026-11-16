@@ -10,7 +10,7 @@ import { statusOf } from '$lib/status'
 import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
-import { genreOf } from '$lib/genres'
+import { GENRES, genreOf } from '$lib/genres'
 import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
@@ -1018,6 +1018,15 @@ export function radicalCountsStatement(db: D1Database, under?: string) {
 export async function radicalCounts(db: D1Database, under?: string) {
   const { results } = await radicalCountsStatement(db, under).all<{ stated: number; path: string; n: number }>()
   return { counts: new Map(results.filter(row => !row.stated).map(row => [row.path, row.n])), stated: new Set(results.filter(row => row.stated).map(row => row.path)) }
+}
+
+// The categories people have added, with the records filed under each. They are one range of the counts,
+// read by key and capped; the built-in categories are read out of it afterwards.
+export const CUSTOM_GENRES_MAX = 200
+export const customGenresStatement = (db: D1Database) => db.prepare(`SELECT substr(tag, 3) AS value, n FROM tag_counts WHERE tag >= 'g:' AND tag < 'g;' AND n > 0 LIMIT ${CUSTOM_GENRES_MAX + GENRES.length}`)
+export async function customGenres(db: D1Database) {
+  const { results } = await customGenresStatement(db).all<{ value: string; n: number }>()
+  return results.filter(row => !genreOf(row.value)).slice(0, CUSTOM_GENRES_MAX).sort((a, b) => b.n - a.n || (a.value < b.value ? -1 : a.value > b.value ? 1 : 0))
 }
 
 export const TAGS_MAX = 200

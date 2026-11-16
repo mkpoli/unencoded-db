@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit'
-import { earliestSighting, editEntry, getEntry, radicalCounts, readEntryFields } from '$lib/server/entries'
+import { customGenres, earliestSighting, editEntry, getEntry, radicalCounts, readEntryFields } from '$lib/server/entries'
 import { filedUnder, radicalPath } from '$lib/radicals'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { writer } from '$lib/server/people'
@@ -19,7 +19,7 @@ export const load: PageServerLoad = async (event) => {
   const sightings = found.sightings.filter(s => !s.hidden_at)
   // The record's earliest attestation, and which piece of evidence holds it.
   const earliest = earliestSighting(sightings)
-  return { entry: found.entry, claims: found.claims, sightings, filed, earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
+  return { entry: found.entry, claims: found.claims, sightings, filed, customGenres: await customGenres(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
 }
 
 export const actions: Actions = {

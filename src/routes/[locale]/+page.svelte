@@ -172,6 +172,7 @@
         <option value="">{t('browse.all')}</option>
         {#each standalone as genre (genre.slug)}<option value={genre.slug}>{genre.label} ({count(`g:${genre.slug}`)})</option>{/each}
         {#each groups as group (group.parent.slug)}<optgroup label={group.parent.label}><option value={group.parent.slug}>{group.parent.label} ({count(`g:${group.parent.slug}`)})</option>{#each group.children as genre (genre.slug)}<option value={genre.slug}>{genre.label} ({count(`g:${genre.slug}`)})</option>{/each}</optgroup>{/each}
+        {#if data.customGenres.length}<optgroup label={t('categories.custom')}>{#each data.customGenres as genre (genre.value)}<option value={genre.value}>{genre.value} ({genre.n})</option>{/each}</optgroup>{/if}
       </select></div>
     {/if}
     <div class="field decade"><label for="decade">{t('browse.decadeLabel')}</label><select class="input" id="decade" name="decade" value={data.decade ?? ''}>

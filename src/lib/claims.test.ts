@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { CLAIM_LIMITS, CLAIM_SCOPES_MAX, CLAIM_SIGHTINGS_MAX, claimsUnder, isClaimKey, mapSightings, newClaimKey, parseClaims, readClaims, scopesOf, splitCharacters, supportedBy, validClaim, type Claim } from './claims'
+import { cleanGenre } from './genres'
 import { IDS_LENGTH_MAX, IDS_MAX } from './ids'
 
 // A claim without its key, which a test names only where the key matters.
@@ -171,13 +172,31 @@ describe('readings, meanings and tags', () => {
   })
 })
 
+describe('categories', () => {
+  test('a built-in slug is kept, its label is its slug and a custom name is kept', () => {
+    expect(cleanGenre('hakka')).toBe('hakka')
+    expect(cleanGenre('客家語')).toBe('hakka')
+    expect(cleanGenre('方言字')).toBe('dialect')
+    expect(cleanGenre(' 近古字書 ')).toBe('近古字書')
+    expect(cleanGenre('x'.repeat(40))).toBe('x'.repeat(40))
+  })
+  test('whitespace, separators, control characters and a long name are rejected', () => {
+    for (const bad of ['', '  ', 'a b', 'a|b', 'a,b', 'a，b', 'a、b', 'a\u0000b', 'x'.repeat(41)]) expect(cleanGenre(bad)).toBeNull()
+  })
+  test('a form saves a custom category, once', () => {
+    expect(read([['genres_present', '1'], ['genre', '戶籍用字'], ['genre', '戶籍用字'], ['genre', 'bad name']])).toEqual({ claims: [claim('genre', '戶籍用字')] })
+    expect(valid(claim('genre', '戶籍用字'))).toBe(true)
+    expect(valid(claim('genre', '客家語'))).toBe(false)
+  })
+})
+
 describe('stored claims', () => {
   test('a claim this app writes is valid, and a list with a bad or surplus claim is not parsed', () => {
     expect(valid(claim('encoding', 'U+5D20', { charset: 'unicode' }))).toBe(true)
     expect(valid(claim('encoding', 'U+5D20'))).toBe(false)
     expect(valid(claim('relation', '木', { relationship: 'nope' }))).toBe(false)
     expect(valid(claim('ivd', 'U+20000'))).toBe(false)
-    expect(valid(claim('genre', 'not-a-genre'))).toBe(false)
+    expect(valid(claim('genre', 'not a genre'))).toBe(false)
     const stored = keyed([claim('reading', 'a')])
     expect(parseClaims(JSON.stringify(stored))).toEqual(stored)
     expect(parseClaims('{broken')).toBeNull()

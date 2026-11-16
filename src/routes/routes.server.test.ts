@@ -6,6 +6,7 @@ import { actions as detailActions, load as detailLoad } from './[locale]/entry/[
 import { actions as addSightingActions } from './[locale]/entry/[id]/sighting/new/+page.server'
 import { load as browseLoad } from './[locale]/+page.server'
 import { load as sourcesLoad } from './[locale]/sources/+page.server'
+import { load as categoriesLoad } from './[locale]/categories/+page.server'
 import { load as radicalsLoad } from './[locale]/radicals/+page.server'
 import { load as chronologyLoad } from './[locale]/chronology/+page.server'
 
@@ -181,6 +182,19 @@ test('browse narrows by category, collection or tag and rejects a malformed one'
   expect(await browseLoad(event('tag=IRG'))).toMatchObject({ tag: 'IRG', tiles: [{ id: 1 }] })
   expect(await browseLoad(event('genre=music'))).toMatchObject({ tiles: [] })
   await expect(browseLoad(event('genre=a%7Cb'))).rejects.toMatchObject({ status: 404 })
+})
+
+test('a category anyone adds is stored, counted, listed and browsable', async () => {
+  const { db } = openTestDb()
+  const form = new FormData()
+  form.set('place', 'A book'); form.set('url', 'https://example.test/source'); form.set('genres_present', '1'); form.append('genre', '近古字書'); form.append('genre', '方言字'); form.append('genre', 'a b')
+  const create = { request: { formData: async () => form }, url: new URL('https://example.test/en'), params: { locale: 'en' }, locals: {}, platform: { env: { DB: db, MEDIA: {} } }, cookies: { set() {} }, getClientAddress: () => '127.0.0.1' } as any
+  await expect(createActions.default(create)).rejects.toMatchObject({ status: 303 })
+  const platform = { env: { DB: db } }
+  const event = (query: string) => ({ url: new URL(`https://example.test/en?${query}`), locals: { glyphStyle: 'sans' }, platform }) as any
+  expect(await browseLoad(event(`genre=${encodeURIComponent('近古字書')}`))).toMatchObject({ genre: '近古字書', tiles: [{ id: 1 }], customGenres: [{ value: '近古字書', n: 1 }] })
+  expect(await browseLoad(event('genre=dialect'))).toMatchObject({ tiles: [{ id: 1 }] })
+  expect(await categoriesLoad({ platform } as any)).toMatchObject({ custom: [{ value: '近古字書', label: '近古字書', n: 1 }], standalone: expect.any(Array), groups: expect.any(Array) })
 })
 
 test('the radicals page lists the radicals in use, browse narrows by one and the record names it', async () => {

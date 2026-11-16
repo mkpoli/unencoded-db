@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
-import { type Citation, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, WORD_SIZE, EXACT_SIZE, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { type Citation, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customGenres, customGenresStatement, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, WORD_SIZE, EXACT_SIZE, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -1081,6 +1081,25 @@ describe('scripts outside the list', () => {
     const details = (raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')
     expect(details).not.toMatch(/TEMP B-TREE|SCAN entries/)
     expect(details.match(/SEARCH entries USING (COVERING )?INDEX entries_custom_scripts \(script_other>\?\)/g)).toHaveLength(2)
+  })
+})
+
+describe('custom categories', () => {
+  test('are counted from the tag counts, without the built-in ones, most records first, as one key range', async () => {
+    await createEntry(db, fields({ claims: [claim('genre', '近古字書'), claim('genre', 'hakka')] }), seen(), [], who)
+    await createEntry(db, fields({ claims: [claim('genre', '近古字書'), claim('genre', '戶籍用字')] }), seen(), [], who)
+    await createEntry(db, fields({ claims: [claim('genre', '甲')] }), seen(), [], who)
+    expect(await customGenres(db)).toEqual([{ value: '近古字書', n: 2 }, { value: '戶籍用字', n: 1 }, { value: '甲', n: 1 }].sort((a, b) => b.n - a.n || (a.value < b.value ? -1 : 1)))
+    expect((await list(db, { facet: 'g:近古字書' }))!.tiles.map(tile => tile.id)).toEqual([2, 1])
+    expect(raw.query("SELECT n FROM tag_counts WHERE tag = 'g:戶籍用字'").get()).toEqual({ n: 1 })
+    const statement = customGenresStatement(db) as unknown as { sql: string; values: unknown[] }
+    const details = (raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.values as never[])) as { detail: string }[]).map(row => row.detail)
+    // The range is read on tag_counts' primary key, which cannot be dropped, so there is no index to delete for this test.
+    expect(details).toEqual([expect.stringMatching(/^SEARCH tag_counts USING PRIMARY KEY \(tag>\? AND tag<\?\)$/)])
+  })
+  test('every valid name is a facet the list accepts', () => {
+    expect(facetTag('g:近古字書')).toBe('g:近古字書')
+    expect(facetTag(`g:${'字'.repeat(40)}`)).toBe(`g:${'字'.repeat(40)}`)
   })
 })
 

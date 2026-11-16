@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit'
 import { mapSightings } from '$lib/claims'
 import { ADD_SIGHTINGS_MAX } from '$lib/limits'
-import { CITATION_FIELDS, hasLink, type SightingFields, createEntry, getEntryRow, getSighting, readEntryFields, readSightingFields } from '$lib/server/entries'
+import { CITATION_FIELDS, customGenres, hasLink, type SightingFields, createEntry, getEntryRow, getSighting, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { writer } from '$lib/server/people'
 import { positiveId, readImages, sightingForms, storeImages, type ReadImage } from '../../_submission.server'
@@ -11,13 +11,14 @@ import type { Actions, PageServerLoad } from './$types'
 // for another character seen in the same place.
 export const load: PageServerLoad = async (event) => {
   const id = positiveId(event.url.searchParams.get('sighting'))
-  if (!id) return { seed: null }
   const { DB } = env(event)
+  const known = await customGenres(DB)
+  if (!id) return { seed: null, customGenres: known }
   const sighting = await getSighting(DB, id)
   const entry = sighting && !sighting.hidden_at ? await getEntryRow(DB, sighting.entry_id) : null
-  if (!sighting || !entry || entry.hidden_at || entry.merged_into) return { seed: null }
+  if (!sighting || !entry || entry.hidden_at || entry.merged_into) return { seed: null, customGenres: known }
   const values: Partial<SightingFields> = { ...Object.fromEntries((['place', 'original_date', 'page', ...CITATION_FIELDS] as const).map(field => [field, sighting[field]])), vias: sighting.vias.map(({ id: _, ...via }) => via) }
-  return { seed: { values, pictures: sighting.media.map(picture => picture.image_key) } }
+  return { seed: { values, pictures: sighting.media.map(picture => picture.image_key) }, customGenres: known }
 }
 
 const filled = (form: FormData, fields: SightingFields) => Object.values({ ...fields, vias: fields.vias.length }).some(Boolean) || form.getAll('image').some(file => file instanceof File && file.size > 0)
