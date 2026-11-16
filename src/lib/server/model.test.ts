@@ -122,7 +122,7 @@ describe('claims', () => {
     const form = new FormData()
     form.set('ids', '⿰山东, ⿰山東')
     form.set('genres_present', '1')
-    const read = readClaims(form, base)
+    const read = readClaims(form, [], base)
     expect(read.claims.map(item => [item.kind, item.value])).toEqual([['ids', '⿰山东'], ['ids', '⿰山東'], ['reading', 'tung']])
     expect(read.claims.slice(1)).toEqual([base[0], base[2]])
   })
@@ -431,7 +431,7 @@ describe('review findings', () => {
     const form = new FormData()
     form.set('related_characters_present', '1')
     for (let i = 0; i < 10; i++) { form.append('related_character', `字${i}`); form.append('related_relationship', 'variant'); form.append('related_difference', 'x'.repeat(5000)); form.append('related_evidence', 'y'.repeat(5000)) }
-    expect(readClaims(form).error).toBe('relatedCharacters')
+    expect(readClaims(form, []).error).toBe('relatedCharacters')
   })
 })
 

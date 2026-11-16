@@ -11,7 +11,7 @@
     <h1>{t('person.title', { name: data.person.name })}</h1>
     <p class="muted small">{t('person.since', { date: day(data.person.created_at) })}</p>
   </div>
-  <HistoryList rows={data.rows} showEntry showActor={false} empty={t('person.empty')} next={data.next} />
+  <HistoryList rows={data.rows} categories={data.categories} showEntry showActor={false} empty={t('person.empty')} next={data.next} />
 </div>
 
 <style>

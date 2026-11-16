@@ -61,11 +61,12 @@ An agent can sign in, and then writes under a person's name. The site is the OAu
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and, optionally, a second source it was found through |
 | `sighting_media` | A sighting's pictures, each with its mark and thumbnail |
 | `revisions` | The journal: every state of an entry or a sighting, with its author |
+| `categories`, `category_changes` | The categories, each with a fixed name, a label, a parent and a place among its siblings, and the log of their changes |
 | `entry_tags`, `tag_counts` | The index behind lists, filters, radicals and search |
 | `reports`, `people`, `sessions` | Moderation and identity |
 | `agent_clients`, `agent_codes`, `agent_tokens` | Agent sign-in: the registered clients, the codes a person granted and the tokens traded for them, both kept as hashes |
 
-A claim is a row of `kind`, `value` and JSON `data`; the kinds and their form fields are in `src/lib/claims.ts`, and a new kind needs no migration. Categories and collections are listed in `src/lib/genres.ts`. The character sets, dictionaries and glyph registries a record can state a code in are listed in `src/lib/registries.ts`; a record with a Unicode code for an ideograph also counts as registered in zi.tools, yedict and GlyphWiki. Unicode, zi.tools, yedict, GlyphWiki and MJ carry a mark, and the list narrows to the records in a marked work with `?in=<id>` or to the ones not in it with `?out=<id>`, each repeatable. `entries.marks` repeats the marked works a record is in, for the short tags on a gallery tile, and the JSON export gives it as an array.
+A claim is a row of `kind`, `value` and JSON `data`; the kinds and their form fields are in `src/lib/claims.ts`, and a new kind needs no migration. Categories are rows of `categories`, arranged on `/categories` and changed through `POST /api/categories`; collections are listed in `src/lib/genres.ts`. The character sets, dictionaries and glyph registries a record can state a code in are listed in `src/lib/registries.ts`; a record with a Unicode code for an ideograph also counts as registered in zi.tools, yedict and GlyphWiki. Unicode, zi.tools, yedict, GlyphWiki and MJ carry a mark, and the list narrows to the records in a marked work with `?in=<id>` or to the ones not in it with `?out=<id>`, each repeatable. `entries.marks` repeats the marked works a record is in, for the short tags on a gallery tile, and the JSON export gives it as an array.
 
 Each claim also carries three links, all inside its own record:
 

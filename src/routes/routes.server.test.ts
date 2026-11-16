@@ -6,7 +6,7 @@ import { actions as detailActions, load as detailLoad } from './[locale]/entry/[
 import { actions as addSightingActions } from './[locale]/entry/[id]/sighting/new/+page.server'
 import { load as browseLoad } from './[locale]/+page.server'
 import { load as sourcesLoad } from './[locale]/sources/+page.server'
-import { actions as categoriesActions, load as categoriesLoad } from './[locale]/categories/+page.server'
+import { load as categoriesLoad } from './[locale]/categories/+page.server'
 import * as categoriesApi from './api/categories/+server'
 import { load as radicalsLoad } from './[locale]/radicals/+page.server'
 import { load as chronologyLoad } from './[locale]/chronology/+page.server'
@@ -194,8 +194,8 @@ test('a category typed into the form without scripts is made under its parent an
   const platform = { env: { DB: db } }
   const event = (query: string) => ({ url: new URL(`https://example.test/en?${query}`), locals: { glyphStyle: 'sans' }, platform }) as any
   for (const genre of [encodeURIComponent('近古字書'), 'hakka', 'dialect']) expect(await browseLoad(event(`genre=${genre}`))).toMatchObject({ tiles: [{ id: 1 }] })
-  expect(await browseLoad(event(''))).toMatchObject({ customGenres: [{ value: '近古字書', parent: 'hakka', n: 1 }] })
-  // A bad parent stops the record, and a built-in label is the built-in category.
+  expect(((await browseLoad(event(''))) as any).categories).toContainEqual({ name: '近古字書', label: '近古字書', parent: 'hakka', position: 0, n: 1 })
+  // A bad parent stops the record, and a category's label is that category.
   const refused = new FormData()
   refused.set('place', 'A book'); refused.set('url', 'https://example.test/source'); refused.set('genre_new', '乙'); refused.set('genre_new_parent', '無')
   expect((await createActions.default({ ...create, request: { formData: async () => refused } }) as any).data.error).toBe('category')
@@ -203,20 +203,32 @@ test('a category typed into the form without scripts is made under its parent an
   label.set('place', 'A book'); label.set('url', 'https://example.test/source'); label.set('genre_new', '方言字')
   await expect(createActions.default({ ...create, request: { formData: async () => label } })).rejects.toMatchObject({ status: 303 })
   expect(await browseLoad(event('genre=dialect'))).toMatchObject({ tiles: [{ id: 2 }, { id: 1 }] })
-  expect(((await categoriesLoad({ platform } as any)) as any).custom).toHaveLength(1)
+  expect(((await categoriesLoad({ platform } as any)) as any).categories.some((category: { name: string }) => category.name === '方言字')).toBe(false)
 })
 
-test('the categories page and its endpoint add a category, and the page counts one no record uses', async () => {
+test('the endpoint creates, moves, renames and deletes a category, and the page reads them with the latest changes', async () => {
   const { db } = openTestDb()
   const platform = { env: { DB: db } }
-  const post = (fields: Record<string, string>) => { const body = new FormData(); for (const [name, value] of Object.entries(fields)) body.set(name, value); return { request: { formData: async () => body }, url: new URL('https://example.test/en/categories?/add'), params: { locale: 'en' }, locals: {}, platform, cookies: { set() {} }, getClientAddress: () => '127.0.0.1' } as any }
-  await expect(categoriesActions.add(post({ genre_new: '戶籍用字', genre_new_parent: '' }))).rejects.toMatchObject({ status: 303, location: '/en/categories' })
-  await expect(categoriesActions.add(post({ genre_new: '寺院用字', genre_new_parent: '戶籍用字' }))).rejects.toMatchObject({ status: 303 })
-  expect((await categoriesActions.add(post({ genre_new: '丙', genre_new_parent: '無' })) as any).data.error).toBe('category')
-  expect(await categoriesLoad({ platform } as any)).toMatchObject({ custom: [{ value: '寺院用字', parent: '戶籍用字', n: 0 }, { value: '戶籍用字', parent: null, n: 0 }] })
-  const response = await categoriesApi.POST(post({ genre_new: '近古字書', genre_new_parent: 'music' }))
-  expect(await response.json()).toEqual({ value: '近古字書', created: true })
-  expect((await categoriesApi.POST(post({ genre_new: 'a b' }))).status).toBe(400)
+  const post = (fields: Record<string, string>) => { const body = new FormData(); for (const [name, value] of Object.entries(fields)) body.set(name, value); return { request: { formData: async () => body }, url: new URL('https://example.test/api/categories'), params: {}, locals: {}, platform, cookies: { set() {} }, getClientAddress: () => '127.0.0.1' } as any }
+  const answer = async (fields: Record<string, string>) => { const response = await categoriesApi.POST(post(fields)); return { status: response.status, body: await response.json() } }
+  expect(await answer({ action: 'create', name: '戶籍用字', parent: '' })).toEqual({ status: 200, body: { value: '戶籍用字', created: true } })
+  expect(await answer({ action: 'create', name: '寺院用字', parent: '戶籍用字' })).toEqual({ status: 200, body: { value: '寺院用字', created: true } })
+  expect(await answer({ action: 'create', name: '客家語', parent: '' })).toEqual({ status: 200, body: { value: 'hakka', created: false } })
+  expect((await answer({ action: 'create', name: '丙', parent: '無' })).status).toBe(400)
+  expect((await answer({ action: 'create', name: 'a b' })).status).toBe(400)
+  expect(await answer({ action: 'move', name: '寺院用字', parent: 'music', position: '0' })).toEqual({ status: 200, body: { ok: true } })
+  expect(await answer({ action: 'move', name: 'dialect', parent: 'hakka', position: '0' })).toEqual({ status: 400, body: { error: 'category', code: 'parent' } })
+  expect((await answer({ action: 'move', name: 'hakka', parent: 'music' })).status).toBe(400)
+  expect(await answer({ action: 'rename', name: '寺院用字', label: '寺社用字' })).toEqual({ status: 200, body: { ok: true } })
+  expect(await answer({ action: 'rename', name: '寺院用字', label: '客家語' })).toEqual({ status: 400, body: { error: 'category', code: 'exists' } })
+  expect(await answer({ action: 'delete', name: '戶籍用字' })).toEqual({ status: 200, body: { ok: true } })
+  expect(await answer({ action: 'delete', name: '戶籍用字' })).toEqual({ status: 404, body: { error: 'category', code: 'missing' } })
+  expect((await answer({ action: 'hide', name: 'hakka' })).status).toBe(400)
+  const page = await categoriesLoad({ platform } as any) as any
+  expect(page.categories).toContainEqual({ name: '寺院用字', label: '寺社用字', parent: 'music', position: 0, n: 0 })
+  expect(page.categories.some((category: { name: string }) => category.name === '戶籍用字')).toBe(false)
+  expect(page.changes.map((change: { kind: string; name: string }) => [change.kind, change.name])).toEqual([['delete', '戶籍用字'], ['rename', '寺院用字'], ['move', '寺院用字'], ['create', '寺院用字'], ['create', '戶籍用字']])
+  expect(page.changes[0].by_name).toMatch(/^anon-/)
 })
 
 test('the radicals page lists the radicals in use, browse narrows by one and the record names it', async () => {

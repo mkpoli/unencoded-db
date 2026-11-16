@@ -8,6 +8,8 @@
 // (`$lib/server/agents`) sends a bearer token in its place, and writes as the person who allowed it.
 import { json } from '@sveltejs/kit'
 import { resourceMetadata } from '$lib/server/agents'
+import { categoryList } from '$lib/server/categories'
+import { env } from '$lib/server/guard'
 import { AGENT_SESSION, newSessionToken } from '$lib/server/people'
 import { callTool, INSTRUCTIONS, toolList } from './_tools.server'
 import type { RequestHandler } from './$types'
@@ -57,7 +59,7 @@ export const POST: RequestHandler = async (event) => {
       }, { [AGENT_SESSION]: newSessionToken() })
     }
     case 'ping': return reply(id, {})
-    case 'tools/list': return reply(id, { tools: toolList() })
+    case 'tools/list': return reply(id, { tools: toolList((await categoryList(env(event).DB)).map(category => category.name)) })
     case 'tools/call': {
       try {
         const result = await callTool(event, params.name, params.arguments)

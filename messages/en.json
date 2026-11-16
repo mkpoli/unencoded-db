@@ -406,6 +406,18 @@
   "field.genreAdd": "Add a category",
   "field.genreParent": "Parent category",
   "field.genreTopLevel": "Top level",
+  "categories.done": "Done",
+  "categories.changes": "Recent changes",
+  "categories.move": "Move {name}",
+  "categories.rename": "Rename {name}",
+  "categories.delete": "Delete {name}",
+  "categories.addUnder": "Add under {name}",
+  "categories.under": "Under {name}",
+  "categories.before": "Before {name}",
+  "categories.change.create": "Added",
+  "categories.change.move": "Moved",
+  "categories.change.rename": "Renamed",
+  "categories.change.delete": "Deleted",
   "field.collection": "Collection",
   "field.tags": "Tags",
   "field.filing": "Categories and tags",
@@ -467,5 +479,7 @@
   "error.readings": "Use up to 20 readings of up to 200 characters, and 20 meanings of up to 500.",
   "error.links": "Check the meanings and readings each row is tied to, and choose up to 20 pieces of evidence for each.",
   "error.tags": "Use up to 30 tags of up to 40 characters each.",
-  "error.category": "That category could not be added."
+  "error.category": "That category could not be added.",
+  "error.categoryChange": "That change could not be saved.",
+  "error.categoryExists": "That category already exists."
 }

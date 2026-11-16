@@ -19,7 +19,8 @@ export const actions: Actions = {
   default: async (event) => {
     await guardWrite(event, 'ADDS')
     const form = await event.request.formData()
-    const { fields: base } = readEntryFields(form), shared = readSightingFields(form)
+    // A batch names no category, so no list of them is read.
+    const { fields: base } = readEntryFields(form, []), shared = readSightingFields(form)
     const ids = form.getAll('ids').map(String), notes = form.getAll('row_note').map(String)
     const files = form.getAll('image'), thumbs = form.getAll('thumb'), boxes = form.getAll('box')
     const count = Math.max(ids.length, notes.length, files.length)
@@ -35,7 +36,7 @@ export const actions: Actions = {
       const entry = new FormData()
       entry.set('script', base.script_other ?? base.script)
       entry.set('ids', row.ids)
-      const { fields, error } = readEntryFields(entry)
+      const { fields, error } = readEntryFields(entry, [])
       if (error) return reject(400, error, values, row.index + 1)
       if (!row.picture && !hasLink(shared)) return reject(400, 'evidence', values, row.index + 1)
       rows.push({ ...row, fields })

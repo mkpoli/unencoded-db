@@ -1,10 +1,10 @@
 <script lang="ts">
   // The category a new category goes under: the top, or any category, each shown inside its parent.
-  import { arrangeGenres, type CustomGenre } from '$lib/genres'
+  import { arrangeGenres, type CategoryRef } from '$lib/genres'
   import { t } from '$lib/t'
 
-  let { name, id, custom = [], value = $bindable('') }: { name: string; id: string; custom?: CustomGenre[]; value?: string } = $props()
-  const { standalone, groups } = $derived(arrangeGenres(custom))
+  let { name, id, categories = [], value = $bindable('') }: { name: string; id: string; categories?: CategoryRef[]; value?: string } = $props()
+  const { standalone, groups } = $derived(arrangeGenres(categories))
   const rows = $derived([...standalone, ...groups.flatMap(group => [group.root, ...group.rows])])
 </script>
 

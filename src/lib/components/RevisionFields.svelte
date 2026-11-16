@@ -6,12 +6,12 @@
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { registryLabel } from '$lib/registries'
-  import { COLLECTIONS, genreLabel } from '$lib/genres'
+  import { COLLECTIONS } from '$lib/genres'
   import { parseSightingTypes } from '$lib/scripts'
   import { statusOf } from '$lib/status'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
   import { locale, t } from '$lib/t'
-  let { fields, sighting = false }: { fields: EntryFields | SightingFields; sighting?: boolean } = $props()
+  let { fields, sighting = false, labels = new Map() }: { fields: EntryFields | SightingFields; sighting?: boolean; labels?: ReadonlyMap<string, string> } = $props()
   const sourceFields = [
     { key: 'title', label: 'field.title' },
     { key: 'author', label: 'field.author' },
@@ -31,7 +31,7 @@
     switch (claim.kind) {
       case 'encoding': return `${registryLabel(String(claim.data?.charset ?? ''))} ${claim.value}`
       case 'ivd': return claim.value === 'none' ? t('field.ivdNone') : claim.value
-      case 'genre': return genreLabel(claim.value)
+      case 'genre': return labels.get(claim.value) ?? claim.value
       case 'collection': return COLLECTIONS.find(item => item.slug === claim.value)?.label ?? claim.value
       case 'tag': return `#${claim.value}`
       case 'reading': { const doculect = typeof claim.data?.doculect === 'string' ? claim.data.doculect : ''; const key = doculectKey(doculect); return doculect ? `${key ? t(key) : doculect} ${claim.value}` : claim.value }

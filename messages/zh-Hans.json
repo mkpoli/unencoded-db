@@ -406,6 +406,18 @@
   "field.genreAdd": "添加类属",
   "field.genreParent": "上级类属",
   "field.genreTopLevel": "顶层",
+  "categories.done": "完成",
+  "categories.changes": "最近更改",
+  "categories.move": "移动{name}",
+  "categories.rename": "重命名{name}",
+  "categories.delete": "删除{name}",
+  "categories.addUnder": "在{name}下添加",
+  "categories.under": "{name}之下",
+  "categories.before": "{name}之前",
+  "categories.change.create": "添加",
+  "categories.change.move": "移动",
+  "categories.change.rename": "重命名",
+  "categories.change.delete": "删除",
   "field.collection": "合集",
   "field.tags": "标签",
   "field.filing": "类属和标签",
@@ -467,5 +479,7 @@
   "error.readings": "读音最多20项，每项不超过200字；释义最多20项，每项不超过500字。",
   "error.links": "请检查各条目所对应的释义和读音，每条最多可选20项证据。",
   "error.tags": "最多30个标签，每个不超过40个字符。",
-  "error.category": "无法添加此类属。"
+  "error.category": "无法添加此类属。",
+  "error.categoryChange": "无法保存此更改。",
+  "error.categoryExists": "此类属已存在。"
 }

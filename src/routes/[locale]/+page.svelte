@@ -18,7 +18,7 @@
   import { TILE_SIZE_COOKIE, TILE_SIZES, tileSizeOf } from '$lib/tile-size'
   import type { Snapshot } from './$types'
   let { data } = $props()
-  const { standalone, groups } = $derived(arrangeGenres(data.customGenres))
+  const { standalone, groups } = $derived(arrangeGenres(data.categories))
   // Further pages are appended as the list nears its end. They belong to the listing they were read for,
   // and a new listing starts again from its own first page.
   type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: string | null; partial: boolean; total: typeof data.total; idle: number; scanned: number }

@@ -11,6 +11,7 @@ import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, 
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { ancestorsOf, categoryParents, ensureCategories } from './categories'
+import type { Category } from '$lib/genres'
 import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
@@ -79,11 +80,11 @@ function readVias(form: FormData): Citation[] {
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
 const now = () => new Date().toISOString()
 
-export function readEntryFields(form: FormData, base?: Partial<EntryFields>): { fields: EntryFields; error: ClaimError | null } {
+export function readEntryFields(form: FormData, categories: readonly Pick<Category, 'name' | 'label'>[], base?: Partial<EntryFields>): { fields: EntryFields; error: ClaimError | null } {
   const named = form.has('script') ? resolveScript(String(form.get('script'))) : { script: base?.script ?? 'han', script_other: base?.script_other ?? null }
   const strokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
   const field = (name: 'description' | 'radical', max: number) => form.has(name) ? text(form, name, max) : base?.[name] ?? null
-  const read = readClaims(form, base?.claims)
+  const read = readClaims(form, categories, base?.claims)
   return {
     error: read.error,
     fields: {
@@ -656,7 +657,8 @@ export async function setHidden(db: D1Database, target: { entry: number; sightin
   }
 }
 
-async function refresh(db: D1Database, id: number) {
+/** Brings one record's tags, counts and summary up to date from what it holds. */
+export async function refresh(db: D1Database, id: number) {
   const entry = await getEntryRow(db, id)
   if (entry) await db.batch([...await reindex(db, id, entry, await claimRows(db, id), await sightingRows(db, id)), recount(db, id)])
 }

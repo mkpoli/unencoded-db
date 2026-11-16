@@ -406,6 +406,18 @@
   "field.genreAdd": "分類を追加",
   "field.genreParent": "上位の分類",
   "field.genreTopLevel": "最上位",
+  "categories.done": "完了",
+  "categories.changes": "最近の変更",
+  "categories.move": "{name}を移動",
+  "categories.rename": "{name}の名前を変更",
+  "categories.delete": "{name}を削除",
+  "categories.addUnder": "{name}の下に追加",
+  "categories.under": "{name}の下",
+  "categories.before": "{name}の前",
+  "categories.change.create": "追加",
+  "categories.change.move": "移動",
+  "categories.change.rename": "名前を変更",
+  "categories.change.delete": "削除",
   "field.collection": "コレクション",
   "field.tags": "タグ",
   "field.filing": "分類とタグ",
@@ -467,5 +479,7 @@
   "error.readings": "読みは20件まで各200文字以内、意味は20件まで各500文字以内で入力してください。",
   "error.links": "各行に結び付けた意味と読みを確認してください。証拠は1行につき20件まで選べます。",
   "error.tags": "タグは30個まで、それぞれ40文字以内で入力してください。",
-  "error.category": "この分類は追加できません。"
+  "error.category": "この分類は追加できません。",
+  "error.categoryChange": "この変更は保存できません。",
+  "error.categoryExists": "この分類はすでにあります。"
 }

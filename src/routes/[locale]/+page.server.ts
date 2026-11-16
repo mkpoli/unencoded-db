@@ -1,4 +1,4 @@
-import { customGenres } from '$lib/server/categories'
+import { categoryList } from '$lib/server/categories'
 import { error, redirect } from '@sveltejs/kit'
 import { alsoSearchIds, counts, cursorOf, decadeTag, exactSearchIds, facetTag, list, listTag, markTags, radicalTag, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, searchTotal, terms } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
@@ -48,8 +48,8 @@ export const load: PageServerLoad = async (event) => {
   const also = exact ? alsoSearchIds(query, searchParams.getAll('also')) : []
   const listing = { script, filter, facet, radical, decade, within, without, query, also, order, seed, after }
   // A search is counted on its first page; further pages are added to that one and keep its count.
-  const [page, totals, custom, total] = await Promise.all([searchError ? null : list(db, listing), counts(db), customGenres(db), searchError || after !== null ? null : searchTotal(db, listing)])
+  const [page, totals, categories, total] = await Promise.all([searchError ? null : list(db, listing), counts(db), categoryList(db), searchError || after !== null ? null : searchTotal(db, listing)])
   if (!page && !searchError) error(404)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, page?.tiles ?? [], event.locals.glyphStyle)
-  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, customGenres: custom, total, glyphs, script, filter, genre, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
+  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, categories, total, glyphs, script, filter, genre, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
 }
