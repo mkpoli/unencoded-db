@@ -12,7 +12,7 @@
   import { cleanIds, codePoints, IDS_MAX, splitIds } from '$lib/ids'
   import { idsMessages } from '$lib/ids-messages'
   import { characterFacts, type CharacterFacts } from '$lib/encoded'
-  import { encodedCandidates, expandedParts, TIER_MAX, TIERS, tierRecords, warmIndex, type Found, type RecordCandidate } from '$lib/candidates'
+  import { encodedCandidates, expandedParts, TIER_MAX, TIERS, tierRecords, type Found, type RecordCandidate } from '$lib/candidates'
   import { href, locale, media, t } from '$lib/t'
   import { recordCode } from '$lib/code'
   import { browser } from '$app/environment'
@@ -36,8 +36,7 @@
   let main = $state<IdsLine>()
   const lines: Record<number, IdsLine | null> = {}
   let hydrated = $state(false)
-  // The encoded characters are indexed while the page is idle, so a query finds them ready.
-  onMount(() => { hydrated = true; warmIndex().catch(() => {}) })
+  onMount(() => { hydrated = true })
 
   // A pasted list of descriptions is taken apart: the first stays, the others become rows.
   $effect(() => {
@@ -144,7 +143,7 @@
                     {:else if item.record.cover_key}<img src={media(item.record.cover_key)} alt="" loading="lazy" decoding="async" />{/if}
                   </span>
                   <span class="body">
-                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier === 'same'} <a class="text-link" href={href(`/entry/${item.record.id}/sighting/new`)} target="_blank">{t('field.candidateAdd')}</a>{/if}</span>
+                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier !== 'similar'} <a class="text-link" href={href(`/entry/${item.record.id}/sighting/new`)} target="_blank">{t('field.candidateAdd')}</a>{/if}</span>
                     <span class="ids">{item.record.ids ?? ''}</span>
                   </span>
                 {:else}

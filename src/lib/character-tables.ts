@@ -2,7 +2,8 @@
 // and Unihan 18.0.0's radical, stroke count, definition, readings and variants (scripts/build-unihan.ts).
 import { codePoints } from './ids'
 
-export type Descriptions = { encoded: Map<string, string>; described: Map<string, string> }
+/** `all` holds every description of a character, in the table's order, leaving out one that is the character itself. */
+export type Descriptions = { encoded: Map<string, string>; described: Map<string, string>; all: Map<string, string[]> }
 export type CharacterFacts = {
   char: string; code: string; ids: string | null; radical: string | null; strokes: number | null
   /** Unihan's English definition. */
@@ -13,20 +14,24 @@ export type CharacterFacts = {
   variants: { character: string; field: string }[]
 }
 
-/** Each description to the character it describes, and each character to its first description. */
+/** Each description to the first character it describes, each character to its first description, and to all of them. */
 export function parseDescriptions(text: string): Descriptions {
   const encoded = new Map<string, string>()
   const described = new Map<string, string>()
+  const all = new Map<string, string[]>()
   for (const line of text.split('\n')) {
     if (!line || line.startsWith('#')) continue
     const [char, sequences] = line.split('\t')
     for (const sequence of sequences?.split(' ') ?? []) {
       const plain = sequence.replace(/\([^)]*\)$/, '').replace(/^〾/, '')
       if (!encoded.has(plain)) encoded.set(plain, char)
-      if (plain !== char && !described.has(char)) described.set(char, plain)
+      if (plain === char) continue
+      if (!described.has(char)) described.set(char, plain)
+      const list = all.get(char)
+      if (list) { if (!list.includes(plain)) list.push(plain) } else all.set(char, [plain])
     }
   }
-  return { encoded, described }
+  return { encoded, described, all }
 }
 
 /** The columns of a Unihan file after the character, in order. */
