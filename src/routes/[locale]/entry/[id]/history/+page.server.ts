@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit'
-import { editEntry, ENTRY_HISTORY_PAGE, getEntry, history, redactRevision, restoreSighting } from '$lib/server/entries'
+import { editEntry, hasLink, ENTRY_HISTORY_PAGE, getEntry, history, redactRevision, restoreSighting } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { writer } from '$lib/server/people'
 import { entrySnapshot, revisionFields, sightingSnapshot } from '$lib/server/revisions'
@@ -50,7 +50,7 @@ export const actions: Actions = {
       const fields = old && sightingSnapshot(old.snapshot)
       if (!old || !fields) error(404)
       // A restore keeps the pictures, so a version without a place or a link needs one to stay.
-      if (!sighting.media.length && !fields.url && !fields.via_url && !fields.place) return fail(400, { error: 'evidence' })
+      if (!sighting.media.length && !hasLink(fields) && !fields.place) return fail(400, { error: 'evidence' })
       const person = await writer(event, db)
       const result = await restoreSighting(db, id, sighting.id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, old.rev, revisionId)
       if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })

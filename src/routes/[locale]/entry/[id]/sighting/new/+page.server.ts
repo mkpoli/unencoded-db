@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit'
-import { addSighting, getEntry, readSightingFields, SightingLimitError, SIGHTINGS_MAX } from '$lib/server/entries'
+import { addSighting, hasLink, getEntry, readSightingFields, SightingLimitError, SIGHTINGS_MAX } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { writer } from '$lib/server/people'
 import { positiveId, uploadedImages } from '../../../../../_submission.server'
@@ -26,7 +26,7 @@ export const actions: Actions = {
     if (found.sightings.length >= SIGHTINGS_MAX) return fail(400, { error: 'sightingLimit', values })
     const media = await uploadedImages(form, MEDIA)
     if (media === 'invalid') return fail(400, { error: 'image', values })
-    if (!media.length && !values.url && !values.via_url) return fail(400, { error: 'evidence', values })
+    if (!media.length && !hasLink(values)) return fail(400, { error: 'evidence', values })
     const person = await writer(event, DB)
     let sighting: number | null
     try {

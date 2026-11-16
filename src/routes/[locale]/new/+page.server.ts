@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit'
 import { mapSightings } from '$lib/claims'
 import { ADD_SIGHTINGS_MAX } from '$lib/limits'
-import { CITATION_FIELDS, VIA_FIELDS, type SightingFields, createEntry, getEntryRow, getSighting, readEntryFields, readSightingFields } from '$lib/server/entries'
+import { CITATION_FIELDS, hasLink, type SightingFields, createEntry, getEntryRow, getSighting, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { writer } from '$lib/server/people'
 import { positiveId, readImages, sightingForms, storeImages, type ReadImage } from '../../_submission.server'
@@ -16,11 +16,11 @@ export const load: PageServerLoad = async (event) => {
   const sighting = await getSighting(DB, id)
   const entry = sighting && !sighting.hidden_at ? await getEntryRow(DB, sighting.entry_id) : null
   if (!sighting || !entry || entry.hidden_at || entry.merged_into) return { seed: null }
-  const values: Partial<SightingFields> = Object.fromEntries(([...CITATION_FIELDS, ...VIA_FIELDS, 'place', 'original_date', 'page'] as const).map(field => [field, sighting[field]]))
+  const values: Partial<SightingFields> = { ...Object.fromEntries((['place', 'original_date', 'page', ...CITATION_FIELDS] as const).map(field => [field, sighting[field]])), vias: sighting.vias.map(({ id: _, ...via }) => via) }
   return { seed: { values, pictures: sighting.media.map(picture => picture.image_key) } }
 }
 
-const filled = (form: FormData, fields: SightingFields) => Object.values(fields).some(Boolean) || form.getAll('image').some(file => file instanceof File && file.size > 0)
+const filled = (form: FormData, fields: SightingFields) => Object.values({ ...fields, vias: fields.vias.length }).some(Boolean) || form.getAll('image').some(file => file instanceof File && file.size > 0)
 
 export const actions: Actions = {
   // A record and the sightings it starts with. Each sighting needs a picture or a link, and all of them are read and checked before a picture is stored or a row written; the record
@@ -50,7 +50,7 @@ export const actions: Actions = {
     for (const [index, section] of sections.entries()) {
       const images = await readImages(section.form)
       if (images === 'invalid') return reject(400, 'image', index + 1)
-      if (!images.length && !section.fields.url && !section.fields.via_url) return reject(400, 'evidence', index + 1)
+      if (!images.length && !hasLink(section.fields)) return reject(400, 'evidence', index + 1)
       pictures.push(images)
     }
     if (!(await chargeWrites(event, 'ADDS', sections.length - 1))) return reject(429, 'slow')
