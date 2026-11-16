@@ -11,7 +11,7 @@ import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, 
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { genreOf } from '$lib/genres'
-import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf } from '$lib/radicals'
+import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
 import { hashHex } from './image'
@@ -195,6 +195,13 @@ function wordTags(entry: TagInput, claims: readonly Claim[], sightings: Sighting
   return [...words].slice(0, WORDS_MAX).map(word => `w:${word}`)
 }
 
+/** The parts of a description: its characters other than the operators and spaces, radical code points as the ideographs they stand for. */
+export const partsOf = (ids: string) => [...new Set([...ids].filter(char => !/[\s\u2FF0-\u2FFF\u31EF]/u.test(char)).map(radicalEquivalent))]
+// A record is found by the parts of each description it states (`p:`), read by key like a word and kept the same way.
+function partTags(claims: readonly Claim[]) {
+  return [...new Set(claims.filter(claim => claim.kind === 'ids').flatMap(claim => partsOf(claim.value)))].map(part => `p:${part}`)
+}
+
 // A date is free text, so the first four- or three-digit run is read as the year and the rest is left alone.
 function firstYear(value: string | null) {
   const match = value?.match(/\d{3,4}/)
@@ -252,8 +259,9 @@ function summarize(sightings: SightingState[]) {
 }
 
 const tagsOf = (entry: Entry, claims: readonly Claim[], summary: ReturnType<typeof summarize>) =>
-  [...facetTags({ ...entry, status: statusOf(claims), ids: primaryIdsOf(claims), cover_key: summary.cover_key, first_year: summary.first_year }, summary.hasSource, claims), ...wordTags(entry, claims, summary.visible)]
-const facet = (tag: string) => !tag.startsWith('w:')
+  [...facetTags({ ...entry, status: statusOf(claims), ids: primaryIdsOf(claims), cover_key: summary.cover_key, first_year: summary.first_year }, summary.hasSource, claims), ...wordTags(entry, claims, summary.visible), ...partTags(claims)]
+// Word and part rows are looked up by key and are no list of their own: they keep no count, year or tag count.
+const facet = (tag: string) => !/^[wp]:/.test(tag)
 const SIGHTING_SEQ = "(SELECT seq FROM sqlite_sequence WHERE name = 'sightings')"
 // A summary names the sighting that holds the record's year by its id (1), or, for one the same write
 // inserts, by how many inserted sightings follow it (2).
@@ -274,7 +282,7 @@ async function reindex(db: D1Database, id: number, entry: Entry, claims: readonl
     db.prepare('DELETE FROM entry_tags WHERE entry_id = ? AND tag IN (SELECT value FROM json_each(?))').bind(id, JSON.stringify(gone)),
     db.prepare('INSERT OR IGNORE INTO entry_tags(tag, entry_id) SELECT value, ? FROM json_each(?)').bind(id, JSON.stringify(added)),
     // Word rows are only looked up by key, never read in order, so they keep no count.
-    db.prepare("UPDATE entry_tags SET sightings = ?1, year = ?2 WHERE entry_id = ?3 AND (sightings != ?1 OR year IS NOT ?2) AND tag NOT GLOB 'w:*'").bind(summary.visible.length, yearOf(summary.first_year), id),
+    db.prepare("UPDATE entry_tags SET sightings = ?1, year = ?2 WHERE entry_id = ?3 AND (sightings != ?1 OR year IS NOT ?2) AND tag NOT GLOB '[wp]:*'").bind(summary.visible.length, yearOf(summary.first_year), id),
     db.prepare('UPDATE tag_counts SET n = n - 1 WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(gone.filter(facet))),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(added.filter(facet))),
   ]
@@ -388,7 +396,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
     ]),
     ...(claims.some(claim => claim.sightings.length) ? [db.prepare(CITED_BY_PLACE), db.prepare(CITED_IN_SNAPSHOT)] : []),
     db.prepare(`UPDATE entries SET ${SUMMARY_SET} WHERE id = ${ENTRY_SEQ}`).bind(...summaryValues(claims, summary)),
-    db.prepare(`INSERT INTO entry_tags(tag, entry_id, sightings, year) SELECT value, ${ENTRY_SEQ}, CASE WHEN value GLOB 'w:*' THEN 0 ELSE ? END, CASE WHEN value GLOB 'w:*' THEN NULL ELSE ? END FROM json_each(?)`).bind(summary.visible.length, yearOf(summary.first_year), JSON.stringify(tags)),
+    db.prepare(`INSERT INTO entry_tags(tag, entry_id, sightings, year) SELECT value, ${ENTRY_SEQ}, CASE WHEN value GLOB '[wp]:*' THEN 0 ELSE ? END, CASE WHEN value GLOB '[wp]:*' THEN NULL ELSE ? END FROM json_each(?)`).bind(summary.visible.length, yearOf(summary.first_year), JSON.stringify(tags)),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),
     recount(db, ENTRY_SEQ),
   ])
@@ -788,8 +796,8 @@ const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status,
 
 // Where each order reads its range, and the place a cursor names in it: the record alone for the orders
 // by record, the count and the record for the orders by count. Null names a cursor that is not one.
-// The order indexes leave out word rows, which are only looked up by key; a read names that so it may use them.
-const LISTED = "t.tag NOT GLOB 'w:*'"
+// The order indexes leave out word and part rows, which are only looked up by key; a read names that so it may use them.
+const LISTED = "t.tag NOT GLOB '[wp]:*'"
 // A shuffled list reads by rank from its seed to the end, then from 0 to the seed. The expression is the
 // one migration 0013 indexes, so it must stay the same character for character.
 const MIXED = '(((t.entry_id % 4294967296) * 1540483477) % 4294967296)'
@@ -1126,12 +1134,12 @@ export async function sourceList(db: D1Database, sort: SourceSort = 'new', curso
 
 // The records that state this value: the ones described by a sequence, given a code, or related to a character.
 export async function claimedBy(db: D1Database, kind: Claim['kind'], value: string, limit = 6) {
-  const { results } = await db.prepare('SELECT e.id, e.ids, e.cover_key FROM claims k CROSS JOIN entries e ON e.id = k.entry_id WHERE k.kind = ? AND k.value = ? AND e.merged_into IS NULL AND e.hidden_at IS NULL ORDER BY k.entry_id LIMIT ?').bind(kind, value, limit).all<{ id: number; ids: string | null; cover_key: string | null }>()
+  const { results } = await db.prepare('SELECT e.id, e.ids, e.layout, e.cover_key FROM claims k CROSS JOIN entries e ON e.id = k.entry_id WHERE k.kind = ? AND k.value = ? AND e.merged_into IS NULL AND e.hidden_at IS NULL ORDER BY k.entry_id LIMIT ?').bind(kind, value, limit).all<{ id: number; ids: string | null; layout: string | null; cover_key: string | null }>()
   return results
 }
 
 // Records already described by exactly this sequence, offered while someone is adding one.
-export const sameIds = (db: D1Database, ids: string) => claimedBy(db, 'ids', ids)
+export const sameIds = (db: D1Database, ids: string, limit = 6) => claimedBy(db, 'ids', ids, limit)
 
 export type Revision = { id: number; entry_id: number; sighting_id: number | null; kind: string; rev: number; snapshot: string; summary: string | null; at: string; redacted_at: string | null; by_id: string; by_name: string; cover_key?: string | null; ids?: string | null; sighting_rev?: number | null }
 

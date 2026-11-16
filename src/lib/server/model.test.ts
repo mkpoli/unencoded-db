@@ -1,9 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { addSighting, claimedBy, createEntry, editEntry, editSighting, exportPage, getEntry, getSighting, history, list, mediaVisible, mergeEntry, readSightingFields, redactRevision, restoreSighting, revertEntry, setHidden, sourcePage, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { sightingSnapshot } from './revisions'
 import { openTestDb } from './testdb'
 
+const migration = (name: string) => readFileSync(join(import.meta.dir, '../../../migrations', name), 'utf8')
 const who = { actor: 'p1', ip: null }
 const fields = (claims: Claim[] = []): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims })
 const seen = (extra: Partial<SightingFields> = {}): SightingFields => ({ place: 'a shop sign', url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, note: null, ...extra })
@@ -438,5 +441,43 @@ describe('search by an encoded character', () => {
     const id = await createEntry(db, fields([claim('ids', '⿳吅工吅'), claim('encoding', 'U+5650', { charset: 'unicode' })]), seen(), [], who)
     await createEntry(db, fields([claim('ids', '⿰山東'), claim('encoding', 'A140', { charset: 'big5' })]), seen(), [], who)
     expect((await list(db, { script: 'han', query: '噐' }))!.tiles.map(tile => tile.id)).toEqual([id])
+  })
+})
+
+describe('part rows', () => {
+  const parts = (raw: ReturnType<typeof openTestDb>['raw']) => (raw.query("SELECT entry_id, tag, sightings, year FROM entry_tags WHERE tag GLOB 'p:*' ORDER BY entry_id, tag").all() as { entry_id: number; tag: string; sightings: number; year: number | null }[])
+
+  test('a record has one part row per distinct part of each of its descriptions, kept current on every write', async () => {
+    const { db, raw } = open()
+    const id = await createEntry(db, fields([claim('ids', '⿰⺅⿱木木'), claim('ids', '⿰⼈水')]), seen({ report_date: '1930' }), [], who)
+    expect(parts(raw)).toEqual(['人', '亻', '木', '水'].sort().map(part => ({ entry_id: id, tag: `p:${part}`, sightings: 0, year: null })))
+    await editEntry(db, id, 1, fields([claim('ids', '⿰火土')]), who, null)
+    expect(parts(raw).map(row => row.tag)).toEqual(['p:土', 'p:火'])
+    await setHidden(db, { entry: id }, true, who, null)
+    expect(parts(raw)).toEqual([])
+    expect((raw.query("SELECT tag FROM tag_counts WHERE tag GLOB 'p:*'").all())).toEqual([])
+  })
+
+  test('0020 gives existing records the rows a write gives them, and skips hidden and merged records', async () => {
+    const { db, raw } = open()
+    const a = await createEntry(db, fields([claim('ids', '⿰⺅⿱木木'), claim('ids', '⿰⼈水')]), seen(), [], who)
+    const b = await createEntry(db, fields([claim('ids', '⿺辶⿱山⿰𠀀日')]), seen(), [], who)
+    const hidden = await createEntry(db, fields([claim('ids', '⿰金金')]), seen(), [], who)
+    await setHidden(db, { entry: hidden }, true, who, null)
+    const merged = await createEntry(db, fields([claim('ids', '⿰火火')]), seen(), [], who)
+    await mergeEntry(db, merged, a, who, null)
+    await createEntry(db, fields(), seen(), [], who)
+    const written = parts(raw)
+    expect(written).toHaveLength(8)
+    raw.exec("DELETE FROM entry_tags WHERE tag GLOB 'p:*'")
+    raw.exec(migration('0020_part_tags.sql').slice(migration('0020_part_tags.sql').indexOf('WITH RECURSIVE')))
+    expect(parts(raw)).toEqual(written)
+    expect(written.every(row => row.entry_id === a || row.entry_id === b)).toBe(true)
+  })
+
+  test('0020 leaves the order indexes to the rows they list', () => {
+    const { raw } = open()
+    const plan = (raw.query("EXPLAIN QUERY PLAN SELECT entry_id FROM entry_tags t WHERE t.tag = ? AND (t.sightings, t.entry_id) < (?, ?) AND t.tag NOT GLOB '[wp]:*' ORDER BY t.sightings DESC, t.entry_id DESC LIMIT 5").all('all', 9, 9) as { detail: string }[]).map(row => row.detail).join('\n')
+    expect(plan).toContain('entry_tags_by_sightings')
   })
 })

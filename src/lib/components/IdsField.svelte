@@ -4,18 +4,20 @@
   // of it those tools are working on. Further descriptions of the same character are rows
   // under it, offered once the first is whole. Each is sent as an `ids` value of its own.
   //
-  // While the first is whole, the field says whether an encoded character or another record has the same
-  // description. A lone encoded character is replaced by its description, and `onfill` receives what is
-  // known of it; for a description that matches a character, the person decides.
+  // While the first is whole, the field lists the records and encoded characters it may duplicate, in three
+  // tiers (see $lib/similar). A lone encoded character is replaced by its description, and `onfill` receives
+  // what is known of it; for a description that matches a character, the person decides.
   import { onMount, tick, untrack } from 'svelte'
   import { isDescription } from 'ids-input'
   import { cleanIds, codePoints, IDS_MAX, splitIds } from '$lib/ids'
   import { idsMessages } from '$lib/ids-messages'
-  import { characterFacts, encodedMatch, type CharacterFacts } from '$lib/encoded'
-  import { href, locale, t } from '$lib/t'
+  import { characterFacts, type CharacterFacts } from '$lib/encoded'
+  import { encodedCandidates, expandedParts, TIER_MAX, TIERS, tierRecords, warmIndex, type Found, type RecordCandidate } from '$lib/candidates'
+  import { href, locale, media, t } from '$lib/t'
   import { recordCode } from '$lib/code'
   import { browser } from '$app/environment'
   import type { IdsAdapter, IdsEditor } from 'ids-input/svelte'
+  import IdsGlyph from './IdsGlyph.svelte'
   import IdsLine from './IdsLine.svelte'
 
   let { values = [], primary = $bindable(''), chosen = $bindable(null), onfill }: {
@@ -34,7 +36,8 @@
   let main = $state<IdsLine>()
   const lines: Record<number, IdsLine | null> = {}
   let hydrated = $state(false)
-  onMount(() => { hydrated = true })
+  // The encoded characters are indexed while the page is idle, so a query finds them ready.
+  onMount(() => { hydrated = true; warmIndex().catch(() => {}) })
 
   // A pasted list of descriptions is taken apart: the first stays, the others become rows.
   $effect(() => {
@@ -75,8 +78,9 @@
   }
   $effect.pre(() => { chosen = building ? editor?.chosen ?? null : null })
 
-  let encoded = $state<string | null>(null)
-  let same = $state<{ id: number }[]>([])
+  let recordHits = $state.raw<Found[]>([])
+  let encodedHits = $state.raw<Found[]>([])
+  const tiers = $derived(TIERS.map(tier => ({ tier, items: [...recordHits, ...encodedHits].filter(item => item.tier === tier).slice(0, TIER_MAX) })).filter(group => group.items.length))
 
   // The details of a character the description matches are filled only when asked for.
   async function fill(char: string) {
@@ -86,7 +90,7 @@
 
   $effect(() => {
     const ids = sequence
-    encoded = null; same = []
+    recordHits = []; encodedHits = []
     if (!browser || !ids) return
     let live = true
     // A lone character is an encoded one to describe, unless it is the first part put down with the tools.
@@ -100,13 +104,19 @@
       }, 500)
       return () => { live = false; clearTimeout(timer) }
     }
-    const timer = setTimeout(async () => {
-      const found = await encodedMatch(ids).catch(() => null)
-      if (live) encoded = found
-      const answer = await fetch(`/api/match?ids=${encodeURIComponent(ids)}`).then(r => r.ok ? r.json() : []).catch(() => [])
-      if (live && Array.isArray(answer)) same = answer.filter((item): item is { id: number } => typeof item?.id === 'number')
+    if (!whole) return
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      encodedCandidates(ids).then(found => { if (live) encodedHits = found }).catch(() => {})
+      ;(async () => {
+        const leaves = [...new Set(await expandedParts(ids))].slice(0, 12).join('')
+        const answer = await fetch(`/api/candidates?ids=${encodeURIComponent(ids)}${leaves ? `&leaves=${encodeURIComponent(leaves)}` : ''}`, { signal: controller.signal }).then(r => r.ok ? r.json() : [])
+        const records = Array.isArray(answer) ? answer.filter((item): item is RecordCandidate => typeof item?.id === 'number') : []
+        const tiered = await tierRecords(ids, records)
+        if (live) recordHits = tiered
+      })().catch(() => {})
     }, 350)
-    return () => { live = false; clearTimeout(timer) }
+    return () => { live = false; clearTimeout(timer); controller.abort() }
   })
 </script>
 
@@ -120,8 +130,37 @@
       {#if tools && editor}<tools.Builder {editor} scope={root} messages={tools.messages} locale={locale()} />{:else}<p class="muted">{t('field.idsLoading')}</p>{/if}
     {/if}
   </div>
-  {#if encoded}<p class="found" data-testid="encoded-hint">{t('field.idsEncoded', { char: encoded, code: codePoints(encoded) })}{#if onfill} <button type="button" class="text-button" onclick={() => fill(encoded!)}>{t('field.idsFill')}</button>{/if}</p>{/if}
-  {#if same.length}<p class="found">{t('field.idsSame')} <span>{#each same as record, i}{i ? ', ' : ''}<a class="text-link" href={href(`/entry/${record.id}`)} target="_blank">{recordCode(record.id)}</a>{/each}</span></p>{/if}
+  {#if whole && tiers.length}
+    <div class="candidates" data-testid="candidates">
+      {#each tiers as group (group.tier)}
+        <section class="tier {group.tier}">
+          <h3>{t(`field.candidate.${group.tier}`)}</h3>
+          <ul>
+            {#each group.items as item (item.source === 'record' ? `r${item.record.id}` : `e${item.char}`)}
+              <li>
+                {#if item.source === 'record'}
+                  <span class="plate">
+                    {#if item.record.ids}<IdsGlyph ids={item.record.ids.split(' ')[0]} layout={item.record.layout} />
+                    {:else if item.record.cover_key}<img src={media(item.record.cover_key)} alt="" loading="lazy" decoding="async" />{/if}
+                  </span>
+                  <span class="body">
+                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier === 'same'} <a class="text-link" href={href(`/entry/${item.record.id}/sighting/new`)} target="_blank">{t('field.candidateAdd')}</a>{/if}</span>
+                    <span class="ids">{item.record.ids ?? ''}</span>
+                  </span>
+                {:else}
+                  <span class="plate char" lang="zh">{item.char}</span>
+                  <span class="body">
+                    <span class="line">{codePoints(item.char)}{#if onfill} <button type="button" class="text-button" onclick={() => fill(item.char)}>{t('field.idsFill')}</button>{/if}</span>
+                    <span class="ids">{item.ids}</span>
+                  </span>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/each}
+    </div>
+  {/if}
   {#if rest.length}
     <div class="more" role="group" aria-labelledby="{uid}-more">
       <span class="label" id="{uid}-more">{t('field.idsMore')}</span>
@@ -143,8 +182,20 @@
   .main, .more, .row-item { display: grid; grid-template-columns: subgrid; align-items: start; gap: 8px 10px; min-width: 0 }
   /* Level with the field under its label. */
   .build { min-height: 47px; margin-top: 27px }
-  .found { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; color: var(--muted); font-size: 12.5px }
-  .found .text-button { min-height: 24px; font-size: inherit }
+  .candidates { display: grid; gap: 8px; font-size: 12.5px }
+  .tier { padding: 6px 10px 8px; border: 1px solid var(--line); border-radius: 8px }
+  .tier.same { border-color: var(--accent); background: var(--accent-light) }
+  h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--muted) }
+  .tier.same h3 { color: var(--accent) }
+  ul { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 0; list-style: none }
+  li { display: flex; align-items: center; gap: 8px; min-width: 0 }
+  .plate { display: grid; place-items: center; flex: none; width: 40px; height: 40px; overflow: hidden; border-radius: 5px; background: var(--surface-tile); color: var(--ink) }
+  .plate img { width: 100%; height: 100%; object-fit: contain }
+  .plate.char { font-size: 26px; line-height: 1 }
+  .body { display: grid; min-width: 0 }
+  .line { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: center }
+  .line .text-button { min-height: 24px; font-size: inherit }
+  .ids { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
   .more { margin-top: 4px }
   .remove { justify-self: start; width: 36px; height: 41px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer }
   .remove:hover { color: var(--wrong) }

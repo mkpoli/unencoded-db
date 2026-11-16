@@ -54,6 +54,9 @@ function tables(): Tables {
   }
 }
 
+/** The ideograph a radical-supplement or Kangxi radical code point stands for, or the character itself. */
+export const radicalEquivalent = (char: string) => tables().equivalents.get(char) ?? char
+
 // A variation selector picks a glyph of the character before it and leaves its radical alone.
 const bare = (text: string) => text.replace(/[\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/gu, '')
 
