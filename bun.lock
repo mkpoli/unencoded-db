@@ -5,7 +5,7 @@
     "": {
       "name": "unencoded-db",
       "dependencies": {
-        "han-compose": "github:mkpoli/han-compose#0bd3ee8",
+        "han-compose": "github:mkpoli/han-compose#a467918",
         "ids-input": "github:mkpoli/ids-input#3e0c0e0f",
         "jose": "^6.2.15",
       },
@@ -266,7 +266,7 @@
 
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
 
-    "han-compose": ["han-compose-monorepo@github:mkpoli/han-compose#0bd3ee8", {}, "mkpoli-han-compose-0bd3ee8", "sha512-dRXm4VsGWSiOh4ax6KUGH/5L73T8bxnTF3cyxOhlLUx/YcyIJ3dqJDl+oGPkZV+8VUpEN7uaLiYgjKIzhE7sdA=="],
+    "han-compose": ["han-compose-monorepo@github:mkpoli/han-compose#a467918", {}, "mkpoli-han-compose-a467918", "sha512-kg6lCnSXSUsp/vi473Nafqls9NVKPhI04pUD3P9qW4WDGhmQ/AyJGjSPXuJmOhbrwCriw4tOH7gVF1IdctJYBA=="],
 
     "ids-input": ["ids-input@github:mkpoli/ids-input#3e0c0e0", { "dependencies": { "@cf-wasm/resvg": "^0.4.0" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-3e0c0e0", "sha512-RfbSEBqwgFLExZSQr0Fi0PrDyV4iefJobdTF0iD84GUcqonPyCzYNiE9rnkx68Is1UjsE1mBJAXGuMHLeSeTLA=="],
 
