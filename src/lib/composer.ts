@@ -6,7 +6,7 @@ export const GLYPH_STYLE: GlyphStyle = 'sans'
 export const GLYPH_STYLE_COOKIE = 'ug.glyph'
 
 const VERSIONS: Record<GlyphStyle, string> = {
-  sans: '0bd3ee83a5e2-sans-compose-layout-v4-f7+variants',
+  sans: '0bd3ee83a5e2-sans-compose-layout-v4-f7',
   serif: '8156f838798c-serif-compose-layout-v4-serif-f7+variants',
   fangsong: '9f797e2322d2-fangsong-compose-layout-v4-fangsong-f7',
   kaisho: 'ce3eaafda8f9-kaisho-compose-layout-v4-kaisho-f7',
