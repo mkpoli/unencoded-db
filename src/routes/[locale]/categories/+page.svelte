@@ -30,12 +30,14 @@
       </div>
     {/each}
   </dl>
-  <form class="add" method="POST" action="?/add">
+  <form class="add stack" method="POST" action="?/add">
+    <h2>{t('field.genreAdd')}</h2>
     {#if form?.error}<p class="notice bad" role="alert">{t(`error.${form.error}`)}</p>{/if}
-    <input class="input" name="genre_new" maxlength={GENRE_LENGTH_MAX} autocomplete="off" required aria-label={t('field.genreAdd')} />
-    <label class="sr-only" for="parent">{t('field.genreParent')}</label>
-    <ParentSelect id="parent" name="genre_new_parent" custom={data.custom} />
-    <button class="button primary" type="submit">{t('form.add')}</button>
+    <div class="fields">
+      <div class="field"><label for="genre-new">{t('field.genre')}</label><input id="genre-new" class="input" name="genre_new" maxlength={GENRE_LENGTH_MAX} autocomplete="off" required /></div>
+      <div class="field"><label for="parent">{t('field.genreParent')}</label><ParentSelect id="parent" name="genre_new_parent" custom={data.custom} /></div>
+      <button class="button primary" type="submit">{t('form.add')}</button>
+    </div>
   </form>
 </div>
 
@@ -49,8 +51,8 @@
   .chip:hover { background:var(--surface-selected) }
   .strong { font-weight:500 }
   .count { color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums }
-  .add { display:flex; flex-wrap:wrap; gap:8px }
-  .add .input { flex:1 1 160px; min-width:0; width:auto }
-  .add .notice { flex-basis:100% }
-  @media(max-width:500px) { .row { grid-template-columns:minmax(0,1fr) } }
+  .add { gap:12px; padding-top:8px }
+  .add h2 { margin:0; font-size:15px }
+  .fields { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; align-items:end; gap:8px 12px }
+  @media(max-width:500px) { .row { grid-template-columns:minmax(0,1fr) } .fields { grid-template-columns:minmax(0,1fr) } }
 </style>

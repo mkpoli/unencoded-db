@@ -51,9 +51,8 @@
     </div>
   {/each}
   <div class="genre-group adder">
-    <input class="input" name="genre_new" bind:value={typed} onkeydown={enter} oninput={() => (wrong = false)} maxlength={GENRE_LENGTH_MAX} autocomplete="off" aria-label={t('field.genreAdd')} aria-invalid={wrong} />
-    <label class="sr-only" for="{uid}-parent">{t('field.genreParent')}</label>
-    <ParentSelect id="{uid}-parent" name="genre_new_parent" {custom} bind:value={parent} />
+    <div class="field"><label for="{uid}-new">{t('field.genreAdd')}</label><input id="{uid}-new" class="input" name="genre_new" bind:value={typed} onkeydown={enter} oninput={() => (wrong = false)} maxlength={GENRE_LENGTH_MAX} autocomplete="off" aria-invalid={wrong} /></div>
+    <div class="field"><label for="{uid}-parent">{t('field.genreParent')}</label><ParentSelect id="{uid}-parent" name="genre_new_parent" {custom} bind:value={parent} /></div>
     <button class="button" type="button" onclick={add} disabled={busy}>{t('form.add')}</button>
   </div>
 </fieldset>
@@ -74,6 +73,6 @@
   .tier { display: inline-flex; max-width: 100% }
   .genre-group > :global(.pill) { margin-bottom: 10px }
   .genre-group { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line) }
-  .adder { display: flex; flex-wrap: wrap; gap: 8px }
-  .adder .input { flex: 1 1 160px; min-width: 0; width: auto }
+  .adder { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 8px 12px }
+  @media (max-width: 500px) { .adder { grid-template-columns: minmax(0, 1fr) } }
 </style>
