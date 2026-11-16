@@ -72,7 +72,7 @@ describe('write body limit', () => {
     form.set('image', new File([new Uint8Array(MAX_IMAGE)], 'image.png', { type: 'image/png' }))
     form.set('thumb', new File([new Uint8Array(MAX_THUMB)], 'thumb.png', { type: 'image/png' }))
     form.set('place', 'A book')
-    const request = new Request('https://example.test/en/new', { method: 'POST', body: form })
+    const request = new Request('https://example.test/en/new', { method: 'POST', body: form, headers: { origin: 'https://example.test' } })
     const response = await runHook(request, async (event) => {
       const parsed = await event.request.formData()
       expect(parsed.get('place')).toBe('A book')

@@ -34,5 +34,5 @@ export const GET: RequestHandler = async event => {
     ? await rotateSession(db, old!, event.locals.person.id, id)
     : await startSession(db, id))
   event.cookies.set(sessionName(event), token, { ...sessionCookie, secure: event.url.protocol === 'https:' })
-  redirect(303, `/${flow.locale}/me`)
+  redirect(303, flow.next ?? `/${flow.locale}/me`)
 }

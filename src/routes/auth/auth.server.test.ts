@@ -126,3 +126,30 @@ test('rejects forged state and cross-origin sign-out', async () => {
   await expect(callback(event)).rejects.toMatchObject({ status: 400 })
   await expect(signOut(event)).rejects.toMatchObject({ status: 403 })
 })
+
+test('sign-in started from the consent page of agent sign-in returns to it', async () => {
+  const { db } = openTestDb()
+  const jar = new Map<string, string>()
+  const cookies = { get: (k: string) => jar.get(k), set: (k: string, v: string) => jar.set(k, v), delete: (k: string) => jar.delete(k) }
+  const env = { DB: db, ATLAS_ISSUER: issuer, ATLAS_CLIENT_ID: 'client', ATLAS_CLIENT_SECRET: 'secret' }
+  const event = (url: string) => ({ url: new URL(url), cookies, platform: { env }, locals: { person: null }, request: new Request(url) }) as any
+  const { privateKey, publicKey } = await generateKeyPair('RS256', { extractable: true })
+  const jwk = { ...await exportJWK(publicKey), kid: 'one', alg: 'RS256' }
+  let nonce = ''
+  globalThis.fetch = (async (input: any) => {
+    const url = String(input)
+    if (url.endsWith('openid-configuration')) return Response.json(discovery)
+    if (url === discovery.jwks_uri) return Response.json({ keys: [jwk] })
+    return Response.json({ id_token: await new SignJWT({ nonce, name: 'Atlas Name' }).setProtectedHeader({ alg: 'RS256', kid: 'one' }).setIssuer(issuer).setAudience('client').setSubject('atlas-user').setIssuedAt().setExpirationTime('5m').sign(privateKey) })
+  }) as unknown as typeof fetch
+  const started = async (next: string) => {
+    let target = ''
+    try { await signIn(event(`https://db.test/auth/sign-in?locale=ja&next=${encodeURIComponent(next)}`)) } catch (e: any) { target = e.location }
+    const auth = new URL(target)
+    nonce = auth.searchParams.get('nonce')!
+    return callback(event(`https://db.test/auth/callback?state=${auth.searchParams.get('state')}&code=good`))
+  }
+  const page = '/ja/oauth/authorize?client_id=abc&redirect_uri=http%3A%2F%2Flocalhost%3A1%2Fcb&state=x'
+  await expect(started(page)).rejects.toMatchObject({ status: 303, location: page })
+  await expect(started('https://evil.example/ja/oauth/authorize?x')).rejects.toMatchObject({ status: 303, location: '/ja/me' })
+})

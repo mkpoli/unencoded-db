@@ -4,5 +4,7 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte'
 export default {
   preprocess: vitePreprocess(),
   compilerOptions: { runes: true },
-  kit: { adapter: adapter(), version: { pollInterval: 5 * 60 * 1000 } },
+  // The origin of a form post is checked in `src/hooks.server.ts`, which lets the OAuth token endpoints through:
+  // a client posts a form to them from outside any browser.
+  kit: { adapter: adapter(), version: { pollInterval: 5 * 60 * 1000 }, csrf: { trustedOrigins: ['*'] } },
 }

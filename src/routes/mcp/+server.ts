@@ -4,8 +4,10 @@
 //
 // The site takes anonymous writes and names each writer by a token: a browser keeps it in a cookie, and an
 // agent keeps the `Mcp-Session-Id` it is handed on `initialize`. The id decides only whose name a write
-// carries. The first write of a connection makes that anonymous person.
+// carries. The first write of a connection makes that anonymous person. An agent that signed in
+// (`$lib/server/agents`) sends a bearer token in its place, and writes as the person who allowed it.
 import { json } from '@sveltejs/kit'
+import { resourceMetadata } from '$lib/server/agents'
 import { AGENT_SESSION, newSessionToken } from '$lib/server/people'
 import { callTool, INSTRUCTIONS, toolList } from './_tools.server'
 import type { RequestHandler } from './$types'
@@ -27,6 +29,10 @@ export const POST: RequestHandler = async (event) => {
   const origin = headers.get('origin')
   if (origin && origin !== event.url.origin) return failure(null, INVALID_REQUEST, 'Forbidden origin', 403)
   if (!/^application\/json\s*(;|$)/i.test(headers.get('content-type') ?? '')) return failure(null, INVALID_REQUEST, 'Send application/json', 415)
+  // A token that names no one is refused, with where to sign in again, and never read as an anonymous caller.
+  if (headers.has('authorization') && !event.locals.person) {
+    return json({ jsonrpc: '2.0', id: null, error: { code: INVALID_REQUEST, message: 'Invalid or expired token' } }, { status: 401, headers: { 'www-authenticate': `Bearer error="invalid_token", resource_metadata="${resourceMetadata(event)}"` } })
+  }
   const version = headers.get('mcp-protocol-version')
   if (version && !VERSIONS.includes(version)) return failure(null, INVALID_REQUEST, `Unsupported protocol version: ${version}`, 400)
 
