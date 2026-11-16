@@ -8,6 +8,7 @@ import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
 import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, readClaims, type Claim, type ClaimError } from '$lib/claims'
+import { DOCULECTS } from '$lib/doculects'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { genreOf } from '$lib/genres'
@@ -169,6 +170,7 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
     if (claim.kind === 'genre') { own.add(`g:${claim.value}`); const parent = genreOf(claim.value)?.parent; if (parent) own.add(`g:${parent}`) }
     else if (claim.kind === 'collection') own.add(`c:${claim.value}`)
     else if (claim.kind === 'tag') own.add(`t:${claim.value}`)
+    else if (claim.kind === 'reading' && typeof claim.data?.doculect === 'string' && claim.data.doculect) own.add(`d:${claim.data.doculect}`)
   }
   // A record is counted in or out of every marked work, so a list of either is one range.
   const held = marksHeld(claims)
@@ -996,7 +998,7 @@ export function chroniclePlace(at: string | null, before: string | null, from: s
 
 // The counts a page shows beside its filters. Tags are counted too, and read where they are listed. The
 // radical paths (`b!`, `b:`) are stepped over by key, so the read does not grow with them.
-export const countsStatement = (db: D1Database) => db.prepare(`SELECT tag, n FROM tag_counts WHERE (tag < 'b!' OR tag >= 'b;') AND n > 0 AND tag NOT LIKE '%|%' AND tag NOT LIKE 't:%'`)
+export const countsStatement = (db: D1Database) => db.prepare(`SELECT tag, n FROM tag_counts WHERE (tag < 'b!' OR tag >= 'b;') AND n > 0 AND tag NOT LIKE '%|%' AND tag NOT LIKE 't:%' AND tag NOT LIKE 'd:%'`)
 export async function counts(db: D1Database) {
   const { results } = await countsStatement(db).all<{ tag: string; n: number }>()
   return Object.fromEntries(results.map(row => [row.tag, row.n])) as Record<string, number>
@@ -1239,4 +1241,14 @@ export const customScriptsStatement = (db: D1Database) => db.prepare(`WITH RECUR
 /** The names visible records give scripts outside the list. */
 export async function customScripts(db: D1Database) {
   return (await customScriptsStatement(db).all<{ name: string }>()).results.map(row => row.name)
+}
+
+export const CUSTOM_DOCULECTS_MAX = 100
+// The languages in use outside the list, most used first: the partial index `tag_counts_doculects` holds the `d:` rows in that order.
+export const customDoculectsStatement = (db: D1Database) => db.prepare(`SELECT substr(tag, 3) AS value, n FROM tag_counts INDEXED BY tag_counts_doculects
+  WHERE tag GLOB 'd:*' AND n > 0 AND tag NOT IN (SELECT 'd:' || value FROM json_each(?1)) ORDER BY n DESC, tag LIMIT ${CUSTOM_DOCULECTS_MAX}`).bind(JSON.stringify(DOCULECTS))
+
+/** The languages visible records give readings outside the list, with how many records use each. */
+export async function customDoculects(db: D1Database) {
+  return (await customDoculectsStatement(db).all<{ value: string; n: number }>()).results
 }

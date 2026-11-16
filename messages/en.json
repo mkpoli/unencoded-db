@@ -421,6 +421,7 @@
   "field.doculect": "Language or dialect",
   "field.doculectUnstated": "Not stated",
   "field.doculectOther": "Other",
+  "field.doculectAdded": "Languages people added",
   "doculect.cmn": "Mandarin",
   "doculect.yue": "Cantonese",
   "doculect.nan": "Southern Min",

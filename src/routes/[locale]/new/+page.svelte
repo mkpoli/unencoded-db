@@ -89,7 +89,7 @@
       </CharacterFields>
     </section>
     <section class="panel titled"><label class="section-title" for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="3">{values?.description ?? ''}</textarea></section>
-    <section class="panel"><SenseFields {claims} {evidence} fill={filled} /></section>
+    <section class="panel"><SenseFields {claims} {evidence} fill={filled} doculects={data.doculects} /></section>
     <section class="group"><h2>{t('entry.sightings')}</h2>
       {#each sightings as item, index (item.key)}
         <fieldset class="panel sighting" bind:this={sections[item.key]} tabindex="-1" data-sighting>

@@ -9,7 +9,7 @@ import { genreOf, isCollection } from './genres'
 import { IDS_LENGTH_MAX, IDS_MAX, splitIds } from './ids'
 import { carryLayout, cleanLayout, validLayout, type Layout } from './layout'
 import { ivdSequence } from './ivd'
-import { cleanDoculect } from './doculects'
+import { cleanDoculect, validDoculect } from './doculects'
 import { isRelationKind } from './related'
 
 export const CLAIM_KINDS = ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'genre', 'collection', 'tag'] as const
@@ -89,7 +89,7 @@ export function validClaim(claim: unknown): claim is Claim {
     case 'genre': return Boolean(genreOf(value))
     case 'collection': return isCollection(value)
     case 'tag': return !/[\s,，、|]/u.test(value)
-    case 'reading': return data === null || (Object.keys(data).length === 1 && cleanDoculect(data.doculect) === data.doculect)
+    case 'reading': return data === null || (Object.keys(data).length === 1 && typeof data.doculect === 'string' && validDoculect(data.doculect))
     default: return true
   }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
-import { addSighting, claimedBy, createEntry, editEntry, editSighting, exportPage, getEntry, getSighting, history, list, mediaVisible, mergeEntry, readSightingFields, redactRevision, restoreSighting, revertEntry, setHidden, sourcePage, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { customDoculects, customDoculectsStatement, addSighting, claimedBy, createEntry, editEntry, editSighting, exportPage, getEntry, getSighting, history, list, mediaVisible, mergeEntry, readSightingFields, redactRevision, restoreSighting, revertEntry, setHidden, sourcePage, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { sightingSnapshot } from './revisions'
@@ -479,5 +479,53 @@ describe('part rows', () => {
     const { raw } = open()
     const plan = (raw.query("EXPLAIN QUERY PLAN SELECT entry_id FROM entry_tags t WHERE t.tag = ? AND (t.sightings, t.entry_id) < (?, ?) AND t.tag NOT GLOB '[wp]:*' ORDER BY t.sightings DESC, t.entry_id DESC LIMIT 5").all('all', 9, 9) as { detail: string }[]).map(row => row.detail).join('\n')
     expect(plan).toContain('entry_tags_by_sightings')
+  })
+})
+
+describe('doculect rows', () => {
+  const reading = (value: string, doculect?: string) => claim('reading', value, doculect ? { doculect } : null)
+  const rows = (raw: ReturnType<typeof openTestDb>['raw']) => raw.query("SELECT tag, entry_id, sightings, year FROM entry_tags WHERE tag GLOB 'd:*' ORDER BY tag, entry_id").all()
+  const tally = (raw: ReturnType<typeof openTestDb>['raw']) => raw.query("SELECT tag, n FROM tag_counts WHERE tag GLOB 'd:*' AND n > 0 ORDER BY tag").all()
+
+  test('a record is listed under each language its readings state, and customDoculects offers the custom ones by use', async () => {
+    const { db, raw } = open()
+    const a = await createEntry(db, fields([reading('mau', '毛南語'), reading('ma', 'cmn'), reading('x')]), seen({ report_date: '1930' }), [], who)
+    await createEntry(db, fields([reading('a', '毛南語'), reading('b', '布依語')]), seen(), [], who)
+    const hidden = await createEntry(db, fields([reading('c', '布依語')]), seen(), [], who)
+    await createEntry(db, fields([reading('d', '布依語')]), seen(), [], who)
+    await setHidden(db, { entry: hidden }, true, who, null)
+    expect(rows(raw).filter(row => (row as { entry_id: number }).entry_id === a)).toEqual([
+      { tag: 'd:cmn', entry_id: a, sightings: 1, year: 1930 }, { tag: 'd:毛南語', entry_id: a, sightings: 1, year: 1930 },
+    ])
+    expect(tally(raw)).toEqual([{ tag: 'd:cmn', n: 1 }, { tag: 'd:布依語', n: 2 }, { tag: 'd:毛南語', n: 2 }])
+    expect(await customDoculects(db)).toEqual([{ value: '布依語', n: 2 }, { value: '毛南語', n: 2 }].sort((x, y) => x.value < y.value ? -1 : 1))
+    await editEntry(db, a, 1, fields([reading('mau')]), who, null)
+    expect(tally(raw)).toEqual([{ tag: 'd:布依語', n: 2 }, { tag: 'd:毛南語', n: 1 }])
+    expect((await customDoculects(db)).map(row => row.value)).toEqual(['布依語', '毛南語'])
+  })
+
+  test('the languages in use are read from the partial index in order, with no sort and no table scan', () => {
+    const { db, raw } = open()
+    const statement = customDoculectsStatement(db) as unknown as { sql: string; values: unknown[] }
+    const plan = (raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')
+    expect(plan).toMatch(/USING (COVERING )?INDEX tag_counts_doculects/)
+    expect(plan).not.toMatch(/TEMP B-TREE|SCAN tag_counts(?! USING)/)
+  })
+
+  test('0021 gives existing records the rows and counts a write gives them', async () => {
+    const { db, raw } = open()
+    await createEntry(db, fields([reading('mau', '毛南語'), reading('ma', 'cmn')]), seen({ report_date: '1930' }), [], who)
+    await createEntry(db, fields([reading('a', '毛南語'), reading('b', '布依語')]), seen(), [], who)
+    const hidden = await createEntry(db, fields([reading('c', '布依語')]), seen(), [], who)
+    await setHidden(db, { entry: hidden }, true, who, null)
+    const merged = await createEntry(db, fields([reading('d', 'ja')]), seen(), [], who)
+    await mergeEntry(db, merged, 1, who, null)
+    await createEntry(db, fields([reading('e')]), seen(), [], who)
+    const written = rows(raw), counted = tally(raw)
+    expect(written).toHaveLength(4)
+    raw.exec("DELETE FROM entry_tags WHERE tag GLOB 'd:*'; DELETE FROM tag_counts WHERE tag GLOB 'd:*'; DROP INDEX tag_counts_doculects")
+    raw.exec(migration('0021_doculect_tags.sql'))
+    expect(rows(raw)).toEqual(written)
+    expect(tally(raw)).toEqual(counted)
   })
 })

@@ -17,7 +17,7 @@
 
   // `evidence` is what a row can rest on. `fill` is what is known of an encoded character, stated where
   // the lists are still empty.
-  let { claims = [], evidence = [], fill = null }: { claims?: Claim[]; evidence?: Choice[]; fill?: CharacterFacts | null } = $props()
+  let { claims = [], evidence = [], fill = null, doculects = [] }: { claims?: Claim[]; evidence?: Choice[]; fill?: CharacterFacts | null; doculects?: string[] } = $props()
 
   const uid = $props.id()
   type Links = { key: string; evidence: string[]; under: string[] }
@@ -31,7 +31,9 @@
   const sightings = $derived([...evidence, ...unlisted])
   const links = (claim: Claim): Links => ({ key: claim.key, evidence: claim.sightings.map(id => offered.get(String(id)) ?? String(id)), under: [...claim.under] })
   const fresh = (under: string[] = []): Links => ({ key: newClaimKey(), evidence: [], under })
-  const stated = (doculect: unknown) => typeof doculect !== 'string' || !doculect ? { doculect: '', other: '' } : isDoculect(doculect) ? { doculect, other: '' } : { doculect: OTHER_DOCULECT, other: doculect }
+  const stated = (doculect: unknown) => typeof doculect === 'string' && doculect ? { doculect, other: '' } : { doculect: '', other: '' }
+  // The languages people have added, then the ones this record's readings already state, each once.
+  const added = untrack(() => [...new Set([...doculects, ...claimsOf(claims, 'reading').map(claim => claim.data?.doculect)].filter((text): text is string => typeof text === 'string' && Boolean(text) && !isDoculect(text)))])
 
   // The row a list opens with has no key until the page runs here, where the server's row and this one
   // are the same row.
@@ -104,6 +106,7 @@
             <select class="input" name={row.doculect === OTHER_DOCULECT ? undefined : 'reading_doculect'} bind:value={row.doculect} aria-label="{t('field.doculect')} {index + 1}">
               <option value="">{t('field.doculectUnstated')}</option>
               {#each DOCULECTS as code (code)}<option value={code}>{t(`doculect.${code}`)}</option>{/each}
+              {#if added.length}<optgroup label={t('field.doculectAdded')}>{#each added as text (text)}<option value={text}>{text}</option>{/each}</optgroup>{/if}
               <option value={OTHER_DOCULECT}>{t('field.doculectOther')}</option>
             </select>
             {#if row.doculect === OTHER_DOCULECT}<input class="input" name="reading_doculect" maxlength={DOCULECT_MAX} bind:value={row.other} required={Boolean(row.value.trim())} aria-label="{t('field.doculectOther')} {index + 1}" placeholder={t('field.doculectOther')} autocomplete="off" />{/if}

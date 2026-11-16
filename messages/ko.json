@@ -421,6 +421,7 @@
   "field.doculect": "언어·방언",
   "field.doculectUnstated": "미지정",
   "field.doculectOther": "기타",
+  "field.doculectAdded": "사용자가 추가한 언어",
   "doculect.cmn": "관화",
   "doculect.yue": "광둥어",
   "doculect.nan": "민남어",

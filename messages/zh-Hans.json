@@ -421,6 +421,7 @@
   "field.doculect": "语言或方言",
   "field.doculectUnstated": "未指定",
   "field.doculectOther": "其他",
+  "field.doculectAdded": "用户添加的语言",
   "doculect.cmn": "官话",
   "doculect.yue": "粤语",
   "doculect.nan": "闽南语",

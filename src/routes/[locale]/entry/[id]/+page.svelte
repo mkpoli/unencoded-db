@@ -174,7 +174,7 @@
           </div>
         </CharacterFields>
         <div class="field" id="edit-description"><label for="description">{t('field.description')}</label><textarea id="description" class="input" name="description">{editValues.description ?? ''}</textarea></div>
-        <div id="edit-senses"><SenseFields claims={editValues.claims} evidence={options} fill={filled} /></div>
+        <div id="edit-senses"><SenseFields claims={editValues.claims} evidence={options} fill={filled} doculects={data.doculects} /></div>
         <details class="filing" id="edit-filing" open>
           <summary class="section-title">{t('field.filing')}</summary>
           <div class="stack filed"><CategoryFields genres={valuesOf(editValues.claims, 'genre')} collections={valuesOf(editValues.claims, 'collection')} tags={valuesOf(editValues.claims, 'tag')} /></div>

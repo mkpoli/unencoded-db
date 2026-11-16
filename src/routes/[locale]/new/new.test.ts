@@ -41,12 +41,12 @@ test('the form starts from a visible sighting', async () => {
   const { db, raw, event } = fixture()
   const form = page([{ place: 'A dictionary', url: 'https://example.test/book', title: 'Book', page: '12', original_date: '1617', note: 'only this character' }])
   await expect(actions.default(event(form))).rejects.toMatchObject({ status: 303 })
-  expect(await load(event(undefined, '?sighting=1'))).toEqual({ seed: { values: { url: 'https://example.test/book', title: 'Book', author: null, publisher: null, report_date: null, vias: [], place: 'A dictionary', original_date: '1617', page: '12' }, pictures: [] } })
-  expect(await load(event())).toEqual({ seed: null })
-  expect(await load(event(undefined, '?sighting=9'))).toEqual({ seed: null })
+  expect(await load(event(undefined, '?sighting=1'))).toEqual({ doculects: [], seed: { values: { url: 'https://example.test/book', title: 'Book', author: null, publisher: null, report_date: null, vias: [], place: 'A dictionary', original_date: '1617', page: '12' }, pictures: [] } })
+  expect(await load(event())).toEqual({ seed: null, doculects: [] })
+  expect(await load(event(undefined, '?sighting=9'))).toEqual({ seed: null, doculects: [] })
   const moderator = (raw.query('SELECT id FROM people LIMIT 1').get() as { id: string }).id
   await setHidden(db, { entry: 1 }, true, { actor: moderator, ip: null }, null)
-  expect(await load(event(undefined, '?sighting=1'))).toEqual({ seed: null })
+  expect(await load(event(undefined, '?sighting=1'))).toEqual({ seed: null, doculects: [] })
 })
 
 test('a via link satisfies the picture or link rule, must be a web link, and is seeded', async () => {
