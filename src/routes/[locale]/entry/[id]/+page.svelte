@@ -6,6 +6,7 @@
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import CharacterFields from '$lib/components/CharacterFields.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
+  import { GLYPH_STYLES } from '$lib/composer'
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
   import CopyButton from '$lib/components/CopyButton.svelte'
   import EditLink from '$lib/components/EditLink.svelte'
@@ -110,7 +111,7 @@
     <div class="head"><h2>{t('entry.about')}</h2><a class="button small" href="#edit-ids" data-edit="ids">{t('entry.edit')}</a></div>
     {#if sequences.length}
       <div class="identity">
-        <span class="plate"><IdsGlyph ids={sequences[0]} layout={entry.layout} /></span>
+        <ul class="styles">{#each GLYPH_STYLES as style (style)}<li><span class="plate"><IdsGlyph ids={sequences[0]} layout={entry.layout} {style} /></span><span class="style-name">{t(`glyphStyle.${style}`)}</span></li>{/each}</ul>
         <ul class="sequences">{#each sequences as sequence}<li><span class="ids">{sequence}</span><CopyButton text={sequence} /></li>{/each}</ul>
         <EditLink field="ids" name={t('field.ids')} />
       </div>
@@ -244,8 +245,12 @@
   .sheet { display:flex; flex-direction:column; gap:10px; padding-top:10px; border-top:1px dashed var(--line) } .filed { margin-top:14px }
   .back { align-self:start; color:var(--muted) } .title { gap:8px } .code { font-variant-numeric:tabular-nums } .code-name { margin-inline-start:6px; font-weight:400; color:var(--muted) } .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
   h3 { font-size:14px; font-weight:600 }
-  .identity { display:flex; align-items:center; gap:18px; min-width:0 }
+  .identity { display:flex; flex-wrap:wrap; align-items:center; gap:12px 18px; min-width:0 }
   .plate { flex:none; display:grid; place-items:center; width:96px; height:96px; border-radius:8px; background:var(--surface-tile) }
+  /* The description drawn in each style the site composes, side by side, in place of one plate. */
+  .styles { display:flex; flex-wrap:wrap; gap:10px; margin:0; padding:0; list-style:none }
+  .styles li { display:flex; flex-direction:column; align-items:center; gap:4px }
+  .style-name { font-size:12px; color:var(--muted) }
   .sites { display:flex; flex-wrap:wrap; gap:4px 12px; margin:0 } dd .sites { margin-top:4px }
   .sequences { display:flex; flex-direction:column; gap:2px; min-width:0; margin:0; padding:0; list-style:none }
   .sequences li { display:flex; align-items:center; gap:4px; font-size:22px; line-height:1.35 } .sequences li + li { font-size:16px; color:var(--muted) }
@@ -271,7 +276,7 @@
   .url { overflow-wrap:anywhere }
   .via { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; margin:0; overflow-wrap:anywhere }
   .via .link { min-width:0 }
-  @media(max-width:700px) { .panel { padding:16px } .plate { width:72px; height:72px } }
+  @media(max-width:700px) { .panel { padding:16px } .plate { width:72px; height:72px } .styles { gap:8px } .styles .plate { width:64px; height:64px } }
   .first-seen { align-self:center; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; text-decoration:underline; text-decoration-color:var(--line-strong); text-underline-offset:3px }
   .first-seen:hover { color:var(--ink) }
   .badge.earliest { background:var(--accent-light); color:var(--accent) }
