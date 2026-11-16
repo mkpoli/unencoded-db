@@ -56,7 +56,8 @@
     const found = Boolean(next && (next.viaUrl || next.viaTitle || next.viaAuthor || next.viaPublisher || next.viaDate))
     if (!row && found) {
       if (!blankVia(vias.at(-1)!) && vias.length < VIAS_MAX) vias.push(via())
-      if (blankVia(vias.at(-1)!)) row = vias.at(-1)
+      // A full chain gives its last link to the post, which is always what the contributor saw.
+      row = vias.at(-1)
     }
     if (row) {
       row.url = keep(row.url, 'viaUrl'); row.title = keep(row.title, 'viaTitle'); row.author = keep(row.author, 'viaAuthor')
@@ -147,6 +148,18 @@
       <div><button type="button" class="text-button" onclick={() => removeVia(row.key)}>{t('field.viaRemove')}</button></div>
     </fieldset>
   {/each}
+  {#if vias.length < VIAS_MAX && !blankVia(vias.at(-1)!)}
+    <!-- Without scripts the add button does nothing, so an empty row is there to fill. -->
+    <noscript><fieldset class="via">
+      <div class="field"><label for="{uid}-via_url-next">{t('field.url')}</label><input id="{uid}-via_url-next" class="input" type="url" name="via_url" placeholder="https://" maxlength="1000" /></div>
+      <div class="grid-2">
+        <div class="field"><label for="{uid}-via_title-next">{t('field.title')}</label><input id="{uid}-via_title-next" class="input" name="via_title" maxlength="300" /></div>
+        <div class="field"><label for="{uid}-via_author-next">{t('field.author')}</label><input id="{uid}-via_author-next" class="input" name="via_author" maxlength="300" /></div>
+        <div class="field"><label for="{uid}-via_publisher-next">{t('field.publisher')}</label><input id="{uid}-via_publisher-next" class="input" name="via_publisher" maxlength="300" /></div>
+        <div class="field"><label for="{uid}-via_report_date-next">{t('field.reportDate')}</label><input id="{uid}-via_report_date-next" class="input" name="via_report_date" maxlength="40" /></div>
+      </div>
+    </fieldset></noscript>
+  {/if}
   {#if vias.length < VIAS_MAX}<div><button type="button" class="button" onclick={() => vias.push(via())}>{t('field.viaAdd')}</button></div>{/if}
 </details>
 

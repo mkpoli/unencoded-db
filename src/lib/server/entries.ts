@@ -679,14 +679,16 @@ function withMedia<T extends { id: number }>(sightings: T[], media: MediaRow[]) 
   for (const { sighting_id, ...image } of media) found.set(sighting_id, [...(found.get(sighting_id) ?? []), image])
   return sightings.map(sighting => ({ ...sighting, media: found.get(sighting.id) ?? [] }))
 }
-type ViaRow = Citation & { id: number; sighting_id: number }
+type ViaRow = Citation & { id: number; sighting_id: number; position: number }
+// A sighting's vias in chain order; the queries leave the order of a sighting's few rows to here.
 function withVias<T extends { id: number }>(sightings: T[], vias: ViaRow[]) {
   const found = new Map<number, (Citation & { id: number })[]>()
-  for (const { sighting_id, ...via } of vias) found.set(sighting_id, [...(found.get(sighting_id) ?? []), via])
+  for (const { sighting_id, position: _, ...via } of [...vias].sort((a, b) => a.sighting_id - b.sighting_id || a.position - b.position)) found.set(sighting_id, [...(found.get(sighting_id) ?? []), via])
   return sightings.map(sighting => ({ ...sighting, vias: found.get(sighting.id) ?? [] }))
 }
-const VIA_COLUMNS = `v.sighting_id, v.source_id AS id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}`
-const VIAS_OF_ENTRY = `SELECT ${VIA_COLUMNS} FROM sightings s JOIN sighting_vias v ON v.sighting_id = s.id JOIN sources c ON c.id = v.source_id WHERE s.entry_id = ? ORDER BY s.id, v.position`
+const VIA_COLUMNS = `v.sighting_id, v.position, v.source_id AS id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}`
+// Only the sightings `sightingRows` reads, so a merged record past SIGHTINGS_MAX costs no more.
+const VIAS_OF_ENTRY = `SELECT ${VIA_COLUMNS} FROM sightings s JOIN sighting_vias v ON v.sighting_id = s.id JOIN sources c ON c.id = v.source_id WHERE s.entry_id = ?1 AND s.id <= COALESCE((SELECT id FROM sightings WHERE entry_id = ?1 ORDER BY id LIMIT 1 OFFSET ${SIGHTINGS_MAX - 1}), ${Number.MAX_SAFE_INTEGER}) ORDER BY s.id`
 const MEDIA_OF_ENTRY = `SELECT x.sighting_id, ${IMAGE_FIELDS.map(field => `x.${field}`).join(', ')} FROM sightings s JOIN sighting_media x ON x.sighting_id = s.id WHERE s.entry_id = ? ORDER BY x.sighting_id, x.position`
 
 // A record's sightings, each with its citation and pictures.
