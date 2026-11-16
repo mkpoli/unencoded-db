@@ -1,5 +1,11 @@
 # Principles
 
+## Founding statement
+
+> As a sub project directly under Glyph Atlas, I am going to add a 珍字集覽 site, as a wiki site that mainly focus on collecting and documenting Unicode unecoded or unifiable variants. This is similar to GlyphWiki, but instead of drawing Glyphs, I would focus on gathering evidence, so that it will make people easier to do IRG submissions.
+>
+> — ♪ まくぽり ☆彡
+
 The rules that decide what goes into the compendium and how a record is written. The wider Glyph
 Atlas principles (collect first, machines first, open, built for reuse) apply as well.
 
