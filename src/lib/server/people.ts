@@ -74,6 +74,35 @@ export async function writer(event: RequestEvent, db: D1Database) {
   return person
 }
 
+// An agent has no cookie jar. Its connection carries the token the endpoint handed it, and its first write
+// makes the anonymous person that token names from then on. The token is kept under a name of its own,
+// so it never stands for a browser's cookie, nor a cookie for it: an agent's person cannot be signed in.
+export const AGENT_SESSION = 'mcp-session-id'
+export function agentToken(request: Request) {
+  const token = request.headers.get(AGENT_SESSION)
+  return token && /^[0-9a-f]{64}$/.test(token) ? `mcp:${token}` : undefined
+}
+export async function agentWriter(event: RequestEvent, db: D1Database) {
+  if (event.locals.person) return event.locals.person
+  let person = await createPerson(db)
+  const token = agentToken(event.request)
+  if (token) {
+    const hash = await hashHex(token), at = Date.now()
+    await db.batch([
+      db.prepare('DELETE FROM sessions WHERE token_hash = ? AND created_at <= ?').bind(hash, new Date(at - YEAR * 1000).toISOString()),
+      db.prepare('INSERT OR IGNORE INTO sessions(token_hash, person, created_at) VALUES(?,?,?)').bind(hash, person.id, new Date(at).toISOString()),
+    ])
+    // Two first writes of one connection may run together. The person whose token was kept stands for both.
+    const held = await personOf(db, token)
+    if (held && held.id !== person.id) {
+      await db.prepare('DELETE FROM people WHERE id = ?').bind(person.id).run()
+      person = held
+    }
+  }
+  event.locals.person = person
+  return person
+}
+
 export const NAME_MAX = 40
 export function cleanName(text: unknown) {
   const name = String(text ?? '').normalize('NFC').replace(/\s+/gu, ' ').trim()

@@ -31,6 +31,24 @@ Sign-in requires a confidential client registered with the Glyph Atlas issuer fo
 
 Without client credentials, the site offers anonymous contributions. Signing in links the browser's anonymous contributions to the account; signing out ends the local session.
 
+## Agents
+
+`https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. In Claude Code:
+
+```sh
+claude mcp add --transport http rare https://rare.glyphatlas.org/mcp
+```
+
+| Tool | Does |
+|---|---|
+| `find_similar_records` | Lists the records that may show the same form as a description sequence |
+| `search_records` | Searches the records by description, character or word |
+| `get_record` | Reads a record with its claims, sightings and picture addresses |
+| `add_record` | Adds a character with up to five sightings |
+| `add_sighting` | Adds evidence to a record |
+
+A write passes the same checks and rate limits as the forms. A picture is given by its address and fetched by the site, up to ten from other sites in one call, and stands as its own thumbnail. The writes of one connection carry one anonymous name, kept by the `Mcp-Session-Id` the endpoint hands out; that id is no browser session and cannot be signed in. The tools are defined in `src/routes/mcp/_tools.server.ts`.
+
 ## Data model
 
 | Table | Holds |
