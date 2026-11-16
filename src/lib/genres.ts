@@ -1,107 +1,122 @@
-// The categories a character can be filed under. A category with a parent is browsed under it, and a
-// record filed under a child is found under its parent too. Each label is the category's own name.
-export type Genre = { slug: string; label: string; parent: string | null }
-
-export const GENRES: readonly Genre[] = [
-  { slug: 'dialect', label: '方言字', parent: null },
-  { slug: 'wu', label: '吳語', parent: 'dialect' },
-  { slug: 'mindong', label: '閩東語', parent: 'dialect' },
-  { slug: 'yue', label: '粵語', parent: 'dialect' },
-  { slug: 'minnan', label: '閩南語', parent: 'dialect' },
-  { slug: 'hakka', label: '客家語', parent: 'dialect' },
-  { slug: 'mandarin', label: '官話', parent: 'dialect' },
-  { slug: 'nom', label: '喃字', parent: 'dialect' },
-  { slug: 'baiwen', label: '白文', parent: 'dialect' },
-  { slug: 'kokuji', label: '日本國字', parent: 'dialect' },
-  { slug: 'kokuji-kr', label: '朝鮮國字', parent: 'dialect' },
-  { slug: 'abbreviation', label: '略字・簡化字', parent: null },
-  { slug: 'shinjitai', label: '日本新字體', parent: 'abbreviation' },
-  { slug: 'shinjitai-extended', label: '日本擴張新字體', parent: 'abbreviation' },
-  { slug: 'simplified-cn', label: '大陸簡體字', parent: 'abbreviation' },
-  { slug: 'simplified-cn-2', label: '大陸二簡字', parent: 'abbreviation' },
-  { slug: 'yakja', label: '韓國略字', parent: 'abbreviation' },
-  { slug: 'ryakuji', label: '日本俗略字', parent: 'abbreviation' },
-  { slug: 'music', label: '樂譜', parent: null },
-  { slug: 'medicine', label: '醫藥', parent: null },
-  { slug: 'chemistry', label: '化學', parent: null },
-  { slug: 'metrology', label: '度量衡', parent: null },
-  { slug: 'taoism', label: '道教', parent: null },
-  { slug: 'buddhism', label: '佛教', parent: null },
-  { slug: 'qieshen', label: '切身', parent: null },
-  { slug: 'transliteration', label: '音譯', parent: null },
-  { slug: 'names', label: '人名', parent: null },
-  { slug: 'places', label: '地名', parent: null },
-  { slug: 'flora-fauna', label: '動植物', parent: null },
-]
+// The categories a character can be filed under, one row each in `categories`. A category with a parent is
+// browsed under it, and a record filed under a child is found under its parent too. `name` is what a claim
+// stores and never changes; `label` is what is shown.
+// `rev` is the id of the change that last wrote the row, which a write names to land only on what it read.
+// `used` says whether any record names it, hidden and merged ones too, where a page reads that.
+export type Category = { name: string; label: string; parent: string | null; position: number; rev: number; n: number; used?: boolean }
+/** What the pure helpers need of a category. */
+export type CategoryRef = Pick<Category, 'name' | 'label' | 'parent' | 'position'>
 
 export const COLLECTIONS = [{ slug: 'extension-e', label: 'Extension E' }] as const
 
-export const genreOf = (slug: string) => GENRES.find(genre => genre.slug === slug) ?? null
-/** What a stored category shows as: a built-in's label, or a custom name as written. */
-export const genreLabel = (value: string) => genreOf(value)?.label ?? value
-
 export const GENRE_LENGTH_MAX = 40
+/** The most levels a chain of categories has, the category itself included. */
+export const GENRE_DEPTH_MAX = 4
+
+/** Whether a value has the shape of a category's name or label. */
+export function validGenreName(value: string) {
+  return Boolean(value) && value.length <= GENRE_LENGTH_MAX && value === value.normalize('NFC').trim() && !/[\s|,，、\p{Cc}]/u.test(value)
+}
 
 /**
- * The value a category is stored as, or null when it is neither a built-in nor a valid custom name.
- * A custom name that spells a built-in's label is that built-in. A custom name has no parent.
+ * The name a typed category is stored as, or null when it is not a valid name. A category's name is that
+ * category; so is its label. Anything else valid is the name of a category to be added.
  */
-export function cleanGenre(value: string): string | null {
-  const name = value.normalize('NFC').trim()
-  if (!name || name.length > GENRE_LENGTH_MAX) return null
-  if (genreOf(name)) return name
-  const named = GENRES.find(genre => genre.label === name)
-  if (named) return named.slug
-  return /[\s|,，、\p{Cc}]/u.test(name) ? null : name
+export function cleanGenre(value: string, categories: readonly Pick<Category, 'name' | 'label'>[]): string | null {
+  const typed = value.normalize('NFC').trim()
+  if (!typed || typed.length > GENRE_LENGTH_MAX) return null
+  if (categories.some(category => category.name === typed)) return typed
+  const labelled = categories.find(category => category.label === typed)
+  if (labelled) return labelled.name
+  return validGenreName(typed) ? typed : null
 }
 
 export const isCollection = (slug: string) => COLLECTIONS.some(collection => collection.slug === slug)
 
-export type GenreGroup = { parent: Genre; children: Genre[] }
+/** Each category's label by its name; a stored name no category has shows as written. */
+export const genreLabels = (categories: readonly Pick<Category, 'name' | 'label'>[]) => new Map(categories.map(category => [category.name, category.label]))
 
-/** The categories as ungrouped labels and one block per parent. */
-export function groupGenres(genres: readonly Genre[] = GENRES): { standalone: Genre[]; groups: GenreGroup[] } {
-  const parents = genres.filter(genre => !genre.parent).map(parent => ({ parent, children: genres.filter(genre => genre.parent === parent.slug) }))
-  return { standalone: parents.filter(group => !group.children.length).map(group => group.parent), groups: parents.filter(group => group.children.length) }
+const byPosition = (a: CategoryRef, b: CategoryRef) => a.position - b.position || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+
+export type CategoryNode<T extends CategoryRef = Category> = T & { children: CategoryNode<T>[]; level: number; height: number }
+
+/**
+ * The categories as a tree, each level in order. A category whose parent is missing, or whose chain runs
+ * past the cap or into a loop, stands at the top.
+ */
+export function categoryTree<T extends CategoryRef>(categories: readonly T[]): CategoryNode<T>[] {
+  const names = new Set(categories.map(category => category.name))
+  const under = new Map<string | null, T[]>()
+  for (const category of [...categories].sort(byPosition)) {
+    const parent = category.parent !== null && names.has(category.parent) ? category.parent : null
+    under.set(parent, [...(under.get(parent) ?? []), category])
+  }
+  const seen = new Set<string>()
+  const grow = (category: T, level: number): CategoryNode<T> => {
+    seen.add(category.name)
+    const children = level < GENRE_DEPTH_MAX ? (under.get(category.name) ?? []).filter(child => !seen.has(child.name)).map(child => grow(child, level + 1)) : []
+    return { ...category, children, level, height: 1 + Math.max(0, ...children.map(child => child.height)) }
+  }
+  const roots = (under.get(null) ?? []).map(category => grow(category, 1))
+  // What a loop or the cap cut off stands at the top, so no category is lost.
+  for (const category of categories) if (!seen.has(category.name)) roots.push(grow({ ...category, parent: null }, 1))
+  return roots
 }
 
-/** A category people added: its name, the category it sits under (a built-in slug, another custom name, or none) and its records. */
-export type CustomGenre = { value: string; parent: string | null; n: number }
+/** Every category in a tree, a parent before its children. */
+export const flatten = <T extends CategoryRef>(nodes: readonly CategoryNode<T>[]): CategoryNode<T>[] => nodes.flatMap(node => [node, ...flatten(node.children)])
+
+/**
+ * Why a category cannot go under `parent` (null for the top): it would be under itself or a category below
+ * it, or a chain would run past the cap. Null when it can.
+ */
+export function moveRefusal<T extends CategoryRef>(nodes: readonly CategoryNode<T>[], name: string, parent: string | null): 'missing' | 'parent' | 'depth' | null {
+  const node = nodes.find(category => category.name === name)
+  if (!node) return 'missing'
+  if (parent === null) return node.height > GENRE_DEPTH_MAX ? 'depth' : null
+  const above = nodes.find(category => category.name === parent)
+  if (!above || flatten([node]).some(category => category.name === parent)) return 'parent'
+  return above.level + node.height > GENRE_DEPTH_MAX ? 'depth' : null
+}
+
+/**
+ * Where a category stands once put under `parent` at `position`: the parent it leaves, and the order of the
+ * categories under its new parent and under the one it leaves, as the tree stands.
+ */
+export function placement<T extends CategoryRef>(roots: readonly CategoryNode<T>[], name: string, parent: string | null, position: number) {
+  const nodes = flatten(roots)
+  const under = (above: string | null) => (above === null ? roots : nodes.find(category => category.name === above)?.children ?? []).map(category => category.name).filter(other => other !== name)
+  const from = nodes.find(category => category.children.some(child => child.name === name))?.name ?? null
+  const order = under(parent)
+  order.splice(Math.max(0, Math.min(position, order.length)), 0, name)
+  return { from, order, left: from === parent ? order : under(from) }
+}
+
+/** The categories with one moved as `placement` puts it, numbered again in their new order. */
+export function moved<T extends CategoryRef>(categories: readonly T[], name: string, parent: string | null, position: number): T[] {
+  const { order, left } = placement(categoryTree(categories), name, parent, position)
+  const at = new Map([...left.map((other, index) => [other, index] as const), ...order.map((other, index) => [other, index] as const)])
+  return categories.map(category => category.name === name ? { ...category, parent, position: at.get(name)! } : at.has(category.name) ? { ...category, position: at.get(category.name)! } : category)
+}
+
 /** A category as one line of a list, `depth` 0 for the top of a group. */
 export type GenreRow = { value: string; label: string; depth: number }
 
-/** The most levels a chain of categories has, the category itself included. */
-export const GENRE_DEPTH_MAX = 4
-
-/**
- * Every category as a list: the ones without children, then one block per category with children. Built-in
- * children come first and custom ones follow, each custom category under its parent, nested by depth.
- */
-export function arrangeGenres(custom: readonly CustomGenre[] = []): { standalone: GenreRow[]; groups: { root: GenreRow; rows: GenreRow[] }[] } {
-  const known = new Set([...GENRES.map(genre => genre.slug), ...custom.map(item => item.value)])
-  const under = (parent: string) => [
-    ...GENRES.filter(genre => genre.parent === parent).map(genre => genre.slug),
-    ...custom.filter(item => item.parent === parent).map(item => item.value),
-  ]
-  const roots = [
-    ...GENRES.filter(genre => !genre.parent).map(genre => genre.slug),
-    ...custom.filter(item => !item.parent || !known.has(item.parent)).map(item => item.value),
-  ]
-  const seen = new Set<string>()
-  const walk = (value: string, depth: number): GenreRow[] => {
-    if (seen.has(value) || depth > GENRE_DEPTH_MAX) return []
-    seen.add(value)
-    return [{ value, label: genreLabel(value), depth }, ...under(value).flatMap(child => walk(child, depth + 1))]
+/** Every category as a list: the ones without children, then one block per category with children. */
+export function arrangeGenres(categories: readonly CategoryRef[]): { standalone: GenreRow[]; groups: { root: GenreRow; rows: GenreRow[] }[] } {
+  const row = (node: CategoryNode<CategoryRef>): GenreRow => ({ value: node.name, label: node.label, depth: node.level - 1 })
+  const roots = categoryTree(categories)
+  return {
+    standalone: roots.filter(root => !root.children.length).map(row),
+    groups: roots.filter(root => root.children.length).map(root => ({ root: row(root), rows: flatten(root.children).map(row) })),
   }
-  const blocks = roots.map(root => walk(root, 0)).filter(block => block.length)
-  return { standalone: blocks.filter(block => block.length === 1).map(block => block[0]), groups: blocks.filter(block => block.length > 1).map(block => ({ root: block[0], rows: block.slice(1) })) }
 }
 
 /** The new category a form asks for: its name as it would be stored and where it goes, null when it asks for none, or 'invalid'. */
-export function readNewGenre(form: FormData): { name: string; parent: string | null } | null | 'invalid' {
+export function readNewGenre(form: FormData, categories: readonly Pick<Category, 'name' | 'label'>[]): { name: string; parent: string | null } | null | 'invalid' {
   const typed = String(form.get('genre_new') ?? '').trim()
   if (!typed) return null
-  const name = cleanGenre(typed)
+  const name = cleanGenre(typed, categories)
   if (!name) return 'invalid'
   return { name, parent: String(form.get('genre_new_parent') ?? '').trim().normalize('NFC') || null }
 }

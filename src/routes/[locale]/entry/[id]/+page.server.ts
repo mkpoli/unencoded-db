@@ -1,9 +1,9 @@
-import { createCategory, customGenres } from '$lib/server/categories'
+import { categoryList, createCategory } from '$lib/server/categories'
 import { error, fail, redirect } from '@sveltejs/kit'
 import { isDescription } from 'ids-input'
 import { cleanIds } from '$lib/ids'
 import { earliestSighting, editEntry, getEntry, radicalCounts, readEntryFields } from '$lib/server/entries'
-import { cleanGenre, readNewGenre } from '$lib/genres'
+import { readNewGenre } from '$lib/genres'
 import { newClaim } from '$lib/claims'
 import { filedUnder, radicalPath } from '$lib/radicals'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
@@ -27,7 +27,7 @@ export const load: PageServerLoad = async (event) => {
   // A description another page proposes to add, ?ids_add=: one, and only a whole one. It is added to the form, not saved.
   const proposed = cleanIds(event.url.searchParams.get('ids_add') ?? '')
   const idsAdd = isDescription(proposed) ? proposed : null
-  return { idsAdd, entry: found.entry, claims: found.claims, sightings, filed, customGenres: await customGenres(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
+  return { idsAdd, entry: found.entry, claims: found.claims, sightings, filed, categories: await categoryList(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
 }
 
 export const actions: Actions = {
@@ -39,10 +39,11 @@ export const actions: Actions = {
     const found = await getEntry(DB, id)
     if (!found || found.entry.hidden_at || found.entry.merged_into) error(404)
     const form = await event.request.formData()
-    const { fields: read, error: claimError } = readEntryFields(form, { ...found.entry, claims: found.claims })
+    const categories = await categoryList(DB)
+    const { fields: read, error: claimError } = readEntryFields(form, categories, { ...found.entry, claims: found.claims })
     // A category typed into the form without scripts is made with the edit and filed under.
-    const fresh = readNewGenre(form)
-    const named = fresh && fresh !== 'invalid' ? cleanGenre(fresh.name)! : null
+    const fresh = readNewGenre(form, categories)
+    const named = fresh && fresh !== 'invalid' ? fresh.name : null
     const values = named && !read.claims.some(claim => claim.kind === 'genre' && claim.value === named) ? { ...read, claims: [...read.claims, newClaim('genre', named)] } : read
     if (claimError) return fail(400, { error: claimError, values })
     if (fresh === 'invalid') return fail(400, { error: 'category', values })
@@ -51,7 +52,7 @@ export const actions: Actions = {
     const person = await writer(event, DB)
     const summary = String(form.get('summary') ?? '').trim().slice(0, 500) || null
     const who = { actor: person.id, ip: await ipHash(event) }
-    if (fresh && !(await createCategory(DB, fresh, who)).ok) return fail(400, { error: 'category', values })
+    if (fresh && !(await createCategory(DB, categories, fresh, who)).ok) return fail(400, { error: 'category', values })
     const result = await editEntry(DB, id, rev, values, who, summary)
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code, values })
     redirect(303, `/${event.params.locale}/entry/${id}`)

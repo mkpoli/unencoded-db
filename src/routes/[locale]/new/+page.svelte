@@ -104,7 +104,7 @@
     </section>
     <details class="panel filing" open>
       <summary class="section-title">{t('field.filing')}</summary>
-      <div class="group filed"><CategoryFields known={data.customGenres} genres={valuesOf(claims, 'genre')} collections={valuesOf(claims, 'collection')} tags={valuesOf(claims, 'tag')} /></div>
+      <div class="group filed"><CategoryFields categories={data.categories} genres={valuesOf(claims, 'genre')} collections={valuesOf(claims, 'collection')} tags={valuesOf(claims, 'tag')} /></div>
     </details>
     <SubmitBar {busy} label={t('nav.add')} cancel={href()} sticky />
   </form>

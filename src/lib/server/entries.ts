@@ -10,7 +10,8 @@ import { statusOf } from '$lib/status'
 import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, readClaims, valuesOf, type Claim, type ClaimError } from '$lib/claims'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
-import { ancestorsOf, categoryParents, ensureCategories } from './categories'
+import { FILE_ROWS, ensureCategories, filedUnder } from './categories'
+import type { Category } from '$lib/genres'
 import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
@@ -79,11 +80,11 @@ function readVias(form: FormData): Citation[] {
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
 const now = () => new Date().toISOString()
 
-export function readEntryFields(form: FormData, base?: Partial<EntryFields>): { fields: EntryFields; error: ClaimError | null } {
+export function readEntryFields(form: FormData, categories: readonly Pick<Category, 'name' | 'label'>[], base?: Partial<EntryFields>): { fields: EntryFields; error: ClaimError | null } {
   const named = form.has('script') ? resolveScript(String(form.get('script'))) : { script: base?.script ?? 'han', script_other: base?.script_other ?? null }
   const strokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
   const field = (name: 'description' | 'radical', max: number) => form.has(name) ? text(form, name, max) : base?.[name] ?? null
-  const read = readClaims(form, base?.claims)
+  const read = readClaims(form, categories, base?.claims)
   return {
     error: read.error,
     fields: {
@@ -159,15 +160,16 @@ export function parseMarks(raw: string | null | undefined): string[] {
 }
 
 type TagInput = Pick<Entry, 'script' | 'status' | 'description' | 'script_other'>
-export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key' | 'radical' | 'first_year'>, hasSource: boolean, claims: readonly Claim[] = [], parents: ReadonlyMap<string, string | null> = new Map()) {
+// A record's category rows (`g:`) are written by `genreRows` from the categories as its batch finds them, and
+// are left out here.
+export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key' | 'radical' | 'first_year'>, hasSource: boolean, claims: readonly Claim[] = []) {
   const filters = entry.status ? [`f:${entry.status}`] : []
   if (!entry.cover_key) filters.push('n:image')
   if (!entry.ids) filters.push('n:ids')
   if (!hasSource) filters.push('n:source')
   const own = new Set<string>()
   for (const claim of claims) {
-    if (claim.kind === 'genre') for (const value of [claim.value, ...ancestorsOf(claim.value, parents)]) own.add(`g:${value}`)
-    else if (claim.kind === 'collection') own.add(`c:${claim.value}`)
+    if (claim.kind === 'collection') own.add(`c:${claim.value}`)
     else if (claim.kind === 'tag') own.add(`t:${claim.value}`)
   }
   // A record is counted in or out of every marked work, so a list of either is one range.
@@ -258,8 +260,24 @@ function summarize(sightings: SightingState[]) {
   }
 }
 
-const tagsOf = (entry: Entry, claims: readonly Claim[], summary: ReturnType<typeof summarize>, parents: ReadonlyMap<string, string | null>) =>
-  [...facetTags({ ...entry, status: statusOf(claims), ids: primaryIdsOf(claims), cover_key: summary.cover_key, first_year: summary.first_year }, summary.hasSource, claims, parents), ...wordTags(entry, claims, summary.visible), ...partTags(claims)]
+const tagsOf = (entry: Entry, claims: readonly Claim[], summary: ReturnType<typeof summarize>) =>
+  [...facetTags({ ...entry, status: statusOf(claims), ids: primaryIdsOf(claims), cover_key: summary.cover_key, first_year: summary.first_year }, summary.hasSource, claims), ...wordTags(entry, claims, summary.visible), ...partTags(claims)]
+const GENRE_ROWS = "tag >= 'g:' AND tag < 'g;'"
+/**
+ * A record's category rows, written again from its claims, from whether it is live and from the categories,
+ * all as the batch that runs these statements finds them, so neither a category moved nor a claim written
+ * meanwhile leaves them behind. They go after the record's claims and summary in the batch. `owner` is as
+ * for `owned`.
+ */
+function genreRows(db: D1Database, owner: number | string) {
+  const { sql, values } = owned(owner)
+  return [
+    db.prepare(`UPDATE tag_counts SET n = n - 1 WHERE tag IN (SELECT tag FROM entry_tags WHERE entry_id = ${sql} AND ${GENRE_ROWS})`).bind(...values),
+    db.prepare(`DELETE FROM entry_tags WHERE entry_id = ${sql} AND ${GENRE_ROWS}`).bind(...values),
+    db.prepare(`WITH RECURSIVE ${filedUnder(`= ${sql}`)} ${FILE_ROWS} WHERE e.merged_into IS NULL AND e.hidden_at IS NULL`).bind(...values),
+    db.prepare(`INSERT INTO tag_counts(tag, n) SELECT tag, 1 FROM entry_tags WHERE entry_id = ${sql} AND ${GENRE_ROWS} ON CONFLICT(tag) DO UPDATE SET n = n + 1`).bind(...values),
+  ]
+}
 // Word and part rows are looked up by key and are no list of their own: they keep no count, year or tag count.
 const facet = (tag: string) => !/^[wp]:/.test(tag)
 const SIGHTING_SEQ = "(SELECT seq FROM sqlite_sequence WHERE name = 'sightings')"
@@ -273,8 +291,8 @@ const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summ
 async function reindex(db: D1Database, id: number, entry: Entry, claims: readonly Claim[], sightings: SightingState[]) {
   const summary = summarize(sightings)
   const live = !entry.merged_into && !entry.hidden_at
-  const next = live ? tagsOf(entry, claims, summary, await categoryParents(db, valuesOf(claims, 'genre'))) : []
-  const { results } = await db.prepare('SELECT tag FROM entry_tags WHERE entry_id = ?').bind(id).all<{ tag: string }>()
+  const next = live ? tagsOf(entry, claims, summary) : []
+  const { results } = await db.prepare(`SELECT tag FROM entry_tags WHERE entry_id = ? AND NOT (${GENRE_ROWS})`).bind(id).all<{ tag: string }>()
   const current = new Set(results.map(row => row.tag)), wanted = new Set(next)
   const gone = [...current].filter(tag => !wanted.has(tag)), added = [...wanted].filter(tag => !current.has(tag))
   return [
@@ -285,6 +303,7 @@ async function reindex(db: D1Database, id: number, entry: Entry, claims: readonl
     db.prepare("UPDATE entry_tags SET sightings = ?1, year = ?2 WHERE entry_id = ?3 AND (sightings != ?1 OR year IS NOT ?2) AND tag NOT GLOB '[wp]:*'").bind(summary.visible.length, yearOf(summary.first_year), id),
     db.prepare('UPDATE tag_counts SET n = n - 1 WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(gone.filter(facet))),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(added.filter(facet))),
+    ...genreRows(db, id),
   ]
 }
 
@@ -378,7 +397,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
   const sources = await Promise.all(drafts.map(draft => sourceOf(db, draft.fields)))
   const summary = summarize(drafts.map(draft => ({ ...draft.fields, media: draft.media })))
   await ensureCategories(db, valuesOf(claims, 'genre'), who)
-  const tags = [...new Set(tagsOf({ ...fields, merged_into: null, hidden_at: null } as unknown as Entry, claims, summary, await categoryParents(db, valuesOf(claims, 'genre'))))]
+  const tags = [...new Set(tagsOf({ ...fields, merged_into: null, hidden_at: null } as unknown as Entry, claims, summary))]
   // AUTOINCREMENT sequences are read inside the same transaction as the inserts.
   const results = await db.batch<{ id: number }>([
     db.prepare(`INSERT INTO entries(${ENTRY_FIELDS.join(', ')}, created_by, created_at, updated_at) VALUES(${ENTRY_FIELDS.map(() => '?').join(', ')}, ?, ?, ?) RETURNING id`)
@@ -399,6 +418,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
     db.prepare(`UPDATE entries SET ${SUMMARY_SET} WHERE id = ${ENTRY_SEQ}`).bind(...summaryValues(claims, summary)),
     db.prepare(`INSERT INTO entry_tags(tag, entry_id, sightings, year) SELECT value, ${ENTRY_SEQ}, CASE WHEN value GLOB '[wp]:*' THEN 0 ELSE ? END, CASE WHEN value GLOB '[wp]:*' THEN NULL ELSE ? END FROM json_each(?)`).bind(summary.visible.length, yearOf(summary.first_year), JSON.stringify(tags)),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),
+    ...genreRows(db, ENTRY_SEQ),
     recount(db, ENTRY_SEQ),
   ])
   return results[0].results[0].id
@@ -656,7 +676,8 @@ export async function setHidden(db: D1Database, target: { entry: number; sightin
   }
 }
 
-async function refresh(db: D1Database, id: number) {
+/** Brings one record's tags, counts and summary up to date from what it holds. */
+export async function refresh(db: D1Database, id: number) {
   const entry = await getEntryRow(db, id)
   if (entry) await db.batch([...await reindex(db, id, entry, await claimRows(db, id), await sightingRows(db, id)), recount(db, id)])
 }

@@ -11,7 +11,7 @@ const stated = ({ key, ...rest }: Claim): Stated => rest
 const form = (entries: [string, string][]) => { const data = new FormData(); for (const [name, value] of entries) data.append(name, value); return data }
 // What a route acts on: the claims to store, or the error that stops it.
 const read = (entries: [string, string][], base: Stated[] = []) => {
-  const { claims, error } = readClaims(form(entries), keyed(base))
+  const { claims, error } = readClaims(form(entries), [], keyed(base))
   return error ? { error } : { claims: claims.map(stated) }
 }
 const valid = (item: Stated) => validClaim({ key: 'abcd1234', ...item })
@@ -173,20 +173,27 @@ describe('readings, meanings and tags', () => {
 })
 
 describe('categories', () => {
-  test('a built-in slug is kept, its label is its slug and a custom name is kept', () => {
-    expect(cleanGenre('hakka')).toBe('hakka')
-    expect(cleanGenre('客家語')).toBe('hakka')
-    expect(cleanGenre('方言字')).toBe('dialect')
-    expect(cleanGenre(' 近古字書 ')).toBe('近古字書')
-    expect(cleanGenre('x'.repeat(40))).toBe('x'.repeat(40))
+  const listed = [{ name: 'hakka', label: '客家語' }, { name: 'dialect', label: '方言字' }, { name: '近古字書', label: '近古字書' }, { name: 'renamed', label: '改名後' }]
+  test('a name is kept, a label names its category, and any other valid name is kept', () => {
+    expect(cleanGenre('hakka', listed)).toBe('hakka')
+    expect(cleanGenre('客家語', listed)).toBe('hakka')
+    expect(cleanGenre('方言字', listed)).toBe('dialect')
+    expect(cleanGenre('改名後', listed)).toBe('renamed')
+    expect(cleanGenre(' 近古字書 ', listed)).toBe('近古字書')
+    expect(cleanGenre('戶籍用字', listed)).toBe('戶籍用字')
+    expect(cleanGenre('x'.repeat(40), listed)).toBe('x'.repeat(40))
   })
   test('whitespace, separators, control characters and a long name are rejected', () => {
-    for (const bad of ['', '  ', 'a b', 'a|b', 'a,b', 'a，b', 'a、b', 'a\u0000b', 'x'.repeat(41)]) expect(cleanGenre(bad)).toBeNull()
+    for (const bad of ['', '  ', 'a b', 'a|b', 'a,b', 'a，b', 'a、b', 'a\u0000b', 'x'.repeat(41)]) expect(cleanGenre(bad, listed)).toBeNull()
   })
-  test('a form saves a custom category, once', () => {
+  test('a form saves a typed label as its category, and each category once', () => {
     expect(read([['genres_present', '1'], ['genre', '戶籍用字'], ['genre', '戶籍用字'], ['genre', 'bad name']])).toEqual({ claims: [claim('genre', '戶籍用字')] })
+    const typed = readClaims(form([['genres_present', '1'], ['genre', '客家語'], ['genre', 'hakka'], ['genre', '改名後'], ['genre', '戶籍用字']]), listed)
+    expect(typed.claims.map(item => item.value)).toEqual(['hakka', 'renamed', '戶籍用字'])
+    // A stored claim is checked for its shape: a label renamed later never makes it invalid.
     expect(valid(claim('genre', '戶籍用字'))).toBe(true)
-    expect(valid(claim('genre', '客家語'))).toBe(false)
+    expect(valid(claim('genre', '客家語'))).toBe(true)
+    expect(valid(claim('genre', 'a b'))).toBe(false)
   })
 })
 
@@ -242,7 +249,7 @@ describe('keys', () => {
   })
 
   test('every claim a form states has a key of its own', () => {
-    const { claims } = readClaims(form([['ids', '⿰木木 ⿱木木'], ['reading', 'tung'], ['meaning', 'east'], ['tags', 'a b'], ['related_characters_present', '1'], ['related_character', '木'], ['related_relationship', 'variant'], ['related_difference', ''], ['related_evidence', '']]))
+    const { claims } = readClaims(form([['ids', '⿰木木 ⿱木木'], ['reading', 'tung'], ['meaning', 'east'], ['tags', 'a b'], ['related_characters_present', '1'], ['related_character', '木'], ['related_relationship', 'variant'], ['related_difference', ''], ['related_evidence', '']]), [])
     expect(claims).toHaveLength(7)
     expect(claims.every(item => isClaimKey(item.key))).toBe(true)
     expect(new Set(claims.map(item => item.key)).size).toBe(7)
@@ -254,7 +261,7 @@ describe('keys', () => {
       ['reading', 'tang'], ['reading_doculect', 'nan'], ['reading_key', base[0].key],
       ['meaning', 'east hill'], ['meaning_key', base[1].key],
       ['related_characters_present', '1'], ['related_character', '林'], ['related_relationship', 'unifiable'], ['related_difference', ''], ['related_evidence', ''], ['related_key', base[2].key],
-    ]), base)
+    ]), [], base)
     expect(error).toBeNull()
     expect(claims.map(item => [item.key, item.value])).toEqual([[base[0].key, 'tang'], [base[1].key, 'east hill'], [base[2].key, '林']])
     // A keyed row's links are the ones its own fields give.
@@ -262,7 +269,7 @@ describe('keys', () => {
   })
 
   test('a row made in the browser keeps the key it was made with', () => {
-    const { claims } = readClaims(form([['meaning', 'east'], ['meaning_key', 'new00001'], ['meaning', 'west'], ['meaning_key', '']]))
+    const { claims } = readClaims(form([['meaning', 'east'], ['meaning_key', 'new00001'], ['meaning', 'west'], ['meaning_key', '']]), [])
     expect(claims[0].key).toBe('new00001')
     expect(isClaimKey(claims[1].key)).toBe(true)
   })
@@ -273,7 +280,7 @@ describe('keys', () => {
       ['ids', '⿱木木 ⿰木水'], ['reading', 'ki'], ['reading_doculect', 'ko'], ['reading', 'ki'], ['reading_doculect', 'ja'],
       ['encodings_present', '1'], ['encoding_charset', 'cns11643'], ['encoding_code', 'A140'], ['encoding_charset', 'big5'], ['encoding_code', 'A140'],
       ['ivd_status', 'registered'], ['ivd_sequence', 'U+20000 U+E0100'], ['genres_present', '1'], ['genre', 'hakka'], ['tags', 'new IRG'],
-    ]), base)
+    ]), [], base)
     const key = (kind: Claim['kind'], value: string, data?: string) => claims.find(item => item.kind === kind && item.value === value && (!data || Object.values(item.data ?? {}).includes(data)))!.key
     expect(key('ids', '⿱木木')).toBe(base[1].key)
     expect(base.map(item => item.key)).not.toContain(key('ids', '⿰木水'))
@@ -291,7 +298,7 @@ describe('keys', () => {
 
   test('a key given twice, or one that names a claim of another kind, is not taken', () => {
     const base = keyed([claim('meaning', 'east')])
-    const { claims } = readClaims(form([['reading', 'a'], ['reading_key', 'dup00001'], ['reading', 'b'], ['reading_key', 'dup00001'], ['reading', 'c'], ['reading_key', base[0].key]]), base)
+    const { claims } = readClaims(form([['reading', 'a'], ['reading_key', 'dup00001'], ['reading', 'b'], ['reading_key', 'dup00001'], ['reading', 'c'], ['reading_key', base[0].key]]), [], base)
     expect(claims.map(item => item.kind)).toEqual(['reading', 'reading', 'reading', 'meaning'])
     expect(claims[0].key).toBe('dup00001')
     expect(new Set(claims.map(item => item.key)).size).toBe(4)
@@ -308,7 +315,7 @@ describe('scopes', () => {
       ['reading', 'kua'], ['reading_key', 'read0001'], ['under.read0001', 'mean0001'],
       ['related_characters_present', '1'], ...related('侉', 'rela0001'), ...related('東', 'rela0002'),
       ['under.rela0001', 'mean0001'], ['under.rela0001', 'read0001'], ['under.rela0002', 'mean0002'],
-    ]))
+    ]), [])
     expect(error).toBeNull()
     const [reading, first, second, 侉, 東] = claims
     expect(reading.under).toEqual([first.key])
@@ -327,17 +334,17 @@ describe('scopes', () => {
     const under = (target: string, kind: 'reading' | 'related' = 'related'): [string, string][] => kind === 'reading'
       ? [['reading', 'tung'], ['reading_key', reading], ['under.' + reading, target]]
       : [['related_characters_present', '1'], ...related('東', 'rela0001'), ['under.rela0001', target]]
-    expect(readClaims(form(under(meaning)), base).error).toBeNull()
-    expect(readClaims(form(under(reading)), base).error).toBeNull()
-    expect(readClaims(form(under(meaning, 'reading')), base).error).toBeNull()
-    expect(readClaims(form(under('nosuch00')), base).error).toBe('links')
-    expect(readClaims(form(under('not a key')), base).error).toBe('links')
-    expect(readClaims(form(under(tag)), base).error).toBe('links')
+    expect(readClaims(form(under(meaning)), [], base).error).toBeNull()
+    expect(readClaims(form(under(reading)), [], base).error).toBeNull()
+    expect(readClaims(form(under(meaning, 'reading')), [], base).error).toBeNull()
+    expect(readClaims(form(under('nosuch00')), [], base).error).toBe('links')
+    expect(readClaims(form(under('not a key')), [], base).error).toBe('links')
+    expect(readClaims(form(under(tag)), [], base).error).toBe('links')
     // A reading holds under a meaning, not under itself or another reading; a relation not under a relation.
-    expect(readClaims(form(under(reading, 'reading')), base).error).toBe('links')
-    expect(readClaims(form([['related_characters_present', '1'], ...related('東', 'rela0001'), ...related('侉', 'rela0002'), ['under.rela0001', 'rela0002']]), base).error).toBe('links')
+    expect(readClaims(form(under(reading, 'reading')), [], base).error).toBe('links')
+    expect(readClaims(form([['related_characters_present', '1'], ...related('東', 'rela0001'), ...related('侉', 'rela0002'), ['under.rela0001', 'rela0002']]), [], base).error).toBe('links')
     // A meaning has no scope, whatever the form sends for it.
-    expect(readClaims(form([['meaning', 'east'], ['meaning_key', meaning], ['under.' + meaning, reading]]), base).error).toBe('links')
+    expect(readClaims(form([['meaning', 'east'], ['meaning_key', meaning], ['under.' + meaning, reading]]), [], base).error).toBe('links')
   })
 
   test('a scope that is removed leaves every claim that held under it, in the same read', () => {
@@ -346,11 +353,11 @@ describe('scopes', () => {
     base[0].under = [east, hill]
     base.push({ key: 'rela0001', ...claim('relation', '東', { relationship: 'usage' }, { under: [reading, east] }) })
     // The form carries the meanings alone, and the readings and relations stay as the record has them.
-    const kept = readClaims(form([['meaning', 'hill'], ['meaning_key', hill]]), base)
+    const kept = readClaims(form([['meaning', 'hill'], ['meaning_key', hill]]), [], base)
     expect(kept.error).toBeNull()
     expect(kept.claims.map(item => [item.value, item.under])).toEqual([['tung', [hill]], ['hill', []], ['東', [reading]]])
     // A removed row and what was under it travel in one form.
-    const both = readClaims(form([['readings_present', '1'], ['meanings_present', '1'], ['related_characters_present', '1'], ...related('東', 'rela0001'), ['under.rela0001', reading], ['under.rela0001', east]]), base)
+    const both = readClaims(form([['readings_present', '1'], ['meanings_present', '1'], ['related_characters_present', '1'], ...related('東', 'rela0001'), ['under.rela0001', reading], ['under.rela0001', east]]), [], base)
     expect(both).toEqual({ error: null, claims: [{ ...base[3], under: [] }] })
   })
 
@@ -358,7 +365,7 @@ describe('scopes', () => {
     const { claims, error } = readClaims(form([
       ['meaning', ''], ['meaning_key', 'mean0001'], ['meaning', 'east'], ['meaning_key', 'mean0002'], ['meaning', 'east'], ['meaning_key', 'mean0003'],
       ['related_characters_present', '1'], ...related('東', 'rela0001'), ['under.rela0001', 'mean0001'], ['under.rela0001', 'mean0003'], ['under.rela0001', 'mean0002'],
-    ]))
+    ]), [])
     expect(error).toBeNull()
     expect(claims.map(item => [item.key, item.under])).toEqual([['mean0002', []], ['rela0001', ['mean0002']]])
   })
@@ -366,8 +373,8 @@ describe('scopes', () => {
   test('a claim names a bounded number of sightings and scopes', () => {
     const many = (name: string, values: string[]): [string, string][] => values.map(value => [name, value])
     const sightings = Array.from({ length: CLAIM_SIGHTINGS_MAX + 1 }, (_, i) => String(i + 1))
-    expect(readClaims(form([['meaning', 'east'], ['meaning_key', 'mean0001'], ...many('sightings.mean0001', sightings.slice(1))])).error).toBeNull()
-    expect(readClaims(form([['meaning', 'east'], ['meaning_key', 'mean0001'], ...many('sightings.mean0001', sightings)])).error).toBe('links')
+    expect(readClaims(form([['meaning', 'east'], ['meaning_key', 'mean0001'], ...many('sightings.mean0001', sightings.slice(1))]), []).error).toBeNull()
+    expect(readClaims(form([['meaning', 'east'], ['meaning_key', 'mean0001'], ...many('sightings.mean0001', sightings)]), []).error).toBe('links')
   })
 
   test('sightings are renamed or dropped together, and read from the sighting', () => {

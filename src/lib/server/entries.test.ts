@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+import { Database } from 'bun:sqlite'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { GENRES } from '$lib/genres'
-import { categoryParentsStatement, createCategory, customGenres, customGenresStatement } from './categories'
+import { categoryTree, flatten, genreLabels } from '$lib/genres'
+import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, categoriesStatement, categoryList, changesStatement, createCategory, deleteCategory, ensureCategories, latestChangeStatement, moveCategory, moveSizeStatement, recentMovesStatement, refileStatements, renameCategory, undoChange } from './categories'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
-import { type Citation, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, WORD_SIZE, exactSize, alsoSearchIds, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { type Citation, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, WORD_SIZE, exactSize, alsoSearchIds, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -33,7 +34,7 @@ test('structured comparisons retain evidence across edits and restoration', asyn
     form.append('related_character', character); form.append('related_relationship', relationship)
     form.append('related_difference', difference); form.append('related_evidence', evidence)
   }
-  const { fields: values, error } = readEntryFields(form)
+  const { fields: values, error } = readEntryFields(form, [])
   expect(error).toBeNull()
   const relations = values.claims
   expect(relations.map(({ key, ...rest }) => rest)).toEqual([relation('木', 'variant', 'One extra stroke', 'Dictionary p. 10'), relation('林', 'uncertain', 'Different component', 'Inscription A')].map(({ key, ...rest }) => rest))
@@ -70,9 +71,9 @@ test('comparison indexing preserves existing terms at the 400-word cap', async (
 test('omitted comparison controls preserve existing data; explicit empty controls clear it', () => {
   const original = fields({ claims: [relation('木', 'similar')] })
   const form = new FormData()
-  expect(readEntryFields(form, original).fields.claims).toEqual(original.claims)
+  expect(readEntryFields(form, [], original).fields.claims).toEqual(original.claims)
   form.set('related_characters_present', '1')
-  expect(readEntryFields(form, original).fields.claims).toEqual([])
+  expect(readEntryFields(form, [], original).fields.claims).toEqual([])
 })
 
 describe('marked works', () => {
@@ -1065,7 +1066,7 @@ describe('status', () => {
   const unicode: [string, string][] = [['encodings_present', '1'], ['encoding_charset', 'unicode'], ['encoding_code', 'U+5650']]
 
   test('a posted status is ignored', () => {
-    expect(readEntryFields(form([...unicode, ['status', 'variant']])).fields).not.toHaveProperty('status')
+    expect(readEntryFields(form([...unicode, ['status', 'variant']]), []).fields).not.toHaveProperty('status')
   })
 
   test('an old snapshot that holds a status still reads', () => {
@@ -1089,12 +1090,12 @@ test('a record repeats the layout of its first description for its tile, through
 })
 
 describe('scripts outside the list', () => {
-  const named = (script: string) => { const form = new FormData(); form.set('script', script); return readEntryFields(form).fields }
+  const named = (script: string) => { const form = new FormData(); form.set('script', script); return readEntryFields(form, []).fields }
 
   test('the form names a script, and only `other` keeps a name', () => {
     expect(named('漢字')).toMatchObject({ script: 'han', script_other: null })
     expect(named('方音符號')).toMatchObject({ script: 'other', script_other: '方音符號' })
-    expect(readEntryFields(new FormData(), fields({ script: 'other', script_other: '方音符號' })).fields).toMatchObject({ script: 'other', script_other: '方音符號' })
+    expect(readEntryFields(new FormData(), [], fields({ script: 'other', script_other: '方音符號' })).fields).toMatchObject({ script: 'other', script_other: '方音符號' })
   })
 
   test('a revision keeps a name only for `other`', () => {
@@ -1116,86 +1117,455 @@ describe('scripts outside the list', () => {
   })
 })
 
-describe('custom categories', () => {
-  const made = async (name: string, parent: string | null = null) => { const result = await createCategory(db, { name, parent }, who); expect(result).toMatchObject({ ok: true }); return result }
+describe('categories', () => {
+  const listed = () => categoryList(db)
+  const made = async (name: string, parent: string | null = null) => { const result = await createCategory(db, await listed(), { name, parent }, who); expect(result).toMatchObject({ ok: true }); return result }
   const tagsOf = (id: number) => (raw.query("SELECT tag FROM entry_tags WHERE entry_id = ? AND tag GLOB 'g:*' ORDER BY tag").all(id) as { tag: string }[]).map(row => row.tag)
+  const row = async (name: string) => { const found = (await listed()).find(category => category.name === name); if (!found) return found; const { rev: _, ...rest } = found; return rest }
+  const countOf = (tag: string) => (raw.query('SELECT n FROM tag_counts WHERE tag = ?').get(tag) as { n: number } | null)?.n ?? 0
+  const plan = (statement: unknown) => { const { sql, values } = statement as { sql: string; values: unknown[] }; return (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail).join('\n') }
 
-  test('a record in a category added under a built-in one is listed under it and its parent', async () => {
+  // The categories the site started with, in the order the list had them.
+  const STARTED = [
+    ['dialect', '方言字', null], ['wu', '吳語', 'dialect'], ['mindong', '閩東語', 'dialect'], ['yue', '粵語', 'dialect'], ['minnan', '閩南語', 'dialect'], ['hakka', '客家語', 'dialect'],
+    ['mandarin', '官話', 'dialect'], ['nom', '喃字', 'dialect'], ['baiwen', '白文', 'dialect'], ['kokuji', '日本國字', 'dialect'], ['kokuji-kr', '朝鮮國字', 'dialect'],
+    ['abbreviation', '略字・簡化字', null], ['shinjitai', '日本新字體', 'abbreviation'], ['shinjitai-extended', '日本擴張新字體', 'abbreviation'], ['simplified-cn', '大陸簡體字', 'abbreviation'],
+    ['simplified-cn-2', '大陸二簡字', 'abbreviation'], ['yakja', '韓國略字', 'abbreviation'], ['ryakuji', '日本俗略字', 'abbreviation'],
+    ['music', '樂譜', null], ['medicine', '醫藥', null], ['chemistry', '化學', null], ['metrology', '度量衡', null], ['taoism', '道教', null], ['buddhism', '佛教', null],
+    ['qieshen', '切身', null], ['transliteration', '音譯', null], ['names', '人名', null], ['places', '地名', null], ['flora-fauna', '動植物', null],
+  ] as const
+
+  test('the migration makes a row of every category the site started with, keeping its name, label, parent and order', async () => {
+    const migrations = join(import.meta.dir, '../../../migrations')
+    const before = new Database(':memory:')
+    for (const name of readdirSync(migrations).sort().filter(name => name < '0024')) before.exec(readFileSync(join(migrations, name), 'utf8'))
+    // 0023 listed the same names as the ones it left to the code.
+    const old = readFileSync(join(migrations, '0023_categories.sql'), 'utf8')
+    expect([...old.slice(old.indexOf('NOT IN')).matchAll(/'([a-z0-9-]+)'/g)].map(match => match[1]).sort()).toEqual(STARTED.map(([name]) => name).sort())
+    before.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+    before.exec("INSERT INTO categories(name, parent, created_by, created_at) VALUES ('近古字書', 'hakka', 'p', '2026-02'), ('戶籍用字', NULL, 'p', '2026-03'), ('寺院用字', NULL, 'p', '2026-01')")
+    before.exec(readFileSync(join(migrations, '0024_category_rows.sql'), 'utf8'))
+    const rows = before.query('SELECT name, label, parent, position, created_by FROM categories').all() as { name: string; label: string; parent: string | null; position: number; created_by: string | null }[]
+    const started = rows.filter(row => row.created_by === null)
+    expect(categoryTree(started).flatMap(root => [root, ...root.children]).map(node => [node.name, node.label, node.parent])).toEqual(STARTED.map(item => [...item]))
+    expect(rows.filter(row => row.created_by !== null).sort((a, b) => a.name < b.name ? -1 : 1)).toEqual([
+      { name: '寺院用字', label: '寺院用字', parent: null, position: 13, created_by: 'p' },
+      { name: '戶籍用字', label: '戶籍用字', parent: null, position: 14, created_by: 'p' },
+      { name: '近古字書', label: '近古字書', parent: 'hakka', position: 0, created_by: 'p' },
+    ])
+    expect(raw.query('SELECT count(*) AS n FROM categories').get()).toEqual({ n: STARTED.length })
+  })
+
+  test('a record in a category added under another is listed under it and every category above', async () => {
     await made('近古字書', 'hakka')
     const id = await createEntry(db, fields({ claims: [claim('genre', '近古字書')] }), seen(), [], who)
     expect(tagsOf(id)).toEqual(['g:dialect', 'g:hakka', 'g:近古字書'])
     for (const facet of ['g:近古字書', 'g:hakka', 'g:dialect']) expect((await list(db, { facet }))!.tiles.map(tile => tile.id)).toEqual([id])
+    expect(await row('近古字書')).toEqual({ name: '近古字書', label: '近古字書', parent: 'hakka', position: 0, n: 1 })
   })
 
   test('a chain of added categories files a record under every ancestor, and an edit keeps the counts', async () => {
     await made('甲'); await made('乙', '甲'); await made('丙', '乙')
     const id = await createEntry(db, fields({ claims: [claim('genre', '丙')] }), seen(), [], who)
     expect(tagsOf(id)).toEqual(['g:丙', 'g:乙', 'g:甲'])
-    expect(await customGenres(db)).toEqual([{ value: '丙', parent: '乙', n: 1 }, { value: '乙', parent: '甲', n: 1 }, { value: '甲', parent: null, n: 1 }])
+    expect((await listed()).filter(category => category.n).map(({ rev: _, ...rest }) => rest)).toEqual([
+      { name: '丙', label: '丙', parent: '乙', position: 0, n: 1 }, { name: '乙', label: '乙', parent: '甲', position: 0, n: 1 }, { name: '甲', label: '甲', parent: null, position: 13, n: 1 },
+    ])
     await editEntry(db, id, 1, fields({ claims: [] }), who, null)
     expect(tagsOf(id)).toEqual([])
-    expect((await customGenres(db)).map(row => row.n)).toEqual([0, 0, 0])
+    expect((await listed()).filter(category => category.n).map(({ rev: _, ...rest }) => rest)).toEqual([])
   })
 
-  test('a category that has no row yet is added at the top when a record names it', async () => {
+  test('a category that has no row yet is added at the end of the top when a record names it', async () => {
     const id = await createEntry(db, fields({ claims: [claim('genre', '戶籍用字')] }), seen(), [], who)
     expect(tagsOf(id)).toEqual(['g:戶籍用字'])
-    expect(await customGenres(db)).toEqual([{ value: '戶籍用字', parent: null, n: 1 }])
+    expect(await row('戶籍用字')).toEqual({ name: '戶籍用字', label: '戶籍用字', parent: null, position: 13, n: 1 })
+    expect(raw.query('SELECT name, kind, after FROM category_changes').all()).toEqual([{ name: '戶籍用字', kind: 'create', after: '{"label":"戶籍用字","parent":null}' }])
   })
 
-  test('a built-in label or slug names the built-in category, and a name already added stays where it is', async () => {
-    expect(await createCategory(db, { name: '方言字', parent: null }, who)).toEqual({ ok: true, value: 'dialect', created: false })
-    expect(await createCategory(db, { name: 'hakka', parent: '甲' }, who)).toEqual({ ok: true, value: 'hakka', created: false })
+  test('a typed name or label names its category, and a name already there stays where it is', async () => {
+    expect(await createCategory(db, await listed(), { name: '方言字', parent: null }, who)).toEqual({ ok: true, value: 'dialect', created: false })
+    expect(await createCategory(db, await listed(), { name: 'hakka', parent: '甲' }, who)).toEqual({ ok: true, value: 'hakka', created: false })
     await made('甲')
-    expect(await createCategory(db, { name: '甲', parent: 'music' }, who)).toEqual({ ok: true, value: '甲', created: false })
-    expect(await customGenres(db)).toEqual([{ value: '甲', parent: null, n: 0 }])
+    expect(await createCategory(db, await listed(), { name: '甲', parent: 'music' }, who)).toEqual({ ok: true, value: '甲', created: false })
+    expect(await renameCategory(db, await listed(), { name: 'hakka', label: '客語' }, who)).toEqual({ ok: true })
+    expect(await createCategory(db, await listed(), { name: '客語', parent: null }, who)).toEqual({ ok: true, value: 'hakka', created: false })
+    expect(raw.query("SELECT count(*) AS n FROM category_changes WHERE kind = 'create'").get()).toEqual({ n: 1 })
   })
 
-  test('a name that is invalid, a parent that does not exist, a cycle and a chain past four levels are refused', async () => {
-    expect(await createCategory(db, { name: 'a b', parent: null }, who)).toEqual({ ok: false, code: 'invalid' })
-    expect(await createCategory(db, { name: '甲', parent: '無' }, who)).toEqual({ ok: false, code: 'parent' })
-    expect(await createCategory(db, { name: '甲', parent: '甲' }, who)).toEqual({ ok: false, code: 'parent' })
-    await made('甲'); await made('乙', '甲')
-    raw.run("UPDATE categories SET parent = '乙' WHERE name = '甲'")
-    expect(await createCategory(db, { name: '丙', parent: '乙' }, who)).toEqual({ ok: false, code: 'depth' })
-    raw.run('DELETE FROM categories')
+  test('a name that is invalid, a parent that does not exist and a chain past four levels are refused', async () => {
+    expect(await createCategory(db, await listed(), { name: 'a b', parent: null }, who)).toEqual({ ok: false, code: 'invalid' })
+    expect(await createCategory(db, await listed(), { name: '甲', parent: '無' }, who)).toEqual({ ok: false, code: 'parent' })
     // dialect > hakka > 一 > 二 is four levels, and a fifth is refused.
     await made('一', 'hakka'); await made('二', '一')
-    expect(await createCategory(db, { name: '三', parent: '二' }, who)).toEqual({ ok: false, code: 'depth' })
-    await made('甲'); await made('乙', '甲'); await made('丙', '乙'); await made('丁', '丙')
-    expect(await createCategory(db, { name: '戊', parent: '丁' }, who)).toEqual({ ok: false, code: 'depth' })
+    expect(await createCategory(db, await listed(), { name: '三', parent: '二' }, who)).toEqual({ ok: false, code: 'depth' })
   })
 
-  test('are read with their counts, zero where no record is filed, as one range of the table by key', async () => {
-    await made('甲'); await made('乙', 'music')
+  test('a rename changes the label alone: claims, rows and counts stay, and the new label shows', async () => {
+    await made('近古字書', 'hakka')
+    const id = await createEntry(db, fields({ claims: [claim('genre', '近古字書')] }), seen(), [], who)
+    const claims = raw.query('SELECT * FROM claims ORDER BY id').all(), rows = raw.query('SELECT * FROM entry_tags ORDER BY tag, entry_id').all(), counts = raw.query('SELECT * FROM tag_counts ORDER BY tag').all()
+    expect(await renameCategory(db, await listed(), { name: '近古字書', label: '近古の字書' }, who)).toEqual({ ok: true })
+    expect(await row('近古字書')).toMatchObject({ label: '近古の字書', n: 1 })
+    expect(genreLabels(await listed()).get('近古字書')).toBe('近古の字書')
+    expect(raw.query('SELECT * FROM claims ORDER BY id').all()).toEqual(claims)
+    expect(raw.query('SELECT * FROM entry_tags ORDER BY tag, entry_id').all()).toEqual(rows)
+    expect(raw.query('SELECT * FROM tag_counts ORDER BY tag').all()).toEqual(counts)
+    expect(tagsOf(id)).toEqual(['g:dialect', 'g:hakka', 'g:近古字書'])
+    // A label names one category, and no other category's name.
+    expect(await renameCategory(db, await listed(), { name: '近古字書', label: '客家語' }, who)).toEqual({ ok: false, code: 'exists' })
+    expect(await renameCategory(db, await listed(), { name: '近古字書', label: 'music' }, who)).toEqual({ ok: false, code: 'exists' })
+    expect(await renameCategory(db, await listed(), { name: '近古字書', label: 'a b' }, who)).toEqual({ ok: false, code: 'invalid' })
+    expect(raw.query('SELECT name, kind, before, after FROM category_changes WHERE kind = ?').all('rename')).toEqual([{ name: '近古字書', kind: 'rename', before: '{"label":"近古字書"}', after: '{"label":"近古の字書"}' }])
+  })
+
+  test('a move files the records under the category and below it under their new parents, as a full refresh would', async () => {
+    await made('近古字書', 'hakka'); await made('子書', '近古字書')
+    const own = await createEntry(db, fields({ claims: [claim('genre', '近古字書')] }), seen({ report_date: '1617' }), [], who)
+    const below = await createEntry(db, fields({ claims: [claim('genre', '子書')] }), seen(), [], who)
+    const both = await createEntry(db, fields({ claims: [claim('genre', '近古字書'), claim('genre', 'hakka'), claim('genre', 'music')] }), seen({ report_date: '0800' }), [], who)
+    const elsewhere = await createEntry(db, fields({ claims: [claim('genre', 'yue')] }), seen(), [], who)
+    const hidden = await createEntry(db, fields({ claims: [claim('genre', '近古字書')] }), seen(), [], who)
+    await setHidden(db, { entry: hidden }, true, who, null)
+    expect(countOf('g:dialect')).toBe(4); expect(countOf('g:hakka')).toBe(3); expect(countOf('g:music')).toBe(1)
+    expect(await moveCategory(db, await listed(), { name: '近古字書', parent: 'music', position: 0 }, who)).toEqual({ ok: true })
+    expect(tagsOf(own)).toEqual(['g:music', 'g:近古字書'])
+    expect(tagsOf(below)).toEqual(['g:music', 'g:子書', 'g:近古字書'])
+    expect(tagsOf(both)).toEqual(['g:dialect', 'g:hakka', 'g:music', 'g:近古字書'])
+    expect(tagsOf(elsewhere)).toEqual(['g:dialect', 'g:yue'])
+    expect(tagsOf(hidden)).toEqual([])
+    expect([countOf('g:dialect'), countOf('g:hakka'), countOf('g:music'), countOf('g:近古字書'), countOf('g:子書')]).toEqual([2, 1, 3, 3, 1])
+    for (const facet of ['g:music', 'g:近古字書']) expect((await list(db, { facet }))!.tiles.map(tile => tile.id).sort()).toEqual([own, below, both].sort())
+    expect((await list(db, { facet: 'g:hakka' }))!.tiles.map(tile => tile.id)).toEqual([both])
+    expect(await row('近古字書')).toMatchObject({ parent: 'music', position: 0 })
+    // Every category row and every count equals what refreshing each record from what it holds writes.
+    const state = () => [raw.query("SELECT tag, entry_id, sightings, year FROM entry_tags WHERE tag GLOB 'g:*' ORDER BY tag, entry_id").all(), raw.query("SELECT tag, n FROM tag_counts WHERE tag GLOB 'g:*' AND n > 0 ORDER BY tag").all()]
+    const afterMove = state()
+    expect(afterMove[0]).toContainEqual({ tag: 'g:music', entry_id: own, sightings: 1, year: 1617 })
+    expect(afterMove[0]).toContainEqual({ tag: 'g:music', entry_id: both, sightings: 1, year: 800 })
+    for (const id of [own, below, both, elsewhere, hidden]) await refresh(db, id)
+    expect(state()).toEqual(afterMove)
+    expect(raw.query("SELECT name, before, after FROM category_changes WHERE kind = 'move'").all()).toEqual([{ name: '近古字書', before: '{"parent":"hakka","position":0}', after: '{"parent":"music","position":0}' }])
+  })
+
+  test('a move reorders the categories under one parent, and a move to another numbers both again', async () => {
+    const order = async (parent: string | null) => (await listed()).filter(category => category.parent === parent).sort((a, b) => a.position - b.position).map(category => category.name)
+    expect(await moveCategory(db, await listed(), { name: 'hakka', parent: 'dialect', position: 0 }, who)).toEqual({ ok: true })
+    expect(await order('dialect')).toEqual(['hakka', 'wu', 'mindong', 'yue', 'minnan', 'mandarin', 'nom', 'baiwen', 'kokuji', 'kokuji-kr'])
+    expect(await moveCategory(db, await listed(), { name: 'yue', parent: 'abbreviation', position: 1 }, who)).toEqual({ ok: true })
+    expect(await order('abbreviation')).toEqual(['shinjitai', 'yue', 'shinjitai-extended', 'simplified-cn', 'simplified-cn-2', 'yakja', 'ryakuji'])
+    expect((await listed()).filter(category => category.parent === 'dialect').map(category => category.position).sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+    expect(await moveCategory(db, await listed(), { name: 'music', parent: null, position: 0 }, who)).toEqual({ ok: true })
+    expect((await order(null)).slice(0, 2)).toEqual(['music', 'dialect'])
+  })
+
+  test('a category never goes under itself or a category below it, nor past the depth cap', async () => {
+    await made('一', 'hakka'); await made('二', '一')
+    expect(await moveCategory(db, await listed(), { name: 'dialect', parent: 'dialect', position: 0 }, who)).toEqual({ ok: false, code: 'parent' })
+    expect(await moveCategory(db, await listed(), { name: 'dialect', parent: '二', position: 0 }, who)).toEqual({ ok: false, code: 'parent' })
+    expect(await moveCategory(db, await listed(), { name: 'hakka', parent: '無', position: 0 }, who)).toEqual({ ok: false, code: 'parent' })
+    // hakka holds three levels, so under a top-level category it reaches four, and one level more is refused.
+    expect(await moveCategory(db, await listed(), { name: 'hakka', parent: 'music', position: 0 }, who)).toEqual({ ok: true })
+    expect(await moveCategory(db, await listed(), { name: 'hakka', parent: 'wu', position: 0 }, who)).toEqual({ ok: false, code: 'depth' })
+    expect(await moveCategory(db, await listed(), { name: '一', parent: 'yue', position: 0 }, who)).toEqual({ ok: true })
+    expect(await row('hakka')).toMatchObject({ parent: 'music' })
+  })
+
+  test('a category a record names, or one with a category under it, is not deleted; an unused one is', async () => {
+    await made('一', 'hakka'); await made('二')
+    const id = await createEntry(db, fields({ claims: [claim('genre', '一')] }), seen(), [], who)
+    await setHidden(db, { entry: id }, true, who, null)
+    expect(await deleteCategory(db, await listed(), { name: '一' }, who)).toEqual({ ok: false, code: 'used' })
+    expect(await deleteCategory(db, await listed(), { name: 'hakka' }, who)).toEqual({ ok: false, code: 'used' })
+    expect(await deleteCategory(db, await listed(), { name: '無' }, who)).toEqual({ ok: false, code: 'missing' })
+    expect(await deleteCategory(db, await listed(), { name: '二' }, who)).toEqual({ ok: true })
+    expect(await row('二')).toBeUndefined()
+    expect(raw.query("SELECT name, before FROM category_changes WHERE kind = 'delete'").all()).toEqual([{ name: '二', before: '{"label":"二","parent":null}' }])
+  })
+
+  test('the reads and writes go by key or by index, and the latest changes are read from the end of the key', async () => {
+    await made('甲', 'music')
+    // Every statement the writes send goes by key or by index too.
+    const sent: { sql: string; values: unknown[] }[] = []
+    const spy = { prepare: (sql: string) => db.prepare(sql), batch: (statements: never[]) => { sent.push(...statements); return db.batch(statements) } } as unknown as D1Database
+    await createCategory(spy, await listed(), { name: '乙', parent: '甲' }, who)
+    await ensureCategories(spy, ['丙', '乙'], who)
+    await renameCategory(spy, await listed(), { name: '乙', label: '乙二' }, who)
+    await moveCategory(spy, await listed(), { name: '乙', parent: 'dialect', position: 1 }, who)
+    await deleteCategory(spy, await listed(), { name: '乙' }, who)
+    await undoChange(spy, await listed(), (raw.query('SELECT MAX(id) AS id FROM category_changes').get() as { id: number }).id, who)
+    // A record's category rows are written in its own batch, by record.
+    const filedRecord = await createEntry(spy, fields({ claims: [claim('genre', '甲')] }), seen(), [], who)
+    await editEntry(spy, filedRecord, 1, fields({ claims: [claim('genre', 'music')] }), who, null)
+    expect(sent.length).toBeGreaterThan(12)
+    // The record writes' other statements have tests of their own.
+    for (const statement of sent.filter(statement => /categor|'g:'/.test(statement.sql))) expect(`${statement.sql}: ${plan(statement)}`).not.toMatch(/claims_by_value \(kind=\?\)|AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (categories|tag_counts|claims|entries|entry_tags|people|cl|e|t|c)\b/)
+    // Each pattern names the index a read needs; dropping that index makes the read scan.
+    const reads: [string, string, RegExp][] = [
+      ['used', plan(categoriesStatement(db, true)), /SEARCH t USING PRIMARY KEY \(tag=\?\)[\s\S]*SEARCH claims USING COVERING INDEX claims_by_value \(kind=\? AND value=\?\)/],
+      ['move size', plan(moveSizeStatement(db, '甲')), /SEARCH tag_counts USING PRIMARY KEY \(tag=\?\)/],
+      ['recent moves', plan(recentMovesStatement(db, who.actor, '2026')), /SEARCH category_changes USING (COVERING )?INDEX category_changes_by_actor \(actor=\? AND kind=\? AND at>\?\)/],
+      ['latest change', plan(latestChangeStatement(db, '甲')), /SEARCH category_changes USING COVERING INDEX category_changes_by_name \(name=\?\)/],
+      ['changes', plan(changesStatement(db)), /SCAN c[\s\S]*SEARCH p USING INDEX sqlite_autoindex_people_1 \(id=\?\)/],
+      ...refileStatements(db, '甲').map((statement, index): [string, string, RegExp] => [`refile ${index}`, plan(statement), /^(?=[\s\S]*SEARCH c USING (COVERING )?INDEX categories_by_parent \(parent=\?\))(?=[\s\S]*SEARCH cl USING (COVERING )?INDEX claims_by_value \(kind=\? AND value=\?\))/]),
+      ['next position', plan(db.prepare('SELECT COALESCE(MAX(position) + 1, 0) FROM categories WHERE parent IS ?').bind('music')), /SEARCH categories USING (COVERING )?INDEX categories_by_parent \(parent=\?\)/],
+      ['label', plan(db.prepare('SELECT 1 FROM categories WHERE label = ?').bind('甲')), /SEARCH categories USING COVERING INDEX categories_by_label \(label=\?\)/],
+      ['unused', plan(db.prepare("SELECT NOT EXISTS (SELECT 1 FROM categories WHERE parent = ?1) AND NOT EXISTS (SELECT 1 FROM claims WHERE kind = 'genre' AND value = ?1)").bind('甲')), /categories_by_parent \(parent=\?\)[\s\S]*claims_by_value \(kind=\? AND value=\?\)/],
+    ]
+    // A record's categories are read from its own claims, by record: a search by kind alone reads every category claim.
+    expect(plan(refileStatements(db, '甲')[2])).toMatch(/SEARCH cl USING INDEX claims_by_entry \(entry_id=\?\)/)
+    for (const [name, details] of reads) expect(`${name}: ${details}`).not.toMatch(/claims_by_value \(kind=\?\)/)
+    // The one temporary tree is a refile's count, grouping by tag the rows that batch has just written.
+    for (const [name, details, wanted] of reads) {
+      expect(`${name}: ${details}`).toMatch(wanted)
+      expect(`${name}: ${details}`).not.toMatch(/AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (categories|tag_counts|claims|entries|entry_tags|people|cl|e|t)\b/)
+      if (name !== 'refile 3') expect(details).not.toMatch(/TEMP B-TREE/)
+    }
+    // The list is the table in key order, stopped at the cap: a scan with no sort.
+    expect(plan(categoriesStatement(db))).toMatch(/^SCAN c\nSEARCH t USING PRIMARY KEY \(tag=\?\)/)
+    // `SCAN c` on the changes is the newest rows of the key, read backwards and stopped at the limit.
+    expect(plan(changesStatement(db))).not.toMatch(/ORDER BY/)
+    const bare = openTestDb()
+    bare.raw.run('DROP INDEX categories_by_parent')
+    const { sql, values } = refileStatements(bare.db, '甲')[0] as unknown as { sql: string; values: never[] }
+    expect((bare.raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...values) as { detail: string }[]).map(row => row.detail).join('\n')).toMatch(/SEARCH c USING AUTOMATIC|SCAN c\b/)
+  })
+
+  const filed = () => [raw.query("SELECT tag, entry_id, sightings, year FROM entry_tags WHERE tag GLOB 'g:*' ORDER BY tag, entry_id").all(), raw.query("SELECT tag, n FROM tag_counts WHERE tag GLOB 'g:*' AND n != 0 ORDER BY tag").all()]
+  const everything = () => [raw.query('SELECT * FROM categories ORDER BY name').all(), raw.query('SELECT * FROM category_changes ORDER BY id').all(), ...filed()]
+  const refreshAll = async () => { for (const { id } of raw.query('SELECT id FROM entries').all() as { id: number }[]) await refresh(db, id) }
+  const latest = () => (raw.query('SELECT MAX(id) AS id FROM category_changes').get() as { id: number }).id
+
+  test('two moves from one stale reading: the second is refused whole and changes nothing', async () => {
+    await made('X'); await made('Y'); await made('Z', 'X')
+    await createEntry(db, fields({ claims: [claim('genre', 'Y')] }), seen(), [], who)
+    const stale = await listed()
+    expect(await moveCategory(db, stale, { name: 'Y', parent: 'X', position: 0 }, who)).toEqual({ ok: true })
+    const after = everything()
+    // X under Y would close a loop now that Y is under X. X itself is unchanged, so only the written check sees it.
+    expect(await moveCategory(db, stale, { name: 'X', parent: 'Y', position: 0 }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(everything()).toEqual(after)
+    // A move naming a revision of the category that is no longer current is refused before it is written.
+    const y = stale.find(category => category.name === 'Y')!
+    expect(await moveCategory(db, await listed(), { name: 'Y', parent: null, position: 0, rev: y.rev }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(everything()).toEqual(after)
+  })
+
+  test('two moves from one reading cannot take a chain past four levels', async () => {
+    await made('A'); await made('B', 'A'); await made('C'); await made('D', 'C'); await made('E')
+    const stale = await listed()
+    expect(await moveCategory(db, stale, { name: 'C', parent: 'B', position: 0 }, who)).toEqual({ ok: true })
+    const after = everything()
+    expect(await moveCategory(db, stale, { name: 'A', parent: 'E', position: 0 }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(everything()).toEqual(after)
+    expect(Math.max(...flatten(categoryTree(await listed())).map(node => node.level))).toBe(4)
+    const id = await createEntry(db, fields({ claims: [claim('genre', 'D')] }), seen(), [], who)
+    expect(tagsOf(id)).toEqual(['g:A', 'g:B', 'g:C', 'g:D'])
+  })
+
+  test('a move of a category with more records filed under it than the cap is refused', async () => {
+    await made('甲'); await made('乙', '甲')
     await createEntry(db, fields({ claims: [claim('genre', '乙')] }), seen(), [], who)
-    expect(await customGenres(db)).toEqual([{ value: '乙', parent: 'music', n: 1 }, { value: '甲', parent: null, n: 0 }])
-    const plan = (statement: unknown) => { const { sql, values } = statement as { sql: string; values: unknown[] }; return (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail) }
-    // Both reads are on primary keys, which cannot be dropped, so there is no index to delete for these tests.
-    const reads = plan(customGenresStatement(db)).join('\n')
-    expect(reads).toMatch(/SEARCH c USING PRIMARY KEY \(name>\?\)/)
-    expect(reads).toMatch(/SEARCH t USING PRIMARY KEY \(tag=\?\)/)
-    const chain = plan(categoryParentsStatement(db, ['乙'])).join('\n')
-    expect(chain).toMatch(/SEARCH categories USING PRIMARY KEY \(name=\?\)/)
-    for (const details of [reads, chain]) expect(details).not.toMatch(/TEMP B-TREE|SCAN (c|t|categories|tag_counts)\b/)
+    raw.run("UPDATE tag_counts SET n = ? WHERE tag = 'g:甲'", [MOVE_RECORDS_MAX + 1])
+    const before = everything()
+    expect(await moveCategory(db, await listed(), { name: '甲', parent: 'music', position: 0 }, who)).toEqual({ ok: false, code: 'too_large' })
+    expect(everything()).toEqual(before)
+    expect(await moveCategory(db, await listed(), { name: '乙', parent: 'music', position: 0 }, who)).toEqual({ ok: true })
   })
 
-  test('the migration lists the built-in categories, and files the ones records already carry', async () => {
-    const sql = readFileSync(join(import.meta.dir, '../../../migrations/0023_categories.sql'), 'utf8')
-    const listed = [...sql.slice(sql.indexOf('NOT IN')).matchAll(/'([a-z0-9-]+)'/g)].map(match => match[1])
-    expect(listed.sort()).toEqual(GENRES.map(genre => genre.slug).sort())
-    const first = await createEntry(db, fields({ claims: [claim('genre', '甲'), claim('genre', 'hakka')] }), seen(), [], who)
+  test('a writer moves at most so many categories an hour', async () => {
+    for (let move = 0; move < MOVES_PER_HOUR; move += 1) expect(await moveCategory(db, await listed(), { name: 'music', parent: null, position: move % 2 }, who)).toEqual({ ok: true })
+    expect(await moveCategory(db, await listed(), { name: 'music', parent: null, position: 3 }, who)).toEqual({ ok: false, code: 'slow' })
+    // An undo is not counted, and does not count.
+    expect(await undoChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(raw.query("SELECT count(*) AS n FROM category_changes WHERE kind = 'move' AND json_extract(after, '$.undo') IS NOT NULL").get()).toEqual({ n: 1 })
+    expect(await moveCategory(db, await listed(), { name: 'music', parent: null, position: 3 }, who)).toEqual({ ok: false, code: 'slow' })
     const other = { actor: (await createPerson(db)).id, ip: null }
-    await createEntry(db, fields({ claims: [claim('genre', '甲'), claim('genre', '乙')] }), seen(), [], other)
-    raw.run("UPDATE entries SET created_at = '2026-01-02T00:00:00.000Z' WHERE id = 1")
-    raw.run("UPDATE entries SET created_at = '2026-01-01T00:00:00.000Z' WHERE id = 2")
-    raw.run('DELETE FROM categories')
-    raw.exec(sql.slice(sql.indexOf('INSERT')))
-    expect(raw.query('SELECT name, parent, created_by, created_at FROM categories ORDER BY name').all()).toEqual([
-      { name: '乙', parent: null, created_by: other.actor, created_at: '2026-01-01T00:00:00.000Z' },
-      { name: '甲', parent: null, created_by: other.actor, created_at: '2026-01-01T00:00:00.000Z' },
-    ])
-    expect(first).toBe(1)
+    expect(await moveCategory(db, await listed(), { name: 'music', parent: null, position: 3 }, other)).toEqual({ ok: true })
+  })
+
+  test('the hourly count is taken again as a move is written, so moves at once cannot pass it together', async () => {
+    for (let move = 0; move < MOVES_PER_HOUR - 1; move += 1) expect(await moveCategory(db, await listed(), { name: 'music', parent: null, position: move % 2 }, who)).toEqual({ ok: true })
+    // Another move of the same writer lands between this one's count and its write.
+    const racing = { prepare: (sql: string) => db.prepare(sql), batch: async (statements: never[]) => {
+      raw.run("INSERT INTO category_changes(name, kind, before, after, actor, at) VALUES ('medicine', 'move', '{}', '{}', ?, ?)", [who.actor, new Date().toISOString()])
+      return db.batch(statements)
+    } } as unknown as D1Database
+    const before = raw.query('SELECT * FROM categories ORDER BY name').all()
+    expect(await moveCategory(racing, await listed(), { name: 'chemistry', parent: null, position: 0 }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(raw.query('SELECT * FROM categories ORDER BY name').all()).toEqual(before)
+  })
+
+  test('a record written while a category moves is filed under the parents the category has when it lands', async () => {
+    await made('P1'); await made('P2'); await made('C', 'P1')
+    const id = await createEntry(db, fields(), seen(), [], who)
+    // The move lands after the edit has read the record and before its batch runs.
+    let moves = 1
+    const racing = { prepare: (sql: string) => db.prepare(sql), batch: async (statements: { sql: string }[]) => {
+      if (moves && statements.some(statement => /UPDATE entries SET/.test(statement.sql))) { moves -= 1; expect(await moveCategory(db, await listed(), { name: 'C', parent: 'P2', position: 0 }, who)).toEqual({ ok: true }) }
+      return db.batch(statements as never[])
+    } } as unknown as D1Database
+    expect(await editEntry(racing, id, 1, fields({ claims: [claim('genre', 'C')] }), who, null)).toMatchObject({ ok: true })
+    expect(tagsOf(id)).toEqual(['g:C', 'g:P2'])
+    const edited = filed()
+    await refreshAll()
+    expect(filed()).toEqual(edited)
+    // The same for a record being added.
+    moves = 1
+    expect(await moveCategory(db, await listed(), { name: 'C', parent: 'P1', position: 0 }, who)).toEqual({ ok: true })
+    const added = await createEntry(racing, fields({ claims: [claim('genre', 'C')] }), seen({ report_date: '1700' }), [], who)
+    expect(tagsOf(added)).toEqual(['g:C', 'g:P2'])
+    const both = filed()
+    await refreshAll()
+    expect(filed()).toEqual(both)
+  })
+
+  test('a refresh that read a record before an edit gave it a category leaves the edit filed', async () => {
+    await made('A')
+    const id = await createEntry(db, fields(), seen(), [], who)
+    // The edit lands after the refresh has read the record and before its batch runs.
+    let edits = 1
+    const racing = { prepare: (sql: string) => db.prepare(sql), batch: async (statements: { sql: string }[]) => {
+      if (edits && statements.some(statement => /UPDATE entries SET ids/.test(statement.sql))) { edits -= 1; expect(await editEntry(db, id, 1, fields({ claims: [claim('genre', 'A')] }), who, null)).toMatchObject({ ok: true }) }
+      return db.batch(statements as never[])
+    } } as unknown as D1Database
+    await refresh(racing, id)
+    expect(tagsOf(id)).toEqual(['g:A'])
+    expect(countOf('g:A')).toBe(1)
+    const raced = filed()
+    await refreshAll()
+    expect(filed()).toEqual(raced)
+  })
+
+  test("a record's category rows are written by record and by key, with the planner's statistics or without", async () => {
+    raw.run('PRAGMA foreign_keys = OFF')
+    raw.transaction(() => {
+      for (let id = 1000; id < 4000; id += 1) {
+        raw.run("INSERT INTO entries(id, script, created_by, created_at, updated_at, sightings, first_year) VALUES (?, 'han', 'p', 'x', 'x', 1, '1700')", [id])
+        for (let position = 0; position < 4; position += 1) raw.run("INSERT INTO claims(entry_id, position, key, kind, value, data, sightings, under) VALUES (?, ?, ?, ?, ?, NULL, '[]', '[]')", [id, position, `key${position}000`, position ? 'ids' : 'genre', position ? `v${id}-${position}` : id % 3 ? 'wu' : 'music'])
+      }
+    })()
+    raw.run('PRAGMA foreign_keys = ON')
+    await made('甲', 'wu')
+    const sent: { sql: string; values: unknown[] }[] = []
+    const spy = { prepare: (sql: string) => db.prepare(sql), batch: (statements: never[]) => { sent.push(...statements); return db.batch(statements) } } as unknown as D1Database
+    const id = await createEntry(spy, fields({ claims: [claim('genre', '甲')] }), seen(), [], who)
+    await editEntry(spy, id, 1, fields({ claims: [claim('genre', 'music')] }), who, null)
+    await refresh(spy, id)
+    const writes = [...new Map(sent.filter(statement => /'g:'/.test(statement.sql)).map(statement => [statement.sql, statement])).values(), ...refileStatements(db, 'wu') as unknown as { sql: string; values: unknown[] }[]]
+    expect(writes.length).toBeGreaterThan(6)
+    for (const analyzed of [false, true]) {
+      if (analyzed) raw.run('ANALYZE')
+      for (const statement of writes) {
+        const details = `${analyzed ? 'analyzed' : 'bare'}: ${statement.sql}: ${plan(statement)}`
+        expect(details).not.toMatch(/SCAN (categories|tag_counts|claims|entries|entry_tags|cl|e|c)\b|AUTOMATIC|claims_by_value \(kind=\?\)/)
+        // The rows are read from each record's claims, and the record is then found by its key.
+        if (/INSERT OR IGNORE INTO entry_tags/.test(statement.sql)) expect(details).toMatch(/SEARCH cl USING INDEX claims_by_entry \(entry_id=\?\)[\s\S]*SEARCH e USING INTEGER PRIMARY KEY \(rowid=\?\)/)
+      }
+    }
+  })
+
+  test('a reorder read before a category moved elsewhere leaves that category where it went', async () => {
+    await made('P'); await made('Q'); await made('a', 'P'); await made('b', 'P'); await made('q1', 'Q'); await made('q2', 'Q')
+    const stale = await listed()
+    const under = (parent: string) => (raw.query('SELECT name FROM categories WHERE parent IS ? ORDER BY position, name').all(parent) as { name: string }[]).map(row => row.name)
+    expect(await moveCategory(db, await listed(), { name: 'b', parent: 'Q', position: 2 }, who)).toEqual({ ok: true })
+    expect(await moveCategory(db, stale, { name: 'a', parent: 'P', position: 1 }, who)).toEqual({ ok: true })
+    expect(under('Q')).toEqual(['q1', 'q2', 'b'])
+    expect(under('P')).toEqual(['a'])
+  })
+
+  test('undoing a move puts a category back at its exact place, out of its tray and within it, past a gap in the numbering', async () => {
+    const under = (parent: string) => (raw.query('SELECT name FROM categories WHERE parent IS ? ORDER BY position, name').all(parent) as { name: string }[]).map(row => row.name)
+    await made('P'); await made('Q')
+    for (const name of ['c0', 'c1', 'c2', 'c3', 'c4']) await made(name, 'P')
+    expect(await deleteCategory(db, await listed(), { name: 'c1' }, who)).toEqual({ ok: true })
+    const before = under('P')
+    expect(before).toEqual(['c0', 'c2', 'c3', 'c4'])
+    expect(await moveCategory(db, await listed(), { name: 'c3', parent: 'Q', position: 0 }, who)).toEqual({ ok: true })
+    expect(await undoChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(under('P')).toEqual(before)
+    expect(await moveCategory(db, await listed(), { name: 'c3', parent: 'P', position: 0 }, who)).toEqual({ ok: true })
+    expect(under('P')).toEqual(['c3', 'c0', 'c2', 'c4'])
+    expect(await undoChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(under('P')).toEqual(before)
+  })
+
+  test('a change id is never used twice, so a stale write is refused even after a log row is gone', async () => {
+    await made('X'); await made('Y'); await made('Z', 'X')
+    await createEntry(db, fields({ claims: [claim('genre', 'Z')] }), seen(), [], who)
+    const stale = await listed()
+    expect(await moveCategory(db, await listed(), { name: 'Z', parent: 'Y', position: 0 }, who)).toEqual({ ok: true })
+    raw.run('DELETE FROM category_changes WHERE id = (SELECT MAX(id) FROM category_changes)')
+    const after = everything()
+    const z = stale.find(category => category.name === 'Z')!
+    expect(await moveCategory(db, await listed(), { name: 'Z', parent: null, position: 0, rev: z.rev }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(await moveCategory(db, stale, { name: 'Z', parent: null, position: 0 }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(everything()).toEqual(after)
+    // Read afresh, the row names the id the deleted log row had; the next write stamps a new one.
+    expect(await moveCategory(db, await listed(), { name: 'Z', parent: null, position: 0 }, who)).toEqual({ ok: true })
+    expect(everything()).not.toEqual(after)
+    expect((raw.query("SELECT rev FROM categories WHERE name = 'Z'").get() as { rev: number }).rev).toBe(latest())
+  })
+
+  test('undoing a move and a rename puts the categories, rows and counts back as a full refresh would', async () => {
+    await made('近古字書', 'hakka'); await made('子書', '近古字書')
+    for (const genres of [['近古字書'], ['子書'], ['近古字書', 'hakka']]) await createEntry(db, fields({ claims: genres.map(value => claim('genre', value)) }), seen({ report_date: '1617' }), [], who)
+    const shape = () => raw.query('SELECT name, label, parent, position FROM categories ORDER BY name').all()
+    const before = [shape(), ...filed()]
+    expect(await moveCategory(db, await listed(), { name: '近古字書', parent: 'music', position: 0 }, who)).toEqual({ ok: true })
+    expect(await undoChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect([shape(), ...filed()]).toEqual(before)
+    expect(raw.query('SELECT kind, after FROM category_changes WHERE id = ?').get(latest())).toEqual({ kind: 'move', after: `{"parent":"hakka","position":0,"undo":${latest() - 1}}` })
+    await refreshAll()
+    expect([shape(), ...filed()]).toEqual(before)
+    expect(await renameCategory(db, await listed(), { name: '近古字書', label: '古字書' }, who)).toEqual({ ok: true })
+    expect(await undoChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect([shape(), ...filed()]).toEqual(before)
+    await refreshAll()
+    expect([shape(), ...filed()]).toEqual(before)
+  })
+
+  test('only the latest change of a category is undone', async () => {
+    await made('甲', 'music')
+    expect(await moveCategory(db, await listed(), { name: '甲', parent: 'medicine', position: 0 }, who)).toEqual({ ok: true })
+    expect(await renameCategory(db, await listed(), { name: '甲', label: '甲一' }, who)).toEqual({ ok: true })
+    const changes = () => raw.query('SELECT count(*) AS n FROM category_changes').get()
+    const count = changes()
+    expect(await undoChange(db, await listed(), latest() - 1, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(await undoChange(db, await listed(), latest() + 1, who)).toEqual({ ok: false, code: 'missing' })
+    expect(changes()).toEqual(count)
+  })
+
+  test('undoing an added category deletes it while it is empty, and undoing a delete brings it back', async () => {
+    await made('甲', 'music')
+    expect(await undoChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(await row('甲')).toBeUndefined()
+    expect(await undoChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(await row('甲')).toMatchObject({ label: '甲', parent: 'music' })
+    await createEntry(db, fields({ claims: [claim('genre', '甲')] }), seen(), [], who)
+    await made('乙')
+    expect(await renameCategory(db, await listed(), { name: '乙', label: '乙二' }, who)).toEqual({ ok: true })
+    expect(await deleteCategory(db, await listed(), { name: '乙' }, who)).toEqual({ ok: true })
+    expect(await undoChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(await row('乙')).toMatchObject({ label: '乙二', parent: null })
+    const create = (raw.query("SELECT MAX(id) AS id FROM category_changes WHERE name = '甲'").get() as { id: number }).id
+    expect(await undoChange(db, await listed(), create, who)).toEqual({ ok: false, code: 'used' })
+    expect((await categoryList(db, true)).find(category => category.name === '甲')).toMatchObject({ used: true })
+    expect((await categoryList(db, true)).find(category => category.name === '乙')).toMatchObject({ used: false })
+  })
+
+  test('a category a hidden or merged record names is used, and a move or rename names the revision it read', async () => {
+    await made('甲'); await made('乙')
+    const hidden = await createEntry(db, fields({ claims: [claim('genre', '甲')] }), seen(), [], who)
+    await setHidden(db, { entry: hidden }, true, who, null)
+    const used = new Map((await categoryList(db, true)).map(category => [category.name, category.used]))
+    expect([used.get('甲'), used.get('乙')]).toEqual([true, false])
+    const read = await listed()
+    expect(await renameCategory(db, read, { name: '乙', label: '乙一' }, who)).toEqual({ ok: true })
+    expect(await renameCategory(db, read, { name: '乙', label: '乙二' }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(await deleteCategory(db, read, { name: '乙' }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(await row('乙')).toMatchObject({ label: '乙一' })
   })
 
   test('every valid name is a facet the list accepts', () => {

@@ -26,7 +26,7 @@
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { codePage, marksOf, registryLabel } from '$lib/registries'
-  import { COLLECTIONS, genreLabel } from '$lib/genres'
+  import { COLLECTIONS, genreLabels } from '$lib/genres'
   import { boxesOf, evidenceFile } from '$lib/picture'
   import { CHECKS, readiness } from '$lib/readiness'
   import { parseSightingTypes } from '$lib/scripts'
@@ -98,7 +98,8 @@
   const ivd = $derived(valuesOf(claims, 'ivd')[0] ?? null)
   const encodings = $derived(encodingsOf(claims))
   const marks = $derived(marksOf(encodings))
-  const genres = $derived(valuesOf(claims, 'genre').map(value => ({ value, label: genreLabel(value) })))
+  const labels = $derived(genreLabels(data.categories))
+  const genres = $derived(valuesOf(claims, 'genre').map(value => ({ value, label: labels.get(value) ?? value })))
   const collections = $derived(COLLECTIONS.filter(collection => valuesOf(claims, 'collection').includes(collection.slug)))
   const tags = $derived(valuesOf(claims, 'tag'))
   const brief = (text: string) => [...text].length > 40 ? [...text].slice(0, 39).join('') + '…' : text
@@ -214,7 +215,7 @@
         <div id="edit-senses"><SenseFields claims={editValues.claims} evidence={options} fill={filled} /></div>
         <details class="filing" id="edit-filing" open>
           <summary class="section-title">{t('field.filing')}</summary>
-          <div class="stack filed"><CategoryFields known={data.customGenres} genres={valuesOf(editValues.claims, 'genre')} collections={valuesOf(editValues.claims, 'collection')} tags={valuesOf(editValues.claims, 'tag')} /></div>
+          <div class="stack filed"><CategoryFields categories={data.categories} genres={valuesOf(editValues.claims, 'genre')} collections={valuesOf(editValues.claims, 'collection')} tags={valuesOf(editValues.claims, 'tag')} /></div>
         </details>
       {/key}
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" /></div>

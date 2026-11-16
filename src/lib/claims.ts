@@ -5,7 +5,7 @@
 // entry in this file and its form fields, and the database stays as it is.
 import { analyze, parseComposition, type Composition } from './composition'
 import { cleanCode, isRegistry, type Encoding } from './registries'
-import { cleanGenre, isCollection } from './genres'
+import { cleanGenre, isCollection, validGenreName, type Category } from './genres'
 import { IDS_LENGTH_MAX, IDS_MAX, splitIds } from './ids'
 import { carryLayout, cleanLayout, validLayout, type Layout } from './layout'
 import { ivdSequence } from './ivd'
@@ -86,7 +86,7 @@ export function validClaim(claim: unknown): claim is Claim {
     case 'encoding': return Boolean(data && typeof data.charset === 'string' && data.charset.length > 0 && data.charset.length <= 40)
     case 'relation': return Boolean(data && isRelationKind(data.relationship) && short(data.difference ?? '', 5000) && short(data.evidence ?? '', 5000))
     case 'ivd': return value === 'none' || ivdSequence(value) === value
-    case 'genre': return cleanGenre(value) === value
+    case 'genre': return validGenreName(value)
     case 'collection': return isCollection(value)
     case 'tag': return !/[\s,，、|]/u.test(value)
     case 'reading': return data === null || (Object.keys(data).length === 1 && cleanDoculect(data.doculect) === data.doculect)
@@ -169,9 +169,10 @@ const identity = (kind: ClaimKind, value: string, data: Claim['data']) => CLAIM_
 
 /**
  * The claims a form submits, over the ones the record holds for the groups the form leaves out. With
- * an error, the claims are a draft to show again and not to store.
+ * an error, the claims are a draft to show again and not to store. A category is named by its name or its
+ * label among `categories`.
  */
-export function readClaims(form: FormData, base: readonly Claim[] = []): { claims: Claim[]; error: ClaimError | null } {
+export function readClaims(form: FormData, categories: readonly Pick<Category, 'name' | 'label'>[], base: readonly Claim[] = []): { claims: Claim[]; error: ClaimError | null } {
   const next = new Map<ClaimKind, Claim[]>()
   let error: ClaimError | null = null
   const fail = (code: ClaimError) => { error ??= code }
@@ -282,7 +283,7 @@ export function readClaims(form: FormData, base: readonly Claim[] = []): { claim
   }
 
   if (form.has('genres_present')) {
-    const chosen = new Set(form.getAll('genre').map(value => cleanGenre(clean(value))))
+    const chosen = new Set(form.getAll('genre').map(value => cleanGenre(clean(value), categories)))
     next.set('genre', [...chosen].filter(slug => slug !== null).slice(0, CLAIM_LIMITS.genre.max).map(slug => made('genre', slug)))
   }
   if (form.has('collections_present')) {

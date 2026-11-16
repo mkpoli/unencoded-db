@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import { editEntry, hasLink, ENTRY_HISTORY_PAGE, getEntry, history, redactRevision, restoreSighting } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
+import { categoryList } from '$lib/server/categories'
 import { writer } from '$lib/server/people'
 import { entrySnapshot, revisionFields, sightingSnapshot } from '$lib/server/revisions'
 import { positiveId } from '../../../../_submission.server'
@@ -16,7 +17,7 @@ export const load: PageServerLoad = async (event) => {
   const visibleSightings = new Map(found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => [sighting.id, sighting.rev]))
   const before = event.url?.searchParams.get('before')
   if (before !== null && before !== undefined && !positiveId(before)) error(404)
-  const page = await history(db, id, before ? positiveId(before) : null)
+  const [page, categories] = await Promise.all([history(db, id, before ? positiveId(before) : null), categoryList(db)])
   const next = page.length > ENTRY_HISTORY_PAGE ? page[ENTRY_HISTORY_PAGE - 1].id : null
   const rows = page.slice(0, ENTRY_HISTORY_PAGE)
     .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id))
@@ -25,7 +26,7 @@ export const load: PageServerLoad = async (event) => {
       ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
       sightingRev: sighting_id ? visibleSightings.get(sighting_id) : null,
     }))
-  return { id, rev: found.entry.rev, rows, next }
+  return { id, rev: found.entry.rev, rows, next, categories: categories.map(({ name, label }) => ({ name, label })) }
 }
 
 export const actions: Actions = {

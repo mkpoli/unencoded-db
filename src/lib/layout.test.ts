@@ -61,7 +61,7 @@ test('a layout becomes a document and comes back from it', () => {
 const form = (fields: [string, string][]) => { const data = new FormData(); for (const [name, value] of fields) data.append(name, value); return data }
 
 test('a form states the layout of its first description', () => {
-  const { claims, error } = readClaims(form([['ids', IDS], ['ids', '⿰亻桼'], ['layout', '{"0":[1,0,0,1,-40,12]}'], ['layout_ids', IDS]]))
+  const { claims, error } = readClaims(form([['ids', IDS], ['ids', '⿰亻桼'], ['layout', '{"0":[1,0,0,1,-40,12]}'], ['layout_ids', IDS]]), [])
   expect(error).toBeNull()
   expect(claims.map(claim => claim.data)).toEqual([{ layout: { '0': [1, 0, 0, 1, -40, 12] } }, null])
   expect(primaryLayoutOf(claims)).toEqual({ '0': [1, 0, 0, 1, -40, 12] })
@@ -70,26 +70,26 @@ test('a form states the layout of its first description', () => {
 
 test('an empty layout takes the layout away, and a form that states none keeps it', () => {
   const base = [newClaim('ids', IDS, { layout: { '0': [1, 0, 0, 1, -40, 12] } })]
-  expect(readClaims(form([['ids', IDS], ['layout', ''], ['layout_ids', IDS]]), base).claims[0].data).toBeNull()
-  expect(readClaims(form([['ids', IDS]]), base).claims[0].data).toEqual(base[0].data)
-  expect(readClaims(form([['ids', IDS]]), base).claims[0].key).toBe(base[0].key)
-  expect(readClaims(form([['ids', IDS], ['layout', ''], ['layout_ids', '']]), base).claims[0].data).toEqual(base[0].data)
-  expect(readClaims(form([['description', 'x']]), base).claims[0]).toEqual(base[0])
+  expect(readClaims(form([['ids', IDS], ['layout', ''], ['layout_ids', IDS]]), [], base).claims[0].data).toBeNull()
+  expect(readClaims(form([['ids', IDS]]), [], base).claims[0].data).toEqual(base[0].data)
+  expect(readClaims(form([['ids', IDS]]), [], base).claims[0].key).toBe(base[0].key)
+  expect(readClaims(form([['ids', IDS], ['layout', ''], ['layout_ids', '']]), [], base).claims[0].data).toEqual(base[0].data)
+  expect(readClaims(form([['description', 'x']]), [], base).claims[0]).toEqual(base[0])
 })
 
 test('a layout goes with the parts a changed description kept', () => {
   const base = [newClaim('ids', IDS, { layout: { '0': [1, 0, 0, 1, -40, 12], '1.0': [1, 0, 0, 1, 0, 30] } })]
   const layout = JSON.stringify(base[0].data!.layout)
-  expect(readClaims(form([['ids', '⿰亻桼']]), base).claims[0].data).toBeNull()
-  expect(readClaims(form([['ids', '⿰亻桼'], ['layout', layout], ['layout_ids', IDS]]), base).claims[0].data).toEqual({ layout: { '0': [1, 0, 0, 1, -40, 12] } })
-  expect(readClaims(form([['ids', '⿰木木'], ['layout', layout], ['layout_ids', IDS]]), base).claims[0].data).toBeNull()
+  expect(readClaims(form([['ids', '⿰亻桼']]), [], base).claims[0].data).toBeNull()
+  expect(readClaims(form([['ids', '⿰亻桼'], ['layout', layout], ['layout_ids', IDS]]), [], base).claims[0].data).toEqual({ layout: { '0': [1, 0, 0, 1, -40, 12] } })
+  expect(readClaims(form([['ids', '⿰木木'], ['layout', layout], ['layout_ids', IDS]]), [], base).claims[0].data).toBeNull()
 })
 
 test('a description that becomes the first keeps its own layout', () => {
   const second = { layout: { '1': [1, 0, 0, 1, 0, 30] } }
   const base = [newClaim('ids', IDS, { layout: { '0': [1, 0, 0, 1, -40, 12] } }), newClaim('ids', '⿰亻桼', second)]
-  expect(readClaims(form([['ids', ''], ['ids', '⿰亻桼'], ['layout', ''], ['layout_ids', '']]), base).claims.map(claim => claim.data)).toEqual([second])
-  expect(readClaims(form([['ids', ''], ['ids', '⿰亻桼'], ['layout', '{"0":[1,0,0,1,-40,12]}'], ['layout_ids', IDS]]), base).claims.map(claim => claim.data)).toEqual([second])
+  expect(readClaims(form([['ids', ''], ['ids', '⿰亻桼'], ['layout', ''], ['layout_ids', '']]), [], base).claims.map(claim => claim.data)).toEqual([second])
+  expect(readClaims(form([['ids', ''], ['ids', '⿰亻桼'], ['layout', '{"0":[1,0,0,1,-40,12]}'], ['layout_ids', IDS]]), [], base).claims.map(claim => claim.data)).toEqual([second])
 })
 
 test('a stored description holds nothing but a layout of its own', () => {

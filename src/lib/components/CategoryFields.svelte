@@ -1,36 +1,37 @@
 <script lang="ts">
   // The categories, collections and tags a record is filed under. The markers save an emptied choice.
   import { CLAIM_LIMITS } from '$lib/claims'
-  import { COLLECTIONS, GENRE_LENGTH_MAX, arrangeGenres, cleanGenre, genreOf, type CustomGenre, type GenreRow } from '$lib/genres'
+  import { COLLECTIONS, GENRE_LENGTH_MAX, arrangeGenres, cleanGenre, type Category, type CategoryRef, type GenreRow } from '$lib/genres'
   import { t } from '$lib/t'
   import CheckPill from './CheckPill.svelte'
   import ParentSelect from './ParentSelect.svelte'
 
-  let { genres = [], known = [], collections = [], tags = [] }: { genres?: string[]; known?: CustomGenre[]; collections?: string[]; tags?: string[] } = $props()
+  let { genres = [], categories = [], collections = [], tags = [] }: { genres?: string[]; categories?: Category[]; collections?: string[]; tags?: string[] } = $props()
   const uid = $props.id()
-  // A category the record has that no one has added a row for yet stands at the top; one made here stands under its parent.
-  let made = $state<CustomGenre[]>([])
+  // A category the record has that has no row yet stands at the end of the top; one made here stands last under its parent.
+  let made = $state<CategoryRef[]>([])
   let chosen = $state<string[]>([])
-  const custom = $derived<CustomGenre[]>([
-    ...known, ...made.filter(item => !known.some(other => other.value === item.value)),
-    ...genres.filter(value => !genreOf(value) && !known.some(item => item.value === value) && !made.some(item => item.value === value)).map(value => ({ value, parent: null, n: 0 })),
+  const known = $derived<CategoryRef[]>([...categories, ...made.filter(item => !categories.some(other => other.name === item.name))])
+  const all = $derived<CategoryRef[]>([
+    ...known,
+    ...genres.filter(value => !known.some(item => item.name === value)).map((value, index) => ({ name: value, label: value, parent: null, position: Number.MAX_SAFE_INTEGER - genres.length + index })),
   ])
-  const { standalone, groups } = $derived(arrangeGenres(custom))
+  const { standalone, groups } = $derived(arrangeGenres(all))
   let typed = $state(''), parent = $state(''), wrong = $state(false), busy = $state(false)
 
   // With scripts the category is made at once and filed under; without them the form carries it with the record.
   async function add() {
-    const name = cleanGenre(typed)
+    const name = cleanGenre(typed, all)
     wrong = !name
     if (!name || busy) return
     busy = true
     try {
       const body = new FormData()
-      body.set('genre_new', name); body.set('genre_new_parent', parent)
+      body.set('action', 'create'); body.set('name', name); body.set('parent', parent)
       const response = await fetch('/api/categories', { method: 'POST', body })
       if (!response.ok) { wrong = true; return }
       const { value } = await response.json() as { value: string }
-      if (!genreOf(value) && !custom.some(item => item.value === value)) made.push({ value, parent: parent || null, n: 0 })
+      if (!all.some(item => item.name === value)) made.push({ name: value, label: value, parent: parent || null, position: Number.MAX_SAFE_INTEGER })
       if (!chosen.includes(value)) chosen.push(value)
       typed = ''
     } catch { wrong = true } finally { busy = false }
@@ -52,7 +53,7 @@
   {/each}
   <div class="genre-group adder">
     <div class="field"><label for="{uid}-new">{t('field.genreAdd')}</label><input id="{uid}-new" class="input" name="genre_new" bind:value={typed} onkeydown={enter} oninput={() => (wrong = false)} maxlength={GENRE_LENGTH_MAX} autocomplete="off" aria-invalid={wrong} /></div>
-    <div class="field"><label for="{uid}-parent">{t('field.genreParent')}</label><ParentSelect id="{uid}-parent" name="genre_new_parent" {custom} bind:value={parent} /></div>
+    <div class="field"><label for="{uid}-parent">{t('field.genreParent')}</label><ParentSelect id="{uid}-parent" name="genre_new_parent" categories={all} bind:value={parent} /></div>
     <button class="button" type="button" onclick={add} disabled={busy}>{t('form.add')}</button>
   </div>
 </fieldset>
