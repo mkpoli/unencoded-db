@@ -25,7 +25,7 @@
     "wrangler": "^4.158.0"
   },
   "dependencies": {
-    "han-compose": "github:mkpoli/han-compose#14207e0",
+    "han-compose": "github:mkpoli/han-compose#f1222f0bbf688525c753d43063037544084e35ef",
     "ids-input": "github:mkpoli/ids-input#fc79c7e7214b",
     "jose": "^6.2.15"
   }
