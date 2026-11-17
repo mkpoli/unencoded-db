@@ -116,12 +116,22 @@
   // The choice stays until the page it drew holds it, so a failed read leaves the tab and the cookie in step.
   let shownStyle = $state<GlyphStyle | null>(null)
   const glyphStyle = $derived(shownStyle ?? data.glyphStyle)
-  $effect(() => { if (shownStyle !== null && data.glyphStyle === shownStyle) shownStyle = null })
+  let switching = 0
   async function setGlyphStyle(style: GlyphStyle) {
     if (style === glyphStyle) return
+    const previous = data.glyphStyle, ticket = ++switching
     shownStyle = style
     document.cookie = `${GLYPH_STYLE_COOKIE}=${style};path=/;max-age=31536000;samesite=lax`
-    try { await invalidateAll() } catch { /* the next page reads the choice from the cookie */ }
+    try {
+      await invalidateAll()
+    } catch {
+      // A failed read leaves no preview behind: the tab and the cookie go back to the style the page holds.
+      if (ticket === switching) {
+        document.cookie = `${GLYPH_STYLE_COOKIE}=${previous};path=/;max-age=31536000;samesite=lax`
+      }
+    } finally {
+      if (ticket === switching) shownStyle = null
+    }
   }
   function sizeTiles(index: number) {
     tileSize = TILE_SIZES[index] ?? tileSize
