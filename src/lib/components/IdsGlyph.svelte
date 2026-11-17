@@ -5,18 +5,18 @@
   // description stands in. A drawing is one path, or the server's own SVG markup when a layout moved a part.
   import { onMount } from 'svelte'
   import { page } from '$app/state'
-  import { composerVersion, GLYPH_STYLE, type GlyphStyle } from '$lib/composer'
+  import { composerDrawing, GLYPH_STYLE, type GlyphStyle } from '$lib/composer'
 
   // `style` draws in one named style whatever the reader chose; without it, the reader's style is used.
   let { ids, layout = null, path: given = null, style: named = null }: { ids: string; layout?: string | null; path?: string | null; style?: GlyphStyle | null } = $props()
   let host = $state<HTMLElement>()
   let visible = $state(false)
   const uid = $props.id()
-  // The reader's style and the export's version are part of the address, so a drawing in one style,
-  // or from an older export, is never taken for another. The route answers a drawing for a year; a
-  // new export must therefore come with a new address.
+  // The reader's style and the export's and composer's versions are part of the address, so a
+  // drawing in one style, or from older code, is never taken for another. The route answers a
+  // drawing for a year; a new export or composer must therefore come with a new address.
   const style = $derived(named ?? page.data.glyphStyle ?? GLYPH_STYLE)
-  const wanted = $derived(ids ? `/api/glyph?ids=${encodeURIComponent(ids)}&v=${encodeURIComponent(composerVersion(style))}${layout ? `&layout=${encodeURIComponent(layout)}` : ''}${style !== GLYPH_STYLE ? `&style=${style}` : ''}` : '')
+  const wanted = $derived(ids ? `/api/glyph?ids=${encodeURIComponent(ids)}&v=${encodeURIComponent(composerDrawing(style))}${layout ? `&layout=${encodeURIComponent(layout)}` : ''}${style !== GLYPH_STYLE ? `&style=${style}` : ''}` : '')
   // What was fetched belongs to the drawing it was asked for, so a glyph given another description starts again.
   let fetched = $state.raw<{ of: string; d: string } | null>(null)
   const path = $derived(given ?? (fetched?.of === wanted ? fetched.d : null))
