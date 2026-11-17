@@ -182,7 +182,7 @@ test('0005 gives every claim a key, a list of sightings and a scope, in claims a
   expect(journal.filter(row => !versions.some(version => version.id === row.id)).map(row => row.snapshot)).toEqual([sighting, '{}', '{"revision":4}', '{}', '{"from":3}'])
 
   // An old version is restored through the store, with its keys and the sighting it rested on.
-  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0019_via_chain.sql', '0016_tag_year.sql', '0018_first_sighting.sql', '0023_categories.sql', '0024_category_rows.sql']) raw.exec(migration(name))
+  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0019_via_chain.sql', '0016_tag_year.sql', '0018_first_sighting.sql', '0023_categories.sql', '0024_category_rows.sql', '0026_typed_tags.sql']) raw.exec(migration(name))
   const db = d1Over(raw)
   expect(await revertEntry(db, 1, 1, { actor: 'p', ip: null })).toEqual({ ok: true, rev: 5 })
   expect((await getEntry(db, 1))!.claims).toEqual(first)
@@ -453,4 +453,73 @@ test('0022 dates each agent client by its latest token or code, so pruning a cli
   expect(await registerClient(d1Over(raw), { redirect_uris: ['https://example.test/cb'] })).toMatchObject({ redirect_uris: ['https://example.test/cb'] })
   expect(raw.query('SELECT count(*) AS n FROM agent_clients').get()).toEqual({ n: 1 })
   expect(raw.query('SELECT (SELECT count(*) FROM agent_tokens) + (SELECT count(*) FROM agent_codes) AS n').get()).toEqual({ n: 0 })
+})
+
+test('0026 unifies categories and #tags into typed tags with seeded implications and rebuilds tag facets', () => {
+  const raw = new Database(':memory:')
+  raw.exec('PRAGMA foreign_keys = ON')
+  const migrations = join(import.meta.dir, '../../../migrations')
+  for (const name of readdirSync(migrations).sort().filter(name => name < '0026')) raw.exec(readFileSync(join(migrations, name), 'utf8'))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec("INSERT INTO entries(id, script, hidden_at, merged_into, sightings, created_by, created_at, updated_at) VALUES (1, 'han', NULL, NULL, 1, 'p', '2026', '2026'), (2, 'han', NULL, NULL, 1, 'p', '2026', '2026'), (3, 'han', '2026', NULL, 1, 'p', '2026', '2026'), (4, 'han', NULL, 1, 1, 'p', '2026', '2026')")
+  raw.exec("UPDATE categories SET rev = 9 WHERE name = 'nom'")
+  raw.exec("INSERT INTO category_changes(id, name, kind, before, after, actor, at) VALUES (4, 'nom', 'rename', '{\"label\":\"nom\"}', '{\"label\":\"喃字\"}', 'p', '2026')")
+  // Entry 1: genre `nom` (plus legacy label `'喃字'` and freeform tag `'IRG'`); Entry 2: kokuji; Entry 3 hidden; Entry 4 merged.
+  raw.exec(`INSERT INTO claims(entry_id, position, key, kind, value, data, sightings, under) VALUES
+    (1, 0, 'genr0001', 'genre', 'nom', NULL, '[]', '[]'),
+    (1, 1, 'tag00001', 'tag', '喃字', NULL, '[]', '[]'),
+    (1, 2, 'tag00002', 'tag', 'IRG', NULL, '[]', '[]'),
+    (2, 0, 'genr0002', 'genre', 'kokuji', NULL, '[]', '[]'),
+    (3, 0, 'genr0003', 'genre', 'kokuji', NULL, '[]', '[]'),
+    (4, 0, 'genr0004', 'genre', 'nom', NULL, '[]', '[]')`)
+  raw.exec("INSERT INTO entry_tags(tag, entry_id, sightings) VALUES ('g:nom', 1, 1), ('t:IRG', 1, 1)")
+
+  raw.exec(migration('0026_typed_tags.sql'))
+
+  expect(raw.query('PRAGMA foreign_key_check').all()).toEqual([])
+  expect(raw.query("SELECT name FROM sqlite_master WHERE name IN ('categories', 'category_changes')").all()).toEqual([])
+  // Types assigned accurately + region & ゲバ字 seeded.
+  const tags = new Map((raw.query('SELECT name, type FROM tags').all() as { name: string; type: string }[]).map(row => [row.name, row.type]))
+  expect([tags.get('nom'), tags.get('dialect'), tags.get('music'), tags.get('日本'), tags.get('越南'), tags.get('大陸'), tags.get('ゲバ字'), tags.get('IRG')]).toEqual(['form', 'language', 'domain', 'region', 'region', 'region', 'form', 'general'])
+  // Implications preserve old hierarchy + seeded regional/form implications.
+  const implies = raw.query("SELECT tag, implies FROM tag_implications WHERE tag IN ('nom', 'kokuji', 'ゲバ字', 'hakka', 'simplified-cn') ORDER BY tag, implies").all()
+  expect(implies).toEqual([
+    { tag: 'hakka', implies: 'dialect' },
+    { tag: 'kokuji', implies: 'dialect' },
+    { tag: 'kokuji', implies: '日本' },
+    { tag: 'nom', implies: 'dialect' },
+    { tag: 'nom', implies: '越南' },
+    { tag: 'simplified-cn', implies: 'abbreviation' },
+    { tag: 'simplified-cn', implies: '大陸' },
+    { tag: 'ゲバ字', implies: '日本' },
+  ])
+  // Claims deduplicated and normalized to canonical names under `tag`.
+  expect(raw.query('SELECT entry_id, kind, value FROM claims ORDER BY entry_id, position').all()).toEqual([
+    { entry_id: 1, kind: 'tag', value: 'nom' },
+    { entry_id: 1, kind: 'tag', value: 'IRG' },
+    { entry_id: 2, kind: 'tag', value: 'kokuji' },
+    { entry_id: 3, kind: 'tag', value: 'kokuji' },
+    { entry_id: 4, kind: 'tag', value: 'nom' },
+  ])
+  // Entry tags and counts rebuilt with transitive closure, excluding hidden/merged records and old `g:` rows.
+  expect(raw.query("SELECT tag, entry_id FROM entry_tags WHERE tag GLOB 'g:*'").all()).toEqual([])
+  expect(raw.query("SELECT tag, entry_id FROM entry_tags WHERE tag GLOB 't:*' ORDER BY entry_id, tag").all()).toEqual([
+    { tag: 't:IRG', entry_id: 1 },
+    { tag: 't:dialect', entry_id: 1 },
+    { tag: 't:nom', entry_id: 1 },
+    { tag: 't:越南', entry_id: 1 },
+    { tag: 't:dialect', entry_id: 2 },
+    { tag: 't:kokuji', entry_id: 2 },
+    { tag: 't:日本', entry_id: 2 },
+  ])
+  expect(raw.query("SELECT tag, n FROM tag_counts WHERE tag GLOB 't:*' AND n > 0 ORDER BY tag").all()).toEqual([
+    { tag: 't:IRG', n: 1 },
+    { tag: 't:dialect', n: 2 },
+    { tag: 't:kokuji', n: 1 },
+    { tag: 't:nom', n: 1 },
+    { tag: 't:日本', n: 1 },
+    { tag: 't:越南', n: 1 },
+  ])
+  // `tag_changes` sequence stays past migrated `rev` (= 9).
+  expect((raw.query("SELECT seq FROM sqlite_sequence WHERE name = 'tag_changes'").get() as { seq: number }).seq).toBeGreaterThanOrEqual(10)
 })

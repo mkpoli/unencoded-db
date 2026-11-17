@@ -110,7 +110,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
   expect(raw.query('SELECT ids, script, status, sightings, first_year FROM entries').get()).toEqual({ ids: '⿰山東', script: 'han', status: 'encoded', sightings: 2, first_year: '1936' })
   expect(raw.query('SELECT box, image_w FROM sighting_media').get()).toEqual({ box: '[[1,1,6,6]]', image_w: 10 })
   const claims = raw.query('SELECT key, kind, value, sightings, under FROM claims ORDER BY position').all() as { key: string; kind: string; value: string; sightings: string; under: string }[]
-  expect(claims.map(claim => [claim.kind, claim.value])).toEqual([['ids', '⿰山東'], ['ids', '⿰山⿻日木'], ['reading', 'tōge'], ['meaning', 'mountain pass'], ['encoding', 'U+5D20'], ['relation', '峠'], ['genre', 'kokuji'], ['tag', 'signage']])
+  expect(claims.map(claim => [claim.kind, claim.value])).toEqual([['ids', '⿰山東'], ['ids', '⿰山⿻日木'], ['reading', 'tōge'], ['meaning', 'mountain pass'], ['encoding', 'U+5D20'], ['relation', '峠'], ['tag', 'kokuji'], ['tag', 'signage']])
   const of = (kind: string) => claims.find(claim => claim.kind === kind)!
   expect(JSON.parse(of('meaning').sightings)).toEqual([2])
   expect(JSON.parse(of('reading').sightings)).toEqual([1, 2])

@@ -38,6 +38,24 @@
   --on-action: #fff;
   --backdrop: light-dark(#17171b66, rgb(0 0 0 / 65%));
   --mark: #e0241b;
+  --tag-general-ink: var(--muted);
+  --tag-general-bg: var(--surface-sunken);
+  --tag-general-line: var(--line);
+  --tag-region-ink: light-dark(#8b4300, #ffb067);
+  --tag-region-bg: light-dark(#fff2e2, #382411);
+  --tag-region-line: light-dark(#edc594, #6c4723);
+  --tag-language-ink: light-dark(#154c8a, #84beff);
+  --tag-language-bg: light-dark(#eaf3ff, #16283e);
+  --tag-language-line: light-dark(#aacbf2, #2d4e77);
+  --tag-form-ink: light-dark(#5c318a, #c79bff);
+  --tag-form-bg: light-dark(#f3ecff, #271b3b);
+  --tag-form-line: light-dark(#cbb4f0, #513878);
+  --tag-domain-ink: light-dark(#19623b, #73d39a);
+  --tag-domain-bg: light-dark(#e9f8ee, #142f20);
+  --tag-domain-line: light-dark(#a4dbb8, #285b3f);
+  --tag-meta-ink: light-dark(#872748, #f48eae);
+  --tag-meta-bg: light-dark(#fdebf1, #381825);
+  --tag-meta-line: light-dark(#eab5c6, #6b2f45);
   --page-gutter: 56px;
   --tile-size: 145px;
 }
@@ -97,6 +115,26 @@ textarea.input { min-height: 96px; resize: vertical; line-height: 1.55 }
 .notice.bad { background: var(--wrong-light); color: var(--wrong) }
 .notice.quiet { background: var(--surface-sunken); color: var(--muted) }
 .badge { display: inline-flex; align-items: center; min-height: 22px; padding: 1px 8px; border-radius: 5px; background: var(--surface-sunken); font-size: 12px; color: var(--muted); white-space: nowrap }
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border: 1px solid var(--tag-line, var(--tag-general-line));
+  border-radius: 999px;
+  background: var(--tag-bg, var(--tag-general-bg));
+  color: var(--tag-ink, var(--tag-general-ink));
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.tag-chip.implied { border-style: dashed }
+.tag-chip[data-tag-type=general] { --tag-ink: var(--tag-general-ink); --tag-bg: var(--tag-general-bg); --tag-line: var(--tag-general-line) }
+.tag-chip[data-tag-type=region] { --tag-ink: var(--tag-region-ink); --tag-bg: var(--tag-region-bg); --tag-line: var(--tag-region-line) }
+.tag-chip[data-tag-type=language] { --tag-ink: var(--tag-language-ink); --tag-bg: var(--tag-language-bg); --tag-line: var(--tag-language-line) }
+.tag-chip[data-tag-type=form] { --tag-ink: var(--tag-form-ink); --tag-bg: var(--tag-form-bg); --tag-line: var(--tag-form-line) }
+.tag-chip[data-tag-type=domain] { --tag-ink: var(--tag-domain-ink); --tag-bg: var(--tag-domain-bg); --tag-line: var(--tag-domain-line) }
+.tag-chip[data-tag-type=meta] { --tag-ink: var(--tag-meta-ink); --tag-bg: var(--tag-meta-bg); --tag-line: var(--tag-meta-line) }
 .badge.unifiable { background: var(--accent-light); color: var(--accent) }
 .badge.homograph, .badge.variant { background: var(--uncertain-badge); color: var(--uncertain-ink) }
 .badge.encoded { background: var(--good-light); color: var(--good) }

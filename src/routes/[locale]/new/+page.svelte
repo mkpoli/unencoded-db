@@ -7,7 +7,7 @@
   import CompositionField from '$lib/components/CompositionField.svelte'
   import IdentityFields from '$lib/components/IdentityFields.svelte'
   import SenseFields from '$lib/components/SenseFields.svelte'
-  import CategoryFields from '$lib/components/CategoryFields.svelte'
+  import TagFields from '$lib/components/TagFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { compositionOf, primaryLayoutOf, valuesOf } from '$lib/claims'
   import { ADD_SIGHTINGS_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
@@ -104,7 +104,7 @@
     </section>
     <details class="panel filing" open>
       <summary class="section-title">{t('field.filing')}</summary>
-      <div class="group filed"><CategoryFields categories={data.categories} genres={valuesOf(claims, 'genre')} collections={valuesOf(claims, 'collection')} tags={valuesOf(claims, 'tag')} /></div>
+      <div class="group filed"><TagFields tags={data.tags} selected={valuesOf(claims, 'tag')} collections={valuesOf(claims, 'collection')} /></div>
     </details>
     <SubmitBar {busy} label={t('nav.add')} cancel={href()} sticky />
   </form>

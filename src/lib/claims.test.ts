@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { CLAIM_LIMITS, CLAIM_SCOPES_MAX, CLAIM_SIGHTINGS_MAX, claimsUnder, isClaimKey, mapSightings, newClaimKey, parseClaims, readClaims, scopesOf, splitCharacters, supportedBy, validClaim, type Claim } from './claims'
-import { cleanGenre } from './genres'
+import { cleanTag } from './tags'
 import { IDS_LENGTH_MAX, IDS_MAX } from './ids'
 
 // A claim without its key, which a test names only where the key matters.
@@ -167,33 +167,34 @@ describe('readings, meanings and tags', () => {
   })
 
   test('a group the form does not carry is left as the record has it', () => {
-    const base = [claim('reading', 'tung'), claim('tag', 'IRG'), claim('genre', 'hakka')]
-    expect(read([['meaning', 'east']], base)).toEqual({ claims: [claim('reading', 'tung'), claim('meaning', 'east'), claim('genre', 'hakka'), claim('tag', 'IRG')] })
+    const base = [claim('reading', 'tung'), claim('tag', 'IRG'), claim('tag', 'hakka')]
+    expect(read([['meaning', 'east']], base)).toEqual({ claims: [claim('reading', 'tung'), claim('meaning', 'east'), claim('tag', 'IRG'), claim('tag', 'hakka')] })
   })
 })
 
-describe('categories', () => {
+describe('tags and legacy category forms', () => {
   const listed = [{ name: 'hakka', label: '客家語' }, { name: 'dialect', label: '方言字' }, { name: '近古字書', label: '近古字書' }, { name: 'renamed', label: '改名後' }]
-  test('a name is kept, a label names its category, and any other valid name is kept', () => {
-    expect(cleanGenre('hakka', listed)).toBe('hakka')
-    expect(cleanGenre('客家語', listed)).toBe('hakka')
-    expect(cleanGenre('方言字', listed)).toBe('dialect')
-    expect(cleanGenre('改名後', listed)).toBe('renamed')
-    expect(cleanGenre(' 近古字書 ', listed)).toBe('近古字書')
-    expect(cleanGenre('戶籍用字', listed)).toBe('戶籍用字')
-    expect(cleanGenre('x'.repeat(40), listed)).toBe('x'.repeat(40))
+  test('a name is kept, a label names its tag, and any other valid name is kept', () => {
+    expect(cleanTag('hakka', listed)).toBe('hakka')
+    expect(cleanTag('客家語', listed)).toBe('hakka')
+    expect(cleanTag('方言字', listed)).toBe('dialect')
+    expect(cleanTag('改名後', listed)).toBe('renamed')
+    expect(cleanTag(' 近古字書 ', listed)).toBe('近古字書')
+    expect(cleanTag('戶籍用字', listed)).toBe('戶籍用字')
+    expect(cleanTag('#越南', listed)).toBe('越南')
+    expect(cleanTag('x'.repeat(40), listed)).toBe('x'.repeat(40))
   })
   test('whitespace, separators, control characters and a long name are rejected', () => {
-    for (const bad of ['', '  ', 'a b', 'a|b', 'a,b', 'a，b', 'a、b', 'a\u0000b', 'x'.repeat(41)]) expect(cleanGenre(bad, listed)).toBeNull()
+    for (const bad of ['', '  ', 'a b', 'a|b', 'a,b', 'a，b', 'a、b', 'a\u0000b', 'x'.repeat(41)]) expect(cleanTag(bad, listed)).toBeNull()
   })
-  test('a form saves a typed label as its category, and each category once', () => {
-    expect(read([['genres_present', '1'], ['genre', '戶籍用字'], ['genre', '戶籍用字'], ['genre', 'bad name']])).toEqual({ claims: [claim('genre', '戶籍用字')] })
-    const typed = readClaims(form([['genres_present', '1'], ['genre', '客家語'], ['genre', 'hakka'], ['genre', '改名後'], ['genre', '戶籍用字']]), listed)
+  test('a form saves a typed label as its tag, merges tag & legacy genre fields, and keeps each tag once', () => {
+    expect(read([['tags_present', '1'], ['tag', '戶籍用字'], ['tag', '戶籍用字'], ['tag', 'bad name']])).toEqual({ claims: [claim('tag', '戶籍用字')] })
+    const typed = readClaims(form([['tags_present', '1'], ['tag', '客家語'], ['genre', 'hakka'], ['tags', '#改名後 戶籍用字']]), listed)
     expect(typed.claims.map(item => item.value)).toEqual(['hakka', 'renamed', '戶籍用字'])
     // A stored claim is checked for its shape: a label renamed later never makes it invalid.
-    expect(valid(claim('genre', '戶籍用字'))).toBe(true)
-    expect(valid(claim('genre', '客家語'))).toBe(true)
-    expect(valid(claim('genre', 'a b'))).toBe(false)
+    expect(valid(claim('tag', '戶籍用字'))).toBe(true)
+    expect(valid(claim('tag', '客家語'))).toBe(true)
+    expect(valid(claim('tag', 'a b'))).toBe(false)
   })
 })
 
@@ -203,7 +204,7 @@ describe('stored claims', () => {
     expect(valid(claim('encoding', 'U+5D20'))).toBe(false)
     expect(valid(claim('relation', '木', { relationship: 'nope' }))).toBe(false)
     expect(valid(claim('ivd', 'U+20000'))).toBe(false)
-    expect(valid(claim('genre', 'not a genre'))).toBe(false)
+    expect(valid(claim('tag', 'not a tag'))).toBe(false)
     const stored = keyed([claim('reading', 'a')])
     expect(parseClaims(JSON.stringify(stored))).toEqual(stored)
     expect(parseClaims('{broken')).toBeNull()
@@ -275,11 +276,11 @@ describe('keys', () => {
   })
 
   test('a claim stated again without a key continues the one the record holds', () => {
-    const base = keyed([claim('ids', '⿰木木'), claim('ids', '⿱木木'), claim('reading', 'ki', { doculect: 'ja' }, { sightings: [2] }), claim('reading', 'ki', { doculect: 'ko' }), claim('encoding', 'A140', { charset: 'big5' }), claim('ivd', 'none'), claim('genre', 'hakka'), claim('tag', 'IRG')])
+    const base = keyed([claim('ids', '⿰木木'), claim('ids', '⿱木木'), claim('reading', 'ki', { doculect: 'ja' }, { sightings: [2] }), claim('reading', 'ki', { doculect: 'ko' }), claim('encoding', 'A140', { charset: 'big5' }), claim('ivd', 'none'), claim('tag', 'hakka'), claim('tag', 'IRG')])
     const { claims } = readClaims(form([
       ['ids', '⿱木木 ⿰木水'], ['reading', 'ki'], ['reading_doculect', 'ko'], ['reading', 'ki'], ['reading_doculect', 'ja'],
       ['encodings_present', '1'], ['encoding_charset', 'cns11643'], ['encoding_code', 'A140'], ['encoding_charset', 'big5'], ['encoding_code', 'A140'],
-      ['ivd_status', 'registered'], ['ivd_sequence', 'U+20000 U+E0100'], ['genres_present', '1'], ['genre', 'hakka'], ['tags', 'new IRG'],
+      ['ivd_status', 'registered'], ['ivd_sequence', 'U+20000 U+E0100'], ['tags_present', '1'], ['tag', 'hakka'], ['tags', 'new IRG'],
     ]), [], base)
     const key = (kind: Claim['kind'], value: string, data?: string) => claims.find(item => item.kind === kind && item.value === value && (!data || Object.values(item.data ?? {}).includes(data)))!.key
     expect(key('ids', '⿱木木')).toBe(base[1].key)
@@ -291,7 +292,7 @@ describe('keys', () => {
     expect(base.map(item => item.key)).not.toContain(key('encoding', 'A140', 'cns11643'))
     // A kind a record holds once is the same claim whatever it now says.
     expect(key('ivd', 'U+20000 U+E0100')).toBe(base[5].key)
-    expect(key('genre', 'hakka')).toBe(base[6].key)
+    expect(key('tag', 'hakka')).toBe(base[6].key)
     expect(key('tag', 'IRG')).toBe(base[7].key)
     expect(new Set(claims.map(item => item.key)).size).toBe(claims.length)
   })

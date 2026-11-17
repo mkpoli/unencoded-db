@@ -20,14 +20,14 @@
   import IdentityFields from '$lib/components/IdentityFields.svelte'
   import SenseFields from '$lib/components/SenseFields.svelte'
   import SenseList from '$lib/components/SenseList.svelte'
-  import CategoryFields from '$lib/components/CategoryFields.svelte'
+  import TagFields from '$lib/components/TagFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import type { CharacterFacts } from '$lib/encoded'
   import { compositionOf, encodingsOf, primaryLayoutOf, supportedBy, valuesOf } from '$lib/claims'
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { codePage, marksOf, registryLabel } from '$lib/registries'
-  import { COLLECTIONS, genreLabels } from '$lib/genres'
+  import { COLLECTIONS, implicationClosure, tagLabels, tagLookup } from '$lib/tags'
   import { boxesOf, evidenceFile } from '$lib/picture'
   import { CHECKS, readiness } from '$lib/readiness'
   import { parseSightingTypes } from '$lib/scripts'
@@ -99,10 +99,10 @@
   const ivd = $derived(valuesOf(claims, 'ivd')[0] ?? null)
   const encodings = $derived(encodingsOf(claims))
   const marks = $derived(marksOf(encodings))
-  const labels = $derived(genreLabels(data.categories))
-  const genres = $derived(valuesOf(claims, 'genre').map(value => ({ value, label: labels.get(value) ?? value })))
+  const tagsByName = $derived(tagLookup(data.tags))
+  const labels = $derived(tagLabels(data.tags))
+  const closure = $derived(implicationClosure(valuesOf(claims, 'tag'), data.tags))
   const collections = $derived(COLLECTIONS.filter(collection => valuesOf(claims, 'collection').includes(collection.slug)))
-  const tags = $derived(valuesOf(claims, 'tag'))
   const brief = (text: string) => [...text].length > 40 ? [...text].slice(0, 39).join('') + '…' : text
   const options = $derived(data.sightings.map(sighting => ({ token: String(sighting.id), value: String(sighting.id), label: `#${sighting.id} ${brief(sighting.place || sighting.title || sighting.url || '')}` })))
   const ready = $derived(readiness({ ids: entry.ids, radical: entry.radical, strokes: entry.strokes }, data.sightings))
@@ -167,11 +167,27 @@
       {#if entry.description}<p class="description">{entry.description}</p><EditLink field="description" name={t('field.description')} />
       {:else}<EditLink field="description" name={t('entry.addDescription')} add />{/if}
     </div>
-    {#if genres.length || collections.length || tags.length}
+    {#if closure.all.length || collections.length}
       <p class="chips">
-        {#each genres as genre (genre.value)}<a class="chip-link" href={href(`?genre=${encodeURIComponent(genre.value)}`)}>{genre.label}</a>{/each}
-        {#each collections as collection (collection.slug)}<a class="chip-link" href={href(`?collection=${collection.slug}`)}>{collection.label}</a>{/each}
-        {#each tags as tag}<a class="chip-link tag" href={href(`?tag=${encodeURIComponent(tag)}`)}>#{tag}</a>{/each}
+        {#each closure.direct as value (value)}
+          {@const info = tagsByName.get(value)}
+          <a class="tag-chip" data-tag-type={info?.type ?? 'general'} href={href(`/?tag=${encodeURIComponent(value)}`)}>
+            {info?.label ?? value}
+          </a>
+        {/each}
+        {#each closure.implied as implied (implied.name)}
+          {@const info = tagsByName.get(implied.name)}
+          {@const viaNames = implied.via.map(v => labels.get(v) ?? v).join(', ')}
+          <a
+            class="tag-chip implied"
+            data-tag-type={info?.type ?? 'general'}
+            title={t('tags.carriedBy', { via: viaNames })}
+            href={href(`/?tag=${encodeURIComponent(implied.name)}`)}
+          >
+            {info?.label ?? implied.name}
+          </a>
+        {/each}
+        {#each collections as collection (collection.slug)}<a class="chip-link" href={href(`/?collection=${collection.slug}`)}>{collection.label}</a>{/each}
         <EditLink field="filing" name={t('field.filing')} />
       </p>
     {:else}
@@ -219,7 +235,7 @@
         <div id="edit-senses"><SenseFields claims={editValues.claims} evidence={options} fill={filled} /></div>
         <details class="filing" id="edit-filing" open>
           <summary class="section-title">{t('field.filing')}</summary>
-          <div class="stack filed"><CategoryFields categories={data.categories} genres={valuesOf(editValues.claims, 'genre')} collections={valuesOf(editValues.claims, 'collection')} tags={valuesOf(editValues.claims, 'tag')} /></div>
+          <div class="stack filed"><TagFields tags={data.tags} selected={valuesOf(editValues.claims, 'tag')} collections={valuesOf(editValues.claims, 'collection')} /></div>
         </details>
       {/key}
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" /></div>
@@ -303,7 +319,7 @@
   .formation { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px } .formation .label { color:var(--muted); font-size:12px; font-weight:400 }
   .method { font-weight:600 } .part { padding:1px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12.5px }
   .description { white-space:pre-wrap; overflow-wrap:anywhere } .badges { gap:6px }
-  .chips { display:flex; flex-wrap:wrap; gap:6px } .chip-link { padding:2px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px } .chip-link:hover { border-color:var(--accent); color:var(--accent) } .chip-link.tag { color:var(--muted) }
+  .chips { display:flex; flex-wrap:wrap; align-items:center; gap:6px } .chip-link { padding:2px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px } .chip-link:hover { border-color:var(--accent); color:var(--accent) } .chips .tag-chip:hover { filter: brightness(0.95) }
   .marks { display:flex; flex-wrap:wrap; gap:6px; margin:0; padding:0; list-style:none } .marks a:hover { text-decoration:underline }
   .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:12px; margin:0 } .facts:empty { display:none }
   dt { color:var(--muted); font-size:12px } dd { margin:2px 0 0; overflow-wrap:anywhere }

@@ -1,7 +1,7 @@
-import { categoryList, createCategory } from '$lib/server/categories'
+import { createTag, tagList } from '$lib/server/tags'
 import { fail, redirect } from '@sveltejs/kit'
 import { mapSightings, newClaim } from '$lib/claims'
-import { readNewGenre } from '$lib/genres'
+import { readNewTag } from '$lib/tags'
 import { ADD_SIGHTINGS_MAX } from '$lib/limits'
 import { CITATION_FIELDS, hasLink, type SightingFields, createEntry, getEntryRow, getSighting, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
@@ -14,13 +14,13 @@ import type { Actions, PageServerLoad } from './$types'
 export const load: PageServerLoad = async (event) => {
   const id = positiveId(event.url.searchParams.get('sighting'))
   const { DB } = env(event)
-  const categories = await categoryList(DB)
-  if (!id) return { seed: null, categories }
+  const tags = await tagList(DB)
+  if (!id) return { seed: null, tags }
   const sighting = await getSighting(DB, id)
   const entry = sighting && !sighting.hidden_at ? await getEntryRow(DB, sighting.entry_id) : null
-  if (!sighting || !entry || entry.hidden_at || entry.merged_into) return { seed: null, categories }
+  if (!sighting || !entry || entry.hidden_at || entry.merged_into) return { seed: null, tags }
   const values: Partial<SightingFields> = { ...Object.fromEntries((['place', 'original_date', 'page', ...CITATION_FIELDS] as const).map(field => [field, sighting[field]])), vias: sighting.vias.map(({ id: _, ...via }) => via) }
-  return { seed: { values, pictures: sighting.media.map(picture => picture.image_key) }, categories }
+  return { seed: { values, pictures: sighting.media.map(picture => picture.image_key) }, tags }
 }
 
 const filled = (form: FormData, fields: SightingFields) => Object.values({ ...fields, vias: fields.vias.length }).some(Boolean) || form.getAll('image').some(file => file instanceof File && file.size > 0)
@@ -37,22 +37,22 @@ export const actions: Actions = {
     await guardWrite(event, 'ADDS')
     const form = await event.request.formData()
     const { DB, MEDIA } = env(event)
-    const categories = await categoryList(DB)
-    const { fields: read, error: claimError } = readEntryFields(form, categories)
+    const tags = await tagList(DB)
+    const { fields: read, error: claimError } = readEntryFields(form, tags)
     const all = sightingForms(form).map(section => ({ form: section, fields: readSightingFields(section) }))
     const sections = all.filter(section => filled(section.form, section.fields))
     // A claim names the sightings behind it by their place on the page, from 1. A sighting left empty is
     // passed over, so each name becomes the place among the ones that are kept.
-    // A category typed into the form without scripts is made with the record and filed under.
-    const fresh = readNewGenre(form, categories)
+    // A tag typed into the form without scripts is made with the record and attached.
+    const fresh = readNewTag(form, tags)
     const claims = mapSightings(read.claims, place => sections.indexOf(all[place - 1]) + 1 || null)
-    if (fresh && fresh !== 'invalid' && !claims.some(claim => claim.kind === 'genre' && claim.value === fresh.name)) claims.push(newClaim('genre', fresh.name))
+    if (fresh && fresh !== 'invalid' && !claims.some(claim => claim.kind === 'tag' && claim.value === fresh.name)) claims.push(newClaim('tag', fresh.name))
     const entry = { ...read, claims }
     const sightings = sections.map(section => section.fields)
     // `sighting` numbers the one an error is about; 0 names none.
     const reject = (status: 400 | 429, error: string, sighting = 0) => fail(status, { error, sighting, values: { ...entry, sightings } })
     if (claimError) return reject(400, claimError)
-    if (fresh === 'invalid') return reject(400, 'category')
+    if (fresh === 'invalid') return reject(400, 'tag')
     if (!sections.length) return reject(400, 'evidence', 1)
     if (sections.length > ADD_SIGHTINGS_MAX) return reject(400, 'sightingsMax')
 
@@ -69,7 +69,7 @@ export const actions: Actions = {
     for (const [index, fields] of sightings.entries()) drafts.push({ fields, media: await storeImages(MEDIA, pictures[index]) })
     const person = await writer(event, DB)
     const who = { actor: person.id, ip: await ipHash(event) }
-    if (fresh && !(await createCategory(DB, categories, fresh, who)).ok) return reject(400, 'category')
+    if (fresh && !(await createTag(DB, tags, fresh, who)).ok) return reject(400, 'tag')
     const id = await createEntry(DB, entry, drafts[0].fields, drafts[0].media, who, drafts.slice(1))
     redirect(303, `/${event.params.locale}/entry/${id}`)
   },

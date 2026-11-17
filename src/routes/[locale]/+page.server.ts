@@ -1,4 +1,4 @@
-import { categoryList } from '$lib/server/categories'
+import { tagList } from '$lib/server/tags'
 import { error, redirect } from '@sveltejs/kit'
 import { alsoSearchIds, counts, cursorOf, decadeTag, exactSearchIds, facetTag, list, listTag, markTags, radicalTag, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, searchTotal, terms } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
@@ -12,9 +12,10 @@ export const load: PageServerLoad = async (event) => {
   // A script keeps the list to the records written in it: ?script=nom. Without one, every script is listed.
   const script = searchParams.get('script') || null
   const filter = searchParams.get('filter') || null
-  // A category, a collection or a tag narrows the list: ?genre=, ?collection=, ?tag=.
-  const genre = searchParams.get('genre'), collection = searchParams.get('collection'), tag = searchParams.get('tag')
-  const facet = genre ? `g:${genre}` : collection ? `c:${collection}` : tag ? `t:${tag}` : null
+  // A collection or a tag narrows the list: ?collection=, ?tag= (or legacy ?genre=).
+  const genre = searchParams.get('genre'), collection = searchParams.get('collection'), rawTag = searchParams.get('tag')
+  const requestedTag = (rawTag ?? genre)?.normalize('NFC') ?? null
+  const rawFacet = collection ? `c:${collection}` : requestedTag ? `t:${requestedTag}` : null
   // A radical keeps the list to the records filed under its path: ?radical=儿兄克.
   const radical = searchParams.get('radical') || null
   // A decade keeps the list to the records first seen in it: ?decade=1930.
@@ -34,7 +35,7 @@ export const load: PageServerLoad = async (event) => {
     dealt.searchParams.set('seed', String(crypto.getRandomValues(new Uint32Array(1))[0]))
     redirect(302, `${dealt.pathname}${dealt.search}`)
   }
-  if (!listTag(script, filter) || facetTag(facet) === undefined || radicalTag(radical) === undefined || decadeTag(decade) === undefined || !markTags(within, without)) error(404)
+  if (!listTag(script, filter) || facetTag(rawFacet) === undefined || radicalTag(radical) === undefined || decadeTag(decade) === undefined || !markTags(within, without)) error(404)
   const exact = query.length <= SEARCH_LENGTH_MAX && exactSearchIds(query)
   const words = query.length <= SEARCH_LENGTH_MAX && !exact ? new Set(terms(query)) : new Set<string>()
   const searchError = query.length > SEARCH_LENGTH_MAX ? 'queryTooLong' : !exact && query && words.size === 0 ? 'noSearchTerms' : words.size > SEARCH_TERMS_MAX ? 'tooManyTerms' : null
@@ -42,14 +43,19 @@ export const load: PageServerLoad = async (event) => {
   // A record's code typed whole, R+0022 or 天天玄玄, opens the record it names.
   const coded = after === null ? parseRecordCode(query) : null
   // A merged record opens the one it was merged into, and neither may be hidden.
-  const named = coded ? await db.prepare('SELECT COALESCE(m.id, e.id) AS id FROM entries e LEFT JOIN entries m ON m.id = e.merged_into WHERE e.id = ? AND e.hidden_at IS NULL AND (e.merged_into IS NULL OR m.hidden_at IS NULL)').bind(coded).first<{ id: number }>() : null
+  const [tags, named] = await Promise.all([
+    tagList(db),
+    coded ? db.prepare('SELECT COALESCE(m.id, e.id) AS id FROM entries e LEFT JOIN entries m ON m.id = e.merged_into WHERE e.id = ? AND e.hidden_at IS NULL AND (e.merged_into IS NULL OR m.hidden_at IS NULL)').bind(coded).first<{ id: number }>() : null,
+  ])
+  const tag = requestedTag ? (tags.find(item => item.name === requestedTag || item.label === requestedTag)?.name ?? requestedTag) : null
+  const facet = collection ? `c:${collection}` : tag ? `t:${tag}` : null
   if (named) redirect(303, `/${event.params.locale}/entry/${named.id}`)
   // A whole description is also searched under the other spellings the browser found for it: ?also=, at most a few.
   const also = exact ? alsoSearchIds(query, searchParams.getAll('also')) : []
   const listing = { script, filter, facet, radical, decade, within, without, query, also, order, seed, after }
   // A search is counted on its first page; further pages are added to that one and keep its count.
-  const [page, totals, categories, total] = await Promise.all([searchError ? null : list(db, listing), counts(db), categoryList(db), searchError || after !== null ? null : searchTotal(db, listing)])
+  const [page, totals, total] = await Promise.all([searchError ? null : list(db, listing), counts(db), searchError || after !== null ? null : searchTotal(db, listing)])
   if (!page && !searchError) error(404)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, page?.tiles ?? [], event.locals.glyphStyle)
-  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, categories, total, glyphs, script, filter, genre, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
+  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, tags, total, glyphs, script, filter, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
 }
