@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { equivalentSpellings } from './ids-variants'
+import { equivalentSpellings, spellingGroups } from './ids-variants'
 
 const described = new Map([['𡕤', '⿱𡗗夂'], ['𡗗', '⿱丷⿻二人'], ['夂', '⿱𠂊㇏'], ['好', '⿰女子'], ['看', '⿱手目'], ['手', '⿱㇒⿻二亅'], ['明', '⿰日月']])
 const table = { described, encoded: new Map([...described].map(([char, ids]) => [ids, char])) }
@@ -61,4 +61,11 @@ test('a run folds into a character described with an IWDS-equivalent part, even 
   const found = equivalentSpellings('⿺⿱𡗗夂面', table, 16, false)
   expect(found.slice(0, 2)).toEqual(['⿺⿱𡗗夂面', '⿺𡕤面'])
   for (const spelling of found) expect(spelling).not.toMatch(/[攵文攴]/u)
+})
+
+test('descriptions of one form group, and the first in the group draws', () => {
+  const table = { encoded: new Map([['⿱𡗗夂', '𡕤']]), described: new Map([['𡕤', '⿱𡗗夂']]) }
+  const groups = spellingGroups([{ ids: '⿺⿱𡗗夂面', place: 1 }, { ids: '⿰木木', place: 2 }, { ids: '⿺𡕤面', place: 3 }], table)
+  expect(groups.map(group => group.map(form => form.place))).toEqual([[1, 3], [2]])
+  expect(spellingGroups([{ ids: '⿰木木' }], table)).toEqual([[{ ids: '⿰木木' }]])
 })

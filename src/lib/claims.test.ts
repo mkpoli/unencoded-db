@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { CLAIM_LIMITS, CLAIM_SCOPES_MAX, CLAIM_SIGHTINGS_MAX, claimsUnder, isClaimKey, mapSightings, newClaimKey, parseClaims, readClaims, scopesOf, splitCharacters, supportedBy, validClaim, type Claim } from './claims'
+import { CLAIM_LIMITS, CLAIM_SCOPES_MAX, CLAIM_SIGHTINGS_MAX, claimsUnder, idsForms, isClaimKey, mapSightings, newClaimKey, parseClaims, readClaims, scopesOf, splitCharacters, supportedBy, validClaim, type Claim } from './claims'
 import { cleanTag } from './tags'
 import { IDS_LENGTH_MAX, IDS_MAX } from './ids'
 
@@ -28,6 +28,12 @@ describe('descriptions', () => {
 
   test('a sequence past the length limit is refused', () => {
     expect(read([['ids', `⿰木${'木'.repeat(IDS_LENGTH_MAX)}`]])).toEqual({ error: 'ids' })
+  })
+
+  test('a record\'s forms keep one per normalized description, each with its own layout', () => {
+    const layout = { '0': [1, 0, 0, 1, 40, 0] }
+    const forms = idsForms(keyed([claim('ids', '⿰亻木'), claim('ids', '⿱日木', { layout }), claim('ids', '⿱日木', { layout })]))
+    expect(forms).toEqual([{ ids: '⿰亻木', layout: null }, { ids: '⿱日木', layout }])
   })
 
   test('a form without the field keeps the record\'s sequences', () => {
