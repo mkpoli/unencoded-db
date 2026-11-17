@@ -67,3 +67,24 @@ export function equivalentSpellings(ids: string, table: Table, limit = SPELLINGS
   }
   return found
 }
+
+/**
+ * The descriptions grouped by the form they name, in the order of each group's first description.
+ * A description spelled another way is drawn once, by the first in its group.
+ */
+export function spellingGroups<T extends { ids: string }>(forms: readonly T[], table: Table, mates = false): T[][] {
+  const parent = forms.map((_, index) => index)
+  const find = (index: number): number => parent[index] === index ? index : (parent[index] = find(parent[index]))
+  forms.forEach((form, index) => {
+    const found = new Set(equivalentSpellings(form.ids, table, Math.max(SPELLINGS_MAX, forms.length), mates))
+    for (let other = index + 1; other < forms.length; other++) if (found.has(forms[other].ids)) parent[find(other)] = find(index)
+  })
+  const groups = new Map<number, T[]>()
+  forms.forEach((form, index) => {
+    const root = find(index)
+    const group = groups.get(root)
+    if (group) group.push(form)
+    else groups.set(root, [form])
+  })
+  return [...groups.values()]
+}
