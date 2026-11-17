@@ -85,13 +85,13 @@ test('export gives every claim kind a column and the pictures a cell', async () 
     (1, 6, 'code0001', 'encoding', 'U+5D20', '{"charset":"unicode"}', '[]', '[]'),
     (1, 7, 'rela0001', 'relation', '崬', '{"relationship":"variant"}', '[1]', '["mean0001","read0001"]'), (1, 8, 'rela0002', 'relation', '堆', '{"relationship":"usage"}', '[]', '["mean0002"]'),
     (1, 9, 'rela0003', 'relation', '東', '{"relationship":"similar"}', '[]', '[]'),
-    (1, 10, 'genr0001', 'genre', 'hakka', NULL, '[]', '[]'), (1, 11, 'tag00001', 'tag', 'IRG', NULL, '[]', '[]')`)
+    (1, 10, 'genr0001', 'tag', 'hakka', NULL, '[]', '[]'), (1, 11, 'tag00001', 'tag', 'IRG', NULL, '[]', '[]')`)
   raw.exec("INSERT INTO sighting_media(sighting_id, position, image_key, image_type, image_w, image_h, thumb_key) SELECT id, p, k, 'image/png', 1, 1, k FROM sightings, (SELECT 0 AS p, 'one.png' AS k UNION SELECT 1, 'two.png') WHERE place = 'source 0'")
   const response = await exportGet({ url: new URL('https://example.test/api/entries?limit=2&format=csv'), platform: { env: { DB: db } } } as any)
   const [head, first] = (await response.text()).split('\r\n')
   const columns = head.split(',').map(column => column.slice(1, -1))
   const cells = first.split('","').map(cell => cell.replace(/^"|"$/g, ''))
-  for (const kind of ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'genre', 'collection', 'tag', 'images']) expect(columns).toContain(kind)
+  for (const kind of ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'collection', 'tag', 'images']) expect(columns).toContain(kind)
   const cell = (name: string) => cells[columns.indexOf(name)]
   expect(cell('ids')).toBe('⿰亻木; ⿱亻木')
   // A claim names what it holds under after its value, and the evidence rows it rests on by their id.
@@ -99,8 +99,7 @@ test('export gives every claim kind a column and the pictures a cell', async () 
   expect(cell('meaning')).toBe('east hill [evidence: #1 #2]; a pile')
   expect(cell('encoding')).toBe('unicode:U+5D20')
   expect(cell('relation')).toBe('崬 (variant) [under: east hill | hak:tung] [evidence: #1]; 堆 (usage) [under: a pile]; 東 (similar)')
-  expect(cell('genre')).toBe('hakka')
-  expect(cell('tag')).toBe('IRG')
+  expect(cell('tag')).toBe('hakka; IRG')
   expect(cell('images')).toBe('one.png; two.png')
 })
 

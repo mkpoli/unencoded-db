@@ -7,7 +7,7 @@ import { isDescription } from 'ids-input'
 import { newClaimKey } from '$lib/claims'
 import { parseRecordCode, recordCode } from '$lib/code'
 import { DOCULECTS } from '$lib/doculects'
-import { COLLECTIONS } from '$lib/genres'
+import { COLLECTIONS } from '$lib/tags'
 import { translate } from '$lib/i18n'
 import { cleanIds, IDS_LENGTH_MAX } from '$lib/ids'
 import { ADD_SIGHTINGS_MAX, BOXES_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
@@ -15,7 +15,7 @@ import { REGISTRIES } from '$lib/registries'
 import { RELATION_KINDS } from '$lib/related'
 import { CONTEXTS, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, STYLES, VIAS_MAX } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
-import { categoryList } from '$lib/server/categories'
+import { tagList } from '$lib/server/tags'
 import { addSighting, CITATION_FIELDS, createEntry, getEntry, hasLink, list, mediaVisible, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { MAX_WRITE_BODY } from '$lib/server/body-limit'
@@ -181,7 +181,7 @@ function sightingForm(input: Json) {
 
 // The record's own fields as /new sends them. A row of meanings, readings or related characters gets its
 // key here, so a later row can name it and each row can name the sightings behind it.
-function entryForm(input: Json, sightings: number, categories: readonly string[]) {
+function entryForm(input: Json, sightings: number, tags: readonly string[]) {
   const form = new FormData()
   if (text(input.script).trim()) form.set('script', text(input.script))
   for (const sequence of items(input.ids).map(text).map(cleanIds).filter(Boolean)) {
@@ -220,8 +220,8 @@ function entryForm(input: Json, sightings: number, categories: readonly string[]
   for (const encoding of encodings) { form.append('encoding_charset', text(encoding.charset)); form.append('encoding_code', text(encoding.code)) }
   const ivd = text(input.ivd).trim()
   if (ivd) { form.set('ivd_status', ivd === 'none' ? 'none' : 'registered'); if (ivd !== 'none') form.set('ivd_sequence', ivd) }
-  if (items(input.categories).length) form.set('genres_present', '1')
-  for (const slug of items(input.categories)) form.append('genre', choice(slug, categories, 'categories'))
+  if (items(input.categories).length) form.set('tags_present', '1')
+  for (const slug of items(input.categories)) form.append('tag', choice(slug, tags, 'categories'))
   if (items(input.collections).length) form.set('collections_present', '1')
   for (const slug of items(input.collections)) form.append('collection', choice(slug, COLLECTIONS.map(collection => collection.slug), 'collections'))
   for (const tag of items(input.tags)) form.append('tags', text(tag))
@@ -236,8 +236,8 @@ async function addRecord(event: RequestEvent, input: Json) {
   const inputs = items(input.sightings).map(record)
   if (!inputs.length) throw new Refusal('A record starts with at least one sighting.')
   if (inputs.length > ADD_SIGHTINGS_MAX) throw new Refusal(said('sightingsMax', { max: ADD_SIGHTINGS_MAX }))
-  const categories = await categoryList(env(event).DB)
-  const { fields: entry, error } = readEntryFields(entryForm(input, inputs.length, categories.map(category => category.name)), categories)
+  const tags = await tagList(env(event).DB)
+  const { fields: entry, error } = readEntryFields(entryForm(input, inputs.length, tags.map(tag => tag.name)), tags)
   if (error) throw new Refusal(said(error))
   const stated = inputs.map((sighting, index) => {
     const fields = readSightingFields(sightingForm(sighting))
@@ -438,9 +438,9 @@ const TOOLS: Tool[] = [
   },
 ]
 
-/** The tools, the categories a record can be filed under named in `add_record`'s schema. */
-export const toolList = (categories: readonly string[]) => TOOLS.map(({ run: _, ...tool }) => tool.name !== 'add_record' ? tool : {
-  ...tool, inputSchema: { ...tool.inputSchema, properties: { ...record(tool.inputSchema.properties), categories: { type: 'array', items: { type: 'string', enum: categories } } } },
+/** The tools, known tag names listed on `add_record`'s `categories` alias schema. */
+export const toolList = (tags: readonly string[]) => TOOLS.map(({ run: _, ...tool }) => tool.name !== 'add_record' ? tool : {
+  ...tool, inputSchema: { ...tool.inputSchema, properties: { ...record(tool.inputSchema.properties), categories: { type: 'array', items: { type: 'string', enum: tags } } } },
 })
 
 /** What a tool answers, or null for a name that is no tool. */

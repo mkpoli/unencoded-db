@@ -1,11 +1,13 @@
 <script lang="ts">
   // One choice among several that can be taken together: a native checkbox drawn as a pill.
-  let { name, value, label, checked = false, strong = false, onchange }: {
-    name?: string; value: string; label: string; checked?: boolean; strong?: boolean; onchange?: (checked: boolean) => void
+  import type { TagType } from '$lib/tags'
+
+  let { name, value, label, checked = false, strong = false, implied = false, tagType, onchange }: {
+    name?: string; value: string; label: string; checked?: boolean; strong?: boolean; implied?: boolean; tagType?: TagType; onchange?: (checked: boolean) => void
   } = $props()
 </script>
 
-<label class="pill" class:strong>
+<label class="pill" class:strong class:implied data-tag-type={tagType}>
   <input type="checkbox" {name} {value} {checked} onchange={event => onchange?.(event.currentTarget.checked)} />
   <span class="box" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 6.4 4.6 9 10.2 2.8" /></svg></span><span class="text" title={label}>{label}</span>
 </label>
@@ -18,8 +20,16 @@
   .box { display: grid; place-items: center; flex: none; width: 20px; height: 20px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface) }
   .box svg { width: 12px; height: 12px; opacity: 0; transition: opacity .12s ease }
   .text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-  .pill:has(input:checked) { border-color: var(--accent); background: var(--accent-light) }
-  .pill:has(input:checked) .box { border-color: var(--accent); background: var(--accent) }
+  .pill[data-tag-type=region] { --pill-ink: var(--tag-region-ink); --pill-bg: var(--tag-region-bg); --pill-line: var(--tag-region-line) }
+  .pill[data-tag-type=language] { --pill-ink: var(--tag-language-ink); --pill-bg: var(--tag-language-bg); --pill-line: var(--tag-language-line) }
+  .pill[data-tag-type=form] { --pill-ink: var(--tag-form-ink); --pill-bg: var(--tag-form-bg); --pill-line: var(--tag-form-line) }
+  .pill[data-tag-type=domain] { --pill-ink: var(--tag-domain-ink); --pill-bg: var(--tag-domain-bg); --pill-line: var(--tag-domain-line) }
+  .pill[data-tag-type=meta] { --pill-ink: var(--tag-meta-ink); --pill-bg: var(--tag-meta-bg); --pill-line: var(--tag-meta-line) }
+  .pill[data-tag-type=general] { --pill-ink: var(--accent); --pill-bg: var(--accent-light); --pill-line: var(--accent) }
+  .pill[data-tag-type]:not([data-tag-type=general]) { border-color: color-mix(in srgb, var(--pill-line) 55%, var(--line)) }
+  .pill.implied:not(:has(input:checked)) { border-style: dashed; border-color: var(--pill-line, var(--accent)); background: var(--pill-bg, var(--accent-light)); color: var(--pill-ink, var(--ink)) }
+  .pill:has(input:checked) { border-color: var(--pill-line, var(--accent)); background: var(--pill-bg, var(--accent-light)); color: var(--pill-ink, inherit) }
+  .pill:has(input:checked) .box { border-color: var(--pill-ink, var(--accent)); background: var(--pill-ink, var(--accent)) }
   .pill:has(input:checked) .box svg { opacity: 1 }
   .strong { font-weight: 500 }
   @media (prefers-reduced-motion: reduce) { .box svg { transition: none } }

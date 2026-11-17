@@ -6,12 +6,12 @@
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { registryLabel } from '$lib/registries'
-  import { COLLECTIONS } from '$lib/genres'
+  import { COLLECTIONS, type TagType } from '$lib/tags'
   import { parseSightingTypes } from '$lib/scripts'
   import { statusOf } from '$lib/status'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
   import { locale, t } from '$lib/t'
-  let { fields, sighting = false, labels = new Map() }: { fields: EntryFields | SightingFields; sighting?: boolean; labels?: ReadonlyMap<string, string> } = $props()
+  let { fields, sighting = false, labels = new Map(), tagTypes = new Map() }: { fields: EntryFields | SightingFields; sighting?: boolean; labels?: ReadonlyMap<string, string>; tagTypes?: ReadonlyMap<string, TagType> } = $props()
   const sourceFields = [
     { key: 'title', label: 'field.title' },
     { key: 'author', label: 'field.author' },
@@ -22,7 +22,7 @@
   ] as const
   const KIND_LABELS: Record<ClaimKind, `${string}.${string}`> = {
     ids: 'field.ids', composition: 'field.formation', reading: 'field.reading', meaning: 'field.meaning', encoding: 'field.encodings',
-    relation: 'field.relatedCharacters', ivd: 'field.ivd', genre: 'field.genre', collection: 'field.collection', tag: 'field.tags',
+    relation: 'field.relatedCharacters', ivd: 'field.ivd', collection: 'field.collection', tag: 'field.tags',
   }
   const WIDE: ClaimKind[] = ['reading', 'meaning', 'relation', 'composition']
   const at = locale()
@@ -31,9 +31,8 @@
     switch (claim.kind) {
       case 'encoding': return `${registryLabel(String(claim.data?.charset ?? ''))} ${claim.value}`
       case 'ivd': return claim.value === 'none' ? t('field.ivdNone') : claim.value
-      case 'genre': return labels.get(claim.value) ?? claim.value
       case 'collection': return COLLECTIONS.find(item => item.slug === claim.value)?.label ?? claim.value
-      case 'tag': return `#${claim.value}`
+      case 'tag': return labels.get(claim.value) ?? claim.value
       case 'reading': { const doculect = typeof claim.data?.doculect === 'string' ? claim.data.doculect : ''; const key = doculectKey(doculect); return doculect ? `${key ? t(key) : doculect} ${claim.value}` : claim.value }
       case 'composition': {
         const analysis = analyze(claim.value, compositionOf(claims))
@@ -79,7 +78,7 @@
       {#each CLAIM_KINDS.filter(kind => kind !== 'relation') as kind}
         {@const items = claimsOf(entry.claims, kind)}
         {#if items.length}
-          <div class:wide={WIDE.includes(kind)}><dt>{t(KIND_LABELS[kind])}</dt><dd><ul class="claims" class:ids={kind === 'ids'}>{#each items as claim (claim.key)}<li>{shown(claim, entry.claims)}{#if layoutOf(claim)}<span class="scope">{t('field.layoutAdjusted')}</span>{/if}{@render scopes(claim, entry.claims)}{@render bases(claim)}</li>{/each}</ul></dd></div>
+          <div class:wide={WIDE.includes(kind)}><dt>{t(KIND_LABELS[kind])}</dt><dd><ul class="claims" class:ids={kind === 'ids'}>{#each items as claim (claim.key)}<li>{#if kind === 'tag'}<span class="tag-chip" data-tag-type={tagTypes.get(claim.value) ?? 'general'}>{shown(claim, entry.claims)}</span>{:else}{shown(claim, entry.claims)}{/if}{#if layoutOf(claim)}<span class="scope">{t('field.layoutAdjusted')}</span>{/if}{@render scopes(claim, entry.claims)}{@render bases(claim)}</li>{/each}</ul></dd></div>
         {/if}
       {/each}
     </dl>

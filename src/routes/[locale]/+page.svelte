@@ -5,7 +5,7 @@
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
   import Tile from '$lib/components/Tile.svelte'
-  import { COLLECTIONS, arrangeGenres } from '$lib/genres'
+  import { COLLECTIONS, arrangeTagsByType } from '$lib/tags'
   import { MARKED } from '$lib/registries'
   import { ORDER, PAGE, SORTS } from '$lib/order'
   import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
@@ -18,7 +18,7 @@
   import { TILE_SIZE_COOKIE, TILE_SIZES, tileSizeOf } from '$lib/tile-size'
   import type { Snapshot } from './$types'
   let { data } = $props()
-  const { standalone, groups } = $derived(arrangeGenres(data.categories))
+  const tagGroups = $derived(arrangeTagsByType(data.tags))
   // Further pages are appended as the list nears its end. They belong to the listing they were read for,
   // and a new listing starts again from its own first page.
   type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: string | null; partial: boolean; total: typeof data.total; idle: number; scanned: number }
@@ -142,8 +142,9 @@
     }
     return [...byCentury]
   })
-  // A collection or a tag is chosen by following a link, and stays until it is cleared.
-  const pinned = $derived(data.genre ? null : data.collection ? { name: 'collection', value: data.collection, label: COLLECTIONS.find(item => item.slug === data.collection)?.label ?? data.collection } : data.tag ? { name: 'tag', value: data.tag, label: `#${data.tag}` } : null)
+  const knownTag = $derived(data.tag ? data.tags.find(item => item.name === data.tag) ?? null : null)
+  // A collection or an unlisted tag is chosen by following a link, and stays until it is cleared.
+  const pinned = $derived(data.collection ? { name: 'collection', value: data.collection, label: COLLECTIONS.find(item => item.slug === data.collection)?.label ?? data.collection } : data.tag && !knownTag ? { name: 'tag', value: data.tag, label: `#${data.tag}` } : null)
   const withFilter = (filter: string) => {
     const params = new URLSearchParams(page.url.searchParams)
     params.delete('after')
@@ -163,7 +164,7 @@
   }
   const unpinned = $derived.by(() => {
     const params = new URLSearchParams(page.url.searchParams)
-    for (const name of ['collection', 'tag', 'after']) params.delete(name)
+    for (const name of ['collection', 'tag', 'genre', 'after']) params.delete(name)
     return params.size ? `?${params}` : href()
   })
   const unfiled = $derived.by(() => {
@@ -186,10 +187,9 @@
     {#if pinned}
       <div class="field"><span class="label">{t(pinned.name === 'tag' ? 'field.tags' : 'field.collection')}</span><input type="hidden" name={pinned.name} value={pinned.value} /><a class="pinned" href={unpinned} aria-label="{pinned.label} ×">{pinned.label} <span aria-hidden="true">×</span></a></div>
     {:else}
-      <div class="field"><label for="genre">{t('field.genre')}</label><select class="input" id="genre" name="genre" value={data.genre ?? ''}>
+      <div class="field"><label for="tag">{t('field.tags')}</label><select class="input" id="tag" name="tag" value={data.tag ?? ''}>
         <option value="">{t('browse.all')}</option>
-        {#each standalone as genre (genre.value)}<option value={genre.value}>{genre.label} ({count(`g:${genre.value}`)})</option>{/each}
-        {#each groups as group (group.root.value)}<optgroup label={group.root.label}><option value={group.root.value}>{group.root.label} ({count(`g:${group.root.value}`)})</option>{#each group.rows as genre (genre.value)}<option value={genre.value}>{'\u00a0\u00a0'.repeat(genre.depth - 1)}{genre.label} ({count(`g:${genre.value}`)})</option>{/each}</optgroup>{/each}
+        {#each tagGroups as group (group.type)}<optgroup label={t(`tagType.${group.type}`)}>{#each group.tags as item (item.name)}<option value={item.name}>{item.label} ({item.n})</option>{/each}</optgroup>{/each}
       </select></div>
     {/if}
     <div class="field decade"><label for="decade">{t('browse.decadeLabel')}</label><select class="input" id="decade" name="decade" value={data.decade ?? ''}>
@@ -231,7 +231,7 @@
     {#if shown.tiles.length}
       <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
     {:else if !shown.partial || done}
-      <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.script || data.filter || data.genre || data.collection || data.tag || data.radical || data.decade || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
+      <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.script || data.filter || data.collection || data.tag || data.radical || data.decade || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
     {/if}
   {/if}
   {#if shown.next !== null && !done}<div class="ahead" bind:this={sentinel}>{#if shown.partial && shown.total}<p class="muted">{t('browse.searched', { n: Math.min(shown.scanned, shown.total.pool), of: shown.total.pool })}</p>{/if}{#if pagesLeft !== null}<p class="muted">{t(pagesLeft === 1 && !shown.total?.floor ? 'browse.pageLeft' : 'browse.pagesLeft', { n: `${pagesLeft}${shown.total?.floor ? '+' : ''}` })}</p>{/if}<a class="button" href={more} aria-busy={busy} onclick={appendOnClick}>{t(shown.partial ? 'browse.continueSearch' : 'browse.more')}</a></div>{/if}

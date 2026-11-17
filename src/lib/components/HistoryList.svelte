@@ -1,6 +1,6 @@
 <script lang="ts">
   import RevisionFields from './RevisionFields.svelte'
-  import { genreLabels, type Category } from '$lib/genres'
+  import { tagLabels, type Tag } from '$lib/tags'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
   import { href, t, when } from '$lib/t'
   import { recordCode } from '$lib/code'
@@ -12,10 +12,11 @@
     redacted?: boolean; redacted_at?: string | null
   }
 
-  let { rows, categories, currentRev = null, showEntry = false, showActor = true, restore = false, redact = false, empty, next = null }: {
-    rows: Row[]; categories: Pick<Category, 'name' | 'label'>[]; currentRev?: number | null; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; empty: string; next?: number | null
+  let { rows, tags, currentRev = null, showEntry = false, showActor = true, restore = false, redact = false, empty, next = null }: {
+    rows: Row[]; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; empty: string; next?: number | null
   } = $props()
-  const labels = $derived(genreLabels(categories))
+  const labels = $derived(tagLabels(tags))
+  const tagTypes = $derived(new Map(tags.map(tag => [tag.name, tag.type])))
 
   // The state a record or a sighting holds now stays; only a past one can be redacted.
   const past = (row: Row) => row.fields ? row.rev !== currentRev : row.sightingRev != null && row.rev !== row.sightingRev
@@ -50,7 +51,7 @@
         <details>
           <summary class="revision-row">{@render line(row)}</summary>
           <div class="revision-body">
-            {#if row.fields}<RevisionFields fields={row.fields} {labels} />{/if}
+            {#if row.fields}<RevisionFields fields={row.fields} {labels} {tagTypes} />{/if}
             {#if row.sightingFields}<RevisionFields fields={row.sightingFields} sighting />{/if}
             {#if restore}
               {#if row.fields && currentRev}

@@ -5,20 +5,20 @@
 // entry in this file and its form fields, and the database stays as it is.
 import { analyze, parseComposition, type Composition } from './composition'
 import { cleanCode, isRegistry, type Encoding } from './registries'
-import { cleanGenre, isCollection, validGenreName, type Category } from './genres'
+import { cleanTag, isCollection, validTagName, type Tag } from './tags'
 import { IDS_LENGTH_MAX, IDS_MAX, splitIds } from './ids'
 import { carryLayout, cleanLayout, validLayout, type Layout } from './layout'
 import { ivdSequence } from './ivd'
 import { cleanDoculect } from './doculects'
 import { isRelationKind } from './related'
 
-export const CLAIM_KINDS = ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'genre', 'collection', 'tag'] as const
+export const CLAIM_KINDS = ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'collection', 'tag'] as const
 export type ClaimKind = (typeof CLAIM_KINDS)[number]
 export type Claim = { key: string; kind: ClaimKind; value: string; data: Record<string, unknown> | null; sightings: number[]; under: string[] }
 
 /** The kinds of claim under which a claim of each kind may hold. A reading goes with a meaning; a related
  * character is related under a meaning, a reading or both. Every other kind states a fact of the whole record. */
-export const SCOPES: Record<ClaimKind, readonly ClaimKind[]> = { ids: [], composition: [], reading: ['meaning'], meaning: [], encoding: [], relation: ['meaning', 'reading'], ivd: [], genre: [], collection: [], tag: [] }
+export const SCOPES: Record<ClaimKind, readonly ClaimKind[]> = { ids: [], composition: [], reading: ['meaning'], meaning: [], encoding: [], relation: ['meaning', 'reading'], ivd: [], collection: [], tag: [] }
 /** How many sightings one claim names, and how many claims it holds under. */
 export const CLAIM_SIGHTINGS_MAX = 20
 export const CLAIM_SCOPES_MAX = 20
@@ -37,7 +37,6 @@ export const CLAIM_LIMITS: Record<ClaimKind, { max: number; length: number }> = 
   encoding: { max: 20, length: 80 },
   relation: { max: 50, length: 80 },
   ivd: { max: 1, length: 80 },
-  genre: { max: 30, length: 40 },
   collection: { max: 10, length: 40 },
   tag: { max: 30, length: 40 },
 }
@@ -86,9 +85,8 @@ export function validClaim(claim: unknown): claim is Claim {
     case 'encoding': return Boolean(data && typeof data.charset === 'string' && data.charset.length > 0 && data.charset.length <= 40)
     case 'relation': return Boolean(data && isRelationKind(data.relationship) && short(data.difference ?? '', 5000) && short(data.evidence ?? '', 5000))
     case 'ivd': return value === 'none' || ivdSequence(value) === value
-    case 'genre': return validGenreName(value)
     case 'collection': return isCollection(value)
-    case 'tag': return !/[\s,，、|]/u.test(value)
+    case 'tag': return validTagName(value)
     case 'reading': return data === null || (Object.keys(data).length === 1 && cleanDoculect(data.doculect) === data.doculect)
     default: return true
   }
@@ -98,8 +96,21 @@ export function validClaim(claim: unknown): claim is Claim {
 export function parseClaims(raw: unknown): Claim[] | null {
   let value = raw
   if (typeof raw === 'string') { try { value = JSON.parse(raw) } catch { return null } }
-  if (!Array.isArray(value) || value.length > CLAIMS_MAX || !value.every(validClaim)) return null
-  const claims = value.map(claim => one(claim.kind, claim.value, claim.data ?? null, { key: claim.key, sightings: [...claim.sightings], under: [...claim.under] }))
+  if (!Array.isArray(value) || value.length > CLAIMS_MAX) return null
+  // Older snapshots stored categories as `genre` claims; fold them into unified `tag` claims.
+  const seenTags = new Set<string>()
+  const normalized = value.flatMap(item => {
+    if (!plain(item)) return [item]
+    if ((item.kind === 'genre' || item.kind === 'tag') && typeof item.value === 'string') {
+      const cleaned = item.kind === 'tag' ? item.value.replace(/^#+/, '') : item.value
+      if (seenTags.has(cleaned)) return []
+      seenTags.add(cleaned)
+      return [{ ...item, kind: 'tag', value: cleaned }]
+    }
+    return [item]
+  })
+  if (!normalized.every(validClaim)) return null
+  const claims = normalized.map(claim => one(claim.kind, claim.value, claim.data ?? null, { key: claim.key, sightings: [...claim.sightings], under: [...claim.under] }))
   // A key names one claim, and a claim holds only under claims of the same list whose kind can be its scope.
   const kinds = new Map(claims.map(claim => [claim.key, claim.kind]))
   if (kinds.size !== claims.length) return null
@@ -169,10 +180,10 @@ const identity = (kind: ClaimKind, value: string, data: Claim['data']) => CLAIM_
 
 /**
  * The claims a form submits, over the ones the record holds for the groups the form leaves out. With
- * an error, the claims are a draft to show again and not to store. A category is named by its name or its
- * label among `categories`.
+ * an error, the claims are a draft to show again and not to store. A tag is named by its canonical name
+ * or display label among `tags`.
  */
-export function readClaims(form: FormData, categories: readonly Pick<Category, 'name' | 'label'>[], base: readonly Claim[] = []): { claims: Claim[]; error: ClaimError | null } {
+export function readClaims(form: FormData, tags: readonly Pick<Tag, 'name' | 'label'>[], base: readonly Claim[] = []): { claims: Claim[]; error: ClaimError | null } {
   const next = new Map<ClaimKind, Claim[]>()
   let error: ClaimError | null = null
   const fail = (code: ClaimError) => { error ??= code }
@@ -282,19 +293,33 @@ export function readClaims(form: FormData, categories: readonly Pick<Category, '
     next.set('ivd', status === 'none' ? [made('ivd', 'none')] : canonical ? [made('ivd', canonical)] : sequence ? [made('ivd', sequence)] : [])
   }
 
-  if (form.has('genres_present')) {
-    const chosen = new Set(form.getAll('genre').map(value => cleanGenre(clean(value), categories)))
-    next.set('genre', [...chosen].filter(slug => slug !== null).slice(0, CLAIM_LIMITS.genre.max).map(slug => made('genre', slug)))
-  }
   if (form.has('collections_present')) {
     const chosen = new Set(form.getAll('collection').map(clean))
     next.set('collection', [...chosen].filter(isCollection).map(slug => made('collection', slug)))
   }
 
-  if (form.has('tags')) {
-    const tags = [...new Set(form.getAll('tags').flatMap(value => clean(value).split(/[\s,，、|]+/u)).map(tag => tag.replace(/^#/, '')).filter(Boolean))]
-    if (tags.length > CLAIM_LIMITS.tag.max || tags.some(tag => tag.length > CLAIM_LIMITS.tag.length)) fail('tags')
-    next.set('tag', tags.map(tag => made('tag', tag)))
+  if (form.has('tags_present') || form.has('tag') || form.has('tags') || form.has('genres_present') || form.has('genre')) {
+    const chosen = new Set<string>()
+    for (const raw of [...form.getAll('tag'), ...form.getAll('genre')]) {
+      const name = cleanTag(clean(raw), tags)
+      if (name) chosen.add(name)
+    }
+    const typed = form.getAll('tags').flatMap(value => clean(value).split(/[\s,，、|]+/u)).map(token => token.replace(/^#+/, '').trim()).filter(Boolean)
+    let bad = false
+    const draftTokens: string[] = []
+    for (const token of typed) {
+      const name = cleanTag(token, tags)
+      if (!name) bad = true
+      else chosen.add(name)
+      draftTokens.push(name ?? token)
+    }
+    const combined = [...chosen]
+    if (bad || combined.length > CLAIM_LIMITS.tag.max) {
+      fail('tags')
+      next.set('tag', [...new Set([...chosen, ...draftTokens])].slice(0, CLAIM_LIMITS.tag.max).map(tag => draft('tag', tag, null)))
+    } else {
+      next.set('tag', combined.map(tag => made('tag', tag)))
+    }
   }
 
   // A claim holds under claims that are still stated. One that was stated, in the record or in a row of

@@ -21,17 +21,17 @@ function open() {
 }
 
 describe('claims', () => {
-  test('a record keeps several descriptions, codes and categories, and is found by each', async () => {
+  test('a record keeps several descriptions, codes and tags, and is found by each', async () => {
     const { db } = open()
-    const claims = [claim('ids', '⿰山東'), claim('ids', '⿰山东'), claim('encoding', 'U+5D20', { charset: 'unicode' }), claim('genre', 'hakka'), claim('tag', 'IRG')]
+    const claims = [claim('ids', '⿰山東'), claim('ids', '⿰山东'), claim('encoding', 'U+5D20', { charset: 'unicode' }), claim('tag', 'hakka'), claim('tag', 'IRG')]
     const id = await createEntry(db, fields(claims), seen(), [], who)
     const found = await getEntry(db, id)
     expect(found!.entry.ids).toBe('⿰山東')
     expect(found!.claims).toEqual(claims)
     expect((await claimedBy(db, 'ids', '⿰山东')).map(row => row.id)).toEqual([id])
     expect((await claimedBy(db, 'encoding', 'U+5D20')).map(row => row.id)).toEqual([id])
-    for (const facet of ['g:hakka', 'g:dialect', 't:IRG']) expect((await list(db, { script: 'han', facet }))!.tiles.map(tile => tile.id)).toEqual([id])
-    expect((await list(db, { script: 'han', facet: 'g:music' }))!.tiles).toEqual([])
+    for (const facet of ['t:hakka', 't:dialect', 't:IRG']) expect((await list(db, { script: 'han', facet }))!.tiles.map(tile => tile.id)).toEqual([id])
+    expect((await list(db, { script: 'han', facet: 't:music' }))!.tiles).toEqual([])
     expect((await list(db, { script: 'han', query: '⿰山东' }))!.tiles.map(tile => tile.id)).toEqual([id])
   })
 
@@ -118,10 +118,10 @@ describe('claims', () => {
   })
 
   test('a form replaces only the groups it carries', () => {
-    const base = [claim('ids', '⿰山東'), claim('genre', 'hakka'), claim('reading', 'tung')]
+    const base = [claim('ids', '⿰山東'), claim('tag', 'hakka'), claim('reading', 'tung')]
     const form = new FormData()
     form.set('ids', '⿰山东, ⿰山東')
-    form.set('genres_present', '1')
+    form.set('tags_present', '1')
     const read = readClaims(form, [], base)
     expect(read.claims.map(item => [item.kind, item.value])).toEqual([['ids', '⿰山东'], ['ids', '⿰山東'], ['reading', 'tung']])
     expect(read.claims.slice(1)).toEqual([base[0], base[2]])

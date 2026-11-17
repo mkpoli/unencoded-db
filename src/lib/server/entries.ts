@@ -10,8 +10,8 @@ import { statusOf } from '$lib/status'
 import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, readClaims, valuesOf, type Claim, type ClaimError } from '$lib/claims'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
-import { FILE_ROWS, ensureCategories, filedUnder } from './categories'
-import type { Category } from '$lib/genres'
+import { FILE_ROWS, ensureTags, filedUnder } from './tags'
+import type { Tag } from '$lib/tags'
 import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
@@ -80,11 +80,11 @@ function readVias(form: FormData): Citation[] {
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
 const now = () => new Date().toISOString()
 
-export function readEntryFields(form: FormData, categories: readonly Pick<Category, 'name' | 'label'>[], base?: Partial<EntryFields>): { fields: EntryFields; error: ClaimError | null } {
+export function readEntryFields(form: FormData, tags: readonly Pick<Tag, 'name' | 'label'>[], base?: Partial<EntryFields>): { fields: EntryFields; error: ClaimError | null } {
   const named = form.has('script') ? resolveScript(String(form.get('script'))) : { script: base?.script ?? 'han', script_other: base?.script_other ?? null }
   const strokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
   const field = (name: 'description' | 'radical', max: number) => form.has(name) ? text(form, name, max) : base?.[name] ?? null
-  const read = readClaims(form, categories, base?.claims)
+  const read = readClaims(form, tags, base?.claims)
   return {
     error: read.error,
     fields: {
@@ -160,8 +160,8 @@ export function parseMarks(raw: string | null | undefined): string[] {
 }
 
 type TagInput = Pick<Entry, 'script' | 'status' | 'description' | 'script_other'>
-// A record's category rows (`g:`) are written by `genreRows` from the categories as its batch finds them, and
-// are left out here.
+// A record's tag rows (`t:`) are written by `tagRows` from the tags and implications as its batch finds
+// them, and are left out here.
 export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key' | 'radical' | 'first_year'>, hasSource: boolean, claims: readonly Claim[] = []) {
   const filters = entry.status ? [`f:${entry.status}`] : []
   if (!entry.cover_key) filters.push('n:image')
@@ -170,7 +170,6 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   const own = new Set<string>()
   for (const claim of claims) {
     if (claim.kind === 'collection') own.add(`c:${claim.value}`)
-    else if (claim.kind === 'tag') own.add(`t:${claim.value}`)
   }
   // A record is counted in or out of every marked work, so a list of either is one range.
   const held = marksHeld(claims)
@@ -262,20 +261,20 @@ function summarize(sightings: SightingState[]) {
 
 const tagsOf = (entry: Entry, claims: readonly Claim[], summary: ReturnType<typeof summarize>) =>
   [...facetTags({ ...entry, status: statusOf(claims), ids: primaryIdsOf(claims), cover_key: summary.cover_key, first_year: summary.first_year }, summary.hasSource, claims), ...wordTags(entry, claims, summary.visible), ...partTags(claims)]
-const GENRE_ROWS = "tag >= 'g:' AND tag < 'g;'"
+const TAG_ROWS = "tag >= 't:' AND tag < 't;'"
 /**
- * A record's category rows, written again from its claims, from whether it is live and from the categories,
- * all as the batch that runs these statements finds them, so neither a category moved nor a claim written
- * meanwhile leaves them behind. They go after the record's claims and summary in the batch. `owner` is as
- * for `owned`.
+ * A record's tag rows, written again from its claims, from whether it is live and from the tag
+ * implications, all as the batch that runs these statements finds them, so neither an implication moved
+ * nor a claim written meanwhile leaves them behind. They go after the record's claims and summary in
+ * the batch. `owner` is as for `owned`.
  */
-function genreRows(db: D1Database, owner: number | string) {
+function tagRows(db: D1Database, owner: number | string) {
   const { sql, values } = owned(owner)
   return [
-    db.prepare(`UPDATE tag_counts SET n = n - 1 WHERE tag IN (SELECT tag FROM entry_tags WHERE entry_id = ${sql} AND ${GENRE_ROWS})`).bind(...values),
-    db.prepare(`DELETE FROM entry_tags WHERE entry_id = ${sql} AND ${GENRE_ROWS}`).bind(...values),
+    db.prepare(`UPDATE tag_counts SET n = n - 1 WHERE tag IN (SELECT tag FROM entry_tags WHERE entry_id = ${sql} AND ${TAG_ROWS})`).bind(...values),
+    db.prepare(`DELETE FROM entry_tags WHERE entry_id = ${sql} AND ${TAG_ROWS}`).bind(...values),
     db.prepare(`WITH RECURSIVE ${filedUnder(`= ${sql}`)} ${FILE_ROWS} WHERE e.merged_into IS NULL AND e.hidden_at IS NULL`).bind(...values),
-    db.prepare(`INSERT INTO tag_counts(tag, n) SELECT tag, 1 FROM entry_tags WHERE entry_id = ${sql} AND ${GENRE_ROWS} ON CONFLICT(tag) DO UPDATE SET n = n + 1`).bind(...values),
+    db.prepare(`INSERT INTO tag_counts(tag, n) SELECT tag, 1 FROM entry_tags WHERE entry_id = ${sql} AND ${TAG_ROWS} ON CONFLICT(tag) DO UPDATE SET n = n + 1`).bind(...values),
   ]
 }
 // Word and part rows are looked up by key and are no list of their own: they keep no count, year or tag count.
@@ -292,7 +291,7 @@ async function reindex(db: D1Database, id: number, entry: Entry, claims: readonl
   const summary = summarize(sightings)
   const live = !entry.merged_into && !entry.hidden_at
   const next = live ? tagsOf(entry, claims, summary) : []
-  const { results } = await db.prepare(`SELECT tag FROM entry_tags WHERE entry_id = ? AND NOT (${GENRE_ROWS})`).bind(id).all<{ tag: string }>()
+  const { results } = await db.prepare(`SELECT tag FROM entry_tags WHERE entry_id = ? AND NOT (${TAG_ROWS})`).bind(id).all<{ tag: string }>()
   const current = new Set(results.map(row => row.tag)), wanted = new Set(next)
   const gone = [...current].filter(tag => !wanted.has(tag)), added = [...wanted].filter(tag => !current.has(tag))
   return [
@@ -303,7 +302,7 @@ async function reindex(db: D1Database, id: number, entry: Entry, claims: readonl
     db.prepare("UPDATE entry_tags SET sightings = ?1, year = ?2 WHERE entry_id = ?3 AND (sightings != ?1 OR year IS NOT ?2) AND tag NOT GLOB '[wp]:*'").bind(summary.visible.length, yearOf(summary.first_year), id),
     db.prepare('UPDATE tag_counts SET n = n - 1 WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(gone.filter(facet))),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(added.filter(facet))),
-    ...genreRows(db, id),
+    ...tagRows(db, id),
   ]
 }
 
@@ -396,7 +395,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
   const claims = mapSightings(fields.claims, place => Number.isInteger(place) && place >= 1 && place <= drafts.length ? place : null)
   const sources = await Promise.all(drafts.map(draft => sourceOf(db, draft.fields)))
   const summary = summarize(drafts.map(draft => ({ ...draft.fields, media: draft.media })))
-  await ensureCategories(db, valuesOf(claims, 'genre'), who)
+  await ensureTags(db, valuesOf(claims, 'tag'), who)
   const tags = [...new Set(tagsOf({ ...fields, merged_into: null, hidden_at: null } as unknown as Entry, claims, summary))]
   // AUTOINCREMENT sequences are read inside the same transaction as the inserts.
   const results = await db.batch<{ id: number }>([
@@ -418,7 +417,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
     db.prepare(`UPDATE entries SET ${SUMMARY_SET} WHERE id = ${ENTRY_SEQ}`).bind(...summaryValues(claims, summary)),
     db.prepare(`INSERT INTO entry_tags(tag, entry_id, sightings, year) SELECT value, ${ENTRY_SEQ}, CASE WHEN value GLOB '[wp]:*' THEN 0 ELSE ? END, CASE WHEN value GLOB '[wp]:*' THEN NULL ELSE ? END FROM json_each(?)`).bind(summary.visible.length, yearOf(summary.first_year), JSON.stringify(tags)),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),
-    ...genreRows(db, ENTRY_SEQ),
+    ...tagRows(db, ENTRY_SEQ),
     recount(db, ENTRY_SEQ),
   ])
   return results[0].results[0].id
@@ -437,7 +436,7 @@ const checkChanged = (db: D1Database, id: number, who: Who) => db.prepare(`INSER
 const redacted = async (db: D1Database, from: number | null) => from !== null && Boolean(await db.prepare('SELECT 1 FROM revisions WHERE id = ? AND redacted_at IS NOT NULL').bind(from).first())
 
 export async function editEntry(db: D1Database, id: number, baseRev: number, fields: EntryFields, who: Who, summary: string | null, kind: 'edit' | 'revert' = 'edit', from: number | null = null): Promise<EditResult> {
-  await ensureCategories(db, valuesOf(fields.claims, 'genre'), who)
+  await ensureTags(db, valuesOf(fields.claims, 'tag'), who)
   for (let attempt = 0; ; attempt++) {
     const mark = await revisionMark(db, id)
     if (await redacted(db, from)) return { ok: false, code: 'missing' }
@@ -765,10 +764,10 @@ export function listTag(script?: string | null, filter?: string | null) {
   return script && f ? `s:${script}|${f}` : script ? `s:${script}` : f ?? 'all'
 }
 
-// A category (`g:`), a collection (`c:`) or a tag (`t:`), as the key it is listed under.
+// A collection (`c:`) or a tag (`t:`), as the key it is listed under.
 export function facetTag(facet?: string | null) {
   if (!facet) return null
-  const match = /^([gct]):([^|\s]{1,40})$/u.exec(facet.normalize('NFC'))
+  const match = /^([ct]):([^|\s]{1,40})$/u.exec(facet.normalize('NFC'))
   return match ? `${match[1]}:${match[2]}` : undefined
 }
 
