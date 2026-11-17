@@ -3,6 +3,7 @@
 /* One-glyph subsets for the style switch's 永; the full faces stay out of the page. */
 @font-face { font-family: "Zhuque Specimen"; src: url("/fonts/specimen-zhuque.woff2") format("woff2"); font-display: swap; unicode-range: U+6C38 }
 @font-face { font-family: "Kureedo Specimen"; src: url("/fonts/specimen-kureedo.woff2") format("woff2"); font-display: swap; unicode-range: U+6C38 }
+@font-face { font-family: "TW-Kai Specimen"; src: url("/fonts/specimen-tw-kai.woff2") format("woff2"); font-display: swap; unicode-range: U+6C38 }
 
 /* The palette and the shapes of Glyph Atlas, whose collection this site adds to. Evidence images are shown as
    they are in either scheme. */
