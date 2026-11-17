@@ -11,6 +11,6 @@ export const load: PageServerLoad = async (event) => {
   const cursor = after === null ? null : parseSourceCursor(sort, after)
   if (after !== null && !cursor) error(404)
   const page = await sourceList(env(event).DB, sort, cursor)
-  const glyphs = await tileGlyphs(event.platform, event.url.origin, page.sources.flatMap(source => source.tiles))
+  const glyphs = await tileGlyphs(event.platform, event.url.origin, page.sources.flatMap(source => source.tiles), event.locals.glyphStyle)
   return { ...page, sort, glyphs }
 }
