@@ -1,5 +1,5 @@
 // The composer exports, one per style of glyph; each folder is versioned, so a new export gets a new name.
-export const GLYPH_STYLES = ['sans', 'serif', 'regular', 'fangsong', 'pen-writing'] as const
+export const GLYPH_STYLES = ['sans', 'serif', 'fangsong', 'regular', 'pen-writing'] as const
 export type GlyphStyle = (typeof GLYPH_STYLES)[number]
 export const GLYPH_STYLE: GlyphStyle = 'sans'
 // The style a reader draws in, kept in a cookie so the server draws tiles in it too.
