@@ -1,4 +1,6 @@
 // The composer exports, one per style of glyph; each folder is versioned, so a new export gets a new name.
+import packageJson from '../../package.json'
+
 export const GLYPH_STYLES = ['sans', 'serif', 'fangsong', 'regular', 'pen-writing'] as const
 export type GlyphStyle = (typeof GLYPH_STYLES)[number]
 export const GLYPH_STYLE: GlyphStyle = 'sans'
@@ -13,5 +15,10 @@ const VERSIONS: Record<GlyphStyle, string> = {
   'pen-writing': 'b53713c2da0e-kaisho-compose-layout-v4-kaisho-f7+kin',
 }
 export const composerVersion = (style: GlyphStyle) => VERSIONS[style]
+// The code draws the glyph too, so a new pin gives its drawings a new address even when the export
+// stays the same.
+const pin = packageJson.dependencies['han-compose']
+export const composerRevision = pin.includes('#') ? pin.slice(pin.lastIndexOf('#') + 1).slice(0, 12) : 'head'
+export const composerDrawing = (style: GlyphStyle) => `${VERSIONS[style]}-${composerRevision}`
 export const composerUrl = (style: GlyphStyle) => `https://ids-input-composer.mkpoli.workers.dev/${VERSIONS[style]}`
 export const glyphStyleOf = (value: string | null | undefined): GlyphStyle => (GLYPH_STYLES as readonly string[]).includes(value ?? '') ? value as GlyphStyle : GLYPH_STYLE

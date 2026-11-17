@@ -6,7 +6,7 @@ import { compose, sketch } from 'han-compose/loader'
 import { onlyBundled } from 'han-compose/local'
 import { exportSource, sourceFor, traitKey, traitsOf } from 'han-compose/source'
 import { layerFrames, renderScopes, scopesMarkup } from 'ids-input/document'
-import { composerUrl, composerVersion, GLYPH_STYLE, type GlyphStyle } from '$lib/composer'
+import { composerDrawing, composerUrl, composerVersion, GLYPH_STYLE, type GlyphStyle } from '$lib/composer'
 import { composerData } from '$lib/composer-data'
 import { cleanIds } from '$lib/ids'
 import { cleanLayout, layoutText } from '$lib/layout'
@@ -20,7 +20,7 @@ export type Glyph = { ids: string | null; layout?: string | null }
 
 // Each style's export and drawings have their own folders, named by the export's version.
 const folderOf = (style: GlyphStyle) => `composer/${composerVersion(style)}`
-const drawingsOf = (style: GlyphStyle) => `glyphs/${composerVersion(style)}`
+const drawingsOf = (style: GlyphStyle) => `glyphs/${composerDrawing(style)}`
 const IMMUTABLE = 'public, max-age=31536000, immutable'
 
 const sources = new WeakMap<Bucket, Map<string, Source>>()
