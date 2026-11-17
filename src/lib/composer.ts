@@ -8,7 +8,7 @@ export const GLYPH_STYLE_COOKIE = 'ug.glyph'
 const VERSIONS: Record<GlyphStyle, string> = {
   sans: '0bd3ee83a5e2-sans-compose-layout-v4-f7+kin',
   serif: '8156f838798c-serif-compose-layout-v4-serif-f7+variants',
-  regular: 'f87b0f71228e-regular-compose-layout-v4-regular-f7',
+  regular: 'c14ee5e08798-regular-compose-layout-v4-regular-f7',
   fangsong: 'b53713c2da0e-fangsong-compose-layout-v4-fangsong-f7+kin',
   'pen-writing': 'b53713c2da0e-kaisho-compose-layout-v4-kaisho-f7+kin',
 }
