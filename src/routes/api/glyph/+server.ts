@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit'
 import { isDescription } from 'ids-input'
-import { glyphStyleOf } from '$lib/composer'
+import { composerVersion, glyphStyleOf } from '$lib/composer'
 import { cleanIds } from '$lib/ids'
 import { cleanLayout, layoutText } from '$lib/layout'
 import { env } from '$lib/server/guard'
@@ -14,6 +14,9 @@ export const GET: RequestHandler = async (event) => {
   const raw = event.url.searchParams.get('ids') ?? '', given = event.url.searchParams.get('layout') ?? ''
   const asked = event.url.searchParams.get('style'), style = glyphStyleOf(asked)
   if (asked !== null && asked !== style) return new Response(null, { status: 404 })
+  // The address names the export, and the answer is cached for a year: a drawing made by another
+  // export must not answer for this one, and the old address must not keep drawing after a new export.
+  if (event.url.searchParams.get('v') !== composerVersion(style)) return new Response(null, { status: 404 })
   const ids = cleanIds(raw)
   if (raw.length > 200 || given.length > 8000 || [...ids].length < 2 || !isDescription(ids)) return new Response(null, { status: 404 })
   const layout = layoutText(cleanLayout(given, ids)) || null
