@@ -1,12 +1,18 @@
 @import 'ids-input/fonts.css';
 
+/* One-glyph subsets for the style switch's 永; the full faces stay out of the page. */
+@font-face { font-family: "Zhuque Specimen"; src: url("/fonts/specimen-zhuque.woff2") format("woff2"); font-display: swap; unicode-range: U+6C38 }
+@font-face { font-family: "Kureedo Specimen"; src: url("/fonts/specimen-kureedo.woff2") format("woff2"); font-display: swap; unicode-range: U+6C38 }
+
 /* The palette and the shapes of Glyph Atlas, whose collection this site adds to. Evidence images are shown as
    they are in either scheme. */
 :root {
   color-scheme: light dark;
   /* Han text takes the shapes of the language it is written in, so each language names its own CJK fonts
-     first; the stack is declared again on every `[lang]` element, so a part marked as another language takes its fonts. */
+     first; the stack is declared again on every `[lang]` element, so a part marked as another language takes its fonts.
+     The serif stack serves the type specimens and serif faces. */
   --cjk: "Noto Sans CJK JP", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "PingFang SC", "Microsoft YaHei";
+  --cjk-serif: "Noto Serif CJK JP", "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
   font-synthesis: none;
   color: var(--ink);
   background: var(--paper);
@@ -35,10 +41,10 @@
   --page-gutter: 56px;
   --tile-size: 145px;
 }
-:lang(zh-Hans) { --cjk: "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei" }
-:lang(zh-Hant) { --cjk: "Noto Sans CJK TC", "Noto Sans TC", "Source Han Sans TC", "PingFang TC", "Microsoft JhengHei" }
-:lang(ko) { --cjk: "Noto Sans CJK KR", "Noto Sans KR", "Source Han Sans K", "Apple SD Gothic Neo", "Malgun Gothic" }
-:lang(ja) { --cjk: "Noto Sans CJK JP", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo" }
+:lang(zh-Hans) { --cjk: "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei"; --cjk-serif: "Noto Serif CJK SC", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif }
+:lang(zh-Hant) { --cjk: "Noto Sans CJK TC", "Noto Sans TC", "Source Han Sans TC", "PingFang TC", "Microsoft JhengHei"; --cjk-serif: "Noto Serif CJK TC", "Noto Serif TC", "Source Han Serif TC", "Songti TC", "PMingLiU", serif }
+:lang(ko) { --cjk: "Noto Sans CJK KR", "Noto Sans KR", "Source Han Sans K", "Apple SD Gothic Neo", "Malgun Gothic"; --cjk-serif: "Noto Serif CJK KR", "Noto Serif KR", "Source Han Serif K", "Nanum Myeongjo", "Batang", serif }
+:lang(ja) { --cjk: "Noto Sans CJK JP", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo"; --cjk-serif: "Noto Serif CJK JP", "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif }
 :root, [lang] { font-family: Inter, "Helvetica Neue", Arial, "Noto Sans", "IDS Numbered", "IDS Strokes", "IDS Parts", "IDS Operators", var(--cjk), "Noto Serif Tangut", "IDS Tangut", "IDS Jurchen", "IDS Shuishu", sans-serif }
 :root[data-tile-size="48"] { --tile-size: 48px }
 :root[data-tile-size="64"] { --tile-size: 64px }

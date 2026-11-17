@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import { afterNavigate, goto, preloadData } from '$app/navigation'
+  import { afterNavigate, goto, invalidateAll, preloadData } from '$app/navigation'
   import { browser } from '$app/environment'
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
@@ -14,6 +14,8 @@
   import { equivalentSpellings } from '$lib/ids-variants'
   import { isDescription } from 'ids-input'
   import ChatLinks from '$lib/components/ChatLinks.svelte'
+  import GlyphStyleTabs from '$lib/components/GlyphStyleTabs.svelte'
+  import { GLYPH_STYLE_COOKIE, type GlyphStyle } from '$lib/composer'
   import { href, t } from '$lib/t'
   import { TILE_SIZE_COOKIE, TILE_SIZES, tileSizeOf } from '$lib/tile-size'
   import type { Snapshot } from './$types'
@@ -110,6 +112,17 @@
   // The reader's tile width, set on the document so the server-drawn list and a moved slider agree.
   // The document holds the width last chosen in this tab; the layout's data holds the one the first page was drawn at.
   let tileSize = $state(tileSizeOf(browser ? document.documentElement.dataset.tileSize : String(page.data.tileSize)))
+  // The display setting answers at once while the server reads the page again and draws its glyphs in the new style.
+  // The choice stays until the page it drew holds it, so a failed read leaves the tab and the cookie in step.
+  let shownStyle = $state<GlyphStyle | null>(null)
+  const glyphStyle = $derived(shownStyle ?? data.glyphStyle)
+  $effect(() => { if (shownStyle !== null && data.glyphStyle === shownStyle) shownStyle = null })
+  async function setGlyphStyle(style: GlyphStyle) {
+    if (style === glyphStyle) return
+    shownStyle = style
+    document.cookie = `${GLYPH_STYLE_COOKIE}=${style};path=/;max-age=31536000;samesite=lax`
+    try { await invalidateAll() } catch { /* the next page reads the choice from the cookie */ }
+  }
   function sizeTiles(index: number) {
     tileSize = TILE_SIZES[index] ?? tileSize
     document.cookie = `${TILE_SIZE_COOKIE}=${tileSize};path=/;max-age=31536000;samesite=lax`
@@ -202,7 +215,13 @@
     {#each data.within as id}<input type="hidden" name="in" value={id} />{/each}{#each data.without as id}<input type="hidden" name="out" value={id} />{/each}
     <button class="button" type="submit">{t('browse.filter')}</button>
   </form>
-  <p class="hint" id="search-hint">{t('browse.idsHint')}</p>
+  <div class="filter-foot">
+    <p class="hint" id="search-hint">{t('browse.idsHint')}</p>
+    <div class="glyph-setting">
+      <span class="glyph-setting-label" aria-hidden="true">{t('nav.glyphStyle')}</span>
+      <GlyphStyleTabs value={glyphStyle} onchange={setGlyphStyle} />
+    </div>
+  </div>
   <div class="bar">
   <nav class="states" aria-label={t('field.status')}>
     <a class="chip" class:on={!data.filter} href={withFilter('')}>{t('browse.all')} <span class="n">{count('all')}</span></a>
@@ -240,6 +259,10 @@
   /* The list loads on as it scrolls, so its footer is out of reach; the chats sit under the heading. */
   .chats { margin:0; font-size:12.5px; color:var(--muted) }
   .heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:start; gap:20px }
+  .filter-foot { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 16px }
+  .filter-foot .hint { margin:0 }
+  .glyph-setting { display:flex; align-items:center; gap:8px; min-width:0 }
+  .glyph-setting-label { flex:none; font-size:11px; font-weight:500; color:var(--muted) }
   .intro { gap:8px; max-width:720px }
   .filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:16px; border:1px solid var(--line); border-radius:9px; background:var(--surface) }
   .filters .field { flex:1 1 140px } .filters .search { flex:2 1 220px } .filters .radical { flex:0 1 120px } .filters .decade { flex:1 1 140px }
@@ -263,4 +286,5 @@
   .also ul { display:flex; flex-wrap:wrap; gap:4px 12px; margin:6px 0 0; padding:0; list-style:none; overflow-wrap:anywhere }
   .ahead { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px }
   .empty { padding:48px 16px; text-align:center; color:var(--muted) } .empty a { display:inline-block; margin-top:12px; color:var(--ink) }
+  @media (max-width: 520px) { .glyph-setting-label { display:none } .glyph-setting { width:100% } }
 </style>
