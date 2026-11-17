@@ -3,7 +3,7 @@
 // place, so `han-compose` resolves as it does from npm. ids-input imports the same engine as
 // `@han-compose/composer`, so that name links to the installed package.
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 
 const modules = join(process.cwd(), 'node_modules')
@@ -11,7 +11,11 @@ const root = join(modules, 'han-compose')
 const alias = join(modules, '@han-compose', 'composer')
 
 const linkAlias = () => {
-  if (existsSync(alias)) return
+  try {
+    lstatSync(alias)
+    if (existsSync(alias)) return
+    unlinkSync(alias)
+  } catch { /* no link yet */ }
   mkdirSync(join(modules, '@han-compose'), { recursive: true })
   symlinkSync(root, alias, 'junction')
 }
