@@ -1,11 +1,11 @@
 # ids-input third-party notices
 
-This notice covers the installed `ids-input` revision `3e0c0e0f`, its imported data and the fonts referenced by its stylesheet, and the installed `han-compose` revision `deb6a8f` with the outlines it carries. The [upstream data notes](data/README.md), [font notes](fonts/README.md), and license files alongside them give the source notices. Some links in those copied notes refer to files in the upstream package.
+This notice covers the installed `ids-input` revision `41ad005b`, its imported data and the fonts referenced by its stylesheet, and the installed `han-compose` revision `79f8cde` with the outlines it carries. The [upstream data notes](data/README.md), [font notes](fonts/README.md), and license files alongside them give the source notices. Some links in those copied notes refer to files in the upstream package.
 
 ## Code and data
 
 - `ids-input` code: Copyright (c) 2026 mkpoli, [MIT license](LICENSE). Data and fonts have separate terms.
-- `han-compose` code: Copyright (c) 2026 mkpoli, [MIT license](https://github.com/mkpoli/han-compose/blob/deb6a8f/js/LICENSE). The app serves its bundled script outlines from `src/lib/composer-data.ts`; their sources and terms are in the [upstream data notes](https://github.com/mkpoli/han-compose/blob/deb6a8f/data/README.md) and the [font notices](fonts/README.md).
+- `han-compose` code: Copyright (c) 2026 mkpoli, [MIT license](https://github.com/mkpoli/han-compose/blob/79f8cde/js/LICENSE). The app serves its bundled script outlines from `src/lib/composer-data.ts`; their sources and terms are in the [upstream data notes](https://github.com/mkpoli/han-compose/blob/79f8cde/data/README.md) and the [font notices](fonts/README.md).
 - BabelStone IDS by Andrew West: the upstream notes describe its IDS data as public domain; the source is [IDS.TXT](https://www.babelstone.co.uk/CJK/IDS.TXT). The installed data also includes BabelStone Tangut IDS.
 - `ids-parts.json`: the first-stroke column derives from [Rime's five-stroke dictionary](https://github.com/rime/rime-stroke), attributed to 四季的風, 雪齋, Kunki Chou and 宋天. It is LGPL-3.0; the [author notice](data/licences/rime-stroke-AUTHORS.txt), [LGPL](data/licences/rime-stroke-LGPL-3.0.txt) and [GPL](data/licences/GPL-3.0.txt) texts are included. Other palette sources include BabelStone, Henry Chan's MIT-licensed [ids](https://github.com/hfhchan/ids), and Unihan under [Unicode License v3](data/licences/Unicode-3.0.txt).
 - Component forms derive from [han-compose](https://github.com/mkpoli/han-compose) (MIT), Unicode's EquivalentUnifiedIdeograph data (Unicode License v3), and [cjkvi-variants](https://github.com/cjkvi/cjkvi-variants) (public domain), according to the data notes.
@@ -20,7 +20,8 @@ The names below identify upstream font sources and the modified or subset faces 
 - Plangothic parts, project and Gongche subsets: Fitzgerald P. Köeingsegg, [SIL OFL 1.1](fonts/OFL-Plangothic.txt).
 - Jigmo operator subset and fallback glyphs: Koichi Kamichi and GlyphWiki contributors, [CC0 1.0](fonts/LICENSE-Jigmo.txt).
 - BabelStone Han PUA numbered-component subset by Andrew West: [Arphic Public License](fonts/LICENSE-BabelStoneHanPUA.txt).
-- Kureedo and its label subset: The Klee Project Authors and The Kureedo Project Authors, [SIL OFL 1.1](fonts/OFL-Kureedo.txt). GenZui Sans: [copyright notices and SIL OFL 1.1](fonts/OFL-GenZuiSans.txt).
+- TW-Kai and its label subset: 數位發展部 (Ministry of Digital Affairs), CNS11643中文標準交換碼全字庫, fonts version 11510.1, [Open Government Data License 1.0](fonts/LICENSE-OGL.txt). The Regular Kai face draws from it.
+- Kureedo and its label subset: The Klee Project Authors and The Kureedo Project Authors, [SIL OFL 1.1](fonts/OFL-Kureedo.txt). GenZui Sans: [copyright notices and SIL OFL 1.1](fonts/OFL-GenZuiSans.txt). The Wen Kai face draws from them.
 - Noto Serif Tangut: Copyright 2021 Google LLC, [SIL OFL 1.1](fonts/OFL-NotoSerifTangut.txt).
 - IDS Seal is derived from Kaiyuan Small Seal by Kaiyuan Small Seal Font Contributors. Its [license](fonts/LICENSE-IDSSeal.txt) bears an OFL 1.1 heading but differs from the standard OFL conditions; consult its text.
 - IDS New Korean derives from four drawings by [Nanuun-saram](https://commons.wikimedia.org/wiki/User:Nanuun-saram), converted into a font and assigned proposed positions. The [attribution notice](fonts/LICENSE-IDSNewKorean.txt) links each drawing and the proposal; the drawings and derivative are [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
