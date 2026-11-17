@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "han-compose": "github:mkpoli/han-compose#79f8cde1d5e1",
-    "ids-input": "github:mkpoli/ids-input#41ad005b846b",
+    "ids-input": "github:mkpoli/ids-input#0374e932e996",
     "jose": "^6.2.15"
   }
 }
