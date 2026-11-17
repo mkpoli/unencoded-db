@@ -153,3 +153,43 @@ test('sign-in started from the consent page of agent sign-in returns to it', asy
   await expect(started(page)).rejects.toMatchObject({ status: 303, location: page })
   await expect(started('https://evil.example/ja/oauth/authorize?x')).rejects.toMatchObject({ status: 303, location: '/ja/me' })
 })
+
+test('signing in with Glyph Atlas brings an anonymous browser’s favourites along', async () => {
+  const { db, raw } = openTestDb()
+  const kept = await createPerson(db, 'atlas-user', 'Kept')
+  raw.exec(`INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES
+    (1, 'han', '${kept.id}', '2026', '2026'),
+    (2, 'han', '${kept.id}', '2026', '2026'),
+    (3, 'han', '${kept.id}', '2026', '2026');
+    INSERT INTO favourites(person, entry_id, at) VALUES ('${kept.id}', 1, 10), ('${kept.id}', 2, 10);`)
+
+  const anon = await createPerson(db, null, 'anon-123456')
+  const anonToken = await startSession(db, anon.id)
+  raw.exec(`INSERT INTO favourites(person, entry_id, at) VALUES ('${anon.id}', 2, 20), ('${anon.id}', 3, 20);`)
+
+  const jar = new Map([[SESSION_COOKIE, anonToken]])
+  const cookies = { get: (k: string) => jar.get(k), set: (k: string, v: string) => jar.set(k, v), delete: (k: string) => jar.delete(k) }
+  const env = { DB: db, ATLAS_ISSUER: issuer, ATLAS_CLIENT_ID: 'client', ATLAS_CLIENT_SECRET: 'secret' }
+  const event = (url: string, person: unknown) => ({ url: new URL(url), cookies, platform: { env }, locals: { person }, request: new Request(url) }) as any
+  const { privateKey, publicKey } = await generateKeyPair('RS256', { extractable: true })
+  const jwk = { ...await exportJWK(publicKey), kid: 'one', alg: 'RS256' }
+  let nonce = ''
+  globalThis.fetch = (async (input: any) => {
+    const url = String(input)
+    if (url.endsWith('openid-configuration')) return Response.json(discovery)
+    if (url === discovery.jwks_uri) return Response.json({ keys: [jwk] })
+    return Response.json({ id_token: await new SignJWT({ nonce, name: 'Kept' }).setProtectedHeader({ alg: 'RS256', kid: 'one' }).setIssuer(issuer).setAudience('client').setSubject('atlas-user').setIssuedAt().setExpirationTime('5m').sign(privateKey) })
+  }) as unknown as typeof fetch
+
+  let target = ''
+  try { await signIn(event('https://db.test/auth/sign-in?locale=en', anon)) } catch (e: any) { target = e.location }
+  const auth = new URL(target)
+  nonce = auth.searchParams.get('nonce')!
+  await expect(callback(event(`https://db.test/auth/callback?state=${auth.searchParams.get('state')}&code=good`, anon))).rejects.toMatchObject({ status: 303, location: '/en/me' })
+
+  expect(raw.query('SELECT person, entry_id, at FROM favourites ORDER BY entry_id').all()).toEqual([
+    { person: kept.id, entry_id: 1, at: 10 },
+    { person: kept.id, entry_id: 2, at: 10 },
+    { person: kept.id, entry_id: 3, at: 20 },
+  ])
+})

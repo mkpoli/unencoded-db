@@ -5,11 +5,13 @@
   import { GLYPH_STYLE_COOKIE, GLYPH_STYLES, type GlyphStyle } from '$lib/composer'
   import { LOCALES, LOCALE_NAMES, LOCALE_COOKIE } from '$lib/i18n'
   import { href, locale, t } from '$lib/t'
+  import { syncFavourites } from '$lib/favourites.svelte'
   import ChatLinks from '$lib/components/ChatLinks.svelte'
   let { data, children } = $props()
 
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
-  const section = $derived(path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/categories') ? 'categories' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
+  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/categories') ? 'categories' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
+  $effect(() => { syncFavourites(data.person?.id ?? null, data.favourites) })
   let menu = $state<HTMLDetailsElement>()
   const remember = (tag: string) => { document.cookie = `${LOCALE_COOKIE}=${tag};path=/;max-age=31536000;samesite=lax`; if (menu) menu.open = false }
   function setTheme(theme: string) {
@@ -53,6 +55,9 @@
     <details class="menu" bind:this={menu}>
       <summary class="button" aria-label={t('nav.menu')}>⋯</summary>
       <div class="menu-body">
+        <div class="menu-group">
+          <a href={href('/favourites')} class:on={section === 'favourites'} onclick={() => { if (menu) menu.open = false }}>{t('favourites.title')}</a>
+        </div>
         <div class="menu-group">
           <span class="menu-label">{t('nav.language')}</span>
           {#each LOCALES as tag}<a href="/{tag}{path}{page.url.search}" class:on={tag === locale()} lang={tag} data-sveltekit-reload onclick={() => remember(tag)}>{LOCALE_NAMES[tag]}</a>{/each}

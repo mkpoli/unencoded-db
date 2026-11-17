@@ -484,5 +484,13 @@
   "error.categoryChange": "이 변경은 저장할 수 없습니다.",
   "error.categoryExists": "이미 있는 분류입니다.",
   "error.categoryConflict": "다른 사람이 먼저 이 분류를 바꿨습니다.",
-  "error.categoryTooLarge": "한 번에 옮기기에는 기록이 너무 많습니다."
+  "error.categoryTooLarge": "한 번에 옮기기에는 기록이 너무 많습니다.",
+  "favourites.title": "즐겨찾기",
+  "favourites.add": "즐겨찾기에 추가",
+  "favourites.remove": "즐겨찾기에서 삭제",
+  "favourites.count.one": "기록 {count}건",
+  "favourites.count.other": "기록 {count}건",
+  "favourites.empty": "아직 즐겨찾기가 없습니다.",
+  "favourites.hint": "기록 페이지에서 별 모양 버튼을 누르면 여기에 모아 볼 수 있습니다.",
+  "favourites.more": "더 보기"
 }

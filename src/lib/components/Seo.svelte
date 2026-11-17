@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state'
   import { t } from '$lib/t'
-  let { title, description, image }: { title?: string; description?: string; image?: string | null } = $props()
+  let { title, description, image, index = true }: { title?: string; description?: string; image?: string | null; index?: boolean } = $props()
   const full = $derived(title ? `${title} · ${t('app.name')}` : `${t('app.name')} · ${t('app.tagline')}`)
   const text = $derived(description ?? t('app.description'))
 </script>
@@ -13,5 +13,6 @@
   <meta property="og:site_name" content={t('app.name')} />
   <meta property="og:description" content={text} />
   <meta property="og:type" content="website" />
+  {#if !index}<meta name="robots" content="noindex" />{/if}
   {#if image}<meta property="og:image" content={new URL(image, page.url).href} />{/if}
 </svelte:head>

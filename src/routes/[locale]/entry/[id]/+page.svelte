@@ -11,6 +11,7 @@
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
   import CopyButton from '$lib/components/CopyButton.svelte'
   import EditLink from '$lib/components/EditLink.svelte'
+  import FavouriteButton from '$lib/components/FavouriteButton.svelte'
   import { characterLinks, descriptionLinks } from '$lib/links'
   import { cleanIds, encodedCharacter } from '$lib/ids'
   import { describedTable } from '$lib/encoded'
@@ -117,6 +118,8 @@
   const at = locale()
 
   let preparing = $state<string | null>(null)
+  let favError = $state('')
+  $effect(() => { void entry.id; favError = '' })
   async function download(sighting: Sighting, picture: StoredImage, position: number) {
     preparing = picture.image_key
     try {
@@ -134,7 +137,8 @@
 <Seo title={`${recordCode(entry.id)} ${recordName(entry.id)}`} image={entry.cover_key ? media(entry.cover_key) : null} />
 <div class="page narrow stack">
   <div class="row"><a class="text-link back" href={href()}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
-  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: data.earliest.year })}</a>{/if}</div></div></div>
+  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: data.earliest.year })}</a>{/if}</div></div><FavouriteButton id={entry.id} initial={data.favourites.includes(entry.id)} onerror={message => favError = message} /></div>
+  {#if favError}<p class="notice bad" role="alert">{favError}</p>{/if}
   {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
   {#if entry.merged_into}<p class="notice quiet"><a class="text-link" href={href(`/entry/${entry.merged_into}`)}>{t('entry.mergedInto', { id: recordCode(entry.merged_into) })}</a></p>{/if}
   <section class="panel stack">
@@ -274,6 +278,7 @@
   </section>
 </div>
 <style>
+  .heading { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px 16px }
   .head { display:flex; align-items:center; justify-content:space-between; gap:12px }
   .line { display:flex; align-items:flex-start; gap:6px } .line .description { margin:0; min-width:0 }
   .senses { position:relative; display:flex; flex-direction:column; gap:8px } .senses > .pen { position:absolute; inset-block-start:-2px; inset-inline-end:0 }

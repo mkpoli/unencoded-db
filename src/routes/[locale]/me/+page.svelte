@@ -9,7 +9,7 @@
   <h1>{t('me.title')}</h1>
   {#if data.person}
     <p>{t('me.intro')}</p>
-    <div><a class="button" href={href(`/u/${data.person.id}`)}>{t('me.contributions')}</a></div>
+    <div class="row"><a class="button" href={href(`/u/${data.person.id}`)}>{t('me.contributions')}</a><a class="button" href={href('/favourites')}>{t('favourites.title')}</a></div>
     <form method="POST" class="stack">
       <div class="field"><label for="name">{t('me.name')}</label><input class="input" id="name" name="name" value={data.person.name} required maxlength="40" /></div>
       {#if form?.error}<p class="notice bad">{t(`error.${form.error}`)}</p>{/if}

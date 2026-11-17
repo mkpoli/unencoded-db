@@ -484,5 +484,13 @@
   "error.categoryChange": "That change could not be saved.",
   "error.categoryExists": "That category already exists.",
   "error.categoryConflict": "Someone changed these categories first.",
-  "error.categoryTooLarge": "Too many records to move at once."
+  "error.categoryTooLarge": "Too many records to move at once.",
+  "favourites.title": "Favourites",
+  "favourites.add": "Add to favourites",
+  "favourites.remove": "Remove from favourites",
+  "favourites.count.one": "{count} record",
+  "favourites.count.other": "{count} records",
+  "favourites.empty": "No favourites yet.",
+  "favourites.hint": "Star a record on its page to keep it here.",
+  "favourites.more": "Show more"
 }

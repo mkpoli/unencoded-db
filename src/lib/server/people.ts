@@ -135,6 +135,10 @@ export async function joinAtlas(db: D1Database, current: Person | null, sub: str
       ...finish(current.id, id),
     ])
     if (!result.results.length) throw new Error('Identity changed during sign-in')
+    await db.batch([
+      db.prepare('INSERT OR IGNORE INTO favourites(person, entry_id, at) SELECT ?, entry_id, at FROM favourites WHERE person = ?').bind(id, current.id),
+      db.prepare('DELETE FROM favourites WHERE person = ?').bind(current.id),
+    ])
   }
   return id
 }
