@@ -10,7 +10,7 @@
   let { data, children } = $props()
 
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
-  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
+  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
   $effect(() => { syncFavourites(data.person?.id ?? null, data.favourites) })
   let compact = $state(true)
   let navLinks = $state<HTMLDivElement>()
@@ -69,6 +69,7 @@
     </button>
     <div class="site-links" id="site-links" bind:this={navLinks} popover={compact ? 'auto' : undefined} onbeforetoggle={placeNavigation}>
       <a class:active={section === 'browse'} aria-current={section === 'browse' ? 'page' : undefined} href={href()}>{t('nav.browse')}</a>
+      <a class:active={section === 'fonts'} aria-current={section === 'fonts' ? 'page' : undefined} href={href('/fonts')}>{t('nav.fonts')}</a>
       <a class:active={section === 'radicals'} aria-current={section === 'radicals' ? 'page' : undefined} href={href('/radicals')}>{t('nav.radicals')}</a>
       <a class:active={section === 'tags'} aria-current={section === 'tags' ? 'page' : undefined} href={href('/tags')}>{t('nav.tags')}</a>
       <a class:active={section === 'chronology'} aria-current={section === 'chronology' ? 'page' : undefined} href={href('/chronology')}>{t('nav.chronology')}</a>
