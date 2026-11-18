@@ -4,12 +4,14 @@
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
-  import { href, t, when } from '$lib/t'
+  import { href, locale, t, when } from '$lib/t'
   import { recordCode } from '$lib/code'
   import { pictureAlt } from '$lib/picture'
+  import { sourceData } from '$lib/structured-data'
   let { data, form } = $props()
   const source = $derived(data.source)
   const heading = $derived(source.title || source.url || t('source.title'))
+  const structured = $derived(sourceData({ locale: locale(), source, name: heading, siteName: t('app.name'), sourcesName: t('nav.sources') }))
   const facts = [
     { key: 'title', label: 'field.title' },
     { key: 'author', label: 'field.author' },
@@ -25,7 +27,7 @@
   const records = $derived(new Set(data.sightings.map(sighting => sighting.entry_id)).size)
 </script>
 
-<Seo title={heading} description={[t('source.title'), heading, source.author, source.publisher, source.report_date].filter(Boolean).join(' · ')}
+<Seo data={structured} title={heading} description={[t('source.title'), heading, source.author, source.publisher, source.report_date].filter(Boolean).join(' · ')}
   image={href(`/source/${source.id}/card.png?v=${encodeURIComponent(artwork.slice(0, 16))}`)} imageAlt={heading} />
 <div class="page narrow stack">
   <a class="text-link back" href={href('/sources')}>← {t('nav.sources')}</a>

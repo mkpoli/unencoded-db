@@ -36,6 +36,7 @@
   import { CHECKS, readiness } from '$lib/readiness'
   import { parseSightingTypes, scriptName } from '$lib/scripts'
   import { snippet } from '$lib/seo'
+  import { recordData } from '$lib/structured-data'
   import type { Sighting, StoredImage } from '$lib/server/entries'
   import { href, locale, media, t, day } from '$lib/t'
   import { recordCode, recordName } from '$lib/code'
@@ -131,6 +132,9 @@
     entry.status && t(`status.${entry.status}`),
     entry.description || entry.cover_place,
   ].filter(Boolean).join(' · '))
+  const cover = $derived(data.sightings.find(sighting => sighting.media.length)?.media[0])
+  const sources = $derived(data.sightings.filter(sighting => sighting.source_id !== null).map(sighting => ({ ...sighting, id: sighting.source_id! })))
+  const structured = $derived(recordData({ locale: locale(), id: entry.id, name: seoTitle, description: seoDescription, siteName: t('app.name'), image: cover && media(cover.image_key), sources }))
   const marks = $derived(marksOf(encodings))
   const tagsByName = $derived(tagLookup(data.tags))
   const labels = $derived(tagLabels(data.tags))
@@ -167,7 +171,7 @@
 </script>
 
 <svelte:window onclick={edit} />
-<Seo title={seoTitle} description={seoDescription} image={href(`/entry/${entry.id}/card.png?v=${encodeURIComponent(entry.updated_at)}`)} imageAlt={seoTitle} />
+<Seo data={structured} title={seoTitle} description={seoDescription} image={href(`/entry/${entry.id}/card.png?v=${encodeURIComponent(entry.updated_at)}`)} imageAlt={seoTitle} />
 <div class="page narrow stack">
   <div class="row"><a class="text-link back" href={href()}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
   <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: data.earliest.year })}</a>{/if}</div></div><div class="row"><ShareRecord id={entry.id} /><FavouriteButton id={entry.id} initial={data.favourites.includes(entry.id)} onerror={message => favError = message} /></div></div>
