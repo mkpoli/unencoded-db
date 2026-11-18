@@ -9,7 +9,7 @@ import { layerFrames, renderScopes, scopesMarkup } from 'ids-input/document'
 import { composerDrawing, composerUrl, composerVersion, GLYPH_STYLE, type GlyphStyle } from '$lib/composer'
 import { composerData } from '$lib/composer-data'
 import { cleanIds } from '$lib/ids'
-import { cleanLayout, layoutText } from '$lib/layout'
+import { cleanLayout, cleanMatrices, layoutForStyle, layoutText } from '$lib/layout'
 import { layoutDocument } from '$lib/layout-document'
 import { hashHex } from './image'
 
@@ -94,9 +94,9 @@ function sourceOf(bucket: Bucket, sequence: string, context: Context, separate =
 }
 
 /** What tells one drawing from another: the description, and its layout when it has one. */
-export function glyphName(glyph: Glyph) {
+export function glyphName(glyph: Glyph, style: GlyphStyle = GLYPH_STYLE) {
   const ids = cleanIds(glyph.ids ?? '')
-  const layout = ids ? layoutText(cleanLayout(glyph.layout, ids)) : ''
+  const layout = ids ? layoutText(layoutForStyle(cleanLayout(glyph.layout, ids), style)) : ''
   return layout ? `${ids}\n${layout}` : ids
 }
 
@@ -109,7 +109,7 @@ async function read(bucket: Bucket, name: string, style: GlyphStyle) {
 // composer cannot tell apart, which is then drawn as it stands; a drawing that failed is thrown, so
 // that nothing is kept in its place.
 async function adjusted(from: Source, ids: string, layout: string, name: string, style: GlyphStyle) {
-  const document = layoutDocument(ids, cleanLayout(layout, ids))
+  const document = layoutDocument(ids, cleanMatrices(layout, ids))
   if (!document) return null
   const drawn = await compose(from, ids, { separate: true, fontStyle: style })
   const leaves = await sketch(from, ids, { fontStyle: style })
@@ -121,7 +121,7 @@ async function adjusted(from: Source, ids: string, layout: string, name: string,
 }
 
 export function drawGlyph(bucket: Bucket, glyph: Glyph, context: Context = {}): Promise<string | null> {
-  const name = glyphName(glyph), style = context.style ?? GLYPH_STYLE
+  const style = context.style ?? GLYPH_STYLE, name = glyphName(glyph, style)
   if (!name) return Promise.resolve(null)
   const task = `${style}\n${name}`
   let run = pending.get(task)
@@ -146,7 +146,7 @@ export function drawGlyph(bucket: Bucket, glyph: Glyph, context: Context = {}): 
 
 // The drawings a page already has, by `glyphName`. A glyph without one keeps its description until it is drawn.
 export async function glyphPaths(bucket: Bucket | undefined, glyphs: Glyph[], style: GlyphStyle = GLYPH_STYLE) {
-  const wanted = [...new Set(glyphs.map(glyphName).filter(Boolean))]
+  const wanted = [...new Set(glyphs.map(glyph => glyphName(glyph, style)).filter(Boolean))]
   const paths: Record<string, string> = {}
   if (!bucket?.get) return paths
   await Promise.all(wanted.map(async name => {
@@ -175,7 +175,7 @@ export async function tileGlyphs(platform: App.Platform | undefined, origin: str
   const bucket = platform?.env?.MEDIA
   const shown = tiles.filter(tile => tile.ids)
   const paths = await glyphPaths(bucket, shown, style)
-  const missing = new Map(shown.map(tile => [glyphName(tile), tile]).filter(([name]) => !paths[name as string]) as [string, Glyph][])
+  const missing = new Map(shown.map(tile => [glyphName(tile, style), tile]).filter(([name]) => !paths[name as string]) as [string, Glyph][])
   if (missing.size) platform?.ctx?.waitUntil(warmGlyphs(bucket, [...missing.values()], { assets: platform?.env?.ASSETS, origin, style }))
-  return Object.fromEntries(shown.flatMap(tile => { const path = paths[glyphName(tile)]; return path ? [[tile.id, path]] : [] })) as Record<number, string>
+  return Object.fromEntries(shown.flatMap(tile => { const path = paths[glyphName(tile, style)]; return path ? [[tile.id, path]] : [] })) as Record<number, string>
 }
