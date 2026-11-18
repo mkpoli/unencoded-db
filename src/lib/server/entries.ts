@@ -15,6 +15,8 @@ import type { Tag } from '$lib/tags'
 import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
+import { dateText } from '$lib/dates'
+import { datedYear, readDates, sightingDates, type DateBook } from './date-readings'
 import { hashHex } from './image'
 import { ORDER, PAGE, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
 
@@ -74,7 +76,7 @@ function readVias(form: FormData): Citation[] {
     title: clean(columns[1][index], 300),
     author: clean(columns[2][index], 300),
     publisher: clean(columns[3][index], 300),
-    report_date: clean(columns[4][index], 40),
+    report_date: dateText(columns[4][index]),
   })))
 }
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
@@ -108,9 +110,9 @@ export function readSightingFields(form: FormData): SightingFields {
     title: text(form, 'title', 300),
     author: text(form, 'author', 300),
     publisher: text(form, 'publisher', 300),
-    report_date: text(form, 'report_date', 40),
+    report_date: dateText(form.get('report_date')),
     vias: readVias(form),
-    original_date: text(form, 'original_date', 40),
+    original_date: dateText(form.get('original_date')),
     page: text(form, 'page', 80),
     context: oneOf(text(form, 'context', 20), CONTEXTS),
     style: oneOf(text(form, 'style', 20), STYLES),
@@ -203,28 +205,22 @@ function partTags(claims: readonly Claim[]) {
   return [...new Set(claims.filter(claim => claim.kind === 'ids').flatMap(claim => partsOf(claim.value)))].map(part => `p:${part}`)
 }
 
-// A date is free text, so the first four- or three-digit run is read as the year and the rest is left alone.
-function firstYear(value: string | null) {
-  const match = value?.match(/\d{3,4}/)
-  return match ? { text: match[0], n: Number(match[0]) } : null
-}
-
 // The year a list is read by: a record's first year as a number, which keeps no leading zero.
 const yearOf = (text: string | null) => text === null ? null : Number(text)
 
 // A sighting's year: the work's own date when it is the earlier, else the date it was reported.
-function sightingYear(sighting: Pick<SightingFields, 'report_date' | 'original_date'>) {
-  const report = firstYear(sighting.report_date), original = firstYear(sighting.original_date)
+function sightingYear(sighting: Pick<SightingFields, 'report_date' | 'original_date'>, dates: DateBook) {
+  const report = datedYear(sighting.report_date, dates), original = datedYear(sighting.original_date, dates)
   return original && (!report || original.n <= report.n) ? { ...original, kind: 'original' as const } : report ? { ...report, kind: 'report' as const } : null
 }
 
 // The earliest attestation among visible sightings, and the sighting that holds it: the first added
 // of those that share its year.
-export function earliestSighting<T extends Pick<SightingFields, 'report_date' | 'original_date'> & { id?: number; hidden_at?: string | null }>(sightings: T[]) {
+export function earliestSighting<T extends Pick<SightingFields, 'report_date' | 'original_date'> & { id?: number; hidden_at?: string | null }>(sightings: T[], dates: DateBook = new Map()) {
   let found: { text: string; n: number; kind: YearKind; sighting: T } | null = null
   for (const sighting of sightings) {
     if (sighting.hidden_at) continue
-    const year = sightingYear(sighting)
+    const year = sightingYear(sighting, dates)
     if (year && (!found || year.n < found.n)) found = { ...year, sighting }
   }
   return found
@@ -235,12 +231,12 @@ type SightingState = SightingFields & { media?: StoredImage[]; hidden_at?: strin
 // What a tile shows of a record, read from its visible sightings: the cover, where it was seen, which
 // source types it has and the earliest year among them. An older work in a recent post dates the
 // sighting, not the post.
-function summarize(sightings: SightingState[]) {
+function summarize(sightings: SightingState[], dates: DateBook) {
   const visible = sightings.filter(sighting => !sighting.hidden_at)
   const cover = visible.find(sighting => sighting.media?.length)
   const types = new Set<SightingType>()
   for (const sighting of visible) for (const type of parseSightingTypes(sighting.types)) types.add(type)
-  const year = earliestSighting(visible)
+  const year = earliestSighting(visible, dates)
   const added = visible.filter(sighting => !(sighting as { id?: number }).id)
   const held = (year?.sighting as { id?: number } | undefined)?.id
   // The sighting that holds the year: a stored one by its id, or one this write inserts, by how many of
@@ -288,7 +284,7 @@ const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summ
 // Brings a record's tags, counts and summary up to date. It answers the statements, to run with the
 // write they belong to.
 async function reindex(db: D1Database, id: number, entry: Entry, claims: readonly Claim[], sightings: SightingState[]) {
-  const summary = summarize(sightings)
+  const summary = summarize(sightings, await readDates(db, sightingDates(sightings)))
   const live = !entry.merged_into && !entry.hidden_at
   const next = live ? tagsOf(entry, claims, summary) : []
   const { results } = await db.prepare(`SELECT tag FROM entry_tags WHERE entry_id = ? AND NOT (${TAG_ROWS})`).bind(id).all<{ tag: string }>()
@@ -339,15 +335,15 @@ const CITED_IN_SNAPSHOT = `UPDATE revisions SET snapshot = json_set(snapshot, '$
 
 // The citation is the source's identity: the same five fields are the same row, whether a sighting cites
 // it as its work or as where it was found.
-async function citationOf(db: D1Database, values: (string | null)[]) {
+async function citationOf(db: D1Database, values: (string | null)[], dates: DateBook) {
   if (values.every(value => value === null)) return { hash: null, statements: [] }
   const hash = await hashHex(JSON.stringify(values))
-  const year = firstYear(values[CITATION_FIELDS.indexOf('report_date')])?.n ?? null
+  const year = datedYear(values[CITATION_FIELDS.indexOf('report_date')], dates)?.n ?? null
   return { hash, statements: [db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year) VALUES(?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year)] }
 }
 // The hash of the cited work, and the hashes of the vias in the order of the chain.
-async function sourceOf(db: D1Database, fields: SightingFields) {
-  const [work, ...vias] = await Promise.all([citationOf(db, CITATION_FIELDS.map(field => fields[field])), ...tidyVias(fields.vias).map(via => citationOf(db, CITATION_FIELDS.map(field => via[field])))])
+async function sourceOf(db: D1Database, fields: SightingFields, dates: DateBook) {
+  const [work, ...vias] = await Promise.all([citationOf(db, CITATION_FIELDS.map(field => fields[field]), dates), ...tidyVias(fields.vias).map(via => citationOf(db, CITATION_FIELDS.map(field => via[field]), dates))])
   return { hash: work.hash, vias: vias.flatMap(via => via.hash === null ? [] : [via.hash]), statements: [...work.statements, ...vias.flatMap(via => via.statements)] }
 }
 const SOURCE_ID = '(SELECT id FROM sources WHERE hash = ?)'
@@ -393,8 +389,9 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
   const at = now()
   const drafts = [{ fields: sighting, media }, ...more]
   const claims = mapSightings(fields.claims, place => Number.isInteger(place) && place >= 1 && place <= drafts.length ? place : null)
-  const sources = await Promise.all(drafts.map(draft => sourceOf(db, draft.fields)))
-  const summary = summarize(drafts.map(draft => ({ ...draft.fields, media: draft.media })))
+  const dates = await readDates(db, sightingDates(drafts.map(draft => draft.fields)), true)
+  const sources = await Promise.all(drafts.map(draft => sourceOf(db, draft.fields, dates)))
+  const summary = summarize(drafts.map(draft => ({ ...draft.fields, media: draft.media })), dates)
   await ensureTags(db, valuesOf(claims, 'tag'), who)
   const tags = [...new Set(tagsOf({ ...fields, merged_into: null, hidden_at: null } as unknown as Entry, claims, summary))]
   // AUTOINCREMENT sequences are read inside the same transaction as the inserts.
@@ -481,7 +478,7 @@ export class SightingLimitError extends Error {
 }
 
 export async function addSighting(db: D1Database, id: number, fields: SightingFields, media: StoredImage[], who: Who) {
-  const source = await sourceOf(db, fields)
+  const source = await sourceOf(db, fields, await readDates(db, sightingDates([fields]), true))
   for (let attempt = 0; ; attempt++) {
     const mark = await revisionMark(db, id)
     const entry = await getEntryRow(db, id)
@@ -527,7 +524,7 @@ export async function restoreSighting(db: D1Database, entryId: number, sightingI
 }
 
 async function writeSighting(db: D1Database, id: number, baseRev: number, fields: SightingFields, media: StoredImage[] | null, who: Who, summary: string | null, expectedEntry: number, from: number | null = null): Promise<EditResult> {
-  const source = await sourceOf(db, fields)
+  const source = await sourceOf(db, fields, await readDates(db, sightingDates([fields]), true))
   for (let attempt = 0; ; attempt++) {
     const initial = await sightingRow(db, id)
     if (!initial || initial.entry_id !== expectedEntry) return { ok: false, code: 'missing' }

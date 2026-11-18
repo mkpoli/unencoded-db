@@ -31,6 +31,12 @@ Sign-in requires a confidential client registered with the Glyph Atlas issuer fo
 
 Without client credentials, the site offers anonymous contributions. Signing in links the browser's anonymous contributions to the account; signing out ends the local session.
 
+## Evidence dates
+
+Report dates, original dates and dates in a citation chain keep the contributor's transcription. Chinese and Japanese era dates use the [HuTime Calendar Conversion API](https://ap.hutime.org/cal/). Each conversion records its query, precision and inclusive Western-calendar bounds. For example, 明萬曆34年 runs from 1606-02-07 through 1607-01-27. The chronology files it under 1606. Dates already in the Western calendar use the same 1582 Julian/Gregorian cutover. An ambiguous or unreadable expression stays available as entered.
+
+The local setup and production release run the date sweep after applying migrations. To retry unresolved dates locally, run `bun scripts/sweep-dates.ts --local`. The sweep also rebuilds source years, earliest sightings and decade counts. JSON exports include a `date_readings` dictionary keyed by the original wording.
+
 ## Agents
 
 `https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. In Claude Code:

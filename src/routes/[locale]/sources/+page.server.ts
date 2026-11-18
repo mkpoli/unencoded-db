@@ -1,3 +1,4 @@
+import { readDates } from '$lib/server/date-readings'
 import { error } from '@sveltejs/kit'
 import { parseSourceCursor, sourceList } from '$lib/server/entries'
 import { sourceSortOf } from '$lib/order'
@@ -12,5 +13,6 @@ export const load: PageServerLoad = async (event) => {
   if (after !== null && !cursor) error(404)
   const page = await sourceList(env(event).DB, sort, cursor)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, page.sources.flatMap(source => source.tiles), event.locals.glyphStyle)
-  return { ...page, sort, glyphs }
+  const dates = await readDates(env(event).DB, page.sources.map(s => s.report_date))
+  return { ...page, sort, glyphs, dates }
 }

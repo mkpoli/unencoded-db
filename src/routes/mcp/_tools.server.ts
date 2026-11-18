@@ -1,3 +1,4 @@
+import { readDates, sightingDates } from '$lib/server/date-readings'
 // The tools an agent calls at /mcp. A write is put into the form the site's own pages send and goes through
 // the same readers, limits and store, so a record an agent adds is checked exactly as one typed into /new.
 // The tool names, schemas and result shapes follow the Model Context Protocol, revision 2025-11-25
@@ -317,6 +318,7 @@ async function getRecord(event: RequestEvent, input: Json) {
     script: entry.script === 'other' ? entry.script_other ?? 'other' : entry.script,
     status: entry.status, description: entry.description, radical: entry.radical, strokes: entry.strokes,
     claims: found.claims.map(claim => ({ key: claim.key, kind: claim.kind, value: claim.value, ...(claim.data ? { data: claim.data } : {}), ...(claim.under.length ? { under: claim.under } : {}), evidence: claim.sightings.filter(sighting => visible.has(sighting)) })),
+    date_readings: Object.fromEntries(await readDates(env(event).DB, sightingDates(sightings))),
     sightings: sightings.map(sighting => ({
       id: sighting.id, place: sighting.place,
       ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
@@ -343,7 +345,7 @@ const CITATION = {
   title: { type: 'string' },
   author: { type: 'string', description: 'The author as they sign: a name or a handle.' },
   publisher: { type: 'string', description: 'The publisher, or the service a post is on, such as X.' },
-  report_date: { type: 'string', description: 'When it was published: a year or a date, such as 1936 or 2026-11-14.' },
+  report_date: { type: 'string', description: 'Publication date as written in the source, e.g. 明萬曆34年, 1936 or 2026-11-14.' },
 }
 
 const SIGHTING = {
