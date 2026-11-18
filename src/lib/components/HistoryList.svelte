@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { DateReading } from '$lib/dates'
   import RevisionFields from './RevisionFields.svelte'
   import { tagLabels, type Tag } from '$lib/tags'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
@@ -12,8 +13,8 @@
     redacted?: boolean; redacted_at?: string | null
   }
 
-  let { rows, tags, currentRev = null, showEntry = false, showActor = true, restore = false, redact = false, empty, next = null }: {
-    rows: Row[]; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; empty: string; next?: number | null
+  let { rows, tags, dates, currentRev = null, showEntry = false, showActor = true, restore = false, redact = false, empty, next = null }: {
+    dates: Map<string, DateReading | null>; rows: Row[]; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; empty: string; next?: number | null
   } = $props()
   const labels = $derived(tagLabels(tags))
   const tagTypes = $derived(new Map(tags.map(tag => [tag.name, tag.type])))
@@ -52,7 +53,7 @@
           <summary class="revision-row">{@render line(row)}</summary>
           <div class="revision-body">
             {#if row.fields}<RevisionFields fields={row.fields} {labels} {tagTypes} />{/if}
-            {#if row.sightingFields}<RevisionFields fields={row.sightingFields} sighting />{/if}
+            {#if row.sightingFields}<RevisionFields fields={row.sightingFields} {dates} sighting />{/if}
             {#if restore}
               {#if row.fields && currentRev}
                 <form class="revision-action" method="POST" action="?/restore">

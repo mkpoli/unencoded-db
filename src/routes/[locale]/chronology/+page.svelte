@@ -1,4 +1,5 @@
 <script lang="ts">
+  import EvidenceDate from '$lib/components/EvidenceDate.svelte'
   import Seo from '$lib/components/Seo.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { recordCode } from '$lib/code'
@@ -61,7 +62,7 @@
                   <span class="glyph">{#if entry.tile.ids}<IdsGlyph ids={entry.tile.ids} layout={entry.tile.layout} path={data.glyphs[entry.tile.id]} />{:else if entry.tile.cover_key}<img src={media(entry.tile.cover_key)} alt="" loading="lazy" decoding="async" />{/if}</span>
                   <span class="text">
                     <span class="name">{#if entry.tile.ids}<span class="ids">{entry.tile.ids}</span>{/if}<span class="code">{recordCode(entry.tile.id)}</span></span>
-                    {#if entry.sighting}<span class="source">{#if entry.sighting.title}『{entry.sighting.title}』{:else if entry.sighting.place}{entry.sighting.place}{/if}{#if entry.sighting.author}<span class="muted"> {entry.sighting.author}</span>{/if}{#if entry.sighting.date}<span class="date" title={t(entry.tile.firstYearKind === 'original' ? 'field.originalDate' : 'field.reportDate')}>（{entry.sighting.date}）</span>{/if}</span>{/if}
+                    {#if entry.sighting}<span class="source">{#if entry.sighting.title}『{entry.sighting.title}』{:else if entry.sighting.place}{entry.sighting.place}{/if}{#if entry.sighting.author}<span class="muted"> {entry.sighting.author}</span>{/if}{#if entry.sighting.date}<span class="date" title={t(entry.tile.firstYearKind === 'original' ? 'field.originalDate' : 'field.reportDate')}>（<EvidenceDate linked={false} text={entry.sighting.date} reading={data.dates.get(entry.sighting.date)} />）</span>{/if}</span>{/if}
                   </span>
                 </a>
               </td>

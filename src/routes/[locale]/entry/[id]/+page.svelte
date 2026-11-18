@@ -1,4 +1,5 @@
 <script lang="ts">
+  import EvidenceDate from '$lib/components/EvidenceDate.svelte'
   import { page } from '$app/state'
   import { claimLabel } from '$lib/claim-label'
   import { onMount, tick, untrack } from 'svelte'
@@ -284,9 +285,9 @@
         {#if sighting.vias.length}
           <p class="via"><span class="muted">{t('field.via')}</span>
             {#each sighting.vias as via, position (position)}{#if position}<span class="muted link-arrow" aria-hidden="true">←</span>{/if}
-              <span class="link"><a class="text-link" href={href(`/source/${via.id}`)}>{via.title || via.url || t('source.title')}</a>{#if via.url && /^https?:\/\//i.test(via.url)} <a class="text-link url" href={via.url} target="_blank" rel="noopener noreferrer">↗</a>{/if}</span>{/each}</p>
+              <span class="link"><a class="text-link" href={href(`/source/${via.id}`)}>{via.title || via.url || t('source.title')}</a>{#if via.report_date} · <EvidenceDate text={via.report_date} reading={data.dates.get(via.report_date)} />{/if}{#if via.url && /^https?:\/\//i.test(via.url)} <a class="text-link url" href={via.url} target="_blank" rel="noopener noreferrer">↗</a>{/if}</span>{/each}</p>
         {/if}
-        <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{sighting[field.key]}</dd></div>{/if}{/each}
+        <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
           {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
         </dl>
