@@ -99,7 +99,7 @@
 
 <div class="field">
   <label for="{uid}-url">{t('field.url')}</label>
-  <input id="{uid}-url" class="input" type="url" name="url" bind:value={url} use:cleanLinkInput placeholder="https://" maxlength="1000" autocorrect="off" autocapitalize="none" spellcheck="false" />
+  <input id="{uid}-url" class="input" type="url" name="url" bind:value={url} use:cleanLinkInput placeholder="https://" maxlength="1000" pattern="[hH][tT][tT][pP][sS]?://.+" autocorrect="off" autocapitalize="none" spellcheck="false" />
   {#if fetching}<p class="hint" role="status">{t('field.linkImageWorking')}</p>{:else if failed}<p class="hint" role="status">{t('field.linkImageFailed')}</p>{/if}
 </div>
 <div class="field">
