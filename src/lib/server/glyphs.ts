@@ -20,7 +20,7 @@ export type Glyph = { ids: string | null; layout?: string | null }
 
 // Each style's export and drawings have their own folders, named by the export's version.
 const folderOf = (style: GlyphStyle) => `composer/${composerVersion(style)}`
-const drawingsOf = (style: GlyphStyle) => `glyphs/${composerDrawing(style)}`
+const drawingsOf = (style: GlyphStyle, name: string) => `glyphs/${composerDrawing(style, name.includes('\n'))}`
 const IMMUTABLE = 'public, max-age=31536000, immutable'
 
 const sources = new WeakMap<Bucket, Map<string, Source>>()
@@ -101,7 +101,7 @@ export function glyphName(glyph: Glyph, style: GlyphStyle = GLYPH_STYLE) {
 }
 
 async function read(bucket: Bucket, name: string, style: GlyphStyle) {
-  const stored = await bucket.get(`${drawingsOf(style)}/${await hashHex(name)}.txt`)
+  const stored = await bucket.get(`${drawingsOf(style, name)}/${await hashHex(name)}.txt`)
   return stored ? stored.text() : null
 }
 
@@ -132,7 +132,7 @@ export function drawGlyph(bucket: Bucket, glyph: Glyph, context: Context = {}): 
       const [ids, layout] = name.split('\n')
       const drawn = (layout ? await adjusted(sourceOf(bucket, ids, context, true), ids, layout, name, style) : null) ?? (await compose(sourceOf(bucket, ids, context), ids, { fontStyle: style })).d
       if (!drawn) return null
-      await bucket.put(`${drawingsOf(style)}/${await hashHex(name)}.txt`, drawn, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
+      await bucket.put(`${drawingsOf(style, name)}/${await hashHex(name)}.txt`, drawn, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
       return drawn
     })().catch(error => {
       // A drawing that fails leaves the description on the page; the log says why.

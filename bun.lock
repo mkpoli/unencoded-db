@@ -6,7 +6,7 @@
       "name": "unencoded-db",
       "dependencies": {
         "han-compose": "github:mkpoli/han-compose#ee187e83945db805620d54c44df31584d2d64553",
-        "ids-input": "github:mkpoli/ids-input#38847b4b68ca61b552919dc532ed8c902e06b506",
+        "ids-input": "github:mkpoli/ids-input#3b9c30d348bd895eacc78959266e91fcaf64836c",
         "jose": "^6.2.15",
       },
       "devDependencies": {
@@ -268,7 +268,7 @@
 
     "han-compose": ["han-compose-monorepo@github:mkpoli/han-compose#ee187e8", {}, "mkpoli-han-compose-ee187e8", "sha512-zsCXMFTOwpPoLE1q5+ZO7kam22PYWYRwjni8BNi7rYWhKiY8JyyvfDlqmb2YOIhgLKFzwqFzz5akrHNyILXwgQ=="],
 
-    "ids-input": ["ids-input@github:mkpoli/ids-input#38847b4", { "dependencies": { "@cf-wasm/resvg": "^0.4.0", "@han-compose/composer": "file:../composer" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-38847b4", "sha512-FnJlNqKjjGk0osjtHvrX1R1j19mBPpzlck6vs1dSEN2W52XWiRsC42skZ3fGFDdFTTH60WQonJHtzzggXS1GAQ=="],
+    "ids-input": ["ids-input@github:mkpoli/ids-input#3b9c30d", { "dependencies": { "@cf-wasm/resvg": "^0.4.0", "@han-compose/composer": "file:../composer" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-3b9c30d", "sha512-t0xnMV9yKNMaAynAmDBWQ0Mi3dFm7wBumOrPWXOSDvMfDghH63nPvfZIcJdfypJy+JwPvN2Ee3vPSAEI26FuKg=="],
 
     "is-reference": ["is-reference@3.0.3", "", { "dependencies": { "@types/estree": "^1.0.6" } }, "sha512-ixkJoqQvAP88E6wLydLGGqCJsrFUnqoH6HnaczB8XmDH1oaWU+xxdptvikTgaEhtZ53Ky6YXiBuUI2WXLMCwjw=="],
 

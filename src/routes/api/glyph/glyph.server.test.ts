@@ -20,11 +20,11 @@ function fixture() {
     put: async (name: string, value: string) => { drawings.set(name, value) },
   }
   const event = (query: string) => ({ url: new URL(`https://example.test/api/glyph?${query}`), platform: { env: { DB: db, MEDIA: bucket } } }) as any
-  const cache = async (name: string, style: GlyphStyle = 'sans') => drawings.set(`glyphs/${composerDrawing(style)}/${await hashHex(name)}.txt`, 'M0 0')
+  const cache = async (name: string, style: GlyphStyle = 'sans') => drawings.set(`glyphs/${composerDrawing(style, name.includes('\n'))}/${await hashHex(name)}.txt`, 'M0 0')
   return { raw, event, cache }
 }
 
-const ask = (ids: string, layout = '', style: GlyphStyle = 'sans') => `ids=${encodeURIComponent(ids)}&style=${style}&v=${encodeURIComponent(composerDrawing(style))}${layout ? `&layout=${encodeURIComponent(layout)}` : ''}`
+const ask = (ids: string, layout = '', style: GlyphStyle = 'sans') => `ids=${encodeURIComponent(ids)}&style=${style}&v=${encodeURIComponent(composerDrawing(style, Boolean(layout)))}${layout ? `&layout=${encodeURIComponent(layout)}` : ''}`
 
 test('the first description of a visible record draws', async () => {
   const { event, cache } = fixture()

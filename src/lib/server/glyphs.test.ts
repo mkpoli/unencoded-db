@@ -17,7 +17,7 @@ test('a description with a layout is another drawing than the description alone'
   const layout = '{"0":[1,0,0,1,40,0]}'
   const plain = { ids: '⿰魚羊' }, moved = { ids: '⿰魚羊', layout }
   expect(glyphName(moved)).toBe(`⿰魚羊\n${layout}`)
-  const key = `glyphs/${composerDrawing('sans')}/${await hashHex(glyphName(moved))}.txt`
+  const key = `glyphs/${composerDrawing('sans', true)}/${await hashHex(glyphName(moved))}.txt`
   const bucket = {
     get: async (name: string) => name === key ? { text: async () => '<g/>' } : null,
     put: async () => {},
@@ -53,7 +53,7 @@ test('a description with a layout is drawn part by part as markup, and kept unde
   const drawn = await drawGlyph(bucket, moved, context)
   expect(plain).toMatch(/^M/)
   expect(drawn).toMatch(/^<defs>.*<path d="M/)
-  expect(kept).toEqual([moved.ids, glyphName(moved)].map(name => `glyphs/${composerDrawing('sans')}/${new Bun.CryptoHasher('sha256').update(name).digest('hex')}.txt`))
+  expect(kept).toEqual([moved.ids, glyphName(moved)].map(name => `glyphs/${composerDrawing('sans', name.includes('\n'))}/${new Bun.CryptoHasher('sha256').update(name).digest('hex')}.txt`))
 })
 
 test('each style keeps its drawings in its own folder', async () => {

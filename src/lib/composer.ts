@@ -19,6 +19,6 @@ export const composerVersion = (style: GlyphStyle) => VERSIONS[style]
 // stays the same.
 const pin = packageJson.dependencies['han-compose']
 export const composerRevision = pin.includes('#') ? pin.slice(pin.lastIndexOf('#') + 1).slice(0, 12) : 'head'
-export const composerDrawing = (style: GlyphStyle) => `${VERSIONS[style]}-${composerRevision}${style === 'sans' ? '-width1' : ''}`
+export const composerDrawing = (style: GlyphStyle, adjusted = false) => `${VERSIONS[style]}-${composerRevision}${style === 'sans' && adjusted ? '-width1' : ''}`
 export const composerUrl = (style: GlyphStyle) => `https://ids-input-composer.mkpoli.workers.dev/${VERSIONS[style]}`
 export const glyphStyleOf = (value: string | null | undefined): GlyphStyle => (GLYPH_STYLES as readonly string[]).includes(value ?? '') ? value as GlyphStyle : GLYPH_STYLE
