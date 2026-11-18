@@ -1,3 +1,4 @@
+import { nameKey, nameLabel } from '../name-key'
 // The store of records: an entry is a character, a claim is one thing the record states about it, a
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
@@ -341,7 +342,16 @@ async function citationOf(db: D1Database, values: (string | null)[], dates: Date
   if (values.every(value => value === null)) return { hash: null, statements: [] }
   const hash = await hashHex(JSON.stringify(values))
   const year = datedYear(values[CITATION_FIELDS.indexOf('report_date')], dates)?.n ?? null
-  return { hash, statements: [db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year) VALUES(?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year)] }
+  const publisher = values[CITATION_FIELDS.indexOf('publisher')]
+  const key = publisher && nameKey(publisher)
+  const statements = []
+  if (publisher && key && nameLabel(publisher) !== publisher) {
+    statements.push(db.prepare(`INSERT INTO publishers(name, lookup) SELECT ?1, ?2
+      WHERE NOT EXISTS (SELECT 1 FROM publisher_aliases WHERE lookup = ?2) ON CONFLICT(lookup) DO NOTHING`)
+      .bind(nameLabel(publisher), key))
+  }
+  statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null))
+  return { hash, statements }
 }
 // The hash of the cited work, and the hashes of the vias in the order of the chain.
 async function sourceOf(db: D1Database, fields: SightingFields, dates: DateBook) {
@@ -1154,7 +1164,7 @@ type SourceRead = typeof SOURCE_READS[keyof typeof SOURCE_READS]
 
 // Up to `limit` sources in one order after `cursor`. Each reads its first SOURCE_CARD_READ sightings of
 // each way from its index and keeps the visible ones, so a source costs the same however long it is.
-function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | null, limit: number) {
+function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | null, limit: number, publisher: number | null) {
   const ways = [
     { from: 'sightings s INDEXED BY sightings_by_source WHERE s.source_id = c.id ORDER BY s.id', extra: '' },
     { from: 'sighting_vias v INDEXED BY sighting_vias_by_source CROSS JOIN sightings s ON s.id = v.sighting_id WHERE v.source_id = c.id ORDER BY v.sighting_id', extra: ' AND r.source_id IS NOT c.id' },
@@ -1165,18 +1175,18 @@ function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | nul
   const after = order.key ? `(c.${order.key}, c.id) ${past} (?, ?)` : `c.id ${past} ?`
   const bound = order.key ? [cursor?.key ?? start, cursor?.id ?? start] : [cursor?.id ?? start]
   type Row = Source & { year: number | null; records: number; direct: string; via: string }
-  return db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(ways[0])} AS direct, ${seen(ways[1])} AS via FROM sources c INDEXED BY ${order.index} WHERE ${order.where} AND ${after} ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction} LIMIT ?`)
-    .bind(...bound, limit).all<Row>().then(({ results }) => results)
+  return db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(ways[0])} AS direct, ${seen(ways[1])} AS via FROM sources c INDEXED BY ${order.index}${publisher !== null ? '_publisher' : ''} WHERE ${order.where} ${publisher !== null ? 'AND c.publisher_id = ?' : ''} AND ${after} ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction} LIMIT ?`)
+    .bind(...(publisher !== null ? [publisher] : []), ...bound, limit).all<Row>().then(({ results }) => results)
 }
 
 // A page of the source gallery in one order: its sources, each with the records seen in it, and the cursor
 // of the next page.
-export async function sourceList(db: D1Database, sort: SourceSort = 'new', cursor: SourceCursor | null = null) {
+export async function sourceList(db: D1Database, sort: SourceSort = 'new', cursor: SourceCursor | null = null, publisher: number | null = null) {
   const dated = sort === 'earliest' || sort === 'latest'
   const tail = dated && cursor !== null && cursor.key === null
   const order = SOURCE_READS[tail ? 'undated' : sort]
-  let rows = await sourceRun(db, order, cursor, SOURCES_PAGE + 1)
-  if (dated && !tail && rows.length <= SOURCES_PAGE) rows = [...rows, ...await sourceRun(db, SOURCE_READS.undated, null, SOURCES_PAGE + 1 - rows.length)]
+  let rows = await sourceRun(db, order, cursor, SOURCES_PAGE + 1, publisher)
+  if (dated && !tail && rows.length <= SOURCES_PAGE) rows = [...rows, ...await sourceRun(db, SOURCE_READS.undated, null, SOURCES_PAGE + 1 - rows.length, publisher)]
   const page = rows.slice(0, SOURCES_PAGE), end = page.at(-1)
   // A page that ends on an undated source goes on among the undated ones, by id.
   const next = rows.length > SOURCES_PAGE && end ? sourceCursorText({ key: order.key === null ? null : order.key === 'year' && end.year === null ? null : end[order.key], id: end.id }) : null

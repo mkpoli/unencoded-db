@@ -1,3 +1,4 @@
+import { publicPublisher, publisherDirectory } from './publishers'
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { readdirSync, readFileSync } from 'node:fs'
@@ -721,6 +722,59 @@ describe('people', () => {
 })
 
 describe('source gallery', () => {
+  test('publisher filtering keeps citation spellings, accepts new names and follows public via references', async () => {
+    const entry = await createEntry(db, fields(), seen({ title: 'Book', publisher: '江蘇教育出版社',
+      vias: [via({ title: 'Post', publisher: 'Twitter' })] }), [], who)
+    await addSighting(db, entry, seen({ title: 'Second', publisher: '江苏教育出版社' }), [], who)
+    const other = await createEntry(db, fields(), seen({ title: 'New imprint', publisher: 'River Press' }), [], who)
+    await createEntry(db, fields(), seen({ publisher: '未詳' }), [], who)
+    const directory = await publisherDirectory(db)
+    expect(directory.map(p => p.label)).toEqual(['River Press', 'X', '江苏教育出版社'])
+    const x = directory.find(p => p.label === 'X')!
+    expect(x.aliases).toContain('Twitter')
+    expect((await sourceList(db, 'new', null, x.id)).sources.map(s => s.publisher)).toEqual(['Twitter'])
+    expect(await publicPublisher(db, 'ＴＷＩＴＴＥＲ')).toMatchObject({ id: x.id })
+    expect(await publisherDirectory(db, 'Ｔｗｉｔ')).toMatchObject([{ id: x.id }])
+    expect(await publicPublisher(db, '未詳')).toBeNull()
+    const press = directory.find(p => p.label === '江苏教育出版社')!
+    expect((await sourceList(db, 'earliest', null, press.id)).sources.map(s => s.publisher)).toEqual(['江苏教育出版社', '江蘇教育出版社'])
+    await setHidden(db, { entry: other }, true, who, null)
+    expect((await publisherDirectory(db)).map(p => p.label)).not.toContain('River Press')
+    const sighting = (await getEntry(db, entry))!.sightings[0]
+    await editSighting(db, sighting.id, sighting.rev, seen({ title: 'Changed', publisher: 'river press' }), null, who, null, entry)
+    expect((await publisherDirectory(db)).map(p => p.label)).toEqual(['River Press', '江苏教育出版社'])
+  })
+
+  test('new spellings share one normalized directory name and subsequent curation moves existing citations', async () => {
+    await createEntry(db, fields(), seen({ publisher: 'Éditions　 du  Ｎｏｒｄ' }), [], who)
+    await createEntry(db, fields(), seen({ publisher: 'éditions du nord' }), [], who)
+    const press = await publicPublisher(db, 'ÉDITIONS DU NORD')
+    expect(press?.name).toBe('Éditions du Nord')
+    expect((await sourceList(db, 'new', null, press!.id)).sources.map(s => s.publisher)).toEqual(['éditions du nord', 'Éditions　 du  Ｎｏｒｄ'])
+    await createEntry(db, fields(), seen({ publisher: 'Northern imprint' }), [], who)
+    raw.prepare("INSERT INTO publisher_aliases VALUES ('northern imprint','Northern imprint',?)").run(press!.id)
+    expect((await sourceList(db, 'new', null, press!.id)).sources).toHaveLength(3)
+    raw.exec("DELETE FROM publisher_aliases WHERE lookup = 'northern imprint'")
+    expect((await sourceList(db, 'new', null, press!.id)).sources).toHaveLength(2)
+  })
+
+  test('a publisher cursor stays in its group for every sort, including the undated tail', async () => {
+    const add = raw.prepare('INSERT INTO sources(hash, title, publisher, year, records) VALUES (?, ?, ?, ?, 1)')
+    for (let i = 0; i < SOURCES_PAGE + 5; i++) {
+      add.run('a' + i, 'a' + i, i % 2 ? 'X' : 'Twitter', i < SOURCES_PAGE ? 2000 : null)
+      add.run('b' + i, 'b' + i, 'Separate', 1999)
+    }
+    const publisher = (await publisherDirectory(db)).find(p => p.label === 'X')!
+    for (const sort of ['new', 'most', 'earliest', 'latest'] as const) {
+      const a = await sourceList(db, sort, null, publisher.id)
+      const b = await sourceList(db, sort, parseSourceCursor(sort, a.next!), publisher.id)
+      expect(b.next).toBeNull()
+      const titles = [...a.sources, ...b.sources].map(s => s.title)
+      expect(titles.every(t => t?.startsWith('a'))).toBe(true)
+      expect(new Set(titles).size).toBe(SOURCES_PAGE + 5)
+    }
+  })
+
   const titles = async (...args: Parameters<typeof sourceList> extends [unknown, ...infer Rest] ? Rest : never) => (await sourceList(db, ...args)).sources.map(source => source.title)
   const records = (title: string) => (raw.query('SELECT records FROM sources WHERE title = ?').get(title) as { records: number }).records
 
@@ -999,17 +1053,18 @@ describe('query cost', () => {
   })
 
   test('each order of the source gallery reads its own index, and each source\'s sightings from theirs', async () => {
-    await createEntry(db, fields(), seen({ title: 'Book', vias: [via({ title: 'Post' })], report_date: '1900' }), [image], who)
-    await createEntry(db, fields(), seen({ title: 'Leaflet' }), [], who)
+    await createEntry(db, fields(), seen({ title: 'Book', publisher: 'Test press', vias: [via({ title: 'Post', publisher: 'Test press' })], report_date: '1900' }), [image], who)
+    await createEntry(db, fields(), seen({ title: 'Leaflet', publisher: 'Test press' }), [], who)
+    const press = (await publicPublisher(db, 'Test press'))!
     const cases = [['new', null, 'sources_listed'], ['most', null, 'sources_by_records'], ['earliest', null, 'sources_by_year'], ['latest', { key: 1900, id: 1 }, 'sources_by_year'], ['latest', { key: null, id: 9 }, 'sources_undated']] as const
-    for (const [sort, cursor, index] of cases) {
+    for (const [sort, cursor, index] of cases) for (const publisher of [null, press.id]) {
       const plans: string[] = []
       const traced = { prepare(sql: string) {
         const statement = db.prepare(sql)
         return { bind(...values: unknown[]) { plans.push(plan(sql, values).join('\n')); return statement.bind(...values) } }
       }, batch: (statements: D1PreparedStatement[]) => db.batch(statements) } as D1Database
-      await sourceList(traced, sort, cursor)
-      expect(plans[0]).toMatch(new RegExp(`SEARCH c USING INDEX ${index} \\(`))
+      await sourceList(traced, sort, cursor, publisher)
+      expect(plans[0]).toMatch(new RegExp(`SEARCH c USING INDEX ${index}${publisher === null ? '' : '_publisher'} \\(`))
       expect(plans[0]).toMatch(/SEARCH s USING INDEX sightings_by_source \(source_id=\?\)/)
       expect(plans[0]).toMatch(VIA_SEARCH)
       expect(plans.at(-1)).toMatch(/SEARCH e USING INTEGER PRIMARY KEY \(rowid=\?\)/)

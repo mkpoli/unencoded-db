@@ -37,6 +37,10 @@ Report dates, original dates and dates in a citation chain keep the contributor'
 
 The local setup and production release run the date sweep after applying migrations. Saving a sighting retries its unresolved dates. To retry all unresolved dates locally, run `bun scripts/sweep-dates.ts --local`. Add `--recheck` to verify existing readings again. A failed lookup preserves the previous reading. The sweep also rebuilds source years, earliest sightings and decade counts. JSON exports include a `date_readings` dictionary keyed by the original wording. CSV exports carry the same readings for each sighting in the `date_readings` column.
 
+## Publishers
+
+The Sources page filters direct and intermediate citations by publisher. A contributor can choose a suggested publisher or enter a new name. The directory groups verified spellings such as 江蘇教育出版社 and 江苏教育出版社. Citations, exports and revision history retain the submitted name. Only publishers cited by a visible record appear in suggestions.
+
 ## Agents
 
 `https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. In Claude Code:
@@ -67,6 +71,7 @@ An agent can sign in, and then writes under a person's name. The site is the OAu
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
 | `date_readings`, `evidence_dates` | Calendar readings and the view of transcribed dates in sources, sightings and revision history |
 | `date_index_state` | Generation used to retry writes when their date readings change |
+| `publishers`, `publisher_aliases` | Publisher identities and reviewed alternative spellings for the source filter |
 | `sighting_media` | A sighting's pictures, each with its mark and thumbnail |
 | `revisions` | The journal: every state of an entry or a sighting, with its author |
 | `categories`, `category_changes` | The categories, each with a fixed name, a label, a parent and a place among its siblings, and the log of their changes |
