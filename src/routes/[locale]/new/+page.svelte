@@ -231,8 +231,8 @@
       <div class="group filed"><TagFields tags={data.tags} selected={valuesOf(claims, 'tag')} collections={valuesOf(claims, 'collection')} /></div>
     </details>
     <section class="panel noted">
-      <div class="titled"><label class="section-title" for="description">{t('field.notes')}</label><span class="subtitle">{t('field.description')}</span></div>
-      <textarea class="input" id="description" name="description" rows="3">{values?.description ?? ''}</textarea>
+      <div class="titled"><label class="section-title" for="description">{t('field.notes')}</label><span class="subtitle" id="description-note">{t('field.description')}</span></div>
+      <textarea class="input" id="description" name="description" rows="3" aria-describedby="description-note">{values?.description ?? ''}</textarea>
     </section>
     <SubmitBar {busy} label={t('nav.add')} cancel={href()} sticky />
   </form>
