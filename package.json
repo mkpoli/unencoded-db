@@ -30,8 +30,8 @@
     "d3-contour": "^4.0.3",
     "fflate": "^0.8.3",
     "fonteditor-core": "^2.6.3",
-    "han-compose": "github:mkpoli/han-compose#e929f0cbf5f7563118f282837d94818ed7b2b8b9",
-    "ids-input": "github:mkpoli/ids-input#a2a89eaa9ee8ceaf0db01ea9ac11c0bf13431e29",
+    "han-compose": "github:mkpoli/han-compose#f749c58dc9f0e0aabddd45fba7107d8802a63e15",
+    "ids-input": "github:mkpoli/ids-input#8a815118b420028a8412644dddbc434219f4d80f",
     "jose": "^6.2.15",
     "opentype.js": "1.3.4",
     "svgpath": "^2.6.0"
