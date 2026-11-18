@@ -69,7 +69,7 @@ export async function drawing(row: Row, face: Face, covers: Map<string, Promise<
     if (layout) query.set('layout', layout)
     const url = '/api/glyph?' + query
     let response = await fetch(url, { signal })
-    if (response.status === 503) response = await fetch(url, { cache: 'reload', signal })
+    if ([500, 502, 503, 504].includes(response.status)) response = await fetch(url, { cache: 'reload', signal })
     if (response.ok) {
       const { d } = await response.json() as { d: string }
       const path = d.startsWith('<')
@@ -100,15 +100,25 @@ export async function drawing(row: Row, face: Face, covers: Map<string, Promise<
   return { path: missingOutline(), source: 'placeholder' }
 }
 
-export async function previewFont(records: Row[], face: Face, signal: AbortSignal) {
+export async function previewFont(records: Row[], face: Face, signal: AbortSignal, paths = new Map<number, Path>()) {
   const covers = new Map<string, Promise<Path | null>>()
-  const glyphs = []
-  for (let i = 0; i < records.length; i += 4) {
+  const failed: number[] = []
+  const missing = records.filter(row => !paths.has(row.id))
+  for (let i = 0; i < missing.length; i += 4) {
     signal.throwIfAborted()
-    const group = records.slice(i, i + 4)
-    const drawn = await Promise.all(group.map(row => drawing(row, face, covers, signal)))
-    glyphs.push(...drawn.map(({ path }, j) => ({ id: group[j].id, path })))
+    const group = missing.slice(i, i + 4)
+    await Promise.all(group.map(async row => {
+      try {
+        const { path } = await drawing(row, face, covers, signal)
+        paths.set(row.id, path)
+      } catch {
+        signal.throwIfAborted()
+        failed.push(row.id)
+      }
+    }))
   }
   signal.throwIfAborted()
-  return openTypeFont(faceNames[face.style], glyphs, new Date()).otf
+  const glyphs = records.map(({ id }) => ({ id, path: paths.get(id) ?? missingOutline() }))
+  const buffer = failed.length === records.length ? null : openTypeFont(faceNames[face.style], glyphs, new Date()).otf
+  return { buffer, failed }
 }

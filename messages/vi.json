@@ -360,6 +360,7 @@
   "fonts.prev": "Nhóm chữ trước",
   "fonts.next": "Nhóm chữ sau",
   "fonts.empty": "Chưa có ký tự công khai.",
+  "fonts.partial": "Số chữ chưa tải được: {n}",
   "fonts.previewError": "Không tải được bản xem thử.",
   "fonts.retry": "Thử lại",
   "about.fontDownload": "Phông chữ PUA (TTF và OTF)",

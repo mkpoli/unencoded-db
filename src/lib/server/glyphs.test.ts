@@ -88,3 +88,15 @@ test('the server lists every bundled file the composer reads', async () => {
   // The Unicode shards are listed by the build; the rest by name.
   expect(Object.keys(dataUrls).filter(name => !name.startsWith('unicode/') && !(name in composerData))).toEqual([])
 })
+
+test('simultaneous requests for the same glyph own their R2 reads', async () => {
+  let reads = 0
+  const bucket = {
+    get: async () => {
+      const value = 'M' + ++reads
+      return { text: async () => value }
+    }
+  } as unknown as Pick<R2Bucket, 'get' | 'put'>
+  const paths = await Promise.all([drawGlyph(bucket, { ids: '木' }), drawGlyph(bucket, { ids: '木' })])
+  expect(new Set(paths)).toEqual(new Set(['M1', 'M2']))
+})

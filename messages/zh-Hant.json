@@ -360,6 +360,7 @@
   "fonts.prev": "上一組字形",
   "fonts.next": "下一組字形",
   "fonts.empty": "目前沒有公開字元。",
+  "fonts.partial": "未能載入的字形：{n}",
   "fonts.previewError": "無法載入字型預覽。",
   "fonts.retry": "重試",
   "about.fontDownload": "PUA 字型（TTF、OTF）",
