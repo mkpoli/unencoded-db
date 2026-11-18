@@ -26,7 +26,9 @@ const MAX_EVIDENCE_PIXELS = 1_048_576
 // A marked picture is read whole to show the page around the mark.
 const MAX_MARKED_BYTES = 3 * 1024 * 1024, MAX_MARKED_PIXELS = 4_194_304
 const STYLE_BUDGET_MS = 5000
-const PANEL_X = 744, PANEL_WIDTH = 456, PANEL_HEIGHT = 630
+// The evidence lies on the backdrop's paper as a sheet, leaving the cloth and paper around it in view.
+const PANEL_X = 776, PANEL_Y = 38, PANEL_WIDTH = 382, PANEL_HEIGHT = 554
+const COLUMN_END = 700
 const PLATE = 124, PLATE_GAP = 5, PLATE_Y = 390
 
 async function renderer() {
@@ -167,7 +169,7 @@ export async function evidencePanel(bucket: Pick<R2Bucket, 'get'>, picture: Card
     image = { href: `data:image/png;base64,${Buffer.from(region.png).toString('base64')}`, width: region.width, height: region.height }
     view = [0, 0, region.width, region.height]
   }
-  return `<svg x="${PANEL_X}" y="0" width="${PANEL_WIDTH}" height="${PANEL_HEIGHT}" viewBox="${view.join(' ')}" preserveAspectRatio="xMidYMid slice"><image width="${image.width}" height="${image.height}" href="${image.href}"/></svg>`
+  return `<svg x="${PANEL_X}" y="${PANEL_Y}" width="${PANEL_WIDTH}" height="${PANEL_HEIGHT}" viewBox="${view.join(' ')}" preserveAspectRatio="xMidYMid slice"><image width="${image.width}" height="${image.height}" href="${image.href}"/></svg>`
 }
 
 export type CardArt = { glyphs: { name: string; drawing: string }[]; evidence: string }
@@ -247,11 +249,10 @@ export async function renderCard(assets: Fetcher, origin: string, card: Card): P
   const caption = card.caption ? lines(card.caption, 12, 1)[0] : ''
   const backdrop = Buffer.from(background).toString('base64')
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" color="${INK}" fill="${INK}">
-    <defs><linearGradient id="scrim"><stop stop-color="${NIGHT}" stop-opacity=".97"/><stop offset=".73" stop-color="${NIGHT}" stop-opacity=".88"/><stop offset="1" stop-color="${NIGHT}" stop-opacity="0"/></linearGradient></defs>
+    <defs><filter id="shadow" x="-10%" y="-10%" width="125%" height="125%"><feDropShadow dx="6" dy="10" stdDeviation="10" flood-color="#05080e" flood-opacity=".7"/></filter><linearGradient id="scrim"><stop stop-color="${NIGHT}" stop-opacity=".97"/><stop offset=".73" stop-color="${NIGHT}" stop-opacity=".88"/><stop offset="1" stop-color="${NIGHT}" stop-opacity="0"/></linearGradient></defs>
     <rect width="1200" height="630" fill="${NIGHT}"/>
     <image width="1200" height="630" href="data:image/jpeg;base64,${backdrop}"/>
-    <rect width="800" height="630" fill="url(#scrim)"/>
-    ${art?.evidence ? `<rect width="${PANEL_X}" height="630" fill="${NIGHT}" opacity=".9"/>` : ''}
+    <rect width="${plated ? 860 : 800}" height="630" fill="url(#scrim)"/>
     <g transform="translate(64 48)">${MARK}</g>
     ${text('珍字集覽  ·  GLYPH ATLAS', 111, 71, 23, INK)}
     <path d="M68 ${labelY - 58}h62" stroke="${ACCENT}" stroke-width="3"/>
@@ -260,8 +261,8 @@ export async function renderCard(assets: Fetcher, origin: string, card: Card): P
     ${detail}
     ${plated ? plates(art!.glyphs) : `<path d="M68 533h510" stroke="${ACCENT}" stroke-opacity=".42"/>`}
     ${text('rare.glyphatlas.org', 68, footY, 22, MUTED)}
-    ${caption ? text(caption, PANEL_X - 44, footY, 22, MUTED, 'end') : ''}
-    ${art?.evidence ? `<rect x="${PANEL_X}" width="${PANEL_WIDTH}" height="${PANEL_HEIGHT}" fill="${PAPER}"/>${art.evidence}<path d="M${PANEL_X + 0.5} 0v630" stroke="#05080e" stroke-opacity=".6"/>` : ''}
+    ${caption ? text(caption, COLUMN_END, footY, 22, MUTED, 'end') : ''}
+    ${art?.evidence ? `<rect x="${PANEL_X}" y="${PANEL_Y}" width="${PANEL_WIDTH}" height="${PANEL_HEIGHT}" fill="${PAPER}" filter="url(#shadow)"/>${art.evidence}` : ''}
   </svg>`
   const render = new Resvg(svg, { font: { fontBuffers, defaultFontFamily: FONT } })
   try {

@@ -55,12 +55,12 @@ test('record artwork draws every style beside the evidence panel', async () => {
 test('the evidence panel keeps a marked character in view with its surroundings', () => {
   // A page without a mark is cut to the panel's shape around its centre.
   const view = panelView(700, 1100, null)
-  ;[0, (1100 - 700 * 630 / 456) / 2, 700, 700 * 630 / 456].forEach((value, index) => expect(view[index]).toBeCloseTo(value))
+  ;[0, (1100 - 700 * 554 / 382) / 2, 700, 700 * 554 / 382].forEach((value, index) => expect(view[index]).toBeCloseTo(value))
   // A mark near the corner stays inside the crop, which stays inside the page.
   const [x, y, width, tall] = panelView(2000, 3000, [1900, 2900, 60, 60])
   expect(x + width).toBeLessThanOrEqual(2000)
   expect(y + tall).toBeLessThanOrEqual(3000)
   expect(x).toBeLessThanOrEqual(1900)
   expect(y).toBeLessThanOrEqual(2900)
-  expect(tall).toBeCloseTo(240 / 456 * 630)
+  expect(tall).toBeCloseTo(240 / 382 * 554)
 })
