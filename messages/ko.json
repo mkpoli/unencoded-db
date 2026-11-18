@@ -144,6 +144,7 @@
   "field.placeHint": "책과 쪽수, 거리, 웹사이트 등 다른 사람이 다시 찾는 데 도움이 되는 정보를 적어 주세요.",
   "field.url": "링크",
   "field.description": "알아낸 내용",
+  "field.notes": "비고",
   "field.ids": "표의 문자 구성 설명(IDS)",
   "field.idsBuild": "IDS 편집기",
   "field.idsLoading": "편집기를 불러오는 중…",
