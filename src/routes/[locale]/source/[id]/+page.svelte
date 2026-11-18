@@ -6,6 +6,7 @@
   import ViaChain from '$lib/components/ViaChain.svelte'
   import { href, t, when } from '$lib/t'
   import { recordCode } from '$lib/code'
+  import { pictureAlt } from '$lib/picture'
   let { data, form } = $props()
   const source = $derived(data.source)
   const heading = $derived(source.title || source.url || t('source.title'))
@@ -70,7 +71,7 @@
         <div class="stack body">
           {#if sighting.media.length}
             <div class="pictures" class:single={sighting.media.length === 1}>
-              {#each sighting.media as picture, position (picture.image_key)}<MarkedPicture {picture} alt="{sighting.place || t('field.image')} {position + 1}" />{/each}
+              {#each sighting.media as picture, position (picture.image_key)}<MarkedPicture {picture} alt={pictureAlt([tile.ids, recordCode(tile.id), sighting.via ? null : source.title, sighting.place], position, sighting.media.length)} />{/each}
             </div>
           {/if}
           {#if sighting.via}<span class="badge via">{t('source.foundVia')}</span>{/if}
