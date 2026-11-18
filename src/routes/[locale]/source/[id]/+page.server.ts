@@ -15,8 +15,11 @@ export const load: PageServerLoad = async (event) => {
   if (!found) error(404)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, found.sightings.map(sighting => sighting.tile), event.locals.glyphStyle)
   const dates = await readDates(env(event).DB, [found.source.report_date, ...found.sightings.flatMap(s => [s.original_date, ...s.vias.map(via => via.report_date)])])
-  const [aliases, changes] = await Promise.all([sourceAliases(env(event).DB, id), sourceAliasChanges(env(event).DB, id)])
-  return { ...found, glyphs, dates, aliases, changes }
+  const param = event.url.searchParams.get('before')
+  const before = param === null ? null : positiveId(param)
+  if (param !== null && !before) error(404)
+  const [aliases, history] = await Promise.all([sourceAliases(env(event).DB, id), sourceAliasChanges(env(event).DB, id, before)])
+  return { ...found, glyphs, dates, aliases, ...history, before }
 }
 
 async function aliasAction(event: RequestEvent, remove: boolean) {

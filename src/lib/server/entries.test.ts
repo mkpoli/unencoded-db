@@ -1740,3 +1740,14 @@ test('an alias follows its original citation through removal and re-use', async 
   expect(raw.query('SELECT spelling, removed, actor FROM source_alias_changes ORDER BY id').all()).toEqual(
     [0, 1].map(removed => ({ spelling: 'School A', removed, actor: who.actor })))
 })
+
+test('each citation occupies one suggestion even with many matching aliases', async () => {
+  const entry = await createEntry(db, fields(), seen({ url: 'https://example.org/book' }), [], who)
+  await createEntry(db, fields(), seen({ title: 'Dic Z' }), [], who)
+  const [source] = await suggestSources(db, 'example.org')
+  expect(source.url).toBe('https://example.org/book')
+  expect((await sourceList(db, 'new', null, null, 'example.org')).sources[0].id).toBe(source.id)
+  expect((await getEntry(db, entry))!.sightings[0].source_id).toBe(source.id)
+  for (let i = 0; i < 26; i++) await editSourceAlias(db, source.id, `Dic ${i}`, false, who.actor)
+  expect((await suggestSources(db, 'Dic')).map(row => row.title)).toEqual([null, 'Dic Z'])
+})

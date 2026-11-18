@@ -11,7 +11,7 @@ CREATE TABLE source_alias_changes (
   spelling TEXT NOT NULL,
   removed INTEGER NOT NULL,
   actor TEXT NOT NULL REFERENCES people(id),
-  at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX source_alias_changes_by_source ON source_alias_changes(source_id, id);
 
@@ -36,7 +36,7 @@ CREATE TABLE source_search_names (
   source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
   PRIMARY KEY (lookup, source_id)
 ) WITHOUT ROWID;
-CREATE INDEX source_search_names_by_source ON source_search_names(source_id);
+CREATE INDEX source_search_names_by_source ON source_search_names(source_id, lookup);
 CREATE VIEW public_source_names AS
   SELECT id AS source_id, name_lookup AS lookup FROM sources WHERE records > 0 AND name_lookup IS NOT NULL
   UNION ALL SELECT a.source_id, a.lookup FROM source_aliases a JOIN sources s ON s.id = a.source_id WHERE s.records > 0;

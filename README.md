@@ -39,7 +39,7 @@ The local setup and production release run the date sweep after applying migrati
 
 ## Source names
 
-On a source page, open **Alternate names** to add a spelling or abbreviation for that citation. The Sources page and the title fields for direct and intermediate citations accept the start of a title or alternate name. Picking an edition fills its citation details. A new title can be entered freely.
+On a source page, open **Alternate names** to add a spelling or abbreviation for that citation. The Sources page and the title fields for direct and intermediate citations accept the start of a title or alternate name. Picking an edition fills its citation details. A new title can be entered freely. URL-only sources also match their hostname. The release runs `scripts/sweep-source-names.ts` to normalize existing names.
 
 ## Publishers
 
@@ -73,7 +73,7 @@ An agent can sign in, and then writes under a person's name. The site is the OAu
 | `claims` | What a record states more than once: description sequences, composition, readings, meanings, codes, related characters, IVD, categories, collections, tags |
 | `sightings` | One place the character was seen: where, page, date, context, style, source types |
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
-| `source_aliases` | Alternate names for individual citations, including names shared by several editions |
+| `source_aliases`, `source_alias_changes`, `source_search_names` | Alternate names for individual citations, their contributor history, and the lookup index for visible sources |
 | `date_readings`, `evidence_dates` | Calendar readings and the view of transcribed dates in sources, sightings and revision history |
 | `date_index_state` | Generation used to retry writes when their date readings change |
 | `publishers`, `publisher_aliases` | Publisher identities and reviewed alternative spellings for the source filter |
@@ -107,6 +107,8 @@ The CSV export has one column for each kind of claim, and a claim names its link
 | `/api/export?format=json` | One JSON object: the licence, counts and generation time in `dataset`, then every record in `entries` |
 | `/api/export?format=csv` | One row for each piece of evidence, and one for a record without any |
 | `/api/export?format=media` | One row for each visible picture, with its record, source and direct address |
+
+Exports contain the transcribed citation fields. Alternate names and their edit history are available on the source page.
 
 The JSON file carries the record's public code, the name it is credited to, and its `claims` and `evidence`. A claim's `sightings` are as stored, so an id there may name a hidden sighting that is not in `evidence`. Images stay under the rights of their sources; the image list names each source and does not redistribute the files. Records and descriptions are under CC BY-SA 4.0. `GET /api/entries` remains the page-at-a-time cursor, with a `Link` header to the next page. The `dataset` object names the journal revision the download started from; a write during the download fails it, so a mixed file is not delivered.
 

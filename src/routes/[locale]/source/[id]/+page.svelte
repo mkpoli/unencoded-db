@@ -4,7 +4,7 @@
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
-  import { href, t } from '$lib/t'
+  import { href, t, when } from '$lib/t'
   import { recordCode } from '$lib/code'
   let { data, form } = $props()
   const source = $derived(data.source)
@@ -30,7 +30,7 @@
     <h1>{heading}</h1>
     {#if source.url && /^https?:\/\//i.test(source.url)}<a class="text-link url" href={source.url} target="_blank" rel="noopener noreferrer">{source.url} ↗</a>{/if}
     <dl class="facts">{#each facts as fact}{#if source[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{#if fact.key === 'report_date'}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} />{:else}{source[fact.key]}{/if}</dd></div>{/if}{/each}</dl>
-    <details class="aliases" open={form != null || data.aliases.length > 0}>
+    <details class="aliases" open={form != null || data.aliases.length > 0 || data.before !== null}>
       <summary>{t('source.aliases')}{#if data.aliases.length} ({data.aliases.length}){/if}</summary>
       {#each data.aliases as alias}
         <form class="row" method="POST" action="?/removeAlias">
@@ -44,10 +44,11 @@
         <button class="button">{t('source.addAlias')}</button>
       </form>
       {#if data.changes.length}
-        <details><summary>{t('nav.history')}</summary>
+        <details id="alias-history" open={data.before !== null}><summary>{t('nav.history')}</summary>
           <ul>{#each data.changes as change (change.id)}
-            <li>{t(change.removed ? 'source.aliasRemoved' : 'source.aliasAdded', { alias: change.spelling })} · <a class="text-link" href={href(`/u/${change.actor}`)}>{change.name}</a> · <time>{change.at}</time></li>
+            <li>{t(change.removed ? 'source.aliasRemoved' : 'source.aliasAdded', { alias: change.spelling })} · <a class="text-link" href={href(`/u/${change.actor}`)}>{change.name}</a> · <time datetime={change.at}>{when(change.at)}</time></li>
           {/each}</ul>
+          {#if data.older}<a class="text-link" href={`?before=${data.older}#alias-history`}>{t('browse.more')}</a>{/if}
         </details>
       {/if}
       {#if form?.aliasError}<p role="alert">{t('source.aliasError')}</p>{/if}

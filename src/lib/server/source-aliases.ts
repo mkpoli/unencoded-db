@@ -1,4 +1,4 @@
-import { nameKey } from '../name-key'
+import { sourceNameKey } from '../name-key'
 import type { Source } from './entries'
 
 const prefix = "lookup >= ? AND lookup < CAST(? || X'FF' AS TEXT)"
@@ -7,17 +7,19 @@ export const SOURCE_SUGGESTIONS = 24
 export type NameCursor = [string, number]
 
 export async function suggestSources(db: D1Database, text: string, cursor: NameCursor | null = null) {
-  const key = nameKey(text)
+  const key = sourceNameKey(text)
   if (!key || (cursor && !cursor[0].startsWith(key))) return []
   const { results } = await db.prepare(`SELECT s.id, s.title, s.url, s.author, s.publisher, s.report_date,
     n.lookup, a.spelling AS alias FROM (
-      SELECT lookup, source_id FROM source_search_names
+      SELECT lookup, source_id FROM source_search_names candidate
       WHERE lookup < CAST(? || X'FF' AS TEXT) AND (lookup, source_id) > (?, ?)
+      AND NOT EXISTS (SELECT 1 FROM source_search_names earlier WHERE earlier.source_id = candidate.source_id
+        AND earlier.lookup >= ? AND earlier.lookup < candidate.lookup)
       ORDER BY lookup, source_id LIMIT ?
     ) n CROSS JOIN sources s ON s.id = n.source_id
     LEFT JOIN source_aliases a ON a.source_id = n.source_id AND a.lookup = n.lookup
     ORDER BY n.lookup, n.source_id`)
-    .bind(key, cursor?.[0] ?? key, cursor?.[1] ?? 0, SOURCE_SUGGESTIONS + 1).all<Source & { lookup: string; alias: string | null }>()
+    .bind(key, cursor?.[0] ?? key, cursor?.[1] ?? 0, key, SOURCE_SUGGESTIONS + 1).all<Source & { lookup: string; alias: string | null }>()
   return results
 }
 
@@ -27,16 +29,16 @@ export async function sourceAliases(db: D1Database, id: number) {
   return results.map(row => row.spelling)
 }
 
-export async function sourceAliasChanges(db: D1Database, id: number) {
+export async function sourceAliasChanges(db: D1Database, id: number, before: number | null) {
   const { results } = await db.prepare(`SELECT h.id, h.spelling, h.removed, h.at, coalesce(m.id, p.id) AS actor,
     coalesce(m.name, p.name) AS name FROM source_alias_changes h JOIN people p ON h.actor = p.id
-    LEFT JOIN people m ON m.id = p.merged_into WHERE h.source_id = ? ORDER BY h.id DESC LIMIT 50`)
-    .bind(id).all<{ id: number; spelling: string; removed: number; at: string; actor: string; name: string }>()
-  return results
+    LEFT JOIN people m ON m.id = p.merged_into WHERE h.source_id = ? AND h.id < ? ORDER BY h.id DESC LIMIT 51`)
+    .bind(id, before ?? Number.MAX_SAFE_INTEGER).all<{ id: number; spelling: string; removed: number; at: string; actor: string; name: string }>()
+  return { changes: results.slice(0, 50), older: results.length > 50 ? results[49].id : null }
 }
 
 export async function editSourceAlias(db: D1Database, id: number, text: string, remove: boolean, actor: string) {
-  const spelling = text.trim(), key = nameKey(spelling)
+  const spelling = text.trim(), key = sourceNameKey(spelling)
   if (!key || spelling.length > 300 || key.length > 300) return false
   const live = 'EXISTS (SELECT 1 FROM sources WHERE id = ?1 AND records > 0)'
   // Log the stored spelling on removal. The mutation and journal share one D1 transaction.

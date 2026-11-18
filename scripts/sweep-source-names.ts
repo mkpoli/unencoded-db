@@ -1,4 +1,4 @@
-import { nameKey } from '../src/lib/name-key'
+import { sourceNameKey } from '../src/lib/name-key'
 import { executeD1, importD1 } from './d1'
 
 const [where] = process.argv.slice(2)
@@ -12,8 +12,8 @@ for (;;) {
     FROM sources WHERE id > ${after} ORDER BY id LIMIT 500`
   const rows: Row[] = JSON.parse(executeD1(where, '--json', '--command', query))[0].results
   if (!rows.length) break
-  const updates = rows.filter(row => nameKey(row.name) !== row.name_lookup).map(row =>
-    `UPDATE sources SET name_lookup = ${literal(nameKey(row.name))} WHERE id = ${row.id} AND hash = ${literal(row.hash)};`)
+  const updates = rows.filter(row => sourceNameKey(row.name) !== row.name_lookup).map(row =>
+    `UPDATE sources SET name_lookup = ${literal(sourceNameKey(row.name))} WHERE id = ${row.id} AND hash = ${literal(row.hash)};`)
   if (updates.length) importD1(where, updates.join('\n'))
   corrected += updates.length
   after = rows.at(-1)!.id

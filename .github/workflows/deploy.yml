@@ -33,7 +33,9 @@ jobs:
       - run: bun run check
       - run: bun run build
       - run: bunx wrangler d1 migrations apply DB --remote
+      - run: bun scripts/sweep-source-names.ts --remote
       - run: bunx wrangler deploy
+      # Reconcile citations entered by the previous Worker during the release.
       - run: bun scripts/sweep-source-names.ts --remote
       - run: bun scripts/sweep-publishers.ts --remote
       - run: bun scripts/sweep-dates.ts --remote

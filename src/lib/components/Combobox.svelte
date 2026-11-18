@@ -9,8 +9,8 @@
   // when nothing in it fits. It is a plain input until scripts run. The pattern is the ARIA editable combobox
   // with list autocomplete: arrow keys move through the list, Enter takes an option, Escape folds the list.
   // `onchange` hears the value once it is settled: an option taken, or the field left.
-  let { id, name, value = $bindable(''), options, labelledby, maxlength, onopen, onquery, onchange, onselect, onmore }: {
-    id: string; name: string; value?: string; options: readonly ComboOption[]; labelledby?: string; maxlength?: number; onopen?: () => void; onquery?: (text: string) => void; onchange?: (value: string) => void; onselect?: (option: ComboOption) => void; onmore?: () => void
+  let { id, name, value = $bindable(''), options, labelledby, maxlength, placeholder, filter = true, onopen, onquery, onchange, onselect, onmore }: {
+    id: string; name: string; value?: string; options: readonly ComboOption[]; labelledby?: string; maxlength?: number; placeholder?: string; filter?: boolean; onopen?: () => void; onquery?: (text: string) => void; onchange?: (value: string) => void; onselect?: (option: ComboOption) => void; onmore?: () => void
   } = $props()
 
   let open = $state(false)
@@ -20,7 +20,7 @@
   // A value that is already an option shows the whole list, so the other options are there to change to.
   const shown = $derived.by(() => {
     const typed = fold(value)
-    if (!typed || options.some(option => fold(option.label) === typed)) return options
+    if (!filter || !typed || options.some(option => fold(option.label) === typed)) return options
     return options.filter(option => option.more || fold(`${option.label} ${option.hint ?? ''} ${option.terms ?? ''}`).includes(typed))
   })
   // Remote suggestions can reorder while an arrow-key selection is active.
@@ -63,7 +63,7 @@
 
 <div class="combo">
   <input
-    {id} {name} {maxlength} class="input" type="text" role="combobox" autocomplete="off" spellcheck="false"
+    {id} {name} {maxlength} {placeholder} class="input" type="text" role="combobox" autocomplete="off" spellcheck="false"
     aria-autocomplete="list" aria-expanded={expanded} aria-controls="{id}-list" aria-labelledby={labelledby}
     aria-activedescendant={expanded && shown[active] ? optionId(active) : undefined}
     bind:value onclick={show} onkeydown={keydown} oninput={event => { show(); activeKey = null; onquery?.(event.currentTarget.value) }} onblur={() => { open = false; activeKey = null; onchange?.(value) }}

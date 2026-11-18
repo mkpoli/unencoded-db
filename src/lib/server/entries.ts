@@ -1,5 +1,5 @@
 import { sourceMatches } from './source-aliases'
-import { nameKey, nameLabel } from '../name-key'
+import { nameKey, nameLabel, sourceNameKey } from '../name-key'
 // The store of records: an entry is a character, a claim is one thing the record states about it, a
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
@@ -352,7 +352,7 @@ async function citationOf(db: D1Database, values: (string | null)[], dates: Date
       .bind(nameLabel(publisher), key))
   }
   const [url, title, author, imprint, date] = values
-  const sourceName = nameKey(title || url || author || imprint || date || '')
+  const sourceName = sourceNameKey(title || url || author || imprint || date || '')
   statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName))
   return { hash, statements }
 }
@@ -1191,7 +1191,7 @@ function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | nul
   const bound = order.key ? [cursor?.key ?? start, cursor?.id ?? start] : [cursor?.id ?? start]
   type Row = Source & { year: number | null; records: number; direct: string; via: string }
   return db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(ways[0])} AS direct, ${seen(ways[1])} AS via FROM ${query ? `(SELECT DISTINCT source_id FROM (${sourceMatches})) m CROSS JOIN sources c ON c.id = m.source_id` : `sources c INDEXED BY ${order.index}${publisher !== null ? '_publisher' : ''}`} WHERE ${order.where} ${publisher !== null ? 'AND c.publisher_id = ?' : ''} AND ${after} ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction} LIMIT ?`)
-    .bind(...(query ? [nameKey(query), nameKey(query)] : []), ...(publisher !== null ? [publisher] : []), ...bound, limit).all<Row>().then(({ results }) => results)
+    .bind(...(query ? [sourceNameKey(query), sourceNameKey(query)] : []), ...(publisher !== null ? [publisher] : []), ...bound, limit).all<Row>().then(({ results }) => results)
 }
 
 // A page of the source gallery in one order: its sources, each with the records seen in it, and the cursor

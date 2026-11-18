@@ -537,3 +537,18 @@ test('0028 backfills source publishers without rewriting their citation or hash'
   ])
   expect(raw.query('PRAGMA foreign_key_check').all()).toEqual([])
 })
+
+test('0029 indexes existing public names and simplified spellings and restores them on visibility changes', () => {
+  const raw = new Database(':memory:')
+  const directory = join(import.meta.dir, '../../../migrations')
+  for (const file of readdirSync(directory).sort().filter(file => file < '0029')) raw.exec(migration(file))
+  raw.exec("INSERT INTO sources(hash, title, records) VALUES ('one', '合併字學集韻', 1), ('two', '彙音字典', 0)")
+  raw.exec(migration('0029_source_aliases.sql'))
+  const names = () => raw.query('SELECT lookup FROM source_search_names ORDER BY lookup').all().map(row => (row as { lookup: string }).lookup)
+  expect(names()).toEqual(['合併字學集韻', '合并字学集韵'])
+  raw.exec("UPDATE sources SET records = 1 WHERE hash = 'two'")
+  expect(names()).toContain('汇音字典')
+  raw.exec("UPDATE sources SET records = 0 WHERE hash = 'one'")
+  expect(names()).toEqual(['彙音字典', '汇音字典'])
+  raw.close()
+})
