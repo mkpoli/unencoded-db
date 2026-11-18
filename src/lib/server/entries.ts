@@ -1231,16 +1231,18 @@ const EXPORT_SIGHTING_COLUMNS = ['id', 'entry_id', 'first_entry', 'rev', 'source
 const EXPORT_MEDIA = `(SELECT json_group_array(json_object(${IMAGE_FIELDS.map(field => `'${field}', x.${field}`).join(', ')})) FROM (SELECT * FROM sighting_media WHERE sighting_id = s.id ORDER BY position) x)`
 const EXPORT_VIAS = `(SELECT json_group_array(json_object('id', x.id, ${CITATION_FIELDS.map(field => `'${field}', x.${field}`).join(', ')})) FROM (SELECT c.* FROM sighting_vias v JOIN sources c ON c.id = v.source_id WHERE v.sighting_id = s.id ORDER BY v.position) x)`
 const EXPORT_EVIDENCE = `CASE WHEN s.id IS NULL THEN NULL ELSE json_object(${EXPORT_SIGHTING_COLUMNS.map(column => `'${column}', s.${column}`).join(', ')}, ${CITATION_FIELDS.map(field => `'${field}', c.${field}`).join(', ')}, 'vias', json(${EXPORT_VIAS}), 'media', json(${EXPORT_MEDIA}), 'by_id', COALESCE(m.id, p.id), 'by_name', COALESCE(m.name, p.name)) END AS evidence_json`
-type ExportRow = Entry & { evidence_json: string | null }
-export type ExportEntry = Entry & { claims: Claim[]; evidence: Sighting[] }
+// The name a record is credited to, after the anonymous people merged into an account take its name.
+const EXPORT_AUTHOR = `(SELECT COALESCE(am.name, ap.name) FROM people ap LEFT JOIN people am ON am.id = ap.merged_into WHERE ap.id = e.created_by) AS created_by_name`
+type ExportRow = Entry & { evidence_json: string | null; created_by_name: string | null }
+export type ExportEntry = Entry & { claims: Claim[]; evidence: Sighting[]; created_by_name: string | null }
 export async function exportPage(db: D1Database, after: number, limit: number, sightingAfter: number | null = null) {
   const rows: ExportRow[] = []
   if (sightingAfter !== null) {
-    const continuation = await db.prepare(`SELECT e.*, ${EXPORT_EVIDENCE} FROM entries e JOIN sightings s INDEXED BY sightings_visible_export ON s.entry_id = e.id AND s.hidden_at IS NULL ${CITATION} ${WHO('s.created_by')} WHERE e.id = ? AND e.merged_into IS NULL AND e.hidden_at IS NULL AND s.id > ? ORDER BY s.id LIMIT ?`).bind(after, sightingAfter, limit + 1).all<ExportRow>()
+    const continuation = await db.prepare(`SELECT e.*, ${EXPORT_AUTHOR}, ${EXPORT_EVIDENCE} FROM entries e JOIN sightings s INDEXED BY sightings_visible_export ON s.entry_id = e.id AND s.hidden_at IS NULL ${CITATION} ${WHO('s.created_by')} WHERE e.id = ? AND e.merged_into IS NULL AND e.hidden_at IS NULL AND s.id > ? ORDER BY s.id LIMIT ?`).bind(after, sightingAfter, limit + 1).all<ExportRow>()
     rows.push(...continuation.results)
   }
   if (rows.length <= limit) {
-    const following = await db.prepare(`SELECT e.*, ${EXPORT_EVIDENCE} FROM entries e INDEXED BY entries_live_export LEFT JOIN sightings s INDEXED BY sightings_visible_export ON s.entry_id = e.id AND s.hidden_at IS NULL ${CITATION} ${WHO('s.created_by')} WHERE e.id > ? AND e.merged_into IS NULL AND e.hidden_at IS NULL ORDER BY e.id, s.id LIMIT ?`).bind(after, limit + 1 - rows.length).all<ExportRow>()
+    const following = await db.prepare(`SELECT e.*, ${EXPORT_AUTHOR}, ${EXPORT_EVIDENCE} FROM entries e INDEXED BY entries_live_export LEFT JOIN sightings s INDEXED BY sightings_visible_export ON s.entry_id = e.id AND s.hidden_at IS NULL ${CITATION} ${WHO('s.created_by')} WHERE e.id > ? AND e.merged_into IS NULL AND e.hidden_at IS NULL ORDER BY e.id, s.id LIMIT ?`).bind(after, limit + 1 - rows.length).all<ExportRow>()
     rows.push(...following.results)
   }
   const page: ExportEntry[] = []

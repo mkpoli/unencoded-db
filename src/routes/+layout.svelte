@@ -8,7 +8,7 @@
   let { data, children } = $props()
 
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
-  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
+  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
   $effect(() => { syncFavourites(data.person?.id ?? null, data.favourites) })
   let menu = $state<HTMLDetailsElement>()
   const remember = (tag: string) => { document.cookie = `${LOCALE_COOKIE}=${tag};path=/;max-age=31536000;samesite=lax`; if (menu) menu.open = false }
@@ -49,6 +49,7 @@
       <div class="menu-body">
         <div class="menu-group">
           <a href={href('/favourites')} class:on={section === 'favourites'} onclick={() => { if (menu) menu.open = false }}>{t('favourites.title')}</a>
+          <a href={href('/data')} class:on={section === 'data'} aria-current={section === 'data' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('data.title')}</a>
         </div>
         <div class="menu-group">
           <span class="menu-label">{t('nav.language')}</span>
@@ -71,7 +72,7 @@
     <a class="text-link" href="https://creativecommons.org/licenses/by-sa/4.0/" rel="license noopener" target="_blank">{t('footer.licence')}</a>
     · {t('footer.images')} · {t('footer.code')}
     · <a class="text-link" href="https://glyphatlas.org/" target="_blank" rel="noopener">Glyph Atlas</a>
-    · <a class="text-link" href="/api/entries">{t('footer.data')}</a>
+    · <a class="text-link" href={href('/data')}>{t('footer.data')}</a>
   </p>
   <p><ChatLinks /></p>
 </footer>

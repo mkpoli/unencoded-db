@@ -1,6 +1,6 @@
 <script lang="ts">
   import Seo from '$lib/components/Seo.svelte'
-  import { t } from '$lib/t'
+  import { href, t } from '$lib/t'
   import ChatLinks from '$lib/components/ChatLinks.svelte'
 </script>
 
@@ -12,7 +12,11 @@
   <section class="stack">
     <h2>{t('about.dataTitle')}</h2>
     <p>{t('about.data')}</p>
-    <div class="row"><a class="text-link" href="/api/entries">JSON</a><a class="text-link" href="/api/entries?format=csv">CSV</a></div>
+    <div class="row">
+      <a class="text-link" href={href('/data')}>{t('data.title')}</a>
+      <a class="text-link" href="/api/export?format=json">{t('about.apiJson')}</a>
+      <a class="text-link" href="/api/export?format=csv">{t('about.apiCsv')}</a>
+    </div>
   </section>
   <section class="stack">
     <h2>{t('footer.community')}</h2>

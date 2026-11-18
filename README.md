@@ -80,6 +80,20 @@ Only a meaning or a reading can be a scope. A reading may hold under meanings, a
 
 The CSV export has one column for each kind of claim, and a claim names its links after its value: `東 (usage) [under: east | cmn:dōng] [evidence: #3 #7]`, where the numbers are values of `sighting_id`. The JSON export carries `key`, `sightings` and `under` as stored.
 
+## Open data
+
+`/[locale]/data` downloads the whole public dataset: every visible record with its claims, evidence and sources.
+
+| File | Holds |
+|---|---|
+| `/api/export?format=json` | One JSON object: the licence, counts and generation time in `dataset`, then every record in `entries` |
+| `/api/export?format=csv` | One row for each piece of evidence, and one for a record without any |
+| `/api/export?format=media` | One row for each visible picture, with its record, source and direct address |
+
+The JSON file carries the record's public code, the name it is credited to, and its `claims` and `evidence`. A claim's `sightings` are as stored, so an id there may name a hidden sighting that is not in `evidence`. Images stay under the rights of their sources; the image list names each source and does not redistribute the files. Records and descriptions are under CC BY-SA 4.0. `GET /api/entries` remains the page-at-a-time cursor, with a `Link` header to the next page. The `dataset` object names the journal revision the download started from; a write during the download fails it, so a mixed file is not delivered.
+
+A download is generated in one Worker request, so D1's query budget per invocation bounds how large it can grow; a dataset beyond that budget is read through the paged API.
+
 ## Record codes
 
 A record's id is stored as an integer and shown in hexadecimal as `R+A1C2`, beside the same digits spelled with the first sixteen characters of the 千字文 (天 = 0 … 張 = F): 盈地辰玄. The 千字文 digits were proposed by NGWU YOH (chat message, 2026-11-14, unpublished).
