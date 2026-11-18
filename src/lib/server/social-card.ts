@@ -23,6 +23,9 @@ const cards = new Map<string, { png: Uint8Array<ArrayBuffer>; expires: number }>
 const CARD_CACHE_LIMIT = 8
 const CACHEABLE_PNG_BYTES = 1024 * 1024
 const MAX_EVIDENCE_PIXELS = 1_048_576
+// A marked picture is read whole to show the page around the mark.
+const MAX_MARKED_BYTES = 3 * 1024 * 1024, MAX_MARKED_PIXELS = 4_194_304
+const STYLE_BUDGET_MS = 5000
 const PANEL_X = 744, PANEL_WIDTH = 456, PANEL_HEIGHT = 630
 const PLATE = 116, PLATE_GAP = 13, PLATE_Y = 398
 
@@ -133,16 +136,16 @@ export function panelView(width: number, height: number, focus: Box | null): Box
   return [clamp(centerX - viewWidth / 2, width - viewWidth), clamp(centerY - viewHeight / 2, height - viewHeight), viewWidth, viewHeight]
 }
 
-async function evidenceFile(bucket: Pick<R2Bucket, 'get'>, key: string) {
+async function evidenceFile(bucket: Pick<R2Bucket, 'get'>, key: string, maxBytes = MAX_THUMB, maxPixels = MAX_EVIDENCE_PIXELS) {
   const object = await bucket.get(key)
   if (!object) return null
-  if (object.size > MAX_THUMB) {
+  if (object.size > maxBytes) {
     await object.body.cancel()
     return null
   }
   const bytes = await object.arrayBuffer()
   const image = sniff(new Uint8Array(bytes))
-  if (!image?.width || !image.height || image.width * image.height > MAX_EVIDENCE_PIXELS) return null
+  if (!image?.width || !image.height || image.width * image.height > maxPixels) return null
   return { bytes, image }
 }
 
@@ -150,7 +153,7 @@ async function evidenceFile(bucket: Pick<R2Bucket, 'get'>, key: string) {
 // around it; its thumbnail, which holds only the mark, stands in when the picture is too large to read.
 export async function evidencePanel(bucket: Pick<R2Bucket, 'get'>, picture: CardPicture) {
   const marked = boxesOf(picture.box)[0] ?? null
-  const whole = marked ? await evidenceFile(bucket, picture.image_key) : null
+  const whole = marked ? await evidenceFile(bucket, picture.image_key, MAX_MARKED_BYTES, MAX_MARKED_PIXELS) : null
   const file = whole ?? await evidenceFile(bucket, picture.thumb_key)
   if (!file) return ''
   const { width, height, type } = file.image
@@ -182,7 +185,11 @@ export async function recordArtwork(
 ): Promise<CardArt> {
   const [evidence, ...drawings] = await Promise.all([
     cover ? evidencePanel(bucket, cover) : '',
-    ...GLYPH_STYLES.map(style => drawGlyph(bucket, glyph, { ...context, style }).catch(() => null)),
+    // A style still drawing after the budget is left off this card; its drawing is still stored for the next one.
+    ...GLYPH_STYLES.map(style => Promise.race([
+      drawGlyph(bucket, glyph, { ...context, style }).catch(() => null),
+      new Promise<null>(resolve => setTimeout(resolve, STYLE_BUDGET_MS, null)),
+    ])),
   ])
   const glyphs = GLYPH_STYLES.flatMap((style, index) => {
     const drawing = drawings[index]
@@ -199,8 +206,10 @@ function plates(glyphs: CardArt['glyphs']) {
   return glyphs.map(({ name, drawing }, index) => {
     const x = 68 + index * (PLATE + PLATE_GAP)
     const inset = 12
+    // A drawing names its masks after the description, which every style shares, so each plate gets its own ids.
+    const markup = drawing.startsWith('<') ? drawing.replace(/(\bid="|url\(#|href="#)/g, `$1p${index}-`) : `<path d="${drawing}"/>`
     return `<rect x="${x}" y="${PLATE_Y}" width="${PLATE}" height="${PLATE}" rx="3" fill="${PAPER}"/>
-    <svg x="${x + inset}" y="${PLATE_Y + inset}" width="${PLATE - inset * 2}" height="${PLATE - inset * 2}" viewBox="0 0 1000 1000" color="${PRINT}" fill="${PRINT}">${drawing.startsWith('<') ? drawing : `<path d="${drawing}"/>`}</svg>
+    <svg x="${x + inset}" y="${PLATE_Y + inset}" width="${PLATE - inset * 2}" height="${PLATE - inset * 2}" viewBox="0 0 1000 1000" color="${PRINT}" fill="${PRINT}">${markup}</svg>
     ${text(name, x + PLATE / 2, PLATE_Y + PLATE + 27, 18, MUTED, 'middle')}`
   }).join('')
 }
@@ -240,7 +249,8 @@ export async function renderCard(assets: Fetcher, origin: string, card: Card): P
   const titleStart = plated ? Math.round(178 + size * 0.73) : title.length === 3 ? 237 : 263
   const heading = title.map((line, position) => text(line, 68, titleStart + position * (size + 4), size, INK)).join('')
   const detailStart = titleStart + (title.length - 1) * (size + 4) + 52
-  const detail = card.detail ? lines(card.detail, 24, 2).map((line, position) => text(line, 68, detailStart + position * 33, 26, MUTED)).join('') : ''
+  const detailLines = plated && detailStart + 33 > PLATE_Y - 24 ? 1 : 2
+  const detail = card.detail ? lines(card.detail, 24, detailLines).map((line, position) => text(line, 68, detailStart + position * 33, 26, MUTED)).join('') : ''
   const footY = plated ? 592 : 573
   const caption = card.caption ? lines(card.caption, 12, 1)[0] : ''
   const backdrop = Buffer.from(background).toString('base64')
