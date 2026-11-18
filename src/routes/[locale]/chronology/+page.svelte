@@ -1,6 +1,7 @@
 <script lang="ts">
   import Seo from '$lib/components/Seo.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
+  import ViaChain from '$lib/components/ViaChain.svelte'
   import { recordCode } from '$lib/code'
   import { href, media, t } from '$lib/t'
   let { data } = $props()
@@ -64,6 +65,7 @@
                     {#if entry.sighting}<span class="source">{#if entry.sighting.title}『{entry.sighting.title}』{:else if entry.sighting.place}{entry.sighting.place}{/if}{#if entry.sighting.author}<span class="muted"> {entry.sighting.author}</span>{/if}{#if entry.sighting.date}<span class="date" title={t(entry.tile.firstYearKind === 'original' ? 'field.originalDate' : 'field.reportDate')}>（{entry.sighting.date}）</span>{/if}</span>{/if}
                   </span>
                 </a>
+                {#if entry.sighting?.vias.length}<div class="via"><ViaChain vias={entry.sighting.vias} /></div>{/if}
               </td>
             </tr>
           {/each}
@@ -99,6 +101,7 @@
   .decade + .entry.first td { border-top:none }
   tbody + tbody .decade th { border-top:1px solid var(--line-strong) }
   .what { padding:4px 12px }
+  .via { margin-top:4px; margin-inline-start:52px }
   .record { display:flex; align-items:center; gap:12px; min-width:0; padding:2px 0 }
   .record:hover .ids, .record:hover .source { text-decoration:underline; text-decoration-color:var(--line-strong) }
   .glyph { flex:none; display:grid; place-items:center; width:40px; height:40px; overflow:hidden; border-radius:4px; background:var(--surface-tile); color:var(--ink) }

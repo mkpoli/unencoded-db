@@ -9,6 +9,7 @@
   import { COLLECTIONS, type TagType } from '$lib/tags'
   import { parseSightingTypes } from '$lib/scripts'
   import { statusOf } from '$lib/status'
+  import ViaChain from '$lib/components/ViaChain.svelte'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
   import { locale, t } from '$lib/t'
   let { fields, sighting = false, labels = new Map(), tagTypes = new Map() }: { fields: EntryFields | SightingFields; sighting?: boolean; labels?: ReadonlyMap<string, string>; tagTypes?: ReadonlyMap<string, TagType> } = $props()
@@ -59,7 +60,7 @@
       {#if source.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${source.context}`)}</dd></div>{/if}
       {#if source.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${source.style}`)}</dd></div>{/if}
       {#if types.length}<div><dt>{t('field.sourceTypes')}</dt><dd>{types.map(type => t(`evidence.type.${type}`)).join(' · ')}</dd></div>{/if}
-      {#each source.vias as via, position (position)}<div class="wide"><dt>{t('field.via')}</dt><dd>{[via.title, via.author, via.publisher, via.report_date, via.url].filter(Boolean).join(' · ')}</dd></div>{/each}
+      {#if source.vias.length}<div class="wide"><dt>{t('field.via')}</dt><dd><ViaChain vias={source.vias} label={false} /></dd></div>{/if}
     </dl>
     {#if source.note}<p class="description">{source.note}</p>{/if}
   </div>

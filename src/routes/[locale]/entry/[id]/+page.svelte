@@ -23,6 +23,7 @@
   import SenseList from '$lib/components/SenseList.svelte'
   import TagFields from '$lib/components/TagFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
+  import ViaChain from '$lib/components/ViaChain.svelte'
   import type { CharacterFacts } from '$lib/encoded'
   import { compositionOf, encodingsOf, idsForms, primaryLayoutOf, supportedBy, valuesOf } from '$lib/claims'
   import { analyze } from '$lib/composition'
@@ -281,11 +282,7 @@
         {#if sighting.place}<h3>{sighting.place}</h3>{/if}
         {#if types.length || data.earliest?.sighting === sighting.id}<div class="row badges">{#if data.earliest?.sighting === sighting.id}<span class="badge earliest">{t('entry.earliest')}</span>{/if}{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
-        {#if sighting.vias.length}
-          <p class="via"><span class="muted">{t('field.via')}</span>
-            {#each sighting.vias as via, position (position)}{#if position}<span class="muted link-arrow" aria-hidden="true">←</span>{/if}
-              <span class="link"><a class="text-link" href={href(`/source/${via.id}`)}>{via.title || via.url || t('source.title')}</a>{#if via.url && /^https?:\/\//i.test(via.url)} <a class="text-link url" href={via.url} target="_blank" rel="noopener noreferrer">↗</a>{/if}</span>{/each}</p>
-        {/if}
+        {#if sighting.vias.length}<ViaChain vias={sighting.vias} />{/if}
         <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{sighting[field.key]}</dd></div>{/if}{/each}
           {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
@@ -355,8 +352,6 @@
   .pictures:not(.single) { --picture-height: 260px }
   .button.small { min-height:32px; padding:4px 10px; font-size:12.5px }
   .url { overflow-wrap:anywhere }
-  .via { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; margin:0; overflow-wrap:anywhere }
-  .via .link { min-width:0 }
   @media(max-width:700px) { .panel { padding:16px } .plate { width:72px; height:72px } .styles { gap:8px } .styles .plate { width:64px; height:64px } }
   .first-seen { align-self:center; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; text-decoration:underline; text-decoration-color:var(--line-strong); text-underline-offset:3px }
   .first-seen:hover { color:var(--ink) }

@@ -965,14 +965,16 @@ describe('query cost', () => {
     await createEntry(db, fields(), seen({ title: 'Book', vias: [via({ title: 'Post' })] }), [], who)
     await claimedBy(traced, 'ids', '⿰木木')
     await sourcePage(traced, 1)
-    // claims, then the source itself (a lookup by key), then a direct and a via read of rows and pictures.
-    expect(plans).toHaveLength(6)
+    // claims, then the source itself (a lookup by key), then a direct and a via read of rows and pictures,
+    // then the chains of the listed sightings.
+    expect(plans).toHaveLength(7)
     plans.splice(1, 1)
     expect(plans[0]).toMatch(/SEARCH k USING COVERING INDEX claims_by_value \(kind=\? AND value=\?\)/)
     expect(plans[1]).toMatch(/SEARCH s USING INDEX sightings_by_source \(source_id=\?\)/)
     expect(plans[2]).toMatch(/SEARCH s USING INDEX sightings_by_source \(source_id=\?\)/)
     expect(plans[3]).toMatch(VIA_SEARCH)
     expect(plans[4]).toMatch(VIA_SEARCH)
+    expect(plans[5]).toMatch(/SEARCH v USING PRIMARY KEY \(sighting_id=\?\)/)
     for (const details of plans) expect(details).not.toMatch(/TEMP B-TREE|SCAN (?!.*USING)/)
   })
 
@@ -1516,10 +1518,10 @@ describe('chronology', () => {
     expect(end.later).toBe(`at=1983.${CHRONICLE_PAGE + 14}`)
   })
 
-  test('names the evidence that holds each year, with the date it was read from', async () => {
-    const id = await createEntry(db, fields(), seen({ title: 'Old print', author: 'Someone', report_date: '1999', original_date: '1935年5月' }), [], who)
+  test('names the evidence that holds each year, with the date it was read from and the chain it came through', async () => {
+    const id = await createEntry(db, fields(), seen({ title: 'Old print', author: 'Someone', report_date: '1999', original_date: '1935年5月', vias: [via({ title: 'A post', author: 'Poster', publisher: 'X', report_date: '2020', url: 'https://example.test/post' })] }), [], who)
     const page = await chronology(db, { at: [1935, 0] })
-    expect(page.entries[0]).toMatchObject({ year: 1935, tile: { id }, sighting: { title: 'Old print', author: 'Someone', date: '1935年5月' } })
+    expect(page.entries[0]).toMatchObject({ year: 1935, tile: { id }, sighting: { title: 'Old print', author: 'Someone', date: '1935年5月', vias: [{ title: 'A post', author: 'Poster', publisher: 'X', report_date: '2020', url: 'https://example.test/post' }] } })
   })
 
   test('a place is a year and a record either way, or a decade', () => {

@@ -331,6 +331,7 @@ describe('found via', () => {
     const [work, via] = [(await getEntry(db, a))!.sightings[0].source_id!, (await getEntry(db, a))!.sightings[0].vias[1].id]
     const viaPage = await sourcePage(db, via)
     expect(viaPage!.sightings.map(s => [s.tile.id, s.via])).toEqual([[b, false], [a, true]])
+    expect(viaPage!.sightings.map(s => s.vias.map(link => link.title))).toEqual([[], ['A thread', 'A post']])
     expect(viaPage!.sightings[0].media.map(m => m.image_key)).toEqual(['q.jpg'])
     expect((await sourcePage(db, work))!.sightings.map(s => [s.tile.id, s.via])).toEqual([[a, false]])
     // A sighting that cites one source both ways is listed once.

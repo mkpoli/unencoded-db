@@ -2,6 +2,7 @@
   import Seo from '$lib/components/Seo.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
+  import ViaChain from '$lib/components/ViaChain.svelte'
   import { href, t } from '$lib/t'
   import { recordCode } from '$lib/code'
   let { data } = $props()
@@ -46,6 +47,7 @@
             </div>
           {/if}
           {#if sighting.via}<span class="badge via">{t('source.foundVia')}</span>{/if}
+          {#if sighting.vias.length}<ViaChain vias={sighting.vias} label={!sighting.via} />{/if}
           {#if sighting.place}<h3>{sighting.place}</h3>{/if}
           {#if sighting.types.length}<div class="row badges">{#each sighting.types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
           <dl class="facts">{#each seenFacts as fact}{#if sighting[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{sighting[fact.key]}</dd></div>{/if}{/each}
