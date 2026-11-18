@@ -262,7 +262,7 @@
           <div class="sheet">
             <CompositionField ids={primary} value={editComposition} />
             <ScriptPicker value={editValues.script} other={editValues.script_other} />
-            <IdentityFields anchor="edit-identity" claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} fill={filled} />
+            <IdentityFields anchor="edit-identity" claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} fill={filled} ids={primary} />
           </div>
         </CharacterFields>
         <div class="field" id="edit-description"><label for="description">{t('field.description')}</label><textarea id="description" class="input" name="description">{editValues.description ?? ''}</textarea></div>

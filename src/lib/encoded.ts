@@ -1,8 +1,9 @@
 // What is known of an encoded character, read from the tables in the browser when a form first asks. A
 // description match compares exact text, so it is a hint for the person adding a record.
+import { isDescription } from 'ids-input'
 import url from 'ids-input/data/babelstone-ids.tsv.gz?url'
 import { retrying } from './retrying'
-import { factsOf, parseDescriptions, parseUnihan, unihanBlock, type Descriptions, type UnihanRow } from './character-tables'
+import { descriptionParts, factsOf, parseDescriptions, totalStrokes, parseUnihan, unihanBlock, type Descriptions, type UnihanRow } from './character-tables'
 
 export type { CharacterFacts } from './character-tables'
 
@@ -24,4 +25,11 @@ export async function characterFacts(char: string) {
   let rows = unihan.get(block)
   if (!rows) unihan.set(block, rows = fetch(`/unihan/${block}.tsv`).then(response => response.ok ? response.text() : '').then(parseUnihan))
   return factsOf(char, await table, await rows)
+}
+
+/** An estimate of a description's total strokes, added up from the tables; null when a part has no count. */
+export async function descriptionStrokes(ids: string) {
+  const parts = isDescription(ids) ? descriptionParts(ids) : null
+  if (!parts) return null
+  return totalStrokes(await Promise.all(parts.map(part => characterFacts(part).then(facts => facts?.strokes ?? null, () => null))))
 }

@@ -4,14 +4,15 @@
   // equivalent to, IVD membership). A line opens by itself when the record states something on it.
   import { untrack } from 'svelte'
   import { CLAIM_LIMITS, encodingsOf, valuesOf, type Claim } from '$lib/claims'
-  import type { CharacterFacts } from '$lib/encoded'
+  import { descriptionStrokes, type CharacterFacts } from '$lib/encoded'
   import { t } from '$lib/t'
   import EncodingFields from './EncodingFields.svelte'
   import FactLine from './FactLine.svelte'
 
   // `fill` is what is known of an encoded character typed as the description; it fills the fields left
   // empty and opens their lines.
-  let { claims = [], radical = null, strokes = null, fill = null, anchor }: { anchor?: string; claims?: Claim[]; radical?: string | null; strokes?: number | null; fill?: CharacterFacts | null } = $props()
+  // `ids` is the description being typed; the sum of its parts' strokes is offered as the count's placeholder.
+  let { claims = [], radical = null, strokes = null, fill = null, ids = '', anchor }: { anchor?: string; claims?: Claim[]; radical?: string | null; strokes?: number | null; fill?: CharacterFacts | null; ids?: string } = $props()
 
   const uid = $props.id()
   const ivd = untrack(() => valuesOf(claims, 'ivd')[0] ?? '')
@@ -30,6 +31,16 @@
   let indexOpen = $state(untrack(() => indexed))
   let encodedOpen = $state(untrack(() => claims.some(claim => claim.kind === 'encoding' || claim.kind === 'ivd')))
 
+  // An estimate only: a part can take fewer strokes inside a character than alone. It is offered in the
+  // empty field and never sent.
+  let sum = $state<number | null>(null)
+  $effect(() => {
+    const described = ids
+    let live = true
+    descriptionStrokes(described).then(total => { if (live) sum = total })
+    return () => { live = false }
+  })
+
   $effect(() => {
     if (!fill) return
     untrack(() => {
@@ -44,7 +55,7 @@
   {#snippet value()}<span>{radicalValue.trim() || '—'}</span><span class="muted">·</span><span>{counted ? strokesValue : '—'}</span>{/snippet}
   <div class="pair">
     <div class="field"><label for="{uid}-radical">{t('field.radical')}</label><input id="{uid}-radical" class="input" name="radical" maxlength="20" bind:value={radicalValue} autocomplete="off" /></div>
-    <div class="field"><label for="{uid}-strokes">{t('field.strokes')}</label><input id="{uid}-strokes" class="input" name="strokes" type="number" min="0" max="199" bind:value={strokesValue} /></div>
+    <div class="field"><label for="{uid}-strokes">{t('field.strokes')}</label><input id="{uid}-strokes" class="input" name="strokes" type="number" min="0" max="199" placeholder={sum === null ? undefined : `≈ ${sum}`} bind:value={strokesValue} /></div>
   </div>
 </FactLine>
 <FactLine label={t('field.encodings')} stated={encoded.length > 0} bind:open={encodedOpen}>
