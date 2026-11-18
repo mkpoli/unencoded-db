@@ -59,3 +59,12 @@ test('a description no visible record states does not draw', async () => {
   raw.exec("UPDATE entries SET hidden_at = NULL, merged_into = 2")
   expect((await glyph(event(ask(first)))).status).toBe(404)
 })
+
+test('a temporarily unavailable object store returns a retryable status', async () => {
+  const { event } = fixture()
+  const request = event(ask(first))
+  request.platform.env.MEDIA.get = async () => { throw new Error('temporarily unavailable') }
+  const response = await glyph(request)
+  expect(response.status).toBe(503)
+  expect(response.headers.get('cache-control')).toBe('no-store')
+})

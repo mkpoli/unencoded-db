@@ -18,7 +18,7 @@ export const GET: RequestHandler = async (event) => {
   // made by another of either must not answer for this one.
   if (event.url.searchParams.get('v') !== composerDrawing(style)) return new Response(null, { status: 404 })
   const ids = cleanIds(raw)
-  if (raw.length > 200 || given.length > 8000 || [...ids].length < 2 || !isDescription(ids)) return new Response(null, { status: 404 })
+  if (raw.length > 200 || given.length > 8000 || (!ids || ([...ids].length > 1 && !isDescription(ids)))) return new Response(null, { status: 404 })
   const layout = layoutText(cleanLayout(given, ids)) || null
   if (given && !layout) return new Response(null, { status: 404 })
   const bindings = env(event)
@@ -26,7 +26,12 @@ export const GET: RequestHandler = async (event) => {
   // that states none; a layout matches the one stored with that description.
   const visible = await bindings.DB.prepare(`SELECT 1 FROM claims k CROSS JOIN entries e ON e.id = k.entry_id WHERE k.kind = 'ids' AND k.value = ? AND e.hidden_at IS NULL AND e.merged_into IS NULL AND json_extract(k.data, '$.layout') IS ? LIMIT 1`).bind(ids, layout).first()
   if (!visible) return new Response(null, { status: 404 })
-  const path = await drawGlyph(bindings.MEDIA, { ids, layout }, { assets: bindings.ASSETS, origin: event.url.origin, style })
+  let path
+  try {
+    path = await drawGlyph(bindings.MEDIA, { ids, layout }, { assets: bindings.ASSETS, origin: event.url.origin, style })
+  } catch {
+    return new Response(null, { status: 503, headers: { 'cache-control': 'no-store' } })
+  }
   if (!path) return new Response(null, { status: 404 })
   return json({ d: path }, { headers: { 'cache-control': 'public, max-age=31536000, immutable' } })
 }
