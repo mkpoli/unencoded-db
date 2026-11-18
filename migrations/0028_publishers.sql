@@ -3,7 +3,8 @@
 CREATE TABLE publishers (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
-  lookup TEXT NOT NULL UNIQUE
+  lookup TEXT NOT NULL UNIQUE,
+  listed INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE publisher_aliases (
   lookup TEXT PRIMARY KEY,
@@ -45,11 +46,6 @@ CREATE TRIGGER source_publisher_added AFTER INSERT ON sources WHEN NEW.publisher
 BEGIN
   UPDATE sources SET publisher_lookup = coalesce(NEW.publisher_lookup, (SELECT lookup FROM source_publisher_fallback WHERE id = NEW.id)) WHERE id = NEW.id;
 END;
-CREATE TRIGGER source_publisher_changed AFTER UPDATE OF publisher ON sources WHEN NEW.publisher IS NOT OLD.publisher
-BEGIN
-  UPDATE sources SET publisher_lookup = CASE WHEN NEW.publisher_lookup IS OLD.publisher_lookup
-    THEN (SELECT lookup FROM source_publisher_fallback WHERE id = NEW.id) ELSE NEW.publisher_lookup END WHERE id = NEW.id;
-END;
 UPDATE sources SET publisher_lookup = (SELECT lookup FROM source_publisher_fallback WHERE id = sources.id) WHERE publisher IS NOT NULL;
 
 -- Later curation immediately moves existing sources into the corrected group.
@@ -64,7 +60,29 @@ CREATE TRIGGER publisher_alias_removed AFTER DELETE ON publisher_aliases BEGIN
 END;
 
 CREATE INDEX sources_listed_publisher ON sources(publisher_id, id) WHERE records > 0;
+CREATE INDEX sources_any_publisher ON sources(publisher_id);
 CREATE INDEX sources_by_records_publisher ON sources(publisher_id, records, id) WHERE records > 0;
 CREATE INDEX sources_by_year_publisher ON sources(publisher_id, year, id) WHERE records > 0 AND year IS NOT NULL;
 CREATE INDEX sources_undated_publisher ON sources(publisher_id, id) WHERE records > 0 AND year IS NULL;
 CREATE INDEX publisher_aliases_by_publisher ON publisher_aliases(publisher_id);
+
+-- Keep suggestion reads bounded even when many publishers have only hidden citations.
+CREATE INDEX publishers_listed ON publishers(lookup) WHERE listed = 1;
+CREATE VIEW publisher_usage AS SELECT p.id,
+  EXISTS (SELECT 1 FROM sources s WHERE s.publisher_id = p.id AND s.records > 0) AS listed,
+  NOT EXISTS (SELECT 1 FROM sources s WHERE s.publisher_id = p.id)
+    AND NOT EXISTS (SELECT 1 FROM publisher_aliases a WHERE a.publisher_id = p.id) AS unused
+  FROM publishers p;
+UPDATE publishers SET listed = (SELECT u.listed FROM publisher_usage u WHERE u.id = publishers.id);
+CREATE TRIGGER source_publisher_visibility AFTER UPDATE OF publisher_id, records ON sources
+WHEN NEW.publisher_id IS NOT OLD.publisher_id OR (NEW.records > 0) != (OLD.records > 0)
+BEGIN
+  UPDATE publishers SET listed = (SELECT u.listed FROM publisher_usage u WHERE u.id = publishers.id)
+    WHERE id IN (OLD.publisher_id, NEW.publisher_id);
+  DELETE FROM publishers WHERE id = OLD.publisher_id AND (SELECT unused FROM publisher_usage WHERE id = OLD.publisher_id);
+END;
+CREATE TRIGGER source_publisher_removed AFTER DELETE ON sources WHEN OLD.publisher_id IS NOT NULL
+BEGIN
+  UPDATE publishers SET listed = (SELECT listed FROM publisher_usage WHERE id = OLD.publisher_id) WHERE id = OLD.publisher_id;
+  DELETE FROM publishers WHERE id = OLD.publisher_id AND (SELECT unused FROM publisher_usage WHERE id = OLD.publisher_id);
+END;

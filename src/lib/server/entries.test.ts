@@ -1,4 +1,4 @@
-import { publicPublisher, publisherDirectory } from './publishers'
+import { publicPublisher, publisherDirectory, publisherSuggestions } from './publishers'
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { readdirSync, readFileSync } from 'node:fs'
@@ -740,6 +740,7 @@ describe('source gallery', () => {
     expect((await sourceList(db, 'earliest', null, press.id)).sources.map(s => s.publisher)).toEqual(['江苏教育出版社', '江蘇教育出版社'])
     await setHidden(db, { entry: other }, true, who, null)
     expect((await publisherDirectory(db)).map(p => p.label)).not.toContain('River Press')
+    expect(raw.query("SELECT name FROM publishers WHERE name = 'River Press'").get()).toBeTruthy()
     const sighting = (await getEntry(db, entry))!.sightings[0]
     await editSighting(db, sighting.id, sighting.rev, seen({ title: 'Changed', publisher: 'river press' }), null, who, null, entry)
     expect((await publisherDirectory(db)).map(p => p.label)).toEqual(['River Press', '江苏教育出版社'])
@@ -754,6 +755,7 @@ describe('source gallery', () => {
     await createEntry(db, fields(), seen({ publisher: 'Northern imprint' }), [], who)
     raw.prepare("INSERT INTO publisher_aliases VALUES ('northern imprint','Northern imprint',?)").run(press!.id)
     expect((await sourceList(db, 'new', null, press!.id)).sources).toHaveLength(3)
+    expect(raw.query("SELECT id FROM publishers WHERE lookup = 'northern imprint'").get()).toBeNull()
     raw.exec("DELETE FROM publisher_aliases WHERE lookup = 'northern imprint'")
     expect((await sourceList(db, 'new', null, press!.id)).sources).toHaveLength(2)
   })
@@ -967,6 +969,18 @@ describe('query cost', () => {
     // A list by year reads the dated rows of the year index; going down, "has a year" bounds it below.
     if (shape.order === 'earliest' || shape.order === 'latest') return expect(details[0]).toMatch(/^SEARCH t USING COVERING INDEX entry_tags_by_year \(tag=\? AND (year>\? AND )?\(year,entry_id\)[<>]\(\?,\?\)\)$/)
     expect(details[0]).toMatch((shape.order ?? ORDER) === 'most' || shape.order === 'fewest' ? /^SEARCH t USING COVERING INDEX entry_tags_by_sightings \(tag=\? AND \(sightings,entry_id\)[<>]\(\?,\?\)\)$/ : /^SEARCH (t|w\d) USING PRIMARY KEY/)
+  })
+
+  test('publisher autocomplete reads canonical and alias prefixes through their indexes', () => {
+    for (const prefix of ['', '江', 'Ａ', '%']) {
+      const statement = publisherSuggestions(db, prefix) as unknown as { sql: string; values: unknown[] }
+      const details = plan(statement.sql, statement.values).join('\n')
+      expect(details).toContain('publishers_listed')
+      if (prefix) {
+        expect(details).toMatch(/SEARCH publishers USING (?:COVERING )?INDEX publishers_listed \(lookup>\? AND lookup<\?\)/)
+        expect(details).toMatch(/SEARCH a USING PRIMARY KEY \(lookup>\? AND lookup<\?\)/)
+      }
+    }
   })
 
   test('the radical counts read one range of the counts by key', () => {

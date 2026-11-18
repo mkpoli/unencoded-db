@@ -14,7 +14,7 @@
   } = $props()
 
   let open = $state(false)
-  let active = $state(-1)
+  let activeLabel = $state<string | null>(null)
   let list = $state<HTMLUListElement>()
 
   // A value that is already an option shows the whole list, so the other options are there to change to.
@@ -23,6 +23,8 @@
     if (!typed || options.some(option => fold(option.label) === typed)) return options
     return options.filter(option => fold(`${option.label} ${option.hint ?? ''} ${option.terms ?? ''}`).includes(typed))
   })
+  // Remote suggestions can reorder while an arrow-key selection is active.
+  const active = $derived(activeLabel === null ? -1 : shown.findIndex(option => option.label === activeLabel))
   const expanded = $derived(open && shown.length > 0)
   const optionId = (index: number) => `${id}-option-${index}`
 
@@ -33,21 +35,22 @@
   function take(option: ComboOption) {
     value = option.label
     open = false
-    active = -1
+    activeLabel = null
     onchange?.(value)
   }
   function move(step: number) {
     show()
     if (!shown.length) return
-    active = active < 0 ? (step > 0 ? 0 : shown.length - 1) : (active + step + shown.length) % shown.length
+    const next = active < 0 ? (step > 0 ? 0 : shown.length - 1) : (active + step + shown.length) % shown.length
+    activeLabel = shown[next].label
     queueMicrotask(() => list?.querySelector(`#${CSS.escape(optionId(active))}`)?.scrollIntoView({ block: 'nearest' }))
   }
   function keydown(event: KeyboardEvent) {
     if (event.isComposing) return
     if (event.key === 'ArrowDown') { event.preventDefault(); if (event.altKey) show(); else move(1) }
-    else if (event.key === 'ArrowUp') { event.preventDefault(); if (event.altKey) { open = false; active = -1 } else move(-1) }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); if (event.altKey) { open = false; activeLabel = null } else move(-1) }
     else if (event.key === 'Enter' && expanded && active >= 0 && shown[active]) { event.preventDefault(); take(shown[active]) }
-    else if (event.key === 'Escape' && open) { event.preventDefault(); open = false; active = -1 }
+    else if (event.key === 'Escape' && open) { event.preventDefault(); open = false; activeLabel = null }
   }
 </script>
 
@@ -56,7 +59,7 @@
     {id} {name} {maxlength} class="input" type="text" role="combobox" autocomplete="off" spellcheck="false"
     aria-autocomplete="list" aria-expanded={expanded} aria-controls="{id}-list" aria-labelledby={labelledby}
     aria-activedescendant={expanded && shown[active] ? optionId(active) : undefined}
-    bind:value onclick={show} onkeydown={keydown} oninput={event => { show(); active = -1; onquery?.(event.currentTarget.value) }} onblur={() => { open = false; active = -1; onchange?.(value) }}
+    bind:value onclick={show} onkeydown={keydown} oninput={event => { show(); activeLabel = null; onquery?.(event.currentTarget.value) }} onblur={() => { open = false; activeLabel = null; onchange?.(value) }}
   />
   <span class="chevron" aria-hidden="true">⌄</span>
   <ul bind:this={list} id="{id}-list" role="listbox" aria-labelledby={labelledby} hidden={!expanded}>

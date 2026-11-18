@@ -23,5 +23,5 @@
 
 <div class="field">
   <label id="{id}-label" for={id}>{t('field.publisher')}</label>
-  <Combobox {id} {name} bind:value {options} labelledby="{id}-label" maxlength={300} onopen={() => query = value} onquery={text => query = text} />
+  <Combobox {id} {name} bind:value {options} labelledby="{id}-label" maxlength={300} onopen={() => query = value} onquery={text => query = text} onchange={() => query = null} />
 </div>
