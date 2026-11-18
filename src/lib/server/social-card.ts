@@ -10,7 +10,7 @@ import { drawGlyph, type ComposerAssets, type Glyph } from '$lib/server/glyphs'
 import { MAX_THUMB, sniff } from '$lib/server/image'
 
 const NIGHT = '#101824', INK = '#f8efe2', MUTED = '#c6cbd6', ACCENT = '#b7aaff'
-const PAPER = '#f0e6d5', PRINT = '#242638', MARK_RED = '#e0241b'
+const PAPER = '#f0e6d5'
 const FONT = 'Noto Sans CJK TC'
 const FONT_STACK = `${FONT}, Noto Sans CJK KR`
 const MARK = '<path d="M4 4h9v9H4zM19 4h9v9h-9zM4 19h9v9H4z"/><path d="M19 19h9v9h-9z" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"/>'
@@ -27,7 +27,7 @@ const MAX_EVIDENCE_PIXELS = 1_048_576
 const MAX_MARKED_BYTES = 3 * 1024 * 1024, MAX_MARKED_PIXELS = 4_194_304
 const STYLE_BUDGET_MS = 5000
 const PANEL_X = 744, PANEL_WIDTH = 456, PANEL_HEIGHT = 630
-const PLATE = 116, PLATE_GAP = 13, PLATE_Y = 398
+const PLATE = 124, PLATE_GAP = 5, PLATE_Y = 390
 
 async function renderer() {
   initialized ??= import('@resvg/resvg-wasm/index_bg.wasm').then(wasm => initWasm(wasm.default)).catch(error => {
@@ -161,19 +161,13 @@ export async function evidencePanel(bucket: Pick<R2Bucket, 'get'>, picture: Card
   const focus = whole && marked ? marked.map(value => value * ratio) as Box : null
   let view = panelView(width, height, focus)
   let image = { href: `data:${type};base64,${Buffer.from(file.bytes).toString('base64')}`, width, height }
-  let mark = focus
   if (type === 'image/webp') {
     const region = await webpRegion(file.bytes, view).catch(() => null)
     if (!region) return ''
-    const scale = region.width / view[2]
-    mark = focus && [(focus[0] - view[0]) * scale, (focus[1] - view[1]) * scale, focus[2] * scale, focus[3] * scale]
     image = { href: `data:image/png;base64,${Buffer.from(region.png).toString('base64')}`, width: region.width, height: region.height }
     view = [0, 0, region.width, region.height]
   }
-  const stroke = view[2] / PANEL_WIDTH * 3
-  const margin = mark ? Math.max(stroke * 2, Math.min(mark[2], mark[3]) * 0.12) : 0
-  const outline = mark ? `<rect x="${mark[0] - margin}" y="${mark[1] - margin}" width="${mark[2] + margin * 2}" height="${mark[3] + margin * 2}" fill="none" stroke="${MARK_RED}" stroke-width="${stroke}"/>` : ''
-  return `<svg x="${PANEL_X}" y="0" width="${PANEL_WIDTH}" height="${PANEL_HEIGHT}" viewBox="${view.join(' ')}" preserveAspectRatio="xMidYMid slice"><image width="${image.width}" height="${image.height}" href="${image.href}"/>${outline}</svg>`
+  return `<svg x="${PANEL_X}" y="0" width="${PANEL_WIDTH}" height="${PANEL_HEIGHT}" viewBox="${view.join(' ')}" preserveAspectRatio="xMidYMid slice"><image width="${image.width}" height="${image.height}" href="${image.href}"/></svg>`
 }
 
 export type CardArt = { glyphs: { name: string; drawing: string }[]; evidence: string }
@@ -205,12 +199,10 @@ export async function evidenceArtwork(bucket: Pick<R2Bucket, 'get'>, picture: Ca
 function plates(glyphs: CardArt['glyphs']) {
   return glyphs.map(({ name, drawing }, index) => {
     const x = 68 + index * (PLATE + PLATE_GAP)
-    const inset = 12
     // A drawing names its masks after the description, which every style shares, so each plate gets its own ids.
     const markup = drawing.startsWith('<') ? drawing.replace(/(\bid="|url\(#|href="#)/g, `$1p${index}-`) : `<path d="${drawing}"/>`
-    return `<rect x="${x}" y="${PLATE_Y}" width="${PLATE}" height="${PLATE}" rx="3" fill="${PAPER}"/>
-    <svg x="${x + inset}" y="${PLATE_Y + inset}" width="${PLATE - inset * 2}" height="${PLATE - inset * 2}" viewBox="0 0 1000 1000" color="${PRINT}" fill="${PRINT}">${markup}</svg>
-    ${text(name, x + PLATE / 2, PLATE_Y + PLATE + 27, 18, MUTED, 'middle')}`
+    return `<svg x="${x}" y="${PLATE_Y}" width="${PLATE}" height="${PLATE}" viewBox="0 0 1000 1000" color="${INK}" fill="${INK}">${markup}</svg>
+    ${text(name, x + PLATE / 2, PLATE_Y + PLATE + 30, 18, MUTED, 'middle')}`
   }).join('')
 }
 
@@ -249,7 +241,7 @@ export async function renderCard(assets: Fetcher, origin: string, card: Card): P
   const titleStart = plated ? Math.round(178 + size * 0.73) : title.length === 3 ? 237 : 263
   const heading = title.map((line, position) => text(line, 68, titleStart + position * (size + 4), size, INK)).join('')
   const detailStart = titleStart + (title.length - 1) * (size + 4) + 52
-  const detailLines = plated && detailStart + 33 > PLATE_Y - 24 ? 1 : 2
+  const detailLines = plated && detailStart + 33 > PLATE_Y - 16 ? 1 : 2
   const detail = card.detail ? lines(card.detail, 24, detailLines).map((line, position) => text(line, 68, detailStart + position * 33, 26, MUTED)).join('') : ''
   const footY = plated ? 592 : 573
   const caption = card.caption ? lines(card.caption, 12, 1)[0] : ''
