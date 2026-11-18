@@ -128,6 +128,20 @@ export const primaryIdsOf = (claims: readonly Claim[]) => claims.find(claim => c
 /** How the parts of a description are moved in its drawing, or null when they stand where the composer put them. */
 export const layoutOf = (claim: Claim | undefined): Layout | null => (claim?.kind === 'ids' && claim.data?.layout ? claim.data.layout as Layout : null)
 export const primaryLayoutOf = (claims: readonly Claim[]) => layoutOf(claims.find(claim => claim.kind === 'ids'))
+/** The descriptions a record states, in order, each with the layout stored for it. A description that
+ * normalizes into one already listed is left out, so spellings that clean into one sequence draw once. */
+export function idsForms(claims: readonly Claim[]) {
+  const forms: { ids: string; layout: Layout | null }[] = []
+  const seen = new Set<string>()
+  for (const claim of claimsOf(claims, 'ids')) {
+    for (const ids of splitIds(claim.value)) {
+      if (seen.has(ids)) continue
+      seen.add(ids)
+      forms.push({ ids, layout: layoutOf(claim) })
+    }
+  }
+  return forms
+}
 
 export function compositionOf(claims: readonly Claim[]): Composition | null {
   const claim = claims.find(item => item.kind === 'composition')

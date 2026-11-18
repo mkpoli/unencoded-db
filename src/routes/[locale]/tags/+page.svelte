@@ -19,7 +19,7 @@
 
 <Seo title={t('nav.tags')} />
 
-<main class="page">
+<div class="page">
   <div class="head">
     <div>
       <h1>{t('nav.tags')}</h1>
@@ -82,10 +82,10 @@
       {/each}
     </div>
   {/if}
-</main>
+</div>
 
 <style>
-  .page { max-width: 980px; margin: 0 auto; padding: 28px var(--page-gutter); display: grid; gap: 18px }
+  .page { max-width: 980px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px }
   .head { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: start }
   h1 { margin: 0; font-size: 26px }
   .lead { margin: 4px 0 0; color: var(--muted); font-size: 14.5px }

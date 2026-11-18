@@ -9,7 +9,8 @@
 </label>
 
 <style>
-  .pill { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px 0 8px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); cursor: pointer }
+  .pill { position: relative; display: inline-flex; align-items: center; gap: 8px; max-inline-size: 100%; min-block-size: max(40px, var(--target-size)); padding: 0 12px 0 8px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); cursor: pointer }
+  .text { min-inline-size: 0; overflow-wrap: anywhere }
   .pill:hover { border-color: var(--muted) }
   .pill input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer }
   .pill:has(input:focus-visible) { outline: 3px solid var(--focus-ring); outline-offset: 2px }

@@ -14,8 +14,9 @@
   import FavouriteButton from '$lib/components/FavouriteButton.svelte'
   import { characterLinks, descriptionLinks } from '$lib/links'
   import { cleanIds, encodedCharacter } from '$lib/ids'
+  import { layoutText } from '$lib/layout'
   import { describedTable } from '$lib/encoded'
-  import { equivalentSpellings } from '$lib/ids-variants'
+  import { equivalentSpellings, spellingGroups } from '$lib/ids-variants'
   import CompositionField from '$lib/components/CompositionField.svelte'
   import IdentityFields from '$lib/components/IdentityFields.svelte'
   import SenseFields from '$lib/components/SenseFields.svelte'
@@ -23,7 +24,7 @@
   import TagFields from '$lib/components/TagFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import type { CharacterFacts } from '$lib/encoded'
-  import { compositionOf, encodingsOf, primaryLayoutOf, supportedBy, valuesOf } from '$lib/claims'
+  import { compositionOf, encodingsOf, idsForms, primaryLayoutOf, supportedBy, valuesOf } from '$lib/claims'
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { codePage, marksOf, registryLabel } from '$lib/registries'
@@ -43,7 +44,8 @@
   let editOpen = $state(untrack(() => editing || data.idsAdd !== null))
   $effect(() => { if (editing) editOpen = true })
   let fields = $state<CharacterFields>()
-  let plates = $state<HTMLElement>()
+  // The description groups on the page, so each one's report shows its own drawing.
+  let formsShown = $state<HTMLElement[]>([])
   // The links to a field open the form and focus the field's first control; without scripts the browser
   // opens the form around the fragment target.
   async function edit(event: MouseEvent) {
@@ -83,7 +85,14 @@
   let primary = $state(untrack(() => editIds[0] ?? ''))
   const editComposition = $derived.by(() => { const found = compositionOf(editValues.claims); return found ? JSON.stringify(found) : '' })
 
-  const sequences = $derived(valuesOf(claims, 'ids'))
+  // Every description the record states, each with its own layout. Descriptions that spell the same
+  // form share one set of drawings; only the ones that name another form get a set of their own.
+  type Form = { ids: string; layout: string | null }
+  const forms = $derived(idsForms(claims).map((form): Form => ({ ids: form.ids, layout: layoutText(form.layout) || null })))
+  const sequences = $derived(forms.map(form => form.ids))
+  // The table says which of those spellings are one form; until it answers, the first description draws alone.
+  let grouped = $state.raw<(Form & { spellings: string[] })[] | null>(null)
+  const groups = $derived(grouped ?? forms.slice(0, 1).map(form => ({ ...form, spellings: [form.ids] })))
   // The other spellings of the first description the table gives, as far as the record does not hold them.
   let spellings = $state.raw<string[]>([])
   $effect(() => {
@@ -92,6 +101,16 @@
     if (!first) return
     let live = true
     describedTable().then(table => { if (live) spellings = equivalentSpellings(first, table, 5, false).slice(1) }).catch(() => {})
+    return () => { live = false }
+  })
+  $effect(() => {
+    const held = forms
+    if (held.length < 2) { grouped = held.map(form => ({ ...form, spellings: [form.ids] })); return }
+    let live = true
+    grouped = null
+    describedTable()
+      .then(table => { if (live) grouped = spellingGroups(held, table).map(group => ({ ...group[0], spellings: group.map(form => form.ids) })) })
+      .catch(() => { if (live) grouped = held.map(form => ({ ...form, spellings: [form.ids] })) })
     return () => { live = false }
   })
   const others = $derived(spellings.filter(spelling => !sequences.some(held => cleanIds(held) === spelling)))
@@ -145,16 +164,12 @@
     <div class="head"><h2>{t('entry.about')}</h2><a class="button small" href="#edit-ids" data-edit="ids">{t('entry.edit')}</a></div>
     {#if sequences.length}
       <div class="identity">
-        <ul class="styles" bind:this={plates}>{#each GLYPH_STYLES as style (style)}<li><span class="plate"><IdsGlyph ids={sequences[0]} layout={entry.layout} {style} /></span><span class="style-name">{t(`glyphStyle.${style}`)}</span></li>{/each}</ul>
-        <ul class="sequences">{#each sequences as sequence}<li><span class="ids">{sequence}</span><CopyButton text={sequence} /></li>{/each}</ul>
+        <ul class="forms">{#each groups as group, position (group.ids)}<li class="form" bind:this={formsShown[position]}><ul class="styles">{#each GLYPH_STYLES as style (style)}<li><span class="plate"><IdsGlyph ids={group.ids} layout={group.layout} {style} /></span><span class="style-name">{t(`glyphStyle.${style}`)}</span></li>{/each}</ul><p class="sequence">{#each group.spellings as spelling, index (spelling)}<span class="ids" class:secondary={index > 0}>{spelling}</span><CopyButton text={spelling} />{/each}</p><SpellingReport record={entry.id} sequence={group.ids} layout={group.layout} drawing={style => formsShown[position]?.querySelector(`.styles > li:nth-child(${GLYPH_STYLES.indexOf(style) + 1}) svg`) ?? null} /></li>{/each}</ul>
         <EditLink field="ids" name={t('field.ids')} />
         <div class="others">
           {#each others as spelling (spelling)}<button type="button" class="alt" onclick={() => addIds(spelling)}><span class="ids-text">{spelling}</span><span class="alt-add">+ {t('entry.idsAlternateAdd')}</span></button>{/each}
           <a class="text-link small" href="#edit-ids" onclick={another}>+ {t('entry.idsAnother')}</a>
         </div>
-      </div>
-      <div class="spelling">
-        <SpellingReport record={entry.id} sequence={sequences[0]} layout={entry.layout} drawing={style => plates?.children[GLYPH_STYLES.indexOf(style)]?.querySelector('svg') ?? null} />
       </div>
       <p class="sites">{#each descriptionLinks(sequences[0], at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</p>
     {:else}
@@ -306,22 +321,26 @@
   .identity { display:flex; flex-wrap:wrap; align-items:center; gap:12px 18px; min-width:0 }
   .plate { flex:none; display:grid; place-items:center; width:96px; height:96px; border-radius:8px; background:var(--surface-tile) }
   /* The description drawn in each style the site composes, side by side, in place of one plate. */
+  .forms { display:flex; flex-wrap:wrap; align-items:flex-start; gap:14px 22px; min-width:0; margin:0; padding:0; list-style:none }
+  .form { display:flex; flex-direction:column; gap:6px; min-width:0 }
   .styles { display:flex; flex-wrap:wrap; gap:10px; margin:0; padding:0; list-style:none }
   .styles li { display:flex; flex-direction:column; align-items:center; gap:4px }
+  .sequence { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin:0; font-size:22px; line-height:1.35 }
+  .form + .form .sequence { font-size:16px; color:var(--muted) }
+  .sequence .secondary { font-size:16px; color:var(--muted) }
+  .form :global(.report) { align-self:flex-start }
   .style-name { font-size:12px; color:var(--muted) }
   .sites { display:flex; flex-wrap:wrap; gap:4px 12px; margin:0 } dd .sites { margin-top:4px }
   .others { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; min-width:0 }
   .alt { display:inline-flex; align-items:center; gap:8px; max-width:100%; padding:2px 10px; border:1px solid var(--line); border-radius:999px; background:none; font:inherit; font-size:13px; color:var(--ink); cursor:pointer }
   .alt:hover, .alt:focus-visible { border-color:var(--accent); color:var(--accent) }
   .ids-text { overflow-wrap:anywhere } .alt-add { flex:none; color:var(--muted) } .alt:hover .alt-add { color:inherit }
-  .sequences { display:flex; flex-direction:column; gap:2px; min-width:0; margin:0; padding:0; list-style:none }
-  .sequences li { display:flex; align-items:center; gap:4px; font-size:22px; line-height:1.35 } .sequences li + li { font-size:16px; color:var(--muted) }
   .formation { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px } .formation .label { color:var(--muted); font-size:12px; font-weight:400 }
   .method { font-weight:600 } .part { padding:1px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12.5px }
   .description { white-space:pre-wrap; overflow-wrap:anywhere } .badges { gap:6px }
   .chips { display:flex; flex-wrap:wrap; align-items:center; gap:6px } .chip-link { padding:2px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px } .chip-link:hover { border-color:var(--accent); color:var(--accent) } .chips .tag-chip:hover { filter: brightness(0.95) }
   .marks { display:flex; flex-wrap:wrap; gap:6px; margin:0; padding:0; list-style:none } .marks a:hover { text-decoration:underline }
-  .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:12px; margin:0 } .facts:empty { display:none }
+  .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(145px,100%),1fr)); gap:12px; margin:0 } .facts:empty { display:none }
   dt { color:var(--muted); font-size:12px } dd { margin:2px 0 0; overflow-wrap:anywhere }
   .radicals { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px }
   .character { font-size:20px; line-height:1.3 } .character.encoded { font-family:inherit; vertical-align:middle }
@@ -329,9 +348,9 @@
   .supported { display:inline-flex; align-items:baseline; gap:6px; min-width:0; max-width:100%; padding:1px 9px; border:1px solid var(--line); border-radius:999px; font-size:12.5px } .supported:hover { border-color:var(--accent); color:var(--accent) }
   .supported .kind { flex:none; color:var(--muted); font-size:11.5px } .supported .text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
   article:target { outline:2px solid var(--accent); outline-offset:2px } article { scroll-margin-block:16px }
-  .checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:6px 16px; margin:0; padding:0; list-style:none; color:var(--muted) }
+  .checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr)); gap:6px 16px; margin:0; padding:0; list-style:none; color:var(--muted) }
   .checks li { display:flex; gap:8px } .checks li.done { color:var(--ink) } .checks li.done .tick { color:var(--good) } .tick { flex:none; width:1em; text-align:center }
-  .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px } .pictures.single { grid-template-columns:minmax(0,1fr) }
+  .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr)); gap:12px } .pictures.single { grid-template-columns:minmax(0,1fr) }
   figure { display:flex; flex-direction:column; gap:6px; margin:0; min-width:0 }
   .pictures:not(.single) { --picture-height: 260px }
   .button.small { min-height:32px; padding:4px 10px; font-size:12.5px }
