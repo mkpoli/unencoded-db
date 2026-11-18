@@ -11,6 +11,7 @@
   import { COLLECTIONS, type TagType } from '$lib/tags'
   import { parseSightingTypes } from '$lib/scripts'
   import { statusOf } from '$lib/status'
+  import ViaChain from '$lib/components/ViaChain.svelte'
   import RelationCharacter from './RelationCharacter.svelte'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
   import { locale, t } from '$lib/t'
@@ -62,7 +63,7 @@
       {#if source.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${source.context}`)}</dd></div>{/if}
       {#if source.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${source.style}`)}</dd></div>{/if}
       {#if types.length}<div><dt>{t('field.sourceTypes')}</dt><dd>{types.map(type => t(`evidence.type.${type}`)).join(' · ')}</dd></div>{/if}
-      {#each source.vias as via, position (position)}<div class="wide"><dt>{t('field.via')}</dt><dd>{[via.title, via.author, via.publisher, via.url].filter(Boolean).join(' · ')}{#if via.report_date}{#if via.title || via.author || via.publisher || via.url} · {/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}</dd></div>{/each}
+      {#if source.vias.length}<div class="wide"><dt>{t('field.via')}</dt><dd><ViaChain vias={source.vias} dates={dates} label={false} /></dd></div>{/if}
     </dl>
     {#if source.note}<p class="description">{source.note}</p>{/if}
   </div>
