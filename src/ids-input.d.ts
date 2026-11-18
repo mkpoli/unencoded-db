@@ -48,9 +48,10 @@ declare module 'ids-input/svelte' {
     adapter: { preview?: import('han-compose').ComposerPreview }; tree: import('ids-input').IdsPart; chosen?: number[] | null
     messages?: Record<string, string>; locale?: string; small?: boolean; notes?: boolean; delay?: number
     session?: import('ids-input/document').DocumentSession | null; version?: number; editable?: boolean; preserveStroke?: boolean
+    step?: 'idle' | 'loading' | 'composed' | 'final' | 'failed' | 'capped' | 'unavailable'
     scopes?: import('ids-input/document').ScopeTree | null; drawing?: import('han-compose').Drawing | null
     onchoose?: ((path: number[]) => void) | null; onedit?: (() => void) | null
-  }, {}, 'scopes' | 'drawing'>
+  }, {}, 'scopes' | 'drawing' | 'step'>
   /** The text of `key` in `messages`, else in English. */
   export function translator(messages: Record<string, string> | undefined, locale?: string): (key: string, params?: Record<string, string | number>) => string
 }
