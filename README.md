@@ -35,7 +35,7 @@ Without client credentials, the site offers anonymous contributions. Signing in 
 
 Report dates, original dates and dates in a citation chain keep the contributor's transcription. Chinese and Japanese era dates use the [HuTime Calendar Conversion API](https://ap.hutime.org/cal/). Each HuTime conversion records its query, precision and inclusive Western-calendar bounds. For example, 明萬曆34年 runs from 1606-02-07 through 1607-01-27. The chronology files it under 1606. Dates already in the Western calendar use the same 1582 Julian/Gregorian cutover. An ambiguous or unreadable expression stays available as entered. A dynasty name or the prefix 日本 can identify the intended calendar.
 
-The local setup and production release run the date sweep after applying migrations. Saving a sighting retries its unresolved dates. To retry all unresolved dates locally, run `bun scripts/sweep-dates.ts --local`. Add `--recheck` to verify existing readings again. A failed lookup preserves the previous reading. The sweep also rebuilds source years, earliest sightings and decade counts. JSON exports include a `date_readings` dictionary keyed by the original wording. CSV exports carry the same readings for each sighting in the `date_readings` column.
+The local setup and production release run the date sweep after applying migrations. Saving a sighting retries its unresolved dates. To retry all unresolved dates locally, run `bun scripts/sweep-dates.ts --local`. Add `--recheck` to verify existing readings again. A failed lookup preserves the previous reading. The sweep also rebuilds source years, earliest sightings and decade counts. The paged JSON export includes a `date_readings` dictionary keyed by the original wording. The paged CSV export carries the same readings for each sighting in the `date_readings` column; the whole-dataset files keep the transcribed dates in each sighting.
 
 ## Agents
 
@@ -87,6 +87,20 @@ Each claim also carries three links, all inside its own record:
 Only a meaning or a reading can be a scope. A reading may hold under meanings, and a related character under meanings, readings or both; a meaning and every other kind (descriptions, composition, codes, IVD, categories, collections, tags) state a fact of the whole record and have no scope. A reference to a key that names no claim, or a claim that cannot be a scope, is refused, and removing a meaning or a reading removes it from every scope in the same save. A revision's snapshot repeats the claims with their keys and links, so a restored version brings its links back, without the sightings the record no longer has.
 
 The CSV export has one column for each kind of claim, and a claim names its links after its value: `東 (usage) [under: east | cmn:dōng] [evidence: #3 #7]`, where the numbers are values of `sighting_id`. The JSON export carries `key`, `sightings` and `under` as stored.
+
+## Open data
+
+`/[locale]/data` downloads the whole public dataset: every visible record with its claims, evidence and sources.
+
+| File | Holds |
+|---|---|
+| `/api/export?format=json` | One JSON object: the licence, counts and generation time in `dataset`, then every record in `entries` |
+| `/api/export?format=csv` | One row for each piece of evidence, and one for a record without any |
+| `/api/export?format=media` | One row for each visible picture, with its record, source and direct address |
+
+The JSON file carries the record's public code, the name it is credited to, and its `claims` and `evidence`. A claim's `sightings` are as stored, so an id there may name a hidden sighting that is not in `evidence`. Images stay under the rights of their sources; the image list names each source and does not redistribute the files. Records and descriptions are under CC BY-SA 4.0. `GET /api/entries` remains the page-at-a-time cursor, with a `Link` header to the next page. The `dataset` object names the journal revision the download started from; a write during the download fails it, so a mixed file is not delivered.
+
+A download is generated in one Worker request, so D1's query budget per invocation bounds how large it can grow; a dataset beyond that budget is read through the paged API.
 
 ## PUA fonts
 

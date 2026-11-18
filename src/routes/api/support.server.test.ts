@@ -34,6 +34,9 @@ test('export pages JSON and escapes CSV cells', async () => {
   expect(response.headers.get('link')).toContain('after=1')
   const csv = await (await exportEntries(event('/api/entries?format=csv'))).text()
   expect(csv).toContain('"\'=formula"')
+  const header = csv.split('\r\n')[0]
+  expect(header).not.toContain('record_code')
+  expect(header).not.toContain('created_by_name')
   const second = await (await exportEntries(event('/api/entries?after=1'))).json() as { entries: { id: number }[] }
   expect(second.entries[0].id).toBe(2)
   expect(exportEntries(event('/api/entries?limit=201'))).rejects.toMatchObject({ status: 400 })
