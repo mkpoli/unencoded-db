@@ -15,6 +15,8 @@ test('both font formats retain the face name, outline and supplementary-plane ma
     const font = parse(bytes.buffer as ArrayBuffer)
     expect(font.names.fontFamily.en).toBe('Rare Character Compendium PUA Kai')
     expect(font.names.postScriptName.en).toBe('RareCharacterCompendiumPUAKai-Regular')
+    expect(font.tables.os2).toMatchObject({ usFirstCharIndex: 0xffff, usLastCharIndex: 0xffff,
+      ulUnicodeRange1: 0, ulUnicodeRange2: 1 << 25, ulUnicodeRange3: 1 << 26 })
     const glyph = font.charToGlyph(String.fromCodePoint(0xf0000))
     expect(glyph.index).toBe(1)
     expect(glyph.path.commands.length).toBeGreaterThan(4)

@@ -137,7 +137,7 @@ export function drawGlyph(bucket: Bucket, glyph: Glyph, context: Context = {}): 
     })().catch(error => {
       // A drawing that fails leaves the description on the page; the log says why.
       console.error(`glyph ${style} ${name}:`, error)
-      return null
+      throw error
     }).finally(() => pending.delete(task))
     pending.set(task, run)
   }
@@ -165,7 +165,7 @@ export async function warmGlyphs(bucket: Bucket | undefined, glyphs: Glyph[], co
   if (!bucket?.get) return
   let next = 0
   const worker = async () => {
-    while (next < glyphs.length) await drawGlyph(bucket, glyphs[next++], context)
+    while (next < glyphs.length) await drawGlyph(bucket, glyphs[next++], context).catch(() => null)
   }
   await Promise.all(Array.from({ length: Math.min(2, glyphs.length) }, worker))
 }

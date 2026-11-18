@@ -40,6 +40,14 @@ export function fontFiles(face: string, records: { id: number; path: Path }[], d
     postScriptName: stem, version: 'Version 1.000; ' + date.toISOString(), unitsPerEm: 1000,
     ascender: 880, descender: -120, createdTimestamp: Math.floor(date.getTime() / 1000),
     license: 'Component notices accompany this font in the licences directory.', glyphs })
+  // OS/2 uses 16-bit first/last indices and separate bits for BMP and supplementary PUA.
+  const first = records.length ? privateCode(records[0].id) : 0
+  const last = records.length ? privateCode(records[records.length - 1].id) : 0
+  Object.assign(font.tables.os2, {
+    usFirstCharIndex: Math.min(first, 0xffff), usLastCharIndex: Math.min(last, 0xffff),
+    ulUnicodeRange1: 0, ulUnicodeRange2: (first && first <= 0xf8ff ? 1 << 28 : 0) | (last > 0xffff ? 1 << 25 : 0),
+    ulUnicodeRange3: last > 0xffff ? 1 << 26 : 0, ulCodePageRange1: 0
+  })
   const otf = font.toArrayBuffer()
   const ttf = TrueType.create(otf, { type: 'otf' }).write({ type: 'ttf', toBuffer: false }) as ArrayBuffer
   return { [stem + '.otf']: new Uint8Array(otf), [stem + '.ttf']: new Uint8Array(ttf) }
