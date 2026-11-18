@@ -10,6 +10,7 @@ export const DATASET_NAME = 'Rare Character Compendium'
 export const DATASET_LICENSE = 'CC BY-SA 4.0'
 export const DATASET_LICENSE_URL = 'https://creativecommons.org/licenses/by-sa/4.0/'
 export const IMAGE_RIGHTS = 'Images keep the rights of their sources.'
+export const DATASET_PUBLISHER = 'Glyph Atlas'
 
 export type DatasetCounts = { records: number; evidence: number }
 
@@ -25,7 +26,7 @@ export function datasetMetadata(origin: string, counts: DatasetCounts, generated
   return {
     name: DATASET_NAME,
     version: DATASET_VERSION,
-    publisher: 'Glyph Atlas',
+    publisher: DATASET_PUBLISHER,
     homepage: new URL('/', origin).href,
     license: DATASET_LICENSE,
     license_url: DATASET_LICENSE_URL,

@@ -72,5 +72,29 @@ export function sourceData({ locale, source, name, siteName, sourcesName }: Sour
   ]
 }
 
+export type DatasetFacts = {
+  locale: string; name: string; alternateName: string; description: string; license: string; publisher: string; version: number
+  downloads: { name: string; format: 'json' | 'csv' | 'media' }[]
+}
+
+const ENCODINGS = { json: 'application/json', csv: 'text/csv', media: 'text/csv' } as const
+
+// The open data page as a Dataset, so dataset search engines list it with its downloads. One `@id` serves
+// all six locales of the page.
+export function datasetData(facts: DatasetFacts): Json[] {
+  const url = `${SITE_ORIGIN}/${facts.locale}/data`
+  return [{
+    '@context': CONTEXT, '@type': 'Dataset', '@id': `${SITE_ORIGIN}/data#dataset`, url,
+    name: facts.name, alternateName: facts.alternateName, description: facts.description,
+    license: facts.license, isAccessibleForFree: true, version: String(facts.version),
+    publisher: { '@type': 'Organization', name: facts.publisher },
+    isPartOf: { '@type': 'WebSite', '@id': `${SITE_ORIGIN}/`, url: `${SITE_ORIGIN}/` },
+    distribution: facts.downloads.map(download => ({
+      '@type': 'DataDownload', name: download.name, encodingFormat: ENCODINGS[download.format],
+      contentUrl: `${SITE_ORIGIN}/api/export?format=${download.format}`,
+    })),
+  }]
+}
+
 // The text of one script element; `<` is escaped so a value cannot close the element.
 export const jsonLdScript = (data: unknown) => `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`

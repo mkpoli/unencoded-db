@@ -15,6 +15,10 @@ test('the data page counts visible records and evidence', async () => {
       (1, 1, 'hidden sighting', 'p', '2026', '2026', '2026'),
       (2, 2, 'hidden entry', 'p', '2026', '2026', NULL),
       (3, 3, 'merged entry', 'p', '2026', '2026', NULL);`)
-  const result = await load({ platform: { env: { DB: db } } } as any) as any
+  const result = await load({ platform: { env: { DB: db } }, params: { locale: 'ja' } } as any) as any
   expect(result.counts).toEqual({ records: 1, evidence: 2 })
+  const [dataset] = result.structured
+  expect(dataset).toMatchObject({ '@type': 'Dataset', url: 'https://rare.glyphatlas.org/ja/data', license: 'https://creativecommons.org/licenses/by-sa/4.0/', isAccessibleForFree: true })
+  expect(dataset.description.length).toBeGreaterThanOrEqual(50)
+  expect(dataset.distribution.map((download: { contentUrl: string }) => download.contentUrl)).toEqual(['json', 'csv', 'media'].map(format => `https://rare.glyphatlas.org/api/export?format=${format}`))
 })
