@@ -1,3 +1,4 @@
+import { readDates } from '$lib/server/date-readings'
 import { error } from '@sveltejs/kit'
 import { chroniclePlace, chronology } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
@@ -11,5 +12,6 @@ export const load: PageServerLoad = async (event) => {
   if (!place) error(404)
   const page = await chronology(env(event).DB, place)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, page.entries.map(entry => entry.tile), event.locals.glyphStyle)
-  return { ...page, glyphs }
+  const dates = await readDates(env(event).DB, page.entries.map(e => e.sighting?.date ?? null))
+  return { ...page, glyphs, dates }
 }

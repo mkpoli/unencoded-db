@@ -300,23 +300,23 @@
 </div>
 
 <style>
-  .board { display: grid; gap: 22px }
+  .board { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px }
   .board-head { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center }
-  .create-bar { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; min-width: 260px }
-  .create-bar .input { width: auto; min-width: 140px }
+  .create-bar { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 260px; min-inline-size: 0 }
+  .create-bar .input { flex: 1 1 140px; inline-size: auto; min-inline-size: 0 }
   .banner-error { margin: 0; padding: 10px 12px; border: 1px solid var(--wrong); border-radius: 7px; background: var(--wrong-light); color: var(--wrong); font-size: 14px }
   .type-section { display: grid; gap: 10px }
   .type-section h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px }
   .count { font-size: 13px; color: var(--muted); font-weight: 400 }
   .rows { display: grid; gap: 8px }
-  .tag-row { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface) }
+  .tag-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface) }
   .row-main { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center }
-  .identity { display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
+  .identity { display: flex; flex-wrap: wrap; min-inline-size: 0; align-items: center; gap: 8px }
   .slug { font-size: 12px; color: var(--muted) }
   .n { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums }
   .controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
-  .label-input { width: 150px; padding: 5px 8px; font-size: 13.5px }
-  .type-select { width: auto; padding: 5px 8px; font-size: 13.5px }
+  .label-input { inline-size: min(150px, 100%); padding: 5px 8px }
+  .type-select { inline-size: auto; max-inline-size: 100%; padding: 5px 8px }
   .implications { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px }
   .imp-label { color: var(--muted) }
   .x { appearance: none; border: 0; background: none; color: inherit; cursor: pointer; padding: 0 2px; font-size: 14px; line-height: 1 }

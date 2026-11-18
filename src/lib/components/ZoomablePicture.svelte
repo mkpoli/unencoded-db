@@ -163,6 +163,7 @@
   .picture { display: flex; justify-content: center; width: 100%; max-width: 100%; line-height: 0 }
   .plane { position: relative; display: inline-block; max-width: 100%; line-height: 0; transform-origin: center center; will-change: transform }
   .plane img { display: block; width: auto; height: auto; max-width: 100%; max-height: var(--picture-height, 65vh); pointer-events: none; -webkit-user-drag: none }
+  @supports (height: 1dvh) { .plane img { max-height: var(--picture-height, 65dvh) } }
   .tools { position: absolute; right: 10px; bottom: 10px; z-index: 2; display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: light-dark(rgb(255 255 255 / 94%), rgb(27 27 31 / 94%)); box-shadow: 0 2px 12px light-dark(rgb(0 0 0 / 12%), rgb(0 0 0 / 40%)); cursor: default }
   .tools button { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--ink); font-size: 20px; line-height: 1; cursor: pointer }
   .tools button:hover:enabled { background: var(--accent-light) }

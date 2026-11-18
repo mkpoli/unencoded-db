@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import { afterNavigate, goto, invalidateAll, preloadData } from '$app/navigation'
   import { browser } from '$app/environment'
   import { page } from '$app/state'
@@ -23,8 +23,8 @@
   const tagGroups = $derived(arrangeTagsByType(data.tags))
   // Further pages are appended as the list nears its end. They belong to the listing they were read for,
   // and a new listing starts again from its own first page.
-  type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: string | null; partial: boolean; total: typeof data.total; idle: number; scanned: number }
-  const fresh = (from: typeof data): Shown => ({ for: from, tiles: from.tiles, glyphs: from.glyphs ?? {}, next: from.next, partial: from.partial, total: from.total, idle: 0, scanned: from.read })
+  type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: string | null; partial: boolean; total: typeof data.total; scanned: number }
+  const fresh = (from: typeof data): Shown => ({ for: from, tiles: from.tiles, glyphs: from.glyphs ?? {}, next: from.next, partial: from.partial, total: from.total, scanned: from.read })
   let loaded = $state.raw<Shown | null>(null)
   const shown = $derived(loaded?.for === data ? loaded : fresh(data))
   const REACH = 1200
@@ -47,11 +47,12 @@
     try {
       const result = await preloadData(target)
       if (from !== data) return
-      if (result.type !== 'loaded' || result.status !== 200) { failedFor = from; return }
+      // A failed SvelteKit preload can return the current page's data and status.
+      if (result.type !== 'loaded' || result.status !== 200 || result.data === page.data) { failedFor = from; return }
       const next = result.data as typeof data
       // A record already shown is not added twice, whatever the page that brings it again.
       const shownIds = new Set(base.tiles.map(tile => tile.id))
-      loaded = { for: from, tiles: [...base.tiles, ...next.tiles.filter(tile => !shownIds.has(tile.id))], glyphs: { ...base.glyphs, ...next.glyphs }, next: next.next, partial: next.partial, total: base.total, idle: next.tiles.some(tile => !shownIds.has(tile.id)) ? 0 : base.idle + 1, scanned: base.scanned + next.read }
+      loaded = { for: from, tiles: [...base.tiles, ...next.tiles.filter(tile => !shownIds.has(tile.id))], glyphs: { ...base.glyphs, ...next.glyphs }, next: next.next, partial: next.partial, total: base.total, scanned: base.scanned + next.read }
       failedFor = null
       // The sentinel has moved down. Until the observer looks at it again it is taken to be far, and it is
       // observed afresh so the observer reports where it is now, even if scrolling has brought it back.
@@ -72,19 +73,17 @@
     watching.observe(sentinel)
     return () => { watching.disconnect(); observer = undefined; near = false }
   })
-  // A search reads the records a window at a time and may find nothing in one. It knows how many it finds,
-  // so it keeps reading while some are still to come, up to a few empty windows in a row before it waits
-  // to be asked; past a count it could only bound, it waits at once. Once a count is met, it stops.
-  const IDLE_READS = 3
+  // An incomplete search window can contain no matches. Finish scanning in the
+  // background even when the sentinel is below the viewport.
+  let mounted = $state(false)
+  onMount(() => { mounted = true })
   const left = $derived(shown.total ? shown.total.n - shown.tiles.length : null)
   const done = $derived(shown.total !== null && !shown.total.floor && left !== null && left <= 0)
   const pagesLeft = $derived(left !== null && left > 0 ? Math.ceil(left / PAGE) : null)
-  $effect(() => { if (near && !busy && failedFor !== data && !done && (!shown.partial || ((left ?? 0) > 0 && shown.idle < IDLE_READS)) && shown.next !== null) grow() })
+  $effect(() => { if (mounted && (shown.partial || near) && !busy && failedFor !== data && !done && shown.next !== null) grow() })
   const appendOnClick = (event: MouseEvent) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     event.preventDefault()
-    failedFor = null
-    loaded = { ...shown, idle: 0 }
     grow()
   }
   // Returning to the list brings back the pages read so far; a reload starts again from the first.
@@ -98,7 +97,7 @@
     restore: value => {
       if (!value || (arrival === 'enter' && reloaded())) return
       const { y, ...pages } = value
-      loaded = { ...pages, total: pages.total ?? null, scanned: pages.scanned ?? 0, idle: 0, glyphs: data.glyphs ?? {}, for: data }
+      loaded = { ...pages, total: pages.total ?? null, scanned: pages.scanned ?? 0, glyphs: data.glyphs ?? {}, for: data }
       tick().then(() => scrollTo(scrollX, y))
     }
   }
@@ -263,7 +262,20 @@
       <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.script || data.filter || data.collection || data.tag || data.radical || data.decade || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
     {/if}
   {/if}
-  {#if shown.next !== null && !done}<div class="ahead" bind:this={sentinel}>{#if shown.partial && shown.total}<p class="muted">{t('browse.searched', { n: Math.min(shown.scanned, shown.total.pool), of: shown.total.pool })}</p>{/if}{#if pagesLeft !== null}<p class="muted">{t(pagesLeft === 1 && !shown.total?.floor ? 'browse.pageLeft' : 'browse.pagesLeft', { n: `${pagesLeft}${shown.total?.floor ? '+' : ''}` })}</p>{/if}<a class="button" href={more} aria-busy={busy} onclick={appendOnClick}>{t(shown.partial ? 'browse.continueSearch' : 'browse.more')}</a></div>{/if}
+  {#if shown.next !== null && !done}
+    <div class="ahead" bind:this={sentinel}>
+      {#if shown.partial && shown.total}
+        <p class="muted">{t('browse.searched', { n: Math.min(shown.scanned, shown.total.pool), of: shown.total.pool })}</p>
+      {:else if shown.partial && mounted && failedFor !== data}
+        <p class="muted">{t('browse.searching')}</p>
+      {:else if pagesLeft !== null}
+        <p class="muted">{t(pagesLeft === 1 && !shown.total?.floor ? 'browse.pageLeft' : 'browse.pagesLeft', { n: `${pagesLeft}${shown.total?.floor ? '+' : ''}` })}</p>
+      {/if}
+      {#if !shown.partial || !mounted || failedFor === data}
+        <a class="button" href={more} aria-busy={busy} onclick={appendOnClick}>{t(shown.partial ? 'browse.continueSearch' : 'browse.more')}</a>
+      {/if}
+    </div>
+  {/if}
 </div>
 <style>
   /* The list loads on as it scrolls, so its footer is out of reach; the chats sit under the heading. */
@@ -271,8 +283,8 @@
   .heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:start; gap:20px }
   .filter-foot { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 16px }
   .filter-foot .hint { margin:0 }
-  .glyph-setting { display:flex; align-items:center; gap:8px; min-width:0 }
-  .glyph-setting-label { flex:none; font-size:11px; font-weight:500; color:var(--muted) }
+  .glyph-setting { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; min-inline-size:0 }
+  .glyph-setting-label { font-size:11px; font-weight:500; color:var(--muted) }
   .intro { gap:8px; max-width:720px }
   .filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:16px; border:1px solid var(--line); border-radius:9px; background:var(--surface) }
   .filters .field { flex:1 1 140px } .filters .search { flex:2 1 220px } .filters .radical { flex:0 1 120px } .filters .decade { flex:1 1 140px }
@@ -281,9 +293,9 @@
   .shuffle { display:inline-flex; align-items:center; gap:6px } .shuffle svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round }
   .view { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px }
   .bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px } .marks { gap:8px }
-  .pair { display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:8px } .work { padding-inline:12px 4px; font-size:13px; font-weight:500; white-space:nowrap }
+  .pair { display:inline-flex; flex-wrap:wrap; align-items:center; max-inline-size:100%; border:1px solid var(--line); border-radius:8px } .work { padding-inline:12px 4px; font-size:13px; font-weight:500; white-space:nowrap }
   .states .n, .marks .n { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums }
-  .pinned { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:42px; padding:9px 12px; border:1px solid var(--accent); border-radius:7px; background:var(--accent-light); color:var(--accent); font-weight:500 }
+  .pinned { display:flex; align-items:center; justify-content:space-between; gap:8px; min-block-size:max(42px,var(--target-size)); padding:9px 12px; border:1px solid var(--accent); border-radius:7px; background:var(--accent-light); color:var(--accent); font-weight:500 }
   .bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px }
   .size { display:flex; align-items:center; gap:6px; color:var(--muted) }
   .size svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.4 }
@@ -295,6 +307,9 @@
   .also summary { cursor:pointer; color:var(--muted) }
   .also ul { display:flex; flex-wrap:wrap; gap:4px 12px; margin:6px 0 0; padding:0; list-style:none; overflow-wrap:anywhere }
   .ahead { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px }
+  @media (max-width: 38rem) {
+    .filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,7rem),1fr)) }
+    .filters .search { grid-column:1 / -1 }
+  }
   .empty { padding:48px 16px; text-align:center; color:var(--muted) } .empty a { display:inline-block; margin-top:12px; color:var(--ink) }
-  @media (max-width: 520px) { .glyph-setting-label { display:none } .glyph-setting { width:100% } }
 </style>

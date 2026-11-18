@@ -31,3 +31,5 @@ The names below identify upstream font sources and the modified or subset faces 
 ### IDS Shuishu: rights uncertain
 
 The IDS Shuishu font derives from `Uni1B300Shuishu` embedded in the [ISO/IEC 10646 Amendment 2.2 chart](https://www.unicode.org/wg2/docs/n4922-5theditionPdam2-2-charts.pdf). The installed [upstream notice](fonts/LICENSE-IDSShuishu.txt) says the chart and embedded font state no separate glyph redistribution terms. No font license or permission to redistribute the outlines is established by these notices. The accompanying spreadsheet by Andrew West also states no license, according to the data notes. Review and rights clearance are needed before relying on redistribution rights.
+
+The downloadable PUA fonts reserve the code point for each record whose description contains a Shuishu character. They use a placeholder for that record and identify it as `placeholder-shuishu` in the mapping.

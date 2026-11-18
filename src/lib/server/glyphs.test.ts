@@ -17,7 +17,7 @@ test('a description with a layout is another drawing than the description alone'
   const layout = '{"0":[1,0,0,1,40,0]}'
   const plain = { ids: '⿰魚羊' }, moved = { ids: '⿰魚羊', layout }
   expect(glyphName(moved)).toBe(`⿰魚羊\n${layout}`)
-  const key = `glyphs/${composerDrawing('sans')}/${await hashHex(glyphName(moved))}.txt`
+  const key = `glyphs/${composerDrawing('sans', true)}/${await hashHex(glyphName(moved))}.txt`
   const bucket = {
     get: async (name: string) => name === key ? { text: async () => '<g/>' } : null,
     put: async () => {},
@@ -46,6 +46,19 @@ test('a bundled Bopomofo part draws through the build\'s asset binding', async (
   expect(await drawGlyph(bucket, { ids: 'ㄍ' }, context)).toMatch(/^M/)
 })
 
+test('overlapping cold drawings read bundled assets through their own request', async () => {
+  const { bucket, context } = await bopomofo()
+  const reads = [0, 0]
+  const paths = await Promise.all(['ㄍ', 'ㄎ'].map((ids, i) => drawGlyph(bucket, { ids }, {
+    ...context, assets: { fetch: async () => {
+      reads[i]++
+      return context.assets.fetch()
+    } }
+  })))
+  expect(paths.every(path => path?.startsWith('M'))).toBe(true)
+  expect(reads.every(count => count > 0)).toBe(true)
+})
+
 test('a description with a layout is drawn part by part as markup, and kept under its own name', async () => {
   const { bucket, kept, context } = await bopomofo()
   const moved = { ids: '⿰ㄍㄎ', layout: '{"0":[1,0,0,1,-40,12]}' }
@@ -53,7 +66,7 @@ test('a description with a layout is drawn part by part as markup, and kept unde
   const drawn = await drawGlyph(bucket, moved, context)
   expect(plain).toMatch(/^M/)
   expect(drawn).toMatch(/^<defs>.*<path d="M/)
-  expect(kept).toEqual([moved.ids, glyphName(moved)].map(name => `glyphs/${composerDrawing('sans')}/${new Bun.CryptoHasher('sha256').update(name).digest('hex')}.txt`))
+  expect(kept).toEqual([moved.ids, glyphName(moved)].map(name => `glyphs/${composerDrawing('sans', name.includes('\n'))}/${new Bun.CryptoHasher('sha256').update(name).digest('hex')}.txt`))
 })
 
 test('each style keeps its drawings in its own folder', async () => {
@@ -87,4 +100,16 @@ test('the server lists every bundled file the composer reads', async () => {
   const { composerData } = await import('$lib/composer-data')
   // The Unicode shards are listed by the build; the rest by name.
   expect(Object.keys(dataUrls).filter(name => !name.startsWith('unicode/') && !(name in composerData))).toEqual([])
+})
+
+test('simultaneous requests for the same glyph own their R2 reads', async () => {
+  let reads = 0
+  const bucket = {
+    get: async () => {
+      const value = 'M' + ++reads
+      return { text: async () => value }
+    }
+  } as unknown as Pick<R2Bucket, 'get' | 'put'>
+  const paths = await Promise.all([drawGlyph(bucket, { ids: '木' }), drawGlyph(bucket, { ids: '木' })])
+  expect(new Set(paths)).toEqual(new Set(['M1', 'M2']))
 })

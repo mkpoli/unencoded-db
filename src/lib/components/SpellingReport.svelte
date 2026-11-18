@@ -60,7 +60,7 @@
 
 <style>
   .report { padding: 0; border: 0; background: none; cursor: pointer; color: var(--muted) }
-  dialog { width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink) }
+  dialog { inline-size: min(30rem, calc(100% - 2rem)); max-height: calc(100dvh - 32px); padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink) }
   dialog::backdrop { background: var(--backdrop) }
   h2 { font-size: 16px; font-weight: 600 }
   fieldset { min-width: 0; margin: 0; padding: 0; border: 0 }

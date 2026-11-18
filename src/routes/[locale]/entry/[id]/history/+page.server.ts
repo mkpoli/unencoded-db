@@ -3,7 +3,7 @@ import { editEntry, hasLink, ENTRY_HISTORY_PAGE, getEntry, history, redactRevisi
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { tagList } from '$lib/server/tags'
 import { writer } from '$lib/server/people'
-import { entrySnapshot, revisionFields, sightingSnapshot } from '$lib/server/revisions'
+import { entrySnapshot, revisionDates, revisionFields, sightingSnapshot } from '$lib/server/revisions'
 import { positiveId } from '../../../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
@@ -26,7 +26,7 @@ export const load: PageServerLoad = async (event) => {
       ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
       sightingRev: sighting_id ? visibleSightings.get(sighting_id) : null,
     }))
-  return { id, rev: found.entry.rev, rows, next, tags: tags.map(({ name, label, type }) => ({ name, label, type })) }
+  return { id, rev: found.entry.rev, rows, dates: await revisionDates(db, rows), next, tags: tags.map(({ name, label, type }) => ({ name, label, type })) }
 }
 
 export const actions: Actions = {

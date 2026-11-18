@@ -21,16 +21,15 @@
 
 <style>
   .glyph-style {
-    display: flex; align-items: center; gap: 1px; flex: 0 1 auto;
-    min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 1px;
+    min-inline-size: 0; max-inline-size: 100%;
     padding: 2px; border: 1px solid var(--line); border-radius: 7px;
     background: var(--surface);
   }
-  .glyph-style::-webkit-scrollbar { display: none }
   .choice {
     position: relative; display: flex; align-items: center; gap: 5px;
-    height: 26px; padding: 0 8px; border-radius: 5px;
-    color: var(--muted); white-space: nowrap; cursor: pointer;
+    min-block-size: max(26px, var(--target-size)); padding: 4px 8px; border-radius: 5px;
+    color: var(--muted); cursor: pointer;
     transition: color .12s, background-color .12s;
   }
   .choice input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer }
@@ -47,9 +46,4 @@
   .choice[data-style="regular"] { font-family: "TW-Kai Label", "TW-Kai Specimen", var(--cjk-serif) }
   .choice[data-style="pen-writing"] { font-family: "Kureedo Label", "Kureedo Specimen", var(--cjk), sans-serif }
   @media (prefers-reduced-motion: reduce) { .choice { transition: none } }
-  @media (max-width: 520px) {
-    .choice { padding: 0 6px; gap: 4px }
-    .sample { font-size: 14px }
-    .name { font-size: 10.5px }
-  }
 </style>

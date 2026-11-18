@@ -767,6 +767,7 @@ describe('source gallery', () => {
       for (let i = 1; i < times; i++) await createEntry(db, fields(), seen({ title, report_date }), [], who)
       return id
     }
+    raw.prepare('INSERT INTO date_readings VALUES (?, ?)').run('令和2年 (2020)', JSON.stringify({ start: '2020-01-01', end: '2020-12-31', precision: 'year' }))
     await work('Late', '令和2年 (2020)', 2)
     await work('Early', 'c. 980', 3)
     await work('Undated', null)
@@ -980,7 +981,7 @@ describe('query cost', () => {
     const written: { sql: string; values: unknown[] }[] = []
     const traced = { prepare(sql: string) {
       const statement = db.prepare(sql)
-      return { bind(...values: unknown[]) { if (sql.includes('sighting_vias')) written.push({ sql, values }); return statement.bind(...values) } }
+      return { ...statement, bind(...values: unknown[]) { if (sql.includes('sighting_vias')) written.push({ sql, values }); return statement.bind(...values) } }
     }, batch: (statements: D1PreparedStatement[]) => db.batch(statements) } as D1Database
     const id = await createEntry(traced, fields(), seen({ title: 'Book', vias: [via({ title: 'Post' }), via({ title: 'Thread' })] }), [], who)
     const sighting = (await getEntry(traced, id))!.sightings[0]

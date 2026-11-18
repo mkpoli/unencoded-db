@@ -91,10 +91,11 @@
 {#if marking && !disabled}<p class="hint">{t('field.markHint')}</p>{/if}
 
 <style>
-  .stage-wrap { display: flex; justify-content: center; padding: 10px; border-radius: 10px; background: var(--surface-sunken) }
+  .stage-wrap { --picture-height: 62vh; display: flex; justify-content: center; padding: 10px; border-radius: 10px; background: var(--surface-sunken) }
   .box { position: absolute; border: calc(2px * var(--inv, 1)) solid var(--mark); box-shadow: 0 0 0 9999px rgb(0 0 0 / 28%); pointer-events: none }
   .number { position: absolute; bottom: calc(100% + 2px * var(--inv, 1)); left: calc(-2px * var(--inv, 1)); padding: 0 calc(4px * var(--inv, 1)); border-radius: calc(2px * var(--inv, 1)); background: var(--mark); color: #fff; font-size: calc(11px * var(--inv, 1)); font-weight: 600; line-height: 1.5; white-space: nowrap }
   .number.below { bottom: auto; top: calc(100% + 2px * var(--inv, 1)) }
   .number.right { left: auto; right: calc(-2px * var(--inv, 1)) }
+  @supports (height: 1dvh) { .stage-wrap { --picture-height: 62dvh } }
   .button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-light) }
 </style>

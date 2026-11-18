@@ -1,5 +1,8 @@
 // A description sequence as a person types it: the operators and the parts, with spaces taken out.
-export const cleanIds = (text: string) => text.normalize('NFC').replace(/\s+/gu, '')
+// These compatibility ideographs decompose to bare 艹 under NFC. Their
+// standardized variation sequences carry the original shape through NFC.
+export const preserveGrassVariants = (text: string) => text.replace(/艹/gu, '艹\uFE00').replace(/艹/gu, '艹\uFE01')
+export const cleanIds = (text: string) => preserveGrassVariants(text).normalize('NFC').replace(/\s+/gu, '')
 
 export const IDS_MAX = 20
 export const IDS_LENGTH_MAX = 200
@@ -45,4 +48,19 @@ export function encodedCharacter(code: string) {
   const point = /^U\+([0-9A-F]{4,6})(?![0-9A-F])/i.exec(code.trim())
   const value = point ? parseInt(point[1], 16) : -1
   return value >= 0x20 && value <= 0x10FFFF && !(value >= 0xD800 && value <= 0xDFFF) ? String.fromCodePoint(value) : ''
+}
+
+/** The characters a text of Unicode codes such as `U+5D20 U+E0100` names, or '' when the text is not only codes. */
+export function codePointCharacters(text: string) {
+  const tokens = text.trim().split(/\s+/u)
+  if (!tokens[0]) return ''
+  const characters: string[] = []
+  for (const token of tokens) {
+    const point = /^U\+([0-9A-F]{4,6})$/i.exec(token)
+    if (!point) return ''
+    const value = parseInt(point[1], 16)
+    if (value < 0x20 || value > 0x10FFFF || (value >= 0xD800 && value <= 0xDFFF)) return ''
+    characters.push(String.fromCodePoint(value))
+  }
+  return characters.join('')
 }
