@@ -8,34 +8,42 @@
   const labelId = $props.id()
   let dialog: HTMLDialogElement
   let field: HTMLInputElement
+  let nativeShare = $state(false)
   let copied = $state(false)
   let timer: ReturnType<typeof setTimeout> | undefined
   onDestroy(() => clearTimeout(timer))
 
-  async function share() {
-    if (navigator.share && (!navigator.canShare || navigator.canShare({ url }))) {
-      try {
-        await navigator.share({ url })
-        return
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-      }
-    }
+  function openShare() {
+    nativeShare = !!navigator.share && (!navigator.canShare || navigator.canShare({ url }))
+    if (nativeShare) dialog.showModal()
+    else void copyLink()
+  }
 
+  async function share() {
+    try {
+      await navigator.share({ url })
+      dialog.close()
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) field.select()
+    }
+  }
+
+  async function copyLink() {
     try {
       await navigator.clipboard.writeText(url)
+      if (dialog.open) dialog.close()
       copied = true
       clearTimeout(timer)
       timer = setTimeout(() => copied = false, 2000)
     } catch {
-      dialog.showModal()
+      if (!dialog.open) dialog.showModal()
       field.select()
     }
   }
 </script>
 
 <span class="share">
-  <button type="button" class="button" onclick={share}>
+  <button type="button" class="button" onclick={openShare}>
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="M12 15V3m-4 4 4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
     </svg>
@@ -45,11 +53,15 @@
 </span>
 
 <dialog bind:this={dialog} aria-labelledby={labelId}>
-  <label class="field" id={labelId}>
-    {t('entry.shareLink')}
+  <label class="field">
+    <span id={labelId}>{t('entry.shareLink')}</span>
     <input class="input" type="url" readonly value={url} bind:this={field} />
   </label>
-  <form method="dialog"><button class="button">{t('spelling.close')}</button></form>
+  <form method="dialog" class="row">
+    <button class="button">{t('spelling.close')}</button>
+    <button type="button" class="button" onclick={copyLink}>{t('entry.copy')}</button>
+    {#if nativeShare}<button type="button" class="button primary" onclick={share}>{t('entry.share')}</button>{/if}
+  </form>
 </dialog>
 
 <style>
