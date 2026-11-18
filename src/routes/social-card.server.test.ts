@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { encode } from 'fast-png'
 import { openTestDb } from '$lib/server/testdb'
 import { getSourceArtwork, getVisibleSource } from '$lib/server/entries'
-import { panelView, recordArtwork } from '$lib/server/social-card'
+import { lines, panelView, recordArtwork } from '$lib/server/social-card'
 import { GET } from './[locale]/[kind]/[id]/card.png/+server'
 
 test('card requests reject hidden or merged records and sources without visible evidence', async () => {
@@ -63,4 +63,13 @@ test('the evidence panel keeps a marked character in view with its surroundings'
   expect(x).toBeLessThanOrEqual(1900)
   expect(y).toBeLessThanOrEqual(2900)
   expect(tall).toBeCloseTo(240 / 382 * 554)
+})
+
+test('titles break between words, evenly, and keep the site name whole', () => {
+  expect(lines('このページは存在しません。', 10, 3)).toEqual(['このページは', '存在しません。'])
+  expect(lines('Glyph Atlasアカウント', 10, 3)).toEqual(['Glyph Atlas', 'アカウント'])
+  expect(lines('Giới thiệu Tuyển tập chữ quý', 10, 3, ['Tuyển tập chữ quý'])).toEqual(['Giới thiệu', 'Tuyển tập chữ quý'])
+  expect(lines('Tuyển tập chữ quý', 10, 3)).toEqual(['Tuyển tập chữ quý'])
+  expect(lines('R+06C6', 3, 1)).toEqual(['R+0…'])
+  expect(lines('合併字學集韻合併字學集韻', 5, 2)).toEqual(['合併字學集', '韻合併字…'])
 })
