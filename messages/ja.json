@@ -301,6 +301,8 @@
   "history.globalTitle": "履歴",
   "history.empty": "まだ更新はありません。",
   "history.older": "過去の更新",
+  "social.addEvidence": "用例を追加",
+  "social.contributor": "投稿者",
   "person.title": "{name}の投稿",
   "person.empty": "まだ投稿はありません。",
   "person.since": "{date}から参加",

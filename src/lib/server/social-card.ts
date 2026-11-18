@@ -6,21 +6,21 @@ import { glyphName, glyphPaths } from '$lib/server/glyphs'
 import type { Entry } from '$lib/server/entries'
 import { MAX_THUMB, sniff } from '$lib/server/image'
 
-const PAPER = '#fafafa', INK = '#19191c', MUTED = '#67676f', ACCENT = '#6356e5'
+const NIGHT = '#101824', INK = '#f8efe2', MUTED = '#c6cbd6', ACCENT = '#b7aaff'
+const PAPER = '#f0e6d5', PRINT = '#242638'
 const FONT = 'Noto Sans CJK TC'
 const FONT_STACK = `${FONT}, Noto Sans CJK KR`
 const MARK = '<path d="M4 4h9v9H4zM19 4h9v9h-9zM4 19h9v9H4z"/><path d="M19 19h9v9h-9z" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"/>'
-const BOOK = '<path d="M53 199V69c39-12 73-6 97 14 24-20 58-26 97-14v130c-39-12-73-6-97 14-24-20-58-26-97-14zM150 83v130" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>'
 
 let initialized: Promise<void> | undefined
 let webpInitialized: Promise<void> | undefined
-const fonts = new Map<string, Uint8Array>()
+const assetsRead = new Map<string, Uint8Array>()
 // Moderation is checked before consulting this cache. Short-lived entries also let newly drawn glyphs appear.
 const cards = new Map<string, { png: Uint8Array<ArrayBuffer>; expires: number }>()
-const CARD_CACHE_LIMIT = 24
-const CACHEABLE_PNG_BYTES = 192 * 1024
+const CARD_CACHE_LIMIT = 8
+const CACHEABLE_PNG_BYTES = 1024 * 1024
 const MAX_EVIDENCE_PIXELS = 1_048_576
-const ART_WIDTH = 334, ART_HEIGHT = 322
+const ART_WIDTH = 380, ART_HEIGHT = 432
 
 async function renderer() {
   initialized ??= import('@resvg/resvg-wasm/index_bg.wasm').then(wasm => initWasm(wasm.default)).catch(error => {
@@ -62,14 +62,14 @@ async function webpAsPng(bytes: ArrayBuffer) {
   return encodePng({ width, height, data })
 }
 
-async function cardFont(assets: Fetcher, origin: string, file: string) {
-  const found = fonts.get(file)
+async function cardAsset(assets: Fetcher, origin: string, path: string) {
+  const found = assetsRead.get(path)
   if (found) return found
-  const response = await assets.fetch(new URL(`/fonts/${file}`, origin))
-  if (!response.ok) throw new Error('Social card font unavailable')
-  const font = new Uint8Array(await response.arrayBuffer())
-  fonts.set(file, font)
-  return font
+  const response = await assets.fetch(new URL(path, origin))
+  if (!response.ok) throw new Error(`Social card asset unavailable: ${path}`)
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  assetsRead.set(path, bytes)
+  return bytes
 }
 
 function escapeXml(value: string) {
@@ -80,15 +80,22 @@ function text(value: string, x: number, y: number, size: number, fill: string) {
   return `<text x="${x}" y="${y}" fill="${fill}" font-family="${FONT_STACK}" font-size="${size}">${escapeXml(value)}</text>`
 }
 
-// Latin letters occupy a little over half an em in the card face. Fullwidth scripts use one em.
+// Budget a full em for wide glyphs. The common Latin letters have narrower advances in this face.
+function units(character: string) {
+  if (character === ' ') return 0.4
+  const letter = character.normalize('NFD')[0]
+  if ('MWmwÆŒæœ'.includes(letter)) return 1
+  if (/^[A-Z]$/.test(letter)) return 0.85
+  return /^[a-z0-9.,:!+\-]$/.test(letter) ? 0.65 : 1
+}
+
 function lines(value: string, limit: number, count: number) {
   const words = value.normalize('NFC').trim().replace(/\s+/g, ' ').split(' ')
   const result: string[] = []
   let line = '', width = 0
-  const units = (char: string) => /^[\u0020-\u052f\u1e00-\u1eff]$/u.test(char) ? 0.65 : 1
   for (const word of words) {
     const length = [...word].reduce((sum, char) => sum + units(char), 0)
-    if (line && width + 0.65 + length > limit) {
+    if (line && width + units(' ') + length > limit) {
       result.push(line.trimEnd())
       line = ''
       width = 0
@@ -112,32 +119,31 @@ function lines(value: string, limit: number, count: number) {
   return result
 }
 
-export async function recordArtwork(bucket: R2Bucket, entry: Entry) {
-  const key = entry.cover_key
-  if (key) {
-    const object = await bucket.get(key)
-    if (object && object.size <= MAX_THUMB) {
-      const bytes = await object.arrayBuffer()
-      const image = sniff(new Uint8Array(bytes))
-      if (image?.width && image.height && image.width * image.height <= MAX_EVIDENCE_PIXELS) {
-        const png = image.type === 'image/webp' ? await webpAsPng(bytes).catch(() => null) : null
-        if (png || image.type !== 'image/webp') {
-          const data = (png ? Buffer.from(png) : Buffer.from(bytes)).toString('base64')
-          return `<image x="737" y="154" width="${ART_WIDTH}" height="${ART_HEIGHT}" href="data:${png ? 'image/png' : image.type};base64,${data}"/>`
-        }
-      }
-    } else if (object) await object.body.cancel()
+export async function evidenceArtwork(bucket: R2Bucket, key: string) {
+  const object = await bucket.get(key)
+  if (!object) return ''
+  if (object.size > MAX_THUMB) {
+    await object.body.cancel()
+    return ''
   }
-  if (entry.ids) {
-    const glyph = { ids: entry.ids, layout: entry.layout }
-    const path = (await glyphPaths(bucket, [glyph]))[glyphName(glyph) ?? '']
-    if (path) return `<svg x="769" y="180" width="270" height="270" viewBox="0 0 1000 1000">${path.startsWith('<') ? path : `<path d="${path}"/>`}</svg>`
-    return lines(entry.ids, 8, 2).map((line, position) => text(line, 760, 310 + 44 * position, 36, INK)).join('')
-  }
-  return `<g transform="translate(807 218) scale(6)">${MARK}</g>`
+  const bytes = await object.arrayBuffer()
+  const image = sniff(new Uint8Array(bytes))
+  if (!image?.width || !image.height || image.width * image.height > MAX_EVIDENCE_PIXELS) return ''
+  const png = image.type === 'image/webp' ? await webpAsPng(bytes).catch(() => null) : null
+  if (!png && image.type === 'image/webp') return ''
+  const data = (png ? Buffer.from(png) : Buffer.from(bytes)).toString('base64')
+  return `<image x="719" y="83" width="${ART_WIDTH}" height="${ART_HEIGHT}" href="data:${png ? 'image/png' : image.type};base64,${data}"/>`
 }
 
-type Card = { key: string; label: string; title: string; detail?: string | null; art?: () => Promise<string>; source?: boolean }
+export async function recordArtwork(bucket: R2Bucket, entry: Entry, cover: string | null) {
+  const evidence = cover ? await evidenceArtwork(bucket, cover) : ''
+  if (evidence || !entry.ids) return evidence
+  const glyph = { ids: entry.ids, layout: entry.layout }
+  const path = (await glyphPaths(bucket, [glyph]))[glyphName(glyph) ?? '']
+  return path ? `<svg x="748" y="132" width="320" height="320" viewBox="0 0 1000 1000" color="${PRINT}" fill="${PRINT}">${path.startsWith('<') ? path : `<path d="${path}"/>`}</svg>` : ''
+}
+
+type Card = { key: string; label: string; title: string; detail?: string | null; caption?: string; art?: () => Promise<string>; size?: number }
 
 const pngResponse = (png: Uint8Array<ArrayBuffer>) => new Response(png, {
   headers: { 'content-type': 'image/png', 'cache-control': 'no-store' },
@@ -156,24 +162,37 @@ export async function renderCard(assets: Fetcher, origin: string, card: Card): P
   await renderer()
   const art = await card.art?.()
   const files = ['social-card.otf']
-  const content = `${card.label}${card.title}${card.detail ?? ''}${art ?? ''}`
+  const content = `${card.label}${card.title}${card.detail ?? ''}${card.caption ?? ''}${art ?? ''}`
   if (/\p{Script=Hangul}/u.test(content)) files.push('social-card-hangul.otf')
   if (/[\u{20000}-\u{323af}]/u.test(content)) files.push('social-card-supplementary.otf')
-  const fontBuffers = await Promise.all(files.map(file => cardFont(assets, origin, file)))
-  const size = card.source ? 48 : 64
-  const title = lines(card.title, card.source ? 12 : 9, 2)
-  const detail = card.detail ? lines(card.detail, 20, 1)[0] : ''
-  const heading = title.map((line, position) => text(line, 72, 302 + position * 67, size, INK)).join('')
+  const [background, ...fontBuffers] = await Promise.all([
+    cardAsset(assets, origin, '/social-card-backdrop.jpg'),
+    ...files.map(file => cardAsset(assets, origin, `/fonts/${file}`)),
+  ])
+  const size = card.size ?? 60
+  const title = lines(card.title, 565 / size, 3)
+  const titleStart = title.length === 3 ? 237 : 263
+  const heading = title.map((line, position) => text(line, 68, titleStart + position * (size + 4), size, INK)).join('')
+  const detailStart = titleStart + (title.length - 1) * (size + 4) + 52
+  const detail = card.detail ? lines(card.detail, 22, 2).map((line, position) => text(line, 68, detailStart + position * 33, 26, MUTED)).join('') : ''
+  const caption = card.caption && lines(card.caption, ART_WIDTH / 21 - 0.5, 1)[0]
+  const backdrop = Buffer.from(background).toString('base64')
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" color="${INK}" fill="${INK}">
-    <rect width="1200" height="630" fill="${PAPER}"/>
-    <path d="M72 74h1056M72 556h1056" stroke="#e3e3e7" stroke-width="2"/>
-    <path d="M72 74h56" stroke="${ACCENT}" stroke-width="4"/>
-    ${text(lines(card.label, 21, 1)[0] ?? '', 72, 224, 27, ACCENT)}
+    <defs><linearGradient id="scrim"><stop stop-color="${NIGHT}" stop-opacity=".97"/><stop offset=".73" stop-color="${NIGHT}" stop-opacity=".88"/><stop offset="1" stop-color="${NIGHT}" stop-opacity="0"/></linearGradient></defs>
+    <rect width="1200" height="630" fill="${NIGHT}"/>
+    <image width="1200" height="630" href="data:image/jpeg;base64,${backdrop}"/>
+    <rect width="800" height="630" fill="url(#scrim)"/>
+    <g transform="translate(64 48)">${MARK}</g>
+    ${text('珍字集覽  ·  GLYPH ATLAS', 111, 71, 23, INK)}
+    <path d="M68 125h62" stroke="${ACCENT}" stroke-width="3"/>
+    ${text(lines(card.label, 23, 1)[0] ?? '', 68, 183, 26, ACCENT)}
     ${heading}
-    ${detail ? text(detail, 72, title.length > 1 ? 422 : 365, 29, MUTED) : ''}
-    ${text('珍字集覽  ·  Rare Character Compendium', 72, 511, 23, MUTED)}
-    <rect x="680" y="122" width="448" height="386" rx="20" fill="#f1f1f3" stroke="#e3e3e7" stroke-width="2"/>
-    ${art || `<g transform="translate(754 166)">${BOOK}</g>`}
+    ${detail}
+    <path d="M68 533h510" stroke="${ACCENT}" stroke-opacity=".42"/>
+    ${text('rare.glyphatlas.org', 68, 573, 22, MUTED)}
+    ${art ? `<rect x="697" y="62" width="424" height="512" fill="#0b101b" opacity=".8" transform="translate(9 10)"/>
+    <rect x="697" y="62" width="424" height="512" rx="2" fill="${PAPER}"/>
+    ${art}${caption ? text(caption, 719, 552, 21, PRINT) : ''}` : ''}
   </svg>`
   const render = new Resvg(svg, { font: { fontBuffers, defaultFontFamily: FONT } })
   try {

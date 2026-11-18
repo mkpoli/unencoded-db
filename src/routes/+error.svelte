@@ -1,10 +1,12 @@
 <script lang="ts">
   import { page } from '$app/state'
+  import Seo from '$lib/components/Seo.svelte'
   import { href, t } from '$lib/t'
   const known = $derived(page.error?.message)
   const message = $derived(page.status === 404 ? t('error.notFound') : known === 'slow' || known === 'paused' || known === 'banned' ? t(`error.${known}`) : t('error.title'))
 </script>
 
+<Seo title={page.status === 404 ? t('error.notFound') : t('error.title')} />
 <div class="page narrow stack">
   <h1>{page.status}</h1>
   <p>{message}</p>

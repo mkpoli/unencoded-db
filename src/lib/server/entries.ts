@@ -1067,6 +1067,16 @@ export const getVisibleSource = (db: D1Database, id: number) => db.prepare(`
   WHERE id = ? AND (EXISTS (${CITING}) OR EXISTS (${CITING_AS_VIA}))
 `).bind(id).first<Source>()
 
+// A source's cover comes from a visible sighting that cites the work itself.
+export const getSourceArtwork = (db: D1Database, id: number) => db.prepare(`
+  SELECT x.image_key, x.thumb_key FROM sightings s INDEXED BY sightings_by_source
+  CROSS JOIN entries e ON e.id = s.entry_id
+  JOIN sighting_media x ON x.sighting_id = s.id
+  WHERE s.source_id = ? AND s.hidden_at IS NULL AND ${LIVE}
+  ORDER BY s.id, x.position
+  LIMIT 1
+`).bind(id).first<Pick<StoredImage, 'image_key' | 'thumb_key'>>()
+
 export const SOURCE_PAGE = 200
 
 // A source and the records seen in it, each once, with the pages it was seen on.

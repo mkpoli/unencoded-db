@@ -2,9 +2,9 @@ import { error } from '@sveltejs/kit'
 import { recordCode, recordName } from '$lib/code'
 import { translate } from '$lib/i18n'
 import { scriptName } from '$lib/scripts'
-import { getEntryRow, getVisibleSource, mediaVisible } from '$lib/server/entries'
+import { getEntryRow, getSourceArtwork, getVisibleSource, mediaVisible } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
-import { recordArtwork, renderCard } from '$lib/server/social-card'
+import { evidenceArtwork, recordArtwork, renderCard } from '$lib/server/social-card'
 import { positiveId } from '../../../../_submission.server'
 import type { RequestHandler } from './$types'
 
@@ -19,18 +19,25 @@ export const GET: RequestHandler = async event => {
   try {
     if (entry) {
       const cover = entry.cover_key && await mediaVisible(bindings.DB, entry.cover_key) ? entry.cover_key : null
-      const label = scriptName(locale, entry.script, entry.script_other)
+      const label = event.url.searchParams.get('view') === 'history'
+        ? translate(locale, 'history.globalTitle')
+        : scriptName(locale, entry.script, entry.script_other)
       return await renderCard(bindings.ASSETS, event.url.origin, {
-        key: JSON.stringify([kind, locale, id, label, entry.ids, entry.layout, cover]),
+        key: JSON.stringify([kind, locale, id, label, entry.ids, entry.layout, cover, entry.cover_place]),
         label, title: recordCode(entry.id), detail: recordName(entry.id),
-        art: () => recordArtwork(bindings.MEDIA, { ...entry, cover_key: cover }),
+        caption: entry.cover_place ?? '', size: 78,
+        art: () => recordArtwork(bindings.MEDIA, entry, cover),
       })
     }
-    if (source) return await renderCard(bindings.ASSETS, event.url.origin, {
-      key: JSON.stringify([kind, locale, source]),
-      label: translate(locale, 'source.title'), title: source.title || source.url || `#${source.id}`,
-      detail: [source.author, source.report_date].filter(Boolean).join(' · '), source: true,
-    })
+    if (source) {
+      const image = await getSourceArtwork(bindings.DB, id)
+      return await renderCard(bindings.ASSETS, event.url.origin, {
+        key: JSON.stringify([kind, locale, source, image]),
+        label: translate(locale, 'source.title'), title: source.title || source.url || `#${source.id}`,
+        detail: [source.author, source.report_date].filter(Boolean).join(' · '), size: 55,
+        art: image ? async () => (await evidenceArtwork(bindings.MEDIA, image.image_key)) || evidenceArtwork(bindings.MEDIA, image.thumb_key) : undefined,
+      })
+    }
   } catch (cause) {
     console.error('Could not render social card', cause)
   }
