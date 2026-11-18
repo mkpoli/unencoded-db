@@ -9,7 +9,7 @@
         "fflate": "^0.8.3",
         "fonteditor-core": "^2.6.3",
         "han-compose": "github:mkpoli/han-compose#ad1e83f05241a670690a275c582bdb88f92459bc",
-        "ids-input": "github:mkpoli/ids-input#7c1d7e7e4b323afbd8178e25b15d337407ee0732",
+        "ids-input": "github:mkpoli/ids-input#37df414edc18b8fa780923625721fa1560846d85",
         "jose": "^6.2.15",
         "opentype.js": "1.3.4",
         "svgpath": "^2.6.0",
@@ -296,7 +296,7 @@
 
     "han-compose": ["han-compose-monorepo@github:mkpoli/han-compose#ad1e83f", {}, "mkpoli-han-compose-ad1e83f", "sha512-4fhhLnhuynOdHjV9bnLtbx8CICyB/PNAJLWcXIN7T8IV8NGx4e7EWdIp/yyDYjr7WAeRBBKX3m/wRnxL1nbDmw=="],
 
-    "ids-input": ["ids-input@github:mkpoli/ids-input#7c1d7e7", { "dependencies": { "@cf-wasm/resvg": "^0.4.0", "@han-compose/composer": "file:../composer" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-7c1d7e7", "sha512-fCd4zWKC22l3Hqen5w+YL4rbFXwIAgGAOpYceP2yzw0fULOL3VSaMl2SrYvBlXwsiBwJKO65lpnMAq+0ScvIeg=="],
+    "ids-input": ["ids-input@github:mkpoli/ids-input#37df414", { "dependencies": { "@cf-wasm/resvg": "^0.4.0", "@han-compose/composer": "file:../composer" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-37df414", "sha512-XAfrB4EteW5aaJgvOl2uIeqUEPN4MjmdvKJJ8kNiF8ainzKhjCksXylPLpAle1sueQmMkLJOX/zo7JPWP2ClOQ=="],
 
     "internmap": ["internmap@2.0.3", "", {}, "sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg=="],
 
