@@ -5,11 +5,17 @@ CREATE TABLE date_readings (
 ) WITHOUT ROWID;
 
 CREATE VIEW evidence_dates(value) AS
+WITH snapshots(item) AS MATERIALIZED (
+  SELECT snapshot FROM revisions
+  WHERE kind IN ('sighting','sighting_edit') AND redacted_at IS NULL AND json_valid(snapshot)
+), vias(item) AS (
+  SELECT CASE WHEN via.type = 'object' THEN via.value END FROM snapshots s, json_each(s.item, '$.vias') via
+  WHERE json_type(s.item, '$.vias') = 'array'
+)
 SELECT report_date FROM sources UNION SELECT original_date FROM sightings
-  UNION SELECT snapshot ->> '$.report_date' FROM revisions WHERE kind IN ('sighting','sighting_edit') AND redacted_at IS NULL
-  UNION SELECT snapshot ->> '$.original_date' FROM revisions WHERE kind IN ('sighting','sighting_edit') AND redacted_at IS NULL
-  UNION SELECT via.value ->> '$.report_date' FROM revisions r, json_each(r.snapshot, '$.vias') via
-    WHERE r.kind IN ('sighting','sighting_edit') AND r.redacted_at IS NULL;
+  UNION SELECT item ->> '$.report_date' FROM snapshots WHERE json_type(item, '$.report_date') = 'text'
+  UNION SELECT item ->> '$.original_date' FROM snapshots WHERE json_type(item, '$.original_date') = 'text'
+  UNION SELECT item ->> '$.report_date' FROM vias WHERE json_type(item, '$.report_date') = 'text';
 
 -- A write that computed date-dependent tags before a cache change retries with the new readings.
 CREATE TABLE date_index_state (generation INTEGER NOT NULL CHECK (generation >= 0));

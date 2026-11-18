@@ -41,10 +41,11 @@ export async function convertDate(raw: string, request: typeof fetch = fetch, de
     const timeout = AbortSignal.timeout(3500)
     return deadline ? AbortSignal.any([deadline, timeout]) : timeout
   }
-  async function ask(calendar: string) {
-    const params = new URLSearchParams({ method: 'conv', ical: calendar, itype: kind, ival: input, ocal: '101.1', otype: 'date', oform: 'yyyy-MM-dd', out: 'text' })
+  async function ask(calendar: string, wholeYear = false): Promise<(DateReading & { query: string }) | 'ambiguous' | null> {
+    const precision = wholeYear ? 'year' : kind
+    const params = new URLSearchParams({ method: 'conv', ical: calendar, itype: precision, ival: wholeYear ? era + year + '年' : input, ocal: '101.1', otype: 'date', oform: 'yyyy-MM-dd', out: 'text' })
     if (dynasty) params.set('iparam', String(dynasties[dynasty]))
-    if (!d) params.set('ep', 'be')
+    if (precision !== 'date') params.set('ep', 'be')
     const query = 'https://ap.hutime.org/cal/?' + params
     const response = await request(query, { signal: querySignal() })
     // An unavailable calendar cannot rule out a second interpretation of the same era.
@@ -56,11 +57,17 @@ export async function convertDate(raw: string, request: typeof fetch = fetch, de
     if (!body) return null
     const dates = body.split(/\s*\/\/\s*|\r?\n/).map(s => s.trim())
     if (!dates.every(date => /^\d{4}-\d{2}-\d{2}$/.test(date) && westernDate(date))) throw new Error('Invalid HuTime response')
-    if (dates.length > (d ? 1 : 2)) return 'ambiguous'
-    if (dates.length !== (d ? 1 : 2)) return null
-    if (dates[0] > dates[dates.length - 1]) return null
-    if (annotation && Number(annotation[1]) !== Number(dates[0].slice(0, 4))) return null
-    return { start: dates[0], end: dates[dates.length - 1], precision: d ? 'day' : m ? 'month' : 'year', query } satisfies DateReading
+    const expected = precision === 'date' ? 1 : 2
+    if (dates.length > expected) return 'ambiguous'
+    if (dates.length !== expected) throw new Error('Incomplete HuTime response')
+    if (dates[0] > dates[dates.length - 1]) throw new Error('Reversed HuTime bounds')
+    if (annotation && Number(annotation[1]) !== Number(dates[0].slice(0, 4))) {
+      // A late lunar month can fall in January of the following Western year.
+      if (precision === 'year') return null
+      const annotatedYear = await ask(calendar, true)
+      if (!annotatedYear || annotatedYear === 'ambiguous' || dates[0] < annotatedYear.start || dates.at(-1)! > annotatedYear.end) return null
+    }
+    return { start: dates[0], end: dates[dates.length - 1], precision: precision === 'date' ? 'day' : precision, query } satisfies DateReading
   }
   try {
     if (dynasty) {

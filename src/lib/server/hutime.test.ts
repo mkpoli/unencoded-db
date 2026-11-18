@@ -28,6 +28,10 @@ test('HuTime converts the dynasty-qualified year and verifies which dynasty actu
     return url.searchParams.get('ocal') === '1005.1' ? '唐 玄宗 開元10年壬戌 1月1日' : '0722-01-22 // 0723-02-09'
   }))).toMatchObject({ precision: 'year' })
   expect(await convertDate('魏建興2年', reply(url => url.searchParams.get('ocal') === '1005.1' ? '魏 文帝 黃初5年甲辰 1月1日' : '0224-02-07 // 0225-01-27'))).toBeNull()
+  expect(await convertDate('明萬曆34年12月（1606）', reply(url => {
+    if (url.searchParams.get('ocal') === '1005.1') return '明 神宗 萬曆34年丙午 12月1日'
+    return url.searchParams.get('itype') === 'year' ? '1606-02-07 // 1607-01-27' : '1607-01-01 // 1607-01-27'
+  }))).toMatchObject({ precision: 'month', end: '1607-01-27' })
   const reading = await convertDate('明萬曆三十四年', answers)
   expect(reading).toMatchObject(bounds)
   expect(new URL(reading!.query!).searchParams.get('ep')).toBe('be')
@@ -138,6 +142,8 @@ test('an edit racing a recovered date retries and keeps one decade, then redacti
   const original = raw.query("SELECT id, sighting_id FROM revisions WHERE kind = 'sighting'").get() as { id: number; sighting_id: number }
   await editSighting(db, original.sighting_id, 1, { ...sighting, original_date: null }, null, who, null, entry)
   expect(raw.query('SELECT transcription FROM date_readings WHERE transcription = ?').get(wanli)).toBeTruthy()
+  const legacy = raw.prepare("INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) VALUES (?, 'sighting_edit', 0, ?, ?, '2026')")
+  for (const snapshot of ['malformed', '{"report_date":24,"vias":["loose text",{"report_date":32}]}']) legacy.run(entry, snapshot, who.actor)
   await redactRevision(db, entry, original.id, who, null)
   expect(raw.query('SELECT transcription FROM date_readings WHERE transcription = ?').get(wanli)).toBeNull()
 })
