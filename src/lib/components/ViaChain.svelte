@@ -1,11 +1,13 @@
 <script lang="ts">
   // A sighting's chain of go-betweens, nearest the cited work first. Each link carries the whole
   // citation: the title, the author, the publisher, the date, and a web address where there is one.
+  import EvidenceDate from './EvidenceDate.svelte'
+  import type { DateReading } from '$lib/dates'
   import { href, t } from '$lib/t'
   import type { Citation } from '$lib/server/entries'
 
   type Via = Citation & { id?: number }
-  let { vias, label = true }: { vias: readonly Via[]; label?: boolean } = $props()
+  let { vias, label = true, dates }: { vias: readonly Via[]; label?: boolean; dates?: Map<string, DateReading | null> } = $props()
   const web = (url: string | null) => Boolean(url && /^https?:\/\//i.test(url))
 </script>
 
@@ -28,7 +30,11 @@
               {/if}
             </span>
             {#if via.author || via.publisher || via.report_date}
-              <span class="meta">{[via.author, via.publisher, via.report_date].filter(Boolean).join(' · ')}</span>
+              <span class="meta">
+                {#if via.author}{via.author}{/if}
+                {#if via.publisher}{#if via.author} · {/if}{via.publisher}{/if}
+                {#if via.report_date}{#if via.author || via.publisher} · {/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}
+              </span>
             {/if}
           </span>
         </li>

@@ -1,3 +1,4 @@
+import { readDates, sightingDates } from './date-readings'
 import { CONTEXTS, STYLES, VIAS_MAX, isStoredSightingTypes } from '$lib/scripts'
 import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, tidyVias, type Citation, type EntryFields, type SightingFields } from './entries'
 
@@ -48,3 +49,6 @@ export function revisionFields(row: SnapshotRow) {
     sightingFields: !row.redacted_at && row.sighting_id && SIGHTING_KINDS.includes(row.kind) ? sightingSnapshot(row.snapshot) : null,
   }
 }
+
+export const revisionDates = (db: D1Database, rows: { sightingFields: SightingFields | null }[]) =>
+  readDates(db, sightingDates(rows.flatMap(row => row.sightingFields ? [row.sightingFields] : [])))

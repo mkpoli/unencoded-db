@@ -21,6 +21,7 @@ declare module 'ids-input/svelte' {
     readonly draft: string
     /** What is wrong with the text, in the editor's language, or '' when nothing is. */
     readonly problem: string
+    readonly picked: import('ids-input').IdsPart | undefined
     /** The part the tools are working on, by its place in the description, or null. */
     readonly chosen: number[] | null
     readonly canUndo: boolean
@@ -42,15 +43,18 @@ declare module 'ids-input/svelte' {
   export const IdsTree: Component<{ editor: IdsEditor; keyHints?: boolean }>
   export const IdsPartTools: Component<{ editor: IdsEditor; keyHints?: boolean; slot?: HTMLInputElement | null }, {}, 'slot'>
   export const IdsPicker: Component<{ editor: IdsEditor; pickers?: ('find' | 'parts' | 'from' | 'templates')[]; recentKey?: string | null }>
-  export const IdsCharacterInfo: Component<{ root: HTMLElement | null; adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; onpick?: (part: string, path?: number[]) => void }>
+  export function grassForm(editor: IdsEditor): string | null | undefined
+  export const IdsAlternatives: Component<{ editor: IdsEditor; onchoose?: () => void }>
+  export const IdsCharacterInfo: Component<{ root: HTMLElement | null; adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; onpick?: (part: string, path?: number[]) => void; extra?: import('svelte').Snippet<[{ path: number[] | undefined; close: () => void }]> }>
   /** A description drawn by the adapter's `preview`. With a `session` and `editable`, its parts are moved, scaled and turned on the drawing. */
   export const IdsPreview: Component<{
     adapter: { preview?: import('han-compose').ComposerPreview }; tree: import('ids-input').IdsPart; chosen?: number[] | null
     messages?: Record<string, string>; locale?: string; small?: boolean; notes?: boolean; delay?: number
-    session?: import('ids-input/document').DocumentSession | null; version?: number; editable?: boolean
+    session?: import('ids-input/document').DocumentSession | null; version?: number; editable?: boolean; preserveStroke?: boolean
+    step?: 'idle' | 'loading' | 'composed' | 'final' | 'failed' | 'capped' | 'unavailable'
     scopes?: import('ids-input/document').ScopeTree | null; drawing?: import('han-compose').Drawing | null
     onchoose?: ((path: number[]) => void) | null; onedit?: (() => void) | null
-  }, {}, 'scopes' | 'drawing'>
+  }, {}, 'scopes' | 'drawing' | 'step'>
   /** The text of `key` in `messages`, else in English. */
   export function translator(messages: Record<string, string> | undefined, locale?: string): (key: string, params?: Record<string, string | number>) => string
 }
@@ -84,13 +88,12 @@ declare module 'ids-input/document' {
   export function createDocumentSession(initial?: IdsDocument): DocumentSession
   /** How a document is drawn over a composer's drawing; the composer's document view takes these two. */
   export type Renderer = { layerFrames: (...given: never[]) => unknown; renderScopes: (...given: never[]) => unknown }
-  export const layerFrames: Renderer['layerFrames']
-  export const renderScopes: Renderer['renderScopes']
+  export function documentRenderer(stroke?: number[] | null): Renderer
   export function scopesMarkup(drawing: ScopeTree, options?: { ink?: string; idPrefix?: string; emoji?: unknown[] | null; cut?: string | null; cutLeaf?: number | null }): { defs: string; body: string }
 }
 
 declare module 'han-compose' {
-  export type Drawing = { d: string; parts?: { leaf?: number; cut?: boolean }[]; slots?: unknown[]; cut?: string; emoji?: unknown[] }
+  export type Drawing = { d: string; parts?: { leaf?: number; cut?: boolean }[]; slots?: unknown[]; cut?: string; emoji?: unknown[]; stroke?: number[] | null }
   export type SketchLeaf = { index: number; box: number[]; empty: boolean }
   export type ComposerPreview = ((sequence: string, options?: { signal?: AbortSignal }) => Promise<Drawing>) & { warm(): void }
   export type ComposerSource = {
@@ -103,6 +106,10 @@ declare module 'han-compose' {
   export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'regular' | 'fangsong' | 'pen-writing' }): Promise<Drawing>
   /** The composer in a Web Worker, reading han-compose's export at `base`. */
   export function composerPreview(options: { base: string; separate?: boolean; fontStyle?: 'sans' | 'serif' | 'regular' | 'fangsong' | 'pen-writing'; loaders?: Record<string, string> }): ComposerPreview
+}
+
+declare module 'han-compose/tree' {
+  export function isShuishu(text: string | null): boolean
 }
 
 declare module 'han-compose/source' {

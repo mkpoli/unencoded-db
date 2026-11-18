@@ -1,4 +1,5 @@
 <script lang="ts">
+  import EvidenceDate from '$lib/components/EvidenceDate.svelte'
   import Seo from '$lib/components/Seo.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
@@ -62,10 +63,10 @@
                   <span class="glyph">{#if entry.tile.ids}<IdsGlyph ids={entry.tile.ids} layout={entry.tile.layout} path={data.glyphs[entry.tile.id]} />{:else if entry.tile.cover_key}<img src={media(entry.tile.cover_key)} alt="" loading="lazy" decoding="async" />{/if}</span>
                   <span class="text">
                     <span class="name">{#if entry.tile.ids}<span class="ids">{entry.tile.ids}</span>{/if}<span class="code">{recordCode(entry.tile.id)}</span></span>
-                    {#if entry.sighting}<span class="source">{#if entry.sighting.title}『{entry.sighting.title}』{:else if entry.sighting.place}{entry.sighting.place}{/if}{#if entry.sighting.author}<span class="muted"> {entry.sighting.author}</span>{/if}{#if entry.sighting.date}<span class="date" title={t(entry.tile.firstYearKind === 'original' ? 'field.originalDate' : 'field.reportDate')}>（{entry.sighting.date}）</span>{/if}</span>{/if}
+                    {#if entry.sighting}<span class="source">{#if entry.sighting.title}『{entry.sighting.title}』{:else if entry.sighting.place}{entry.sighting.place}{/if}{#if entry.sighting.author}<span class="muted"> {entry.sighting.author}</span>{/if}{#if entry.sighting.date}<span class="date" title={t(entry.tile.firstYearKind === 'original' ? 'field.originalDate' : 'field.reportDate')}>（<EvidenceDate linked={false} text={entry.sighting.date} reading={data.dates.get(entry.sighting.date)} />）</span>{/if}</span>{/if}
                   </span>
                 </a>
-                {#if entry.sighting?.vias.length}<div class="via"><ViaChain vias={entry.sighting.vias} /></div>{/if}
+                {#if entry.sighting?.vias.length}<div class="via"><ViaChain vias={entry.sighting.vias} dates={data.dates} /></div>{/if}
               </td>
             </tr>
           {/each}
@@ -80,7 +81,7 @@
 
 <style>
   .heading { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px 16px }
-  .totals { display:flex; gap:16px; margin:0; font-variant-numeric:tabular-nums }
+  .totals { display:flex; flex-wrap:wrap; gap:4px 16px; margin:0; font-variant-numeric:tabular-nums }
   .bars { display:flex; align-items:flex-end; gap:2px; height:120px; margin:0; padding:6px 28px 22px 6px; list-style:none; overflow-x:auto }
   .bars li { position:relative; flex:1 0 6px; height:100%; display:flex; align-items:flex-end }
   .bars li.century { border-inline-start:1px solid var(--line) }
@@ -90,7 +91,7 @@
   .gap { display:block; width:100%; height:2px; background:var(--line) }
   .tick { position:absolute; inset-block-start:calc(100% + 4px); inset-inline-start:2px; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap }
   /* The 年表: one axis down the page, the year in a shaded gutter beside what was first seen in it. */
-  .chronicle { width:100%; border-collapse:collapse; border:1px solid var(--line-strong); font-size:14px; line-height:1.5 }
+  .chronicle { width:100%; table-layout:fixed; border-collapse:collapse; border:1px solid var(--line-strong); font-size:14px; line-height:1.5 }
   .chronicle thead th { padding:10px 12px; border-bottom:1px solid var(--line-strong); font-size:13px; font-weight:500; color:var(--muted); text-align:start }
   .chronicle th.year, .chronicle td.year { width:72px; padding:8px 10px; background:var(--surface-sunken); color:var(--muted); font-size:12.5px; font-variant-numeric:tabular-nums; text-align:end; vertical-align:top; white-space:nowrap }
   .chronicle thead th.year { text-align:end }
@@ -108,7 +109,7 @@
   .glyph :global(.sequence) { font-size:9px; padding:1px }
   .glyph img { width:100%; height:100%; object-fit:contain }
   .text { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 12px; min-width:0 }
-  .name { display:inline-flex; align-items:baseline; gap:8px }
+  .name { display:inline-flex; flex-wrap:wrap; align-items:baseline; min-inline-size:0; gap:2px 8px }
   .ids { color:var(--muted) }
   .code { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums }
   .source { min-width:0; overflow-wrap:anywhere }

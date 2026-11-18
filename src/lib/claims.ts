@@ -234,7 +234,8 @@ export function readClaims(form: FormData, tags: readonly Pick<Tag, 'name' | 'la
     // of the parts it kept from the named one go with it. A description the record already holds, and
     // every description the form does not speak for, keeps its own.
     const kept = new Map(claimsOf(base, 'ids').map(claim => [claim.value, claim.data]))
-    const drawn = splitIds(clean(form.get('layout_ids')))[0]
+    const layoutIds = form.get('layout_ids')
+    const drawn = typeof layoutIds === 'string' ? splitIds(layoutIds)[0] : undefined
     const spoken = form.has('layout') && drawn && sequences.length > 0 && (drawn === sequences[0] || !kept.has(sequences[0]))
     const stated = spoken ? carryLayout(cleanLayout(clean(form.get('layout')), drawn), drawn, sequences[0]) : undefined
     next.set('ids', sequences.map((sequence, index) => made('ids', sequence, index === 0 && stated !== undefined ? stated && { layout: stated } : kept.get(sequence) ?? null)))

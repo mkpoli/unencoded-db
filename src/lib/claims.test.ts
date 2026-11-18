@@ -392,3 +392,12 @@ describe('scopes', () => {
     expect(supportedBy(mapped, 10).map(item => item.value)).toEqual(['a', 'b'])
   })
 })
+
+test('preserves compatibility grass forms in the IDS, component roles and layout', () => {
+  const raw = '⿰艹艹', ids = '⿰艹\uFE00艹\uFE01'
+  const layout = { '0': [1, 0, 0, 1, 40, 0] }
+  const composition = { ids: raw, parts: ['艹', '艹'], roles: ['semantic', 'phonetic'], formation: null }
+  const result = read([['ids', raw], ['layout_ids', raw], ['layout', JSON.stringify(layout)], ['composition', JSON.stringify(composition)]])
+  expect(result.claims?.find(c => c.kind === 'ids')).toMatchObject({ value: ids, data: { layout } })
+  expect(result.claims?.find(c => c.kind === 'composition')).toMatchObject({ value: ids, data: { parts: ['艹\uFE00', '艹\uFE01'], roles: composition.roles } })
+})

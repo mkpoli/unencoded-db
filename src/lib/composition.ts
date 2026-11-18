@@ -2,7 +2,7 @@
 // formation those roles imply. The parsed parts are a starting point: an editor may replace them,
 // type a role outside the standard three, and name a formation the roles cannot express.
 import { isNode, parse, write, type IdsPart } from 'ids-input'
-import { IDS_LENGTH_MAX, splitIds } from './ids'
+import { IDS_LENGTH_MAX, splitIds, preserveGrassVariants } from './ids'
 
 export const ROLES = ['semantic', 'phonetic', 'symbol'] as const
 export type Role = (typeof ROLES)[number]
@@ -45,9 +45,9 @@ const isRole = (value: unknown): value is Role =>
 const clean = (value: unknown, max: number): string =>
   typeof value === 'string' ? [...value.normalize('NFC').trim()].slice(0, max).join('') : ''
 
-function cleanList(value: unknown, max: number): string[] | undefined {
+function cleanList(value: unknown, max: number, normalize = clean): string[] | undefined {
   if (!Array.isArray(value)) return undefined
-  return value.slice(0, PARTS_MAX).map(item => clean(item, max))
+  return value.slice(0, PARTS_MAX).map(item => normalize(item, max))
 }
 
 /** A stored composition, or null when the value is not one this app writes. */
@@ -57,10 +57,11 @@ export function parseComposition(value: unknown): Composition | null {
   try { data = JSON.parse(value) } catch { return null }
   if (!data || typeof data !== 'object') return null
   const stored = data as { ids?: unknown; parts?: unknown; roles?: unknown; formation?: unknown }
-  const ids = clean(stored.ids, IDS_LENGTH_MAX)
+  const partText = (value: unknown, max: number) => typeof value === 'string' ? clean(preserveGrassVariants(value), max) : ''
+  const ids = partText(stored.ids, IDS_LENGTH_MAX)
   if (!ids) return null
   const roles = cleanList(stored.roles, ROLE_MAX) ?? []
-  const parts = cleanList(stored.parts, PART_MAX)
+  const parts = cleanList(stored.parts, PART_MAX, partText)
   const formation = clean(stored.formation, FORMATION_MAX) || null
   if (parts) {
     // Parts and roles belong to one list; an empty part takes its role with it.

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import EvidenceDate from '$lib/components/EvidenceDate.svelte'
   import Seo from '$lib/components/Seo.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { href, media, t } from '$lib/t'
@@ -25,14 +26,14 @@
     <div class="cards">
       {#each data.sources as source (source.id)}
         {@const name = source.title || host(source.url) || source.url || t('source.title')}
-        {@const byline = [source.author, source.publisher, source.report_date].filter(Boolean).join(' · ')}
+        {@const byline = [source.author, source.publisher].filter(Boolean).join(' · ')}
         <article class="card">
           <a class="cover" href={href(`/source/${source.id}`)} tabindex="-1" aria-hidden="true">
             {#if source.cover}<img src={media(source.cover)} alt="" loading="lazy" decoding="async" />{:else}<span class="blank">{t('browse.noImage')}</span>{/if}
           </a>
           <div class="body">
             <h2 class="name"><a href={href(`/source/${source.id}`)}>{name}</a></h2>
-            {#if byline}<span class="byline">{byline}</span>{/if}
+            {#if byline || source.report_date}<span class="byline">{byline}{#if byline && source.report_date} · {/if}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} /></span>{/if}
             {#if source.title && host(source.url)}<span class="byline">{host(source.url)}</span>{/if}
             <span class="count">{count(source.records)}</span>
           </div>
@@ -57,7 +58,7 @@
 
 <style>
   .sort { display:flex; flex-wrap:wrap; gap:4px }
-  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:20px }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr)); gap:20px }
   .card { display:flex; flex-direction:column; min-width:0; border:1px solid var(--line); border-radius:10px; background:var(--surface); overflow:hidden }
   .cover { display:grid; place-items:center; aspect-ratio:16/10; background:var(--surface-sunken); overflow:hidden }
   .cover img { width:100%; height:100%; object-fit:cover; display:block }
@@ -76,5 +77,4 @@
   .count { margin-top:4px; font-size:12px; font-weight:500 }
   .empty { padding:48px 16px; text-align:center }
   .more { align-self:start }
-  @media(max-width:500px) { .cards { grid-template-columns:minmax(0,1fr) } .sort { display:grid; grid-template-columns:1fr 1fr } .sort .chip { justify-content:center } }
 </style>

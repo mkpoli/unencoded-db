@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { DateReading } from '$lib/dates'
   import RevisionFields from './RevisionFields.svelte'
   import { tagLabels, type Tag } from '$lib/tags'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
@@ -12,8 +13,8 @@
     redacted?: boolean; redacted_at?: string | null
   }
 
-  let { rows, tags, currentRev = null, showEntry = false, showActor = true, restore = false, redact = false, empty, next = null }: {
-    rows: Row[]; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; empty: string; next?: number | null
+  let { rows, tags, dates, currentRev = null, showEntry = false, showActor = true, restore = false, redact = false, empty, next = null }: {
+    dates: Map<string, DateReading | null>; rows: Row[]; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; empty: string; next?: number | null
   } = $props()
   const labels = $derived(tagLabels(tags))
   const tagTypes = $derived(new Map(tags.map(tag => [tag.name, tag.type])))
@@ -34,8 +35,8 @@
   <span class="revision-change">
     <span class="revision-main">
       <span class="revision-kind">{t(`history.kind.${row.kind}`)}</span>
-      {#if showEntry}<a class="revision-entry" href={href(`/entry/${row.entry_id}`)} onclick={stop}>{row.ids || t('entry.record', { id: recordCode(row.entry_id) })}</a>{/if}
-      {#if row.sighting_id}<span class="revision-number">#{row.sighting_id}</span>{/if}
+      {#if showEntry}<a class="revision-entry text-link" href={href(`/entry/${row.entry_id}`)} onclick={stop}>{row.ids || t('entry.record', { id: recordCode(row.entry_id) })}</a>{/if}
+      {#if row.sighting_id}<a class="revision-number" href={href(`/entry/${row.entry_id}#sighting-${row.sighting_id}`)} onclick={stop}>#{row.sighting_id}</a>{/if}
     </span>
     {#if row.redacted || row.redacted_at}<span class="revision-comment">{t('history.redacted')}</span>{:else if row.summary}<span class="revision-comment">{row.summary}</span>{/if}
   </span>
@@ -51,8 +52,13 @@
         <details>
           <summary class="revision-row">{@render line(row)}</summary>
           <div class="revision-body">
+            {#if !showEntry}
+              <div class="revision-links">
+                <a class="text-link" href={href(`/entry/${row.entry_id}`)}>{t('entry.record', { id: recordCode(row.entry_id) })}</a>
+              </div>
+            {/if}
             {#if row.fields}<RevisionFields fields={row.fields} {labels} {tagTypes} />{/if}
-            {#if row.sightingFields}<RevisionFields fields={row.sightingFields} sighting />{/if}
+            {#if row.sightingFields}<RevisionFields fields={row.sightingFields} {dates} sighting />{/if}
             {#if restore}
               {#if row.fields && currentRev}
                 <form class="revision-action" method="POST" action="?/restore">
@@ -105,6 +111,8 @@
   .revision-kind { font-weight: 500 }
   .revision-entry { font-weight: 500; overflow-wrap: anywhere }
   .revision-number { color: var(--muted); font-size: 11.5px; white-space: nowrap }
+  a.revision-number { text-decoration: underline; text-underline-offset: 3px }
+  a.revision-number:hover { color: var(--accent) }
   .revision-comment { overflow: hidden; color: var(--muted); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap }
   .revision-rev { flex: 0 0 36px; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap }
   .revision-toggle { flex: 0 0 16px; color: var(--muted); font-size: 16px; line-height: 1; text-align: center }
@@ -112,6 +120,7 @@
   details[open] .revision-toggle::before { content: '−' }
   details[open] > .revision-row { background: var(--surface-tile) }
   .revision-body { padding: 18px 16px 20px; border-top: 1px solid var(--line); background: var(--surface-sunken) }
+  .revision-links { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-bottom: 14px; font-size: 12.5px; font-weight: 500 }
   .revision-action { display: flex; justify-content: flex-end; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line) }
   .revision-action.redact { gap: 8px }
   .revision-action.redact .input { flex: 1 1 auto; width: auto; min-width: 0 }

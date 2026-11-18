@@ -1,4 +1,5 @@
 <script lang="ts">
+  import EvidenceDate from '$lib/components/EvidenceDate.svelte'
   import { page } from '$app/state'
   import { claimLabel } from '$lib/claim-label'
   import { onMount, tick, untrack } from 'svelte'
@@ -12,6 +13,7 @@
   import CopyButton from '$lib/components/CopyButton.svelte'
   import EditLink from '$lib/components/EditLink.svelte'
   import FavouriteButton from '$lib/components/FavouriteButton.svelte'
+  import ShareRecord from '$lib/components/ShareRecord.svelte'
   import { characterLinks, descriptionLinks } from '$lib/links'
   import { cleanIds, encodedCharacter } from '$lib/ids'
   import { layoutText } from '$lib/layout'
@@ -157,7 +159,7 @@
 <Seo title={`${recordCode(entry.id)} ${recordName(entry.id)}`} image={entry.cover_key ? media(entry.cover_key) : null} />
 <div class="page narrow stack">
   <div class="row"><a class="text-link back" href={href()}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
-  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: data.earliest.year })}</a>{/if}</div></div><FavouriteButton id={entry.id} initial={data.favourites.includes(entry.id)} onerror={message => favError = message} /></div>
+  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: data.earliest.year })}</a>{/if}</div></div><div class="row"><ShareRecord id={entry.id} /><FavouriteButton id={entry.id} initial={data.favourites.includes(entry.id)} onerror={message => favError = message} /></div></div>
   {#if favError}<p class="notice bad" role="alert">{favError}</p>{/if}
   {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
   {#if entry.merged_into}<p class="notice quiet"><a class="text-link" href={href(`/entry/${entry.merged_into}`)}>{t('entry.mergedInto', { id: recordCode(entry.merged_into) })}</a></p>{/if}
@@ -282,8 +284,8 @@
         {#if sighting.place}<h3>{sighting.place}</h3>{/if}
         {#if types.length || data.earliest?.sighting === sighting.id}<div class="row badges">{#if data.earliest?.sighting === sighting.id}<span class="badge earliest">{t('entry.earliest')}</span>{/if}{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
-        {#if sighting.vias.length}<ViaChain vias={sighting.vias} />{/if}
-        <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{sighting[field.key]}</dd></div>{/if}{/each}
+        {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} />{/if}
+        <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
           {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
         </dl>
@@ -337,7 +339,7 @@
   .description { white-space:pre-wrap; overflow-wrap:anywhere } .badges { gap:6px }
   .chips { display:flex; flex-wrap:wrap; align-items:center; gap:6px } .chip-link { padding:2px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px } .chip-link:hover { border-color:var(--accent); color:var(--accent) } .chips .tag-chip:hover { filter: brightness(0.95) }
   .marks { display:flex; flex-wrap:wrap; gap:6px; margin:0; padding:0; list-style:none } .marks a:hover { text-decoration:underline }
-  .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:12px; margin:0 } .facts:empty { display:none }
+  .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(145px,100%),1fr)); gap:12px; margin:0 } .facts:empty { display:none }
   dt { color:var(--muted); font-size:12px } dd { margin:2px 0 0; overflow-wrap:anywhere }
   .radicals { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px }
   .character { font-size:20px; line-height:1.3 } .character.encoded { font-family:inherit; vertical-align:middle }
@@ -345,9 +347,9 @@
   .supported { display:inline-flex; align-items:baseline; gap:6px; min-width:0; max-width:100%; padding:1px 9px; border:1px solid var(--line); border-radius:999px; font-size:12.5px } .supported:hover { border-color:var(--accent); color:var(--accent) }
   .supported .kind { flex:none; color:var(--muted); font-size:11.5px } .supported .text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
   article:target { outline:2px solid var(--accent); outline-offset:2px } article { scroll-margin-block:16px }
-  .checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:6px 16px; margin:0; padding:0; list-style:none; color:var(--muted) }
+  .checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr)); gap:6px 16px; margin:0; padding:0; list-style:none; color:var(--muted) }
   .checks li { display:flex; gap:8px } .checks li.done { color:var(--ink) } .checks li.done .tick { color:var(--good) } .tick { flex:none; width:1em; text-align:center }
-  .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px } .pictures.single { grid-template-columns:minmax(0,1fr) }
+  .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr)); gap:12px } .pictures.single { grid-template-columns:minmax(0,1fr) }
   figure { display:flex; flex-direction:column; gap:6px; margin:0; min-width:0 }
   .pictures:not(.single) { --picture-height: 260px }
   .button.small { min-height:32px; padding:4px 10px; font-size:12.5px }

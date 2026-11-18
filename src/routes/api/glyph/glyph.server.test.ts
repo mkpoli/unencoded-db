@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { composerDrawing } from '$lib/composer'
+import { composerDrawing, type GlyphStyle } from '$lib/composer'
 import { openTestDb } from '$lib/server/testdb'
 import { hashHex } from '$lib/server/image'
 import { GET as glyph } from './+server'
@@ -20,11 +20,11 @@ function fixture() {
     put: async (name: string, value: string) => { drawings.set(name, value) },
   }
   const event = (query: string) => ({ url: new URL(`https://example.test/api/glyph?${query}`), platform: { env: { DB: db, MEDIA: bucket } } }) as any
-  const cache = async (name: string) => drawings.set(`glyphs/${composerDrawing('sans')}/${await hashHex(name)}.txt`, 'M0 0')
+  const cache = async (name: string, style: GlyphStyle = 'sans') => drawings.set(`glyphs/${composerDrawing(style, name.includes('\n'))}/${await hashHex(name)}.txt`, 'M0 0')
   return { raw, event, cache }
 }
 
-const ask = (ids: string, layout = '') => `ids=${encodeURIComponent(ids)}&v=${encodeURIComponent(composerDrawing('sans'))}${layout ? `&layout=${encodeURIComponent(layout)}` : ''}`
+const ask = (ids: string, layout = '', style: GlyphStyle = 'sans') => `ids=${encodeURIComponent(ids)}&style=${style}&v=${encodeURIComponent(composerDrawing(style, Boolean(layout)))}${layout ? `&layout=${encodeURIComponent(layout)}` : ''}`
 
 test('the first description of a visible record draws', async () => {
   const { event, cache } = fixture()
@@ -58,4 +58,29 @@ test('a description no visible record states does not draw', async () => {
   expect((await glyph(event(ask(first)))).status).toBe(404)
   raw.exec("UPDATE entries SET hidden_at = NULL, merged_into = 2")
   expect((await glyph(event(ask(first)))).status).toBe(404)
+})
+
+test('each face serves only its effective layout on a visible claim', async () => {
+  const { event, cache, raw } = fixture()
+  const serif = '{"1":[1,0,0,1,0,30]}'
+  raw.prepare("UPDATE claims SET data = ? WHERE value = ?").run(
+    `{"layout":{"shared":${layout},"faces":{"sans":{},"serif":${serif}}}}`, second,
+  )
+  await cache(second)
+  await cache(`${second}\n${serif}`, 'serif')
+  await cache(`${second}\n${layout}`, 'pen-writing')
+  expect((await glyph(event(ask(second)))).status).toBe(200)
+  expect((await glyph(event(ask(second, layout)))).status).toBe(404)
+  expect((await glyph(event(ask(second, serif, 'serif')))).status).toBe(200)
+  expect((await glyph(event(ask(second, layout, 'serif')))).status).toBe(404)
+  expect((await glyph(event(ask(second, layout, 'pen-writing')))).status).toBe(200)
+})
+
+test('a temporarily unavailable object store returns a retryable status', async () => {
+  const { event } = fixture()
+  const request = event(ask(first))
+  request.platform.env.MEDIA.get = async () => { throw new Error('temporarily unavailable') }
+  const response = await glyph(request)
+  expect(response.status).toBe(503)
+  expect(response.headers.get('cache-control')).toBe('no-store')
 })
