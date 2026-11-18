@@ -32,7 +32,7 @@
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { codePage, marksOf, registryLabel } from '$lib/registries'
   import { COLLECTIONS, implicationClosure, tagLabels, tagLookup } from '$lib/tags'
-  import { boxesOf, evidenceFile } from '$lib/picture'
+  import { boxesOf, evidenceFile, pictureAlt } from '$lib/picture'
   import { CHECKS, readiness } from '$lib/readiness'
   import { parseSightingTypes, scriptName } from '$lib/scripts'
   import { snippet } from '$lib/seo'
@@ -286,7 +286,7 @@
           <div class="pictures" class:single={sighting.media.length === 1}>
             {#each sighting.media as picture, position (picture.image_key)}
               <figure>
-                <MarkedPicture {picture} alt="{sighting.place || t('field.image')} {position + 1}" />
+                <MarkedPicture {picture} alt={pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} />
                 <figcaption><button class="button small" type="button" title={t('sighting.evidenceHint')} disabled={preparing === picture.image_key} onclick={() => download(sighting, picture, position)}>{t('sighting.evidence')}</button></figcaption>
               </figure>
             {/each}

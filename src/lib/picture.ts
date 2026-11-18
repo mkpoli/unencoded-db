@@ -12,6 +12,13 @@ export function boxesOf(stored: string | null): Box[] {
     return Array.isArray(boxes) ? boxes.filter((box): box is Box => Array.isArray(box) && box.length === 4 && box.every(Number.isFinite)) : []
   } catch { return [] }
 }
+/** Words for a picture of a record: what it shows and where it was seen, and which picture it is when there
+ * are several. */
+export function pictureAlt(parts: readonly (string | null | undefined)[], position: number, count: number) {
+  const words = [...new Set(parts.map(part => part?.trim()).filter(Boolean))].join(' · ')
+  return count > 1 ? `${words} (${position + 1}/${count})` : words
+}
+
 export type Prepared = { file: File; bitmap: ImageBitmap; width: number; height: number }
 
 function canvasOf(width: number, height: number) {
