@@ -271,8 +271,8 @@
   .heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:start; gap:20px }
   .filter-foot { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 16px }
   .filter-foot .hint { margin:0 }
-  .glyph-setting { display:flex; align-items:center; gap:8px; min-width:0 }
-  .glyph-setting-label { flex:none; font-size:11px; font-weight:500; color:var(--muted) }
+  .glyph-setting { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; min-inline-size:0 }
+  .glyph-setting-label { font-size:11px; font-weight:500; color:var(--muted) }
   .intro { gap:8px; max-width:720px }
   .filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:16px; border:1px solid var(--line); border-radius:9px; background:var(--surface) }
   .filters .field { flex:1 1 140px } .filters .search { flex:2 1 220px } .filters .radical { flex:0 1 120px } .filters .decade { flex:1 1 140px }
@@ -281,9 +281,9 @@
   .shuffle { display:inline-flex; align-items:center; gap:6px } .shuffle svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round }
   .view { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px }
   .bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px } .marks { gap:8px }
-  .pair { display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:8px } .work { padding-inline:12px 4px; font-size:13px; font-weight:500; white-space:nowrap }
+  .pair { display:inline-flex; flex-wrap:wrap; align-items:center; max-inline-size:100%; border:1px solid var(--line); border-radius:8px } .work { padding-inline:12px 4px; font-size:13px; font-weight:500; white-space:nowrap }
   .states .n, .marks .n { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums }
-  .pinned { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:42px; padding:9px 12px; border:1px solid var(--accent); border-radius:7px; background:var(--accent-light); color:var(--accent); font-weight:500 }
+  .pinned { display:flex; align-items:center; justify-content:space-between; gap:8px; min-block-size:max(42px,var(--target-size)); padding:9px 12px; border:1px solid var(--accent); border-radius:7px; background:var(--accent-light); color:var(--accent); font-weight:500 }
   .bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px }
   .size { display:flex; align-items:center; gap:6px; color:var(--muted) }
   .size svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.4 }
@@ -295,6 +295,9 @@
   .also summary { cursor:pointer; color:var(--muted) }
   .also ul { display:flex; flex-wrap:wrap; gap:4px 12px; margin:6px 0 0; padding:0; list-style:none; overflow-wrap:anywhere }
   .ahead { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px }
+  @media (max-width: 38rem) {
+    .filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,7rem),1fr)) }
+    .filters .search { grid-column:1 / -1 }
+  }
   .empty { padding:48px 16px; text-align:center; color:var(--muted) } .empty a { display:inline-block; margin-top:12px; color:var(--ink) }
-  @media (max-width: 520px) { .glyph-setting-label { display:none } .glyph-setting { width:100% } }
 </style>

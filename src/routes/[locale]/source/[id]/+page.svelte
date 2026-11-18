@@ -72,7 +72,7 @@
   .record .ids { max-width:100%; overflow-wrap:anywhere; text-align:center }
   .record:hover .ids { text-decoration:underline }
   .body { gap:10px; min-width:0 }
-  .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; --picture-height:260px } .pictures.single { grid-template-columns:minmax(0,1fr); --picture-height:65vh }
+  .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr)); gap:12px; --picture-height:260px } .pictures.single { grid-template-columns:minmax(0,1fr); --picture-height:65dvh }
   .note { margin:0; white-space:pre-wrap; overflow-wrap:anywhere }
   h3 { margin:0 } .badge.via { align-self:start }
   @media(max-width:600px) { .panel { padding:16px } .seen { grid-template-columns:minmax(0,1fr) } .record { flex-direction:row; justify-content:flex-start; gap:10px } .plate { width:56px; height:56px } }

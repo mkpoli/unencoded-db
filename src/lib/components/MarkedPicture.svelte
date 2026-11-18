@@ -18,6 +18,6 @@
 <style>
   .image { display:flex; justify-content:center; background:var(--surface-sunken); border-radius:6px; overflow:hidden }
   .frame { position:relative; display:inline-block; max-width:100%; line-height:0 }
-  .frame img { display:block; width:auto; height:auto; max-width:100%; max-height:var(--picture-height, 65vh) }
+  .frame img { display:block; width:auto; height:auto; max-width:100%; max-height:var(--picture-height, 65dvh) }
   .mark { position:absolute; border:2px solid var(--mark); pointer-events:none }
 </style>

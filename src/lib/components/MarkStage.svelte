@@ -63,7 +63,7 @@
   .stage-wrap { display: flex; justify-content: center; padding: 10px; border-radius: 10px; background: var(--surface-sunken) }
   .stage { position: relative; display: inline-block; max-width: 100%; overflow: hidden; line-height: 0; user-select: none }
   .stage.marking { cursor: crosshair; touch-action: none }
-  .stage img { display: block; max-width: 100%; max-height: 62vh; pointer-events: none }
+  .stage img { display: block; max-width: 100%; max-height: 62dvh; pointer-events: none }
   .box { position: absolute; border: 2px solid var(--mark); box-shadow: 0 0 0 9999px rgb(0 0 0 / 28%); pointer-events: none }
   .number { position: absolute; top: 0; left: 0; padding: 0 4px; background: var(--mark); color: #fff; font: 600 11px/1.5 system-ui }
   .button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-light) }
