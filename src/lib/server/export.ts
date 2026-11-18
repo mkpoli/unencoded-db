@@ -1,3 +1,4 @@
+import { quotations } from '$lib/quotations'
 // The whole public dataset, for download. A page of `/api/entries` is a cursor into the same rows; this
 // module walks every cursor, shapes the rows as JSON or CSV, and names the licence and the counts once.
 import { CLAIM_KINDS, claimsOf, primaryLayoutOf, scopesOf, type Claim } from '$lib/claims'
@@ -79,7 +80,7 @@ export async function* exportBatches(db: D1Database, size = EXPORT_BATCH_MAX): A
   }
 }
 
-const exportedSighting = (sighting: Sighting) => ({ ...sighting, types: parseSightingTypes(sighting.types) })
+const exportedSighting = (sighting: Sighting) => ({ ...sighting, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types) })
 
 /** The JSON file, one record at a time and one piece of evidence at a time. A record split across the
  * export pages keeps its first page's metadata and claims, and its evidence continues without a break. */

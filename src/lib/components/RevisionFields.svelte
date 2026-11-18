@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SourceQuotations from '$lib/components/SourceQuotations.svelte'
   // A past version of a record or a sighting, as it read then. A record's claims are listed by kind, each
   // with the claims it held under and the sightings it rested on.
   import EvidenceDate from './EvidenceDate.svelte'
@@ -65,6 +66,7 @@
       {#if types.length}<div><dt>{t('field.sourceTypes')}</dt><dd>{types.map(type => t(`evidence.type.${type}`)).join(' · ')}</dd></div>{/if}
       {#if source.vias.length}<div class="wide"><dt>{t('field.via')}</dt><dd><ViaChain vias={source.vias} dates={dates} label={false} /></dd></div>{/if}
     </dl>
+    <SourceQuotations quotes={source.quotes} url={source.url} />
     {#if source.note}<p class="description">{source.note}</p>{/if}
   </div>
 {:else}

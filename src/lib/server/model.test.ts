@@ -9,7 +9,7 @@ import { openTestDb } from './testdb'
 const migration = (name: string) => readFileSync(join(import.meta.dir, '../../../migrations', name), 'utf8')
 const who = { actor: 'p1', ip: null }
 const fields = (claims: Claim[] = []): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims })
-const seen = (extra: Partial<SightingFields> = {}): SightingFields => ({ place: 'a shop sign', url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, note: null, ...extra })
+const seen = (extra: Partial<SightingFields> = {}): SightingFields => ({ place: 'a shop sign', url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null, ...extra })
 const image = (name: string, box: string | null = null): StoredImage => ({ image_key: `${name}.jpg`, image_type: 'image/jpeg', image_w: 10, image_h: 10, thumb_key: `${name}-t.jpg`, box })
 const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null, links: Partial<Pick<Claim, 'sightings' | 'under'>> = {}): Claim => newClaim(kind, value, data, links)
 const book = { title: '字書', author: '某', publisher: '某社', report_date: '1900', url: null }
@@ -260,6 +260,27 @@ describe('found via', () => {
       form.append('via_url', via.url ?? ''); form.append('via_title', via.title ?? ''); form.append('via_author', via.author ?? ''); form.append('via_publisher', via.publisher ?? ''); form.append('via_report_date', via.report_date ?? ''); form.append('via_quote', via.quote ?? '')
     }
     expect(readSightingFields(form).vias).toEqual([post, quoted])
+  })
+
+  test('passages retain separate locators across search, source pages and revisions', async () => {
+    const { db, raw } = open()
+    const form = new FormData()
+    form.append('quote_text', 'First line\nsecond line')
+    form.append('quote_locator', 'Caption')
+    form.append('quote_text', '冬酒夏醋')
+    form.append('quote_locator', 'Sign')
+    const { quotes } = readSightingFields(form)
+    expect(JSON.parse(quotes!)).toEqual([{ text: 'First line\nsecond line', locator: 'Caption' }, { text: '冬酒夏醋', locator: 'Sign' }])
+    const id = await createEntry(db, fields(), seen({ ...book, quotes }), [], who)
+    const sighting = (await getEntry(db, id))!.sightings[0]
+    expect((await sourcePage(db, sighting.source_id!))!.sightings[0].quotes).toBe(quotes)
+    expect(raw.query("SELECT entry_id FROM entry_tags WHERE tag='w:冬'").all()).toEqual([{ entry_id: id }])
+    const snapshot = (await history(db, id)).find(r => r.sighting_id === sighting.id)!.snapshot
+    expect(sightingSnapshot(snapshot)?.quotes).toBe(quotes)
+    const legacy = JSON.parse(snapshot)
+    delete legacy.quotes
+    expect(sightingSnapshot(JSON.stringify(legacy))?.quotes).toBeNull()
+    expect(sightingSnapshot(JSON.stringify({ ...legacy, quotes: '{}' }))).toBeNull()
   })
 
   test('a quote stays with the sighting and does not split the source', async () => {

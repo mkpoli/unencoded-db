@@ -1,3 +1,4 @@
+import { quotations } from '../quotations'
 import { readDates, sightingDates } from './date-readings'
 import { CONTEXTS, STYLES, VIAS_MAX, isStoredSightingTypes } from '$lib/scripts'
 import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, tidyVias, type EntryFields, type SightingFields, type Via } from './entries'
@@ -25,9 +26,11 @@ export function sightingSnapshot(raw: string): SightingFields | null {
   try {
     const value = JSON.parse(raw)
     if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.place !== 'string') return null
+    if (!('quotes' in value)) value.quotes = null
     for (const field of SIGHTING_FIELDS) {
       if (typeof value[field] !== 'string' && value[field] !== null) return null
     }
+    quotations(value.quotes)
     if (value.context !== null && !(CONTEXTS as readonly string[]).includes(value.context)) return null
     if (value.style !== null && !(STYLES as readonly string[]).includes(value.style)) return null
     if (!isStoredSightingTypes(value.types)) return null

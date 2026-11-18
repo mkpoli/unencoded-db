@@ -1,7 +1,8 @@
 <script lang="ts">
   // Where a character was seen. A picture or a link is enough; the reference IRG wants stays folded.
-  // A post link fills the place, title and author from the post, and hands its photos to `onphotos`. When the
+  // A post link fills the place, quotation and author from the post, and hands its photos to `onphotos`. When the
   // post's author names the book the picture is from, the book becomes the source and the post the last via of the chain.
+  import { quotations, QUOTATIONS_MAX, type Quotation } from '$lib/quotations'
   import SourceTitleField from './SourceTitleField.svelte'
   import PublisherField from './PublisherField.svelte'
   import { untrack } from 'svelte'
@@ -15,7 +16,7 @@
   let { values = {}, onphotos }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void } = $props()
   const uid = $props.id()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
-  const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.original_date || values.page || values.context || values.style || values.types || values.note))
+  const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.original_date || values.page || values.context || values.style || values.types || values.quotes || values.note))
 
   let place = $state(untrack(() => values.place ?? ''))
   let url = $state(untrack(() => values.url ?? ''))
@@ -32,6 +33,12 @@
   type Row = { key: number; url: string; title: string; author: string; publisher: string; date: string; quote: string }
   let nextKey = 0
   const via = (from?: Partial<Via>): Row => ({ key: nextKey++, url: from?.url ?? '', title: from?.title ?? '', author: from?.author ?? '', publisher: from?.publisher ?? '', date: from?.report_date ?? '', quote: from?.quote ?? '' })
+  const passage = (from?: Quotation) => ({ key: nextKey++, text: from?.text ?? '', locator: from?.locator ?? '' })
+  let passages = $state(untrack(() => {
+    const saved = quotations(values.quotes)
+    return saved.length ? saved.map(passage) : [passage()]
+  }))
+  let postedPassage: number | null = null
   let vias = $state<Row[]>(untrack(() => values.vias?.length ? values.vias.map(via) : [via()]))
   let viaOpen = $state(untrack(() => Boolean(values.vias?.length)))
   const blankVia = (row: Row) => !(row.url || row.title || row.author || row.publisher || row.date)
@@ -43,24 +50,35 @@
   let postedKey: number | null = null
 
   // The fields keep what someone typed; a value the last post gave is replaced by the next post's.
-  const blank = { place: '', title: '', author: '', publisher: '', page: '', viaUrl: '', viaTitle: '', viaAuthor: '', viaPublisher: '', viaDate: '' }
+  const blank = { place: '', title: '', author: '', publisher: '', page: '', viaUrl: '', viaTitle: '', viaAuthor: '', viaPublisher: '', viaDate: '', viaQuote: '', quote: '' }
   type Filled = typeof blank
   let posted: Filled | null = null
   function fill(info: PostInfo | null) {
-    const post = info ? { viaUrl: info.url ?? '', viaTitle: info.title, viaAuthor: info.author ?? '', viaPublisher: info.publisher, viaDate: info.date ?? '' } : null
+    const post = info ? { viaUrl: info.url ?? '', viaTitle: '', viaQuote: info.quote, viaAuthor: info.author ?? '', viaPublisher: info.publisher, viaDate: info.date ?? '' } : null
+    let row = vias.find(item => item.key === postedKey && item.url === posted?.viaUrl)
+    const canAttach = row || blankVia(vias.at(-1)!) || vias.length < VIAS_MAX
     const next: Filled | null = !info ? null
-      : info.work && post ? { ...blank, ...post, place: [info.work.title, info.work.page].filter(Boolean).join(' '), title: info.work.title, page: info.work.page ?? '' }
-      : { ...blank, place: info.place, title: info.title, author: info.author ?? '', publisher: info.publisher }
+      : info.work && post?.viaUrl && canAttach ? { ...blank, ...post, place: [info.work.title, info.work.page].filter(Boolean).join(' '), title: info.work.title, page: info.work.page ?? '' }
+      : { ...blank, place: info.place, quote: info.quote, author: info.author ?? '', publisher: info.publisher }
     const keep = (current: string, name: keyof Filled) => !current || current === posted?.[name] ? next?.[name] ?? '' : current
     place = keep(place, 'place'); title = keep(title, 'title'); author = keep(author, 'author'); page = keep(page, 'page')
     publisher = keep(publisher, 'publisher')
+    let direct = passages.find(item => item.key === postedPassage)
+    if (!direct && next?.quote) {
+      direct = passages.find(item => !item.text && !item.locator)
+      if (!direct && passages.length < QUOTATIONS_MAX) { passages.push(passage()); direct = passages.at(-1) }
+    }
+    if (direct) {
+      if (!next?.quote && direct.text === posted?.quote) direct.locator = ''
+      direct.text = keep(direct.text, 'quote')
+      postedPassage = next?.quote ? direct.key : null
+    }
     // The post is what the contributor saw, so it is the last link of the chain.
-    let row = vias.find(item => item.key === postedKey)
     const found = Boolean(next && (next.viaUrl || next.viaTitle || next.viaAuthor || next.viaPublisher || next.viaDate))
     if (!row && found) {
       if (!blankVia(vias.at(-1)!) && vias.length < VIAS_MAX) vias.push(via())
-      // A full chain gives its last link to the post, which is always what the contributor saw.
-      row = vias.at(-1)
+      const available = vias.at(-1)!
+      if (blankVia(available)) row = available
     }
     if (row) {
       const before = [row.url, row.title, row.author, row.publisher, row.date].join('\u0000')
@@ -70,12 +88,13 @@
       // Words written for the source this row held no longer belong to it once a post replaces it. A row
       // that held no source is being filled, so words already in it are for this post.
       if (hadSource && [row.url, row.title, row.author, row.publisher, row.date].join('\u0000') !== before) row.quote = ''
+      if (!next?.viaUrl || row.url === next.viaUrl) row.quote = keep(row.quote, 'viaQuote')
       postedKey = found ? row.key : null
       if (row.url) viaOpen = true
       // The post is where the character was found, so its link moves out of the source's own link.
       if (next?.viaUrl && row.url === next.viaUrl) { url = ''; lookedUp = '' }
     }
-    if (title || author || publisher || page) open = true
+    if (title || author || publisher || page || next?.quote) open = true
     posted = next
   }
 
@@ -83,17 +102,28 @@
   let pendingPost: AbortController | null = null
   function chooseSource(source: Citation) {
     pendingPost?.abort()
+    const samePost = postId(url) !== null && postId(url) === postId(source.url ?? '')
     title = source.title ?? ''
     author = source.author ?? ''
     publisher = source.publisher ?? ''
     reportDate = source.report_date ?? ''
     lookedUp = url = source.url ?? ''
-    posted = null
+    if (!samePost && postedPassage !== null) {
+      const row = passages.find(item => item.key === postedPassage)
+      if (row && row.text === posted?.quote) { row.text = ''; row.locator = '' }
+      postedPassage = null
+    }
+    if (!samePost) posted = null
     postedKey = null
     fetching = failed = false
   }
 
   function chooseVia(row: Row, source: Citation) {
+    const sameSource = row.url && row.url === source.url || (
+      row.url === (source.url ?? '') && row.title === (source.title ?? '') && row.author === (source.author ?? '')
+      && row.publisher === (source.publisher ?? '') && row.date === (source.report_date ?? '')
+    )
+    if (!blankVia(row) && !sameSource) row.quote = ''
     if (row.key === postedKey) postedKey = null
     row.url = source.url ?? ''
     row.title = source.title ?? ''
@@ -105,7 +135,9 @@
   $effect(() => {
     const link = url
     if (link === lookedUp) return
+    const previous = lookedUp
     lookedUp = link
+    if (posted?.quote && postId(previous) !== postId(link)) fill(null)
     fetching = false; failed = false
     const id = postId(link)
     if (!id) { if (posted && !posted.viaUrl) { fill(null); onphotos?.(null) } return }
@@ -163,6 +195,11 @@
     <div class="field"><label for="{uid}-style">{t('field.style')}</label>
       <select id="{uid}-style" class="input" name="style" value={values.style ?? ''}><option value="">{t('field.unset')}</option>{#each STYLES as item}<option value={item}>{t(`style.${item}`)}</option>{/each}</select></div>
   </div>
+  {#each passages as row (row.key)}
+    <div class="field"><label for="{uid}-quote-{row.key}">{t('field.quote')}</label><textarea id="{uid}-quote-{row.key}" class="input" name="quote_text" rows="2" maxlength="5000" bind:value={row.text}></textarea></div>
+    <div class="field"><label for="{uid}-locator-{row.key}">{t('field.quoteLocator')}</label><input id="{uid}-locator-{row.key}" class="input" name="quote_locator" maxlength="300" bind:value={row.locator} /></div>
+  {/each}
+  <button type="button" class="button small" disabled={passages.length >= QUOTATIONS_MAX} onclick={() => passages.push(passage())}>{t('field.addQuote')}</button>
   <div class="field"><label for="{uid}-note">{t('field.note')}</label><textarea id="{uid}-note" class="input" name="note" rows="2" maxlength="5000">{values.note ?? ''}</textarea></div>
 </details>
 <details class="more" bind:open={viaOpen}>

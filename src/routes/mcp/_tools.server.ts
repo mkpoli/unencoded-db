@@ -1,3 +1,4 @@
+import { quotations, QUOTATIONS_MAX } from '$lib/quotations'
 import { readDates, sightingDates } from '$lib/server/date-readings'
 // The tools an agent calls at /mcp. A write is put into the form the site's own pages send and goes through
 // the same readers, limits and store, so a record an agent adds is checked exactly as one typed into /new.
@@ -175,6 +176,13 @@ function sightingForm(input: Json) {
   put('context', choice(input.context, CONTEXTS, 'context'))
   put('style', choice(input.style, STYLES, 'style'))
   for (const type of items(input.types)) form.append('types', choice(type, SIGHTING_TYPES, 'types'))
+  const quotes = items(input.quotes)
+  if (quotes.length > QUOTATIONS_MAX) throw new Refusal(`A sighting quotes up to ${QUOTATIONS_MAX} passages.`)
+  for (const item of quotes) {
+    const quote = record(item)
+    form.append('quote_text', text(quote.text))
+    form.append('quote_locator', text(quote.locator))
+  }
   const vias = items(input.vias).map(record)
   if (vias.length > VIAS_MAX) throw new Refusal(`A sighting names up to ${VIAS_MAX} vias.`)
   for (const via of vias) {
@@ -328,7 +336,7 @@ async function getRecord(event: RequestEvent, input: Json) {
     sightings: sightings.map(sighting => ({
       id: sighting.id, place: sighting.place,
       ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
-      original_date: sighting.original_date, page: sighting.page, context: sighting.context, style: sighting.style, types: parseSightingTypes(sighting.types), note: sighting.note,
+      original_date: sighting.original_date, page: sighting.page, context: sighting.context, style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note,
       vias: sighting.vias.map(({ id: _, ...via }) => via),
       pictures: sighting.media.map(picture => ({ url: `${event.url.origin}/media/v2/${picture.image_key}`, width: picture.image_w, height: picture.image_h, marks: picture.box ? JSON.parse(picture.box) as number[][] : [] })),
     })),
@@ -362,6 +370,7 @@ const SIGHTING = {
   context: { type: 'string', enum: CONTEXTS, description: 'How the character appears.' },
   style: { type: 'string', enum: STYLES, description: 'The writing style.' },
   types: { type: 'array', items: { type: 'string', enum: SIGHTING_TYPES }, description: 'What the source provides: mention (discusses the character), attestation (uses it in a text), description (says how it is written), definition (gives a meaning), reading (gives a pronunciation), relation (names a variant or the same character).' },
+  quotes: { type: 'array', maxItems: QUOTATIONS_MAX, items: { type: 'object', required: ['text'], properties: { text: { type: 'string' }, locator: { type: 'string' } } }, description: 'Quoted passages, each with an optional attribution or location in the source.' },
   note: { type: 'string', description: 'A note on this source.' },
   vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' } } } },
   pictures: {

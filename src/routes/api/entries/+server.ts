@@ -1,3 +1,4 @@
+import { quotations } from '$lib/quotations'
 import { readDates, sightingDates } from '$lib/server/date-readings'
 import { error, json } from '@sveltejs/kit'
 import { CLAIM_KINDS, claimsOf, primaryLayoutOf, scopesOf, type Claim } from '$lib/claims'
@@ -42,7 +43,7 @@ export const GET: RequestHandler = async (event) => {
       types: parseSightingTypes(entry.types),
       marks: parseMarks(entry.marks),
       layout: primaryLayoutOf(entry.claims),
-      evidence: entry.evidence.map(sighting => ({ ...sighting, types: parseSightingTypes(sighting.types) })),
+      evidence: entry.evidence.map(sighting => ({ ...sighting, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types) })),
     })),
   }, { headers })
   // One column for each kind of claim, its values in order. A claim that holds under others names them

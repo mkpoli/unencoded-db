@@ -39,7 +39,7 @@ export function cleanSourceUrl(value: string): string {
 /** A work a post names, with the volume or part when the post gives one. */
 export type Work = { title: string; page: string | null }
 /** What a post contributes to the evidence fields. `work` is the book its author says the picture is from. */
-export type PostInfo = { place: string; publisher: string; author: string | null; title: string; url: string | null; date: string | null; work: Work | null }
+export type PostInfo = { place: string; publisher: string; author: string | null; quote: string; url: string | null; date: string | null; work: Work | null }
 
 // Twitter took the name X on 24 July 2023, so a post is published by the service as it was named that day.
 const RENAMED = Date.UTC(2023, 6, 24)
@@ -90,7 +90,7 @@ export function postInfo(payload: unknown): PostInfo | null {
     place: service,
     publisher: service,
     author: handle ? `@${handle}` : null,
-    title: titleFrom(postText(post)),
+    quote: postText(post).trim().slice(0, 5000).replace(/[\uD800-\uDBFF]$/, ''),
     url: handle && typeof post.id === 'string' && /^\d{1,20}$/.test(post.id) ? `https://x.com/${handle}/status/${post.id}` : null,
     date: stamp && !Number.isNaN(stamp.getTime()) ? stamp.toISOString().slice(0, 10) : null,
     work: workMention([postText(post), ...own.map(postText)]),
@@ -103,17 +103,11 @@ function postText(tweet: { text?: unknown; raw_text?: unknown }): string {
     const { text, display_text_range: range } = raw as { text?: unknown; display_text_range?: unknown }
     if (typeof text === 'string' && Array.isArray(range) && range.length === 2) {
       const [start, end] = range
-      if (Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end >= start && end <= text.length) return text.slice(start, end)
+      const characters = Array.from(text)
+      if (Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end >= start && end <= characters.length) return characters.slice(start, end).join('')
     }
   }
   return typeof tweet.text === 'string' ? tweet.text : ''
-}
-
-// A single line for the title field, without the t.co link the API appends for media.
-function titleFrom(text: string): string {
-  const line = text.replace(/\s+/g, ' ').replace(/\s*https:\/\/t\.co\/\w+\s*$/, '').trim()
-  const cut = line.slice(0, 300)
-  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut
 }
 
 type Photo = { url: string; width?: number; height?: number }

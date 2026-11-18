@@ -26,6 +26,7 @@ export const actions: Actions = {
     const { id, sighting } = await target(event)
     const form = await event.request.formData()
     const values = readSightingFields(form)
+    if (!form.has('quote_text')) values.quotes = sighting.quotes
     const summary = String(form.get('summary') ?? '').trim().slice(0, 500)
     // The positions of the pictures the form takes away; new ones follow those that stay.
     const removed = new Set(form.getAll('remove_media').map(String))
