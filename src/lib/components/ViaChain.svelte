@@ -32,8 +32,8 @@
             {#if via.author || via.publisher || via.report_date}
               <span class="meta">
                 {#if via.author}{via.author}{/if}
-                {#if via.publisher}{#if via.author} · {/if}{via.publisher}{/if}
-                {#if via.report_date}{#if via.author || via.publisher} · {/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}
+                {#if via.publisher}{#if via.author}{' · '}{/if}{via.publisher}{/if}
+                {#if via.report_date}{#if via.author || via.publisher}{' · '}{/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}
               </span>
             {/if}
           </span>
