@@ -23,7 +23,8 @@ export const GET: RequestHandler = async event => {
       key: JSON.stringify([locale, name, entry?.id, entry?.ids, entry?.layout, cover, source?.id, image]),
       label: translate(locale, name === 'home' || name === 'fallback' ? 'nav.browse' : 'app.name'),
       title: socialPageTitle(locale, card.title), detail, caption: entry ? recordCode(entry.id) : undefined,
-      art: entry ? () => recordArtwork(MEDIA, entry, cover) : image ? () => evidenceArtwork(MEDIA, image.thumb_key) : undefined,
+      art: entry ? () => recordArtwork(MEDIA, entry, cover, { assets: ASSETS, origin: event.url.origin })
+        : image ? () => evidenceArtwork(MEDIA, image.thumb_key) : undefined,
     })
   } catch (cause) {
     console.error('Could not render section social card', cause)

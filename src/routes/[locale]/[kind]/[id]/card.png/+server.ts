@@ -26,7 +26,7 @@ export const GET: RequestHandler = async event => {
         key: JSON.stringify([kind, locale, id, label, entry.ids, entry.layout, cover]),
         label, title: recordCode(entry.id), detail: recordName(entry.id),
         size: 78,
-        art: () => recordArtwork(bindings.MEDIA, entry, cover),
+        art: () => recordArtwork(bindings.MEDIA, entry, cover, { assets: bindings.ASSETS, origin: event.url.origin }),
       })
     }
     if (source) {

@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test'
+import { encode } from 'fast-png'
 import { openTestDb } from '$lib/server/testdb'
 import { getSourceArtwork, getVisibleSource } from '$lib/server/entries'
+import { recordArtwork } from '$lib/server/social-card'
 import { GET } from './[locale]/[kind]/[id]/card.png/+server'
 
 test('card requests reject hidden or merged records and sources without visible evidence', async () => {
@@ -30,4 +32,20 @@ test('card requests reject hidden or merged records and sources without visible 
   expect(await getSourceArtwork(db, 2)).toBeNull()
   raw.exec('UPDATE sightings SET source_id = 2 WHERE id = 2')
   expect(await getSourceArtwork(db, 2)).toEqual({ image_key: 'public.png', thumb_key: 'public-thumb.png' })
+})
+
+test('record artwork pairs its drawing with evidence when both are available', async () => {
+  const path = 'M100 100h800v800H100z'
+  const png = encode({ width: 1, height: 1, data: new Uint8Array([255, 255, 255, 255]) })
+  const cover = { size: png.byteLength, arrayBuffer: async () => png.slice().buffer } as R2ObjectBody
+  const bucket = {
+    get: async (key: string) => key === 'cover.png' ? cover : { text: async () => path } as R2ObjectBody,
+    put: async () => { throw new Error('The drawing is already cached') },
+  }
+  const context = { origin: 'https://rare.glyphatlas.org', assets: { fetch: async () => new Response(null, { status: 404 }) } }
+  const combined = await recordArtwork(bucket, { ids: '永' }, 'cover.png', context)
+  expect(combined).toContain(`<path d="${path}"/>`)
+  expect(combined).toContain('<image x="958"')
+  expect(await recordArtwork(bucket, { ids: null }, 'cover.png', context)).toContain('<image x="719"')
+  expect(await recordArtwork(bucket, { ids: '永' }, null, context)).toContain('width="320" height="320"')
 })

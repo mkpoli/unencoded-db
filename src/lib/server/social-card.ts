@@ -2,8 +2,7 @@ import decodeWebp, { init as initWebp } from '@jsquash/webp/decode.js'
 import { initWasm, Resvg } from '@resvg/resvg-wasm'
 import { encode as encodePng } from 'fast-png'
 import { Buffer } from 'node:buffer'
-import { glyphName, glyphPaths } from '$lib/server/glyphs'
-import type { Entry } from '$lib/server/entries'
+import { drawGlyph, type ComposerAssets, type Glyph } from '$lib/server/glyphs'
 import { MAX_THUMB, sniff } from '$lib/server/image'
 
 const NIGHT = '#101824', INK = '#f8efe2', MUTED = '#c6cbd6', ACCENT = '#b7aaff'
@@ -119,7 +118,7 @@ function lines(value: string, limit: number, count: number) {
   return result
 }
 
-export async function evidenceArtwork(bucket: R2Bucket, key: string) {
+async function evidenceHref(bucket: Pick<R2Bucket, 'get'>, key: string) {
   const object = await bucket.get(key)
   if (!object) return ''
   if (object.size > MAX_THUMB) {
@@ -132,15 +131,34 @@ export async function evidenceArtwork(bucket: R2Bucket, key: string) {
   const png = image.type === 'image/webp' ? await webpAsPng(bytes).catch(() => null) : null
   if (!png && image.type === 'image/webp') return ''
   const data = (png ? Buffer.from(png) : Buffer.from(bytes)).toString('base64')
-  return `<image x="719" y="83" width="${ART_WIDTH}" height="${ART_HEIGHT}" href="data:${png ? 'image/png' : image.type};base64,${data}"/>`
+  return `data:${png ? 'image/png' : image.type};base64,${data}`
 }
 
-export async function recordArtwork(bucket: R2Bucket, entry: Entry, cover: string | null) {
-  const evidence = cover ? await evidenceArtwork(bucket, cover) : ''
-  if (evidence || !entry.ids) return evidence
-  const glyph = { ids: entry.ids, layout: entry.layout }
-  const path = (await glyphPaths(bucket, [glyph]))[glyphName(glyph) ?? '']
-  return path ? `<svg x="748" y="132" width="320" height="320" viewBox="0 0 1000 1000" color="${PRINT}" fill="${PRINT}">${path.startsWith('<') ? path : `<path d="${path}"/>`}</svg>` : ''
+function evidenceImage(href: string, inset = false) {
+  if (!href) return ''
+  const bounds = inset ? 'x="958" y="112" width="142" height="380"'
+    : `x="719" y="83" width="${ART_WIDTH}" height="${ART_HEIGHT}"`
+  return `<image ${bounds} href="${href}"/>`
+}
+
+export async function evidenceArtwork(bucket: Pick<R2Bucket, 'get'>, key: string) {
+  return evidenceImage(await evidenceHref(bucket, key))
+}
+
+export async function recordArtwork(
+  bucket: Pick<R2Bucket, 'get' | 'put'>, glyph: Glyph, cover: string | null,
+  context: { assets: ComposerAssets; origin: string },
+) {
+  const [path, evidence] = await Promise.all([
+    drawGlyph(bucket, glyph, context).catch(() => null),
+    cover ? evidenceHref(bucket, cover) : '',
+  ])
+  if (!path) return evidenceImage(evidence)
+
+  const bounds = evidence ? 'x="713" y="190" width="228" height="228"'
+    : 'x="748" y="132" width="320" height="320"'
+  const drawing = `<svg ${bounds} viewBox="0 0 1000 1000" color="${PRINT}" fill="${PRINT}">${path.startsWith('<') ? path : `<path d="${path}"/>`}</svg>`
+  return evidence ? `${drawing}<path d="M949 130v344" stroke="#c9bdad"/>${evidenceImage(evidence, true)}` : drawing
 }
 
 type Card = { key: string; label: string; title: string; detail?: string | null; caption?: string; art?: () => Promise<string>; size?: number }
