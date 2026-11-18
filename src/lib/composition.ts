@@ -1,7 +1,7 @@
 import { compatibilitySequences } from 'ids-input'
 // The parts an editor tags for a record's first description, the role each part plays, and the
 // formation those roles imply. The parsed parts are a starting point: an editor may replace them,
-// type a role outside the standard three, and name a formation the roles cannot express.
+// type a role outside the standard ones, and name a formation the roles cannot express.
 import { isNode, parse, write, type IdsPart } from 'ids-input'
 import { IDS_LENGTH_MAX, splitIds } from './ids'
 

@@ -22,5 +22,5 @@ test('the speller roles and the formation are labelled and read back', () => {
   expect(roleLabel('zh-Hant', 'initial')).toBe('切上字')
   expect(roleLabel('zh-Hant', 'final')).toBe('切下字')
   expect(roleFromLabel('zh-Hant', '切下字')).toBe('final')
-  expect(formationLabel('zh-Hant', 'fanqie')).toBe('切身')
+  expect(formationLabel('zh-Hant', 'fanqie')).toBe('切身字')
 })
