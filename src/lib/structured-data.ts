@@ -49,7 +49,8 @@ export function recordData(facts: RecordFacts): Json[] {
   return [
     present({
       '@context': CONTEXT, '@type': 'CreativeWork', '@id': url, url, name: facts.name, description: facts.description,
-      image: facts.image ? new URL(facts.image, SITE_ORIGIN).href : null, inLanguage: facts.locale, license: RECORD_LICENSE,
+      // The picture is its own object with no licence of its own here: the record's licence does not reach it.
+      image: facts.image ? { '@type': 'ImageObject', contentUrl: new URL(facts.image, SITE_ORIGIN).href } : null, inLanguage: facts.locale, license: RECORD_LICENSE,
       isPartOf: { '@type': 'WebSite', '@id': `${SITE_ORIGIN}/`, url: `${SITE_ORIGIN}/` },
       citation: sources.length ? sources.map(source => citation(facts.locale, source)) : null,
     }),

@@ -15,7 +15,8 @@ test('a record is a licensed work with its cited sources and a trail', () => {
   const [work, trail] = recordData({ locale: 'ja', id: 12, name: '⿰山東 · R-12', description: 'd', siteName: 'Site', image: '/media/v2/k.jpg', sources: [source, source, { id: 8, report_date: '明萬曆34年' }] }) as any[]
   expect(work['@type']).toBe('CreativeWork')
   expect(work['@id']).toBe('https://rare.glyphatlas.org/ja/entry/12')
-  expect(work.image).toBe('https://rare.glyphatlas.org/media/v2/k.jpg')
+  expect(work.image).toEqual({ '@type': 'ImageObject', contentUrl: 'https://rare.glyphatlas.org/media/v2/k.jpg' })
+  expect('license' in work.image).toBe(false)
   expect(work.license).toBe(RECORD_LICENSE)
   expect(work.inLanguage).toBe('ja')
   expect(work.isPartOf.url).toBe('https://rare.glyphatlas.org/')
