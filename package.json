@@ -31,7 +31,7 @@
     "fflate": "^0.8.3",
     "fonteditor-core": "^2.6.3",
     "han-compose": "github:mkpoli/han-compose#976095bc0404df249a64633627274f1e3cee133d",
-    "ids-input": "github:mkpoli/ids-input#2903da738bd7e0a4cad3fe790eb877ac668c757f",
+    "ids-input": "github:mkpoli/ids-input#faa06079cf1726da266541b79c85b73725609bb3",
     "jose": "^6.2.15",
     "opentype.js": "1.3.4",
     "svgpath": "^2.6.0"
