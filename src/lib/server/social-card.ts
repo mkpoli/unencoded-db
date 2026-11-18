@@ -262,8 +262,12 @@ type Card = { key: string; label: string; title: string; keep?: readonly string[
 const CARD_DESIGN = 1
 const CARD_MAX_AGE = 86400
 
-const pngResponse = (png: Uint8Array<ArrayBuffer>) => new Response(png, {
-  headers: { 'content-type': 'image/png', 'cache-control': `public, max-age=${CARD_MAX_AGE}` },
+// Browsers and crawlers keep a card for a day, but no shared cache may: a shared cache in front of the Worker
+// would answer before the visibility check and keep showing a record after it is hidden. Only the Worker's
+// own cache, read after that check, holds cards for everyone.
+const PRIVATE = `private, max-age=${CARD_MAX_AGE}`, SHARED = `public, max-age=${CARD_MAX_AGE}`
+const pngResponse = (body: BodyInit | null, scope: string) => new Response(body, {
+  headers: { 'content-type': 'image/png', 'cache-control': scope },
 })
 
 // Cards are cached under an address made from what they show, never from the requested `?v=`, which only
@@ -279,17 +283,17 @@ export async function renderCard(
   const version = await hashHex(JSON.stringify([CARD_DESIGN, composerRevision, card.key, card.label, card.title, card.detail, card.caption, card.size]))
   const address = new Request(`${origin}${event.url.pathname}?v=${version.slice(0, 16)}`)
   const found = await cache?.match(address)
-  if (found) return found
-  const { response, late } = await draw(assets, origin, card)
+  if (found) return pngResponse(found.body, PRIVATE)
+  const { png, late } = await draw(assets, origin, card)
   if (cache && !late) {
-    const stored = cache.put(address, response.clone()).catch(cause => console.error('Could not cache social card', cause))
+    const stored = cache.put(address, pngResponse(png.slice(), SHARED)).catch(cause => console.error('Could not cache social card', cause))
     if (event.platform?.ctx) event.platform.ctx.waitUntil(stored)
     else await stored
   }
-  return response
+  return pngResponse(png, PRIVATE)
 }
 
-async function draw(assets: Fetcher, origin: string, card: Card): Promise<{ response: Response; late: boolean }> {
+async function draw(assets: Fetcher, origin: string, card: Card): Promise<{ png: Uint8Array<ArrayBuffer>; late: boolean }> {
   await renderer()
   const art = await card.art?.()
   const files = ['social-card.otf']
@@ -335,7 +339,7 @@ async function draw(assets: Fetcher, origin: string, card: Card): Promise<{ resp
     const rendered = render.render()
     try {
       const png = rendered.asPng().slice()
-      return { response: pngResponse(png), late: Boolean(art?.late) }
+      return { png, late: Boolean(art?.late) }
     } finally { rendered.free() }
   } finally { render.free() }
 }

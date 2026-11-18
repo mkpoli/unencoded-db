@@ -93,7 +93,7 @@ test('cards are looked up in the cache only after visibility, under an address m
     expect(looked).toEqual([])
     const response = await card(1, '?v=2026-01-01')
     expect(await response.text()).toBe('png')
-    expect(response.headers.get('cache-control')).toBe('public, max-age=86400')
+    expect(response.headers.get('cache-control')).toBe('private, max-age=86400')
     await card(1, '?v=another')
     expect(looked).toHaveLength(2)
     expect(looked[0]).toBe(looked[1])
