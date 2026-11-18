@@ -30,3 +30,16 @@ test('entry sitemaps list all locales for live records and skip shards with only
   }
   await expect(shard('3')).rejects.toMatchObject({ status: 404 })
 })
+
+test('source sitemaps list sources that visible records cite', async () => {
+  const { db, raw } = openTestDb()
+  raw.exec(`INSERT INTO sources(id, hash, title, records) VALUES (1, 'a', 'Cited', 2), (2, 'b', 'Uncited', 0), (${ENTRIES_PER_SITEMAP + 3}, 'c', 'Later', 1)`)
+  const platform = { env: { DB: db } }
+  const locations = (xml: string) => [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(match => match[1])
+  const sitemapIndex = await index({ platform } as Parameters<typeof index>[0])
+  expect(locations(await sitemapIndex.text())).toEqual(['site', 'sources-1', 'sources-2'].map(part => `${SITE_ORIGIN}/sitemap-${part}.xml`))
+  const shard = (part: string) => child({ platform, params: { part } } as Parameters<typeof child>[0])
+  expect(locations(await (await shard('sources-1')).text())).toEqual(LOCALES.map(locale => `${SITE_ORIGIN}/${locale}/source/1`))
+  await expect(shard('sources-3')).rejects.toMatchObject({ status: 404 })
+  await expect(shard('sources-0')).rejects.toMatchObject({ status: 404 })
+})
