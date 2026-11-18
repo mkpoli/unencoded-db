@@ -328,6 +328,7 @@
   "browse.alsoSearched": "同時搜尋了{n}種其他寫法",
   "browse.pageLeft": "還有{n}頁",
   "browse.pagesLeft": "還有{n}頁",
+  "browse.searching": "搜尋中…",
   "browse.continueSearch": "繼續搜尋",
   "history.kind.sighting_revert": "還原證據文字",
   "history.restoreSighting": "還原文字，保留目前圖片",
