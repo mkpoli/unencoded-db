@@ -164,9 +164,9 @@
 </details>
 
 <style>
-  .types { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0 }
+  .types { container: evidence-types / inline-size; display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0 }
   .types legend { padding: 0; font-weight: 500 }
-  .type-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: 8px }
+  .type-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px }
   .type { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; cursor: pointer }
   .type:hover { border-color: var(--line-strong) }
   .type:has(input:checked) { border-color: var(--accent); background: var(--accent-light) }
@@ -178,4 +178,10 @@
   .more { display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 12px }
   .more[open] > :global(* + *) { margin-top: 12px }
   summary { font-weight: 500; cursor: pointer }
+  @container evidence-types (inline-size >= 17rem) {
+    .type-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  }
+  @container evidence-types (inline-size >= 35rem) {
+    .type-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) }
+  }
 </style>

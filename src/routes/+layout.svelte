@@ -17,7 +17,8 @@
   let navToggle = $state<HTMLButtonElement>()
   let menu = $state<HTMLDetailsElement>()
   let moreToggle = $state<HTMLElement>()
-  const account = $derived(data.person?.name ?? (data.signIn ? t('nav.signIn') : t('me.name')))
+  const showSignIn = $derived(!data.person && data.signIn)
+  const account = $derived(data.person?.name ?? (showSignIn ? t('nav.signIn') : t('me.name')))
 
   onMount(() => {
     const layout = matchMedia('(max-width: 70rem)')
@@ -37,6 +38,7 @@
     const { left, bottom } = navToggle.getBoundingClientRect()
     navLinks.style.setProperty('--nav-left', `${left}px`)
     navLinks.style.setProperty('--nav-top', `${bottom}px`)
+    navLinks.style.setProperty('--nav-scroll', `${window.scrollY}px`)
   }
 
   function dismissSettings(event: KeyboardEvent) {
@@ -61,7 +63,7 @@
     <span class="name">{t('app.name')}</span>
     <small class="by" lang="en">GLYPH <b>ATLAS</b></small>
   </a>
-  <nav class="site-nav" aria-label={t('nav.navigation')}>
+  <nav class="site-nav">
     <button class="button nav-toggle" bind:this={navToggle} type="button" aria-label={t('nav.navigation')} aria-controls="site-links" popovertarget="site-links">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
@@ -78,7 +80,7 @@
   </nav>
   <div class="actions">
     <a class="button primary add" href={href('/new')}>{t('nav.add')}</a>
-    <a class="button who" href={href('/me')} aria-label={account}>
+    <a class="button who" class:sign-in={showSignIn} href={href('/me')} aria-label={account}>
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.8 3.4-5.5 7-5.5s6.2 1.700 7 5.500"/></svg>
       <span class="who-name">{account}</span>
     </a>
@@ -145,6 +147,10 @@
   @media (max-width: 80rem) {
     .by { display: none }
   }
+  @media (width > 70rem) {
+    .site-nav { display: flex; align-self: stretch; margin-block: -12px }
+    .site-links { align-items: stretch }
+  }
   @media (max-width: 70rem) {
     .wordmark { flex: 1 1 auto }
     .who, .add { padding-inline: 10px }
@@ -154,10 +160,10 @@
       .site-links[popover] {
         --nav-size: min(18rem, calc(100% - 2 * var(--page-gutter)));
         --nav-offset: min(calc(var(--nav-top, 4rem) + 6px), 50dvb);
-        position: fixed;
+        position: absolute;
         display: none;
         inset: auto;
-        inset-block-start: var(--nav-offset);
+        inset-block-start: calc(var(--nav-offset) + var(--nav-scroll, 0px));
         inset-inline-start: clamp(var(--page-gutter), var(--nav-left, var(--page-gutter)), calc(100% - var(--page-gutter) - var(--nav-size)));
         inline-size: var(--nav-size);
         max-inline-size: none;
@@ -179,7 +185,8 @@
   @media (max-width: 34rem) {
     .wordmark { flex-basis: 100% }
     .who { min-inline-size: max(40px, var(--target-size)) }
-    .who-name { display: none }
+    .who, .add { padding-inline: 8px }
+    .who:not(.sign-in) .who-name, .sign-in svg { display: none }
     .site-links { --nav-top: 7rem }
   }
 </style>
