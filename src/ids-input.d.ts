@@ -21,6 +21,7 @@ declare module 'ids-input/svelte' {
     readonly draft: string
     /** What is wrong with the text, in the editor's language, or '' when nothing is. */
     readonly problem: string
+    readonly picked: import('ids-input').IdsPart | undefined
     /** The part the tools are working on, by its place in the description, or null. */
     readonly chosen: number[] | null
     readonly canUndo: boolean
@@ -42,7 +43,9 @@ declare module 'ids-input/svelte' {
   export const IdsTree: Component<{ editor: IdsEditor; keyHints?: boolean }>
   export const IdsPartTools: Component<{ editor: IdsEditor; keyHints?: boolean; slot?: HTMLInputElement | null }, {}, 'slot'>
   export const IdsPicker: Component<{ editor: IdsEditor; pickers?: ('find' | 'parts' | 'from' | 'templates')[]; recentKey?: string | null }>
-  export const IdsCharacterInfo: Component<{ root: HTMLElement | null; adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; onpick?: (part: string, path?: number[]) => void }>
+  export function grassForm(editor: IdsEditor): string | null | undefined
+  export const IdsAlternatives: Component<{ editor: IdsEditor; onchoose?: () => void }>
+  export const IdsCharacterInfo: Component<{ root: HTMLElement | null; adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; onpick?: (part: string, path?: number[]) => void; extra?: import('svelte').Snippet<[{ path: number[] | undefined; close: () => void }]> }>
   /** A description drawn by the adapter's `preview`. With a `session` and `editable`, its parts are moved, scaled and turned on the drawing. */
   export const IdsPreview: Component<{
     adapter: { preview?: import('han-compose').ComposerPreview }; tree: import('ids-input').IdsPart; chosen?: number[] | null
