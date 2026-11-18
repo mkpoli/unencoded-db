@@ -135,7 +135,7 @@
   .nav-toggle { display: none }
   .menu summary { list-style: none; font-size: 18px; letter-spacing: 1px }
   .menu summary::-webkit-details-marker { display: none }
-  .menu-body { position: absolute; z-index: 20; inset-block-start: calc(100% + 6px); inset-inline-end: 0; inline-size: min(14rem, calc(100dvi - 2 * var(--page-gutter))); max-block-size: calc(100dvb - 8rem); overflow: auto; overscroll-behavior: contain; padding: 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); box-shadow: 0 8px 28px rgb(0 0 0 / 14%) }
+  .menu-body { position: absolute; z-index: 20; inset-block-start: calc(100% + 6px); inset-inline-end: 0; inline-size: 14rem; inline-size: min(14rem, calc(100dvi - 2 * var(--page-gutter))); max-block-size: calc(100vh - 8rem); max-block-size: calc(100dvb - 8rem); overflow: auto; overscroll-behavior: contain; padding: 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); box-shadow: 0 8px 28px rgb(0 0 0 / 14%) }
   .menu-group { display: flex; flex-direction: column; padding: 4px 0 }
   .menu-group + .menu-group { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 8px }
   .menu-label { padding: 2px 10px 4px; font-size: 11px; color: var(--muted) }
