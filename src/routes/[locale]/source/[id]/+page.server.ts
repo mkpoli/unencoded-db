@@ -2,6 +2,7 @@ import { readDates } from '$lib/server/date-readings'
 import { error, fail, type RequestEvent } from '@sveltejs/kit'
 import { sourcePage } from '$lib/server/entries'
 import { env, guardWrite } from '$lib/server/guard'
+import { notifyIndexNow } from '$lib/server/indexnow'
 import { tileGlyphs } from '$lib/server/glyphs'
 import { positiveId } from '../../../_submission.server'
 import { writer } from '$lib/server/people'
@@ -30,6 +31,7 @@ async function aliasAction(event: RequestEvent, remove: boolean) {
   const db = env(event).DB
   if (typeof value !== 'string' || !value.trim() || value.length > 300 || !await editSourceAlias(db, id, value, remove, (await writer(event, db)).id))
     return fail(400, { aliasError: true, value: remove || typeof value !== 'string' ? '' : value.slice(0, 300) })
+  notifyIndexNow(event, { sources: [id] })
   return { aliasError: false, value: '' }
 }
 

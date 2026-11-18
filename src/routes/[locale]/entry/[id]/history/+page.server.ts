@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import { editEntry, hasLink, ENTRY_HISTORY_PAGE, getEntry, history, redactRevision, restoreSighting } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
+import { notifyIndexNow } from '$lib/server/indexnow'
 import { tagList } from '$lib/server/tags'
 import { writer } from '$lib/server/people'
 import { entrySnapshot, revisionDates, revisionFields, sightingSnapshot } from '$lib/server/revisions'
@@ -55,6 +56,7 @@ export const actions: Actions = {
       const person = await writer(event, db)
       const result = await restoreSighting(db, id, sighting.id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, old.rev, revisionId)
       if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })
+      notifyIndexNow(event, { entries: [id] })
       redirect(303, `/${event.params.locale}/entry/${id}/history`)
     }
     if (!baseRev || baseRev !== found.entry.rev) return fail(409, { error: 'conflict' })
@@ -65,6 +67,7 @@ export const actions: Actions = {
     const person = await writer(event, db)
     const result = await editEntry(db, id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, `r${old.rev}`, 'revert', revisionId)
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })
+    notifyIndexNow(event, { entries: [id] })
     redirect(303, `/${event.params.locale}/entry/${id}/history`)
   },
   // A moderator takes a past version's content out of the history.

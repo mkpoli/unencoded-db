@@ -8,6 +8,7 @@ import { readNewTag } from '$lib/tags'
 import { newClaim } from '$lib/claims'
 import { filedUnder, radicalPath } from '$lib/radicals'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
+import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
 import { positiveId } from '../../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
@@ -57,6 +58,7 @@ export const actions: Actions = {
     if (fresh && !(await createTag(DB, tags, fresh, who)).ok) return fail(400, { error: 'tag', values })
     const result = await editEntry(DB, id, rev, values, who, summary)
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code, values })
+    notifyIndexNow(event, { entries: [id] })
     redirect(303, `/${event.params.locale}/entry/${id}`)
   },
 }

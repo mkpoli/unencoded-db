@@ -19,6 +19,7 @@ declare global {
         ATLAS_CLIENT_SECRET?: string
         IP_SALT?: string
         WRITES_PAUSED?: string
+        INDEXNOW_KEY?: string
       }
     }
   }

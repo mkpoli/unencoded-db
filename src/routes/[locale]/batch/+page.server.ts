@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit'
 import { BATCH_ROWS_MAX } from '$lib/limits'
 import { createEntry, hasLink, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
+import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
 import { uploadedImages } from '../../_submission.server'
 import type { Actions } from './$types'
@@ -60,10 +61,13 @@ export const actions: Actions = {
     const person = await writer(event, DB)
     const who = { actor: person.id, ip: await ipHash(event) }
     let first = 0
+    const created: number[] = []
     for (const [i, row] of rows.entries()) {
       const id = await createEntry(DB, row.fields, { ...shared, note: row.note.trim() || shared.note }, pictures[i], who)
       first ||= id
+      created.push(id)
     }
+    notifyIndexNow(event, { entries: created })
     redirect(303, `/${event.params.locale}/entry/${first}`)
   },
 }
