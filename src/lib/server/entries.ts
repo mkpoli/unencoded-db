@@ -1061,6 +1061,12 @@ export async function tagCounts(db: D1Database) {
 }
 
 export type Source = { id: number; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null }
+
+export const getVisibleSource = (db: D1Database, id: number) => db.prepare(`
+  SELECT id, ${CITATION_FIELDS.join(', ')} FROM sources
+  WHERE id = ? AND (EXISTS (${CITING}) OR EXISTS (${CITING_AS_VIA}))
+`).bind(id).first<Source>()
+
 export const SOURCE_PAGE = 200
 
 // A source and the records seen in it, each once, with the pages it was seen on.
