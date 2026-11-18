@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { gunzipSync } from 'node:zlib'
 import { readFileSync } from 'node:fs'
-import { factsOf, parseDescriptions, parseUnihan, radicalCharacter, unihanBlock } from './character-tables'
+import { descriptionParts, factsOf, parseDescriptions, parseUnihan, radicalCharacter, totalStrokes, unihanBlock } from './character-tables'
 
 const text = (path: string) => new TextDecoder().decode(gunzipSync(readFileSync(path)))
 const descriptions = parseDescriptions(text('node_modules/ids-input/data/babelstone-ids.tsv.gz'))
@@ -40,4 +40,22 @@ test('radical numbers name Kangxi radicals', () => {
 test('a character names its Unihan file', () => {
   expect(unihanBlock('噐')).toBe('56')
   expect(unihanBlock('𠀀')).toBe('200')
+})
+
+test('a description of characters gives its parts', () => {
+  expect(descriptionParts('⿺毛四')).toEqual(['毛', '四'])
+  expect(descriptionParts('⿰木⿱旧工')).toEqual(['木', '旧', '工'])
+})
+
+test('a lone character, a stroke edit and a part that is no Han character give no parts', () => {
+  expect(descriptionParts('毛')).toBeNull()
+  expect(descriptionParts('㇯豕㇒')).toBeNull()
+  expect(descriptionParts('⿸广ま')).toBeNull()
+  expect(descriptionParts('⿳⿸厂#(丿-丶)兀匕')).toBeNull()
+})
+
+test('the total is the sum of the parts, and unknown when one part is', () => {
+  expect(totalStrokes([4, 5])).toBe(9)
+  expect(totalStrokes([3, null])).toBeNull()
+  expect(totalStrokes([])).toBeNull()
 })

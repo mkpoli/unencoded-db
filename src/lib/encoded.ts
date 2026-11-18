@@ -2,7 +2,7 @@
 // description match compares exact text, so it is a hint for the person adding a record.
 import url from 'ids-input/data/babelstone-ids.tsv.gz?url'
 import { retrying } from './retrying'
-import { factsOf, parseDescriptions, parseUnihan, unihanBlock, type Descriptions, type UnihanRow } from './character-tables'
+import { descriptionParts, factsOf, parseDescriptions, totalStrokes, parseUnihan, unihanBlock, type Descriptions, type UnihanRow } from './character-tables'
 
 export type { CharacterFacts } from './character-tables'
 
@@ -24,4 +24,11 @@ export async function characterFacts(char: string) {
   let rows = unihan.get(block)
   if (!rows) unihan.set(block, rows = fetch(`/unihan/${block}.tsv`).then(response => response.ok ? response.text() : '').then(parseUnihan))
   return factsOf(char, await table, await rows)
+}
+
+/** The total strokes of a description of several parts, added up from the tables; null when a part has no count. */
+export async function descriptionStrokes(ids: string) {
+  const parts = descriptionParts(ids)
+  if (!parts) return null
+  return totalStrokes(await Promise.all(parts.map(part => characterFacts(part).then(facts => facts?.strokes ?? null, () => null))))
 }

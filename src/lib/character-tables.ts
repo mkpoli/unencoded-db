@@ -77,3 +77,18 @@ export function factsOf(char: string, descriptions: Descriptions, unihan: Map<st
     variants: [...variants].map(([character, field]) => ({ character, field })),
   }
 }
+
+/** The characters a description is built from, or null for one that edits strokes or names a part some
+ * other way than by a character: its count cannot be had by adding. */
+export function descriptionParts(ids: string): string[] | null {
+  const parts = [...ids].filter(char => !/[\u2FF0-\u2FFF\u31EF]/u.test(char))
+  if (parts.length < 2 || parts.length === [...ids].length) return null
+  return parts.every(char => /\p{Script=Han}/u.test(char)) && !ids.includes('\u31EF') ? parts : null
+}
+
+/** The total strokes of a description, as the sum of its parts' counts; null when one is not known. */
+export function totalStrokes(counts: readonly (number | null | undefined)[]): number | null {
+  let total = 0
+  for (const count of counts) { if (!count) return null; total += count }
+  return counts.length ? total : null
+}

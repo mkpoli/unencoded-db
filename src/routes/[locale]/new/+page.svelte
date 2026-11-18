@@ -212,7 +212,7 @@
         <div class="sheet">
           <CompositionField ids={primary} value={composition} />
           <ScriptPicker value={values?.script} other={values?.script_other} />
-          <IdentityFields {claims} radical={values?.radical} strokes={values?.strokes} fill={filled} />
+          <IdentityFields {claims} radical={values?.radical} strokes={values?.strokes} fill={filled} ids={primary} />
         </div>
       </CharacterFields>
       <div class="related"><RelationFields senses={senses} {evidence} /></div>
