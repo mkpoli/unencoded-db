@@ -43,6 +43,7 @@ declare module 'ids-input/svelte' {
   export const IdsTree: Component<{ editor: IdsEditor; keyHints?: boolean }>
   export const IdsPartTools: Component<{ editor: IdsEditor; keyHints?: boolean; slot?: HTMLInputElement | null }, {}, 'slot'>
   export const IdsPicker: Component<{ editor: IdsEditor; pickers?: ('find' | 'parts' | 'from' | 'templates')[]; recentKey?: string | null }>
+  export function grassForm(editor: IdsEditor): string | null | undefined
   export const IdsAlternatives: Component<{ editor: IdsEditor; onchoose?: () => void }>
   export const IdsCharacterInfo: Component<{ root: HTMLElement | null; adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; onpick?: (part: string, path?: number[]) => void; extra?: import('svelte').Snippet<[{ path: number[] | undefined; close: () => void }]> }>
   /** A description drawn by the adapter's `preview`. With a `session` and `editable`, its parts are moved, scaled and turned on the drawing. */
