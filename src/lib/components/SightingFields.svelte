@@ -2,6 +2,7 @@
   // Where a character was seen. A picture or a link is enough; the reference IRG wants stays folded.
   // A post link fills the place, title and author from the post, and hands its photos to `onphotos`. When the
   // post's author names the book the picture is from, the book becomes the source and the post the last via of the chain.
+  import SourceTitleField from './SourceTitleField.svelte'
   import PublisherField from './PublisherField.svelte'
   import { untrack } from 'svelte'
   import { CONTEXTS, SIGHTING_TYPES, STYLES, parseSightingTypes } from '$lib/scripts'
@@ -19,6 +20,7 @@
   let place = $state(untrack(() => values.place ?? ''))
   let url = $state(untrack(() => values.url ?? ''))
   let title = $state(untrack(() => values.title ?? ''))
+  let reportDate = $state(untrack(() => values.report_date ?? ''))
   let author = $state(untrack(() => values.author ?? ''))
   let open = $state(untrack(() => filled))
   let fetching = $state(false), failed = $state(false)
@@ -73,6 +75,28 @@
   }
 
   let lookedUp = untrack(() => url)
+  let pendingPost: AbortController | null = null
+  function chooseSource(source: Citation) {
+    pendingPost?.abort()
+    title = source.title ?? ''
+    author = source.author ?? ''
+    publisher = source.publisher ?? ''
+    reportDate = source.report_date ?? ''
+    lookedUp = url = source.url ?? ''
+    posted = null
+    postedKey = null
+    fetching = failed = false
+  }
+
+  function chooseVia(row: Via, source: Citation) {
+    if (row.key === postedKey) postedKey = null
+    row.url = source.url ?? ''
+    row.title = source.title ?? ''
+    row.author = source.author ?? ''
+    row.publisher = source.publisher ?? ''
+    row.date = source.report_date ?? ''
+  }
+
   $effect(() => {
     const link = url
     if (link === lookedUp) return
@@ -81,7 +105,9 @@
     const id = postId(link)
     if (!id) { if (posted && !posted.viaUrl) { fill(null); onphotos?.(null) } return }
     const controller = new AbortController()
+    pendingPost = controller
     const timer = setTimeout(async () => {
+      if (controller.signal.aborted) return
       fetching = true
       try {
         const found = await fetchPost(id, controller.signal)
@@ -121,11 +147,11 @@
 <details class="more" bind:open>
   <summary>{t('field.source')}</summary>
   <div class="grid-2">
-    <div class="field"><label for="{uid}-title">{t('field.title')}</label><input id="{uid}-title" class="input" name="title" bind:value={title} maxlength="300" /></div>
+    <SourceTitleField id="{uid}-title" name="title" bind:value={title} onselect={chooseSource} />
     <div class="field"><label for="{uid}-author">{t('field.author')}</label><input id="{uid}-author" class="input" name="author" bind:value={author} maxlength="300" /></div>
     <PublisherField id="{uid}-publisher" name="publisher" bind:value={publisher} />
     <div class="field"><label for="{uid}-page">{t('field.page')}</label><input id="{uid}-page" class="input" name="page" bind:value={page} maxlength="80" /></div>
-    <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" value={values.report_date ?? ''} aria-describedby="{uid}-report_date-hint" /><p class="hint" id="{uid}-report_date-hint">{t('field.reportDateHint')}</p></div>
+    <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" bind:value={reportDate} aria-describedby="{uid}-report_date-hint" /><p class="hint" id="{uid}-report_date-hint">{t('field.reportDateHint')}</p></div>
     <div class="field"><label for="{uid}-original_date">{t('field.originalDate')}</label><input id="{uid}-original_date" class="input" name="original_date" value={values.original_date ?? ''} aria-describedby="{uid}-original_date-hint" /><p class="hint" id="{uid}-original_date-hint">{t('field.originalDateHint')}</p></div>
     <div class="field"><label for="{uid}-context">{t('field.context')}</label>
       <select id="{uid}-context" class="input" name="context" value={values.context ?? ''}><option value="">{t('field.unset')}</option>{#each CONTEXTS as item}<option value={item}>{t(`context.${item}`)}</option>{/each}</select></div>
@@ -141,7 +167,7 @@
     <fieldset class="via">
       <div class="field"><label for="{uid}-via_url-{row.key}">{t('field.url')}</label><input id="{uid}-via_url-{row.key}" class="input" type="url" name="via_url" bind:value={row.url} use:cleanLinkInput placeholder="https://" maxlength="1000" autocorrect="off" autocapitalize="none" spellcheck="false" /></div>
       <div class="grid-2">
-        <div class="field"><label for="{uid}-via_title-{row.key}">{t('field.title')}</label><input id="{uid}-via_title-{row.key}" class="input" name="via_title" bind:value={row.title} maxlength="300" /></div>
+        <SourceTitleField id="{uid}-via_title-{row.key}" name="via_title" bind:value={row.title} onselect={source => chooseVia(row, source)} />
         <div class="field"><label for="{uid}-via_author-{row.key}">{t('field.author')}</label><input id="{uid}-via_author-{row.key}" class="input" name="via_author" bind:value={row.author} maxlength="300" /></div>
         <PublisherField id="{uid}-via_publisher-{row.key}" name="via_publisher" bind:value={row.publisher} />
         <div class="field"><label for="{uid}-via_report_date-{row.key}">{t('field.reportDate')}</label><input id="{uid}-via_report_date-{row.key}" class="input" name="via_report_date" bind:value={row.date} /></div>

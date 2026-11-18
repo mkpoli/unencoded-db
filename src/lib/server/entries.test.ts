@@ -1,3 +1,4 @@
+import { editSourceAlias, sourceAliases, suggestSources } from './source-aliases'
 import { publicPublisher, publisherDirectory, publisherSuggestions } from './publishers'
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
@@ -1689,4 +1690,80 @@ describe('search total', () => {
       for (const detail of details) expect(detail).not.toMatch(/^SCAN (?!d$|\(subquery-\d+\)$)/)
     }
   })
+})
+
+test('source names find the exact public citation, including via-only works and shared aliases', async () => {
+  const citations = [via({ title: 'Dictionary', publisher: 'Press A', report_date: '明萬曆34年' }), via({ title: 'Dictionary', publisher: 'Press B' })]
+  const entry = await createEntry(db, fields(), seen({ ...citations[0], vias: [citations[1]] }), [], who)
+  const editions = await suggestSources(db, 'dict')
+  expect(editions).toHaveLength(2)
+  for (const source of editions) {
+    expect(await editSourceAlias(db, source.id, 'ＤＩＣ  甲', false, who.actor)).toBe(true)
+    expect(await editSourceAlias(db, source.id, 'dic 甲', false, who.actor)).toBe(false)
+    expect(await sourceAliases(db, source.id)).toEqual(['ＤＩＣ  甲'])
+  }
+  const matches = await suggestSources(db, 'dic 甲')
+  expect(matches.map(s => s.id)).toEqual(editions.map(s => s.id))
+  expect(matches.find(s => s.publisher === 'Press A')?.report_date).toBe('明萬曆34年')
+  const press = await publicPublisher(db, 'Press B')
+  expect((await sourceList(db, 'earliest', null, press!.id, 'dic 甲')).sources.map(s => s.publisher)).toEqual(['Press B'])
+  expect(await editSourceAlias(db, editions[0].id, 'dic 甲', true, who.actor)).toBe(true)
+  expect(await suggestSources(db, 'dic 甲')).toHaveLength(1)
+  await setHidden(db, { entry }, true, who, null)
+  expect(await suggestSources(db, 'dict')).toEqual([])
+  expect(await suggestSources(db, 'dic 甲')).toEqual([])
+  expect(await editSourceAlias(db, editions[1].id, 'private', false, who.actor)).toBe(false)
+})
+
+test('the picker pages through shared spellings by normalized name and source id', async () => {
+  const insert = raw.prepare('INSERT INTO sources(hash, title, name_lookup, records) VALUES (?, ?, ?, 1)')
+  for (let id = 1; id <= 30; id++) insert.run(String(id), 'École ＡＢＣ', 'école abc')
+  const first = await suggestSources(db, 'École  ａ')
+  expect(first).toHaveLength(25) // 24 choices and a lookahead
+  const last = first[23]
+  const second = await suggestSources(db, 'école a', [last.lookup, last.id])
+  expect([...first.slice(0, 24), ...second].map(row => row.id)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1))
+  expect(await suggestSources(db, 'absent', [last.lookup, last.id])).toEqual([])
+})
+
+test('an alias follows its original citation through removal and re-use', async () => {
+  const original = seen({ title: 'École　Ａ', author: 'Editor' })
+  const entry = await createEntry(db, fields(), original, [], who)
+  const sighting = (await getEntry(db, entry))!.sightings[0].id
+  const [source] = await suggestSources(db, 'école a')
+  expect(await editSourceAlias(db, source.id, 'School A', false, who.actor)).toBe(true)
+  await editSighting(db, sighting, 1, seen({ title: 'Different work' }), null, who, null, entry)
+  expect(await suggestSources(db, 'School')).toEqual([])
+  await editSighting(db, sighting, 2, original, null, who, null, entry)
+  expect((await suggestSources(db, 'School')).map(row => row.id)).toEqual([source.id])
+  expect(await editSourceAlias(db, source.id, 'school a', true, who.actor)).toBe(true)
+  expect(raw.query('SELECT spelling, removed, actor FROM source_alias_changes ORDER BY id').all()).toEqual(
+    [0, 1].map(removed => ({ spelling: 'School A', removed, actor: who.actor })))
+})
+
+test('each citation occupies one suggestion even with many matching aliases', async () => {
+  const entry = await createEntry(db, fields(), seen({ url: 'https://example.org/book' }), [], who)
+  await createEntry(db, fields(), seen({ title: 'Dic Z' }), [], who)
+  const [source] = await suggestSources(db, 'example.org')
+  expect(source.url).toBe('https://example.org/book')
+  expect((await sourceList(db, 'new', null, null, 'example.org')).sources[0].id).toBe(source.id)
+  expect((await getEntry(db, entry))!.sightings[0].source_id).toBe(source.id)
+  for (let i = 0; i < 26; i++) await editSourceAlias(db, source.id, `Dic ${i}`, false, who.actor)
+  expect((await suggestSources(db, 'Dic')).map(row => row.title)).toEqual([null, 'Dic Z'])
+})
+
+test('source suggestions show evidence from the matching public sighting', async () => {
+  const title = 'Primer'
+  await createEntry(db, fields(), seen({ title, page: 'i' }), [], who)
+  const illustrated = await createEntry(db, fields(), seen({ title, page: '12', vias: [via({ title: 'Reprint' })] }), [image], who)
+  const preview = async (name: string) => (await suggestSources(db, name))[0]
+  expect(await preview(title)).toMatchObject({ records: 2, evidence: { entry: illustrated, page: '12', thumb: image.thumb_key, via: 0 } })
+  expect(await preview('Reprint')).toMatchObject({ records: 1, evidence: { entry: illustrated, thumb: image.thumb_key, via: 1 } })
+  const sighting = (await getEntry(db, illustrated))!.sightings[0].id
+  await setHidden(db, { entry: illustrated, sighting }, true, who, null)
+  expect((await preview(title)).evidence).toMatchObject({ page: 'i', thumb: null })
+  expect(await preview('Reprint')).toBeUndefined()
+  await setHidden(db, { entry: illustrated, sighting }, false, who, null)
+  await setHidden(db, { entry: illustrated }, true, who, null)
+  expect((await preview(title)).evidence).toMatchObject({ page: 'i', thumb: null })
 })

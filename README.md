@@ -37,6 +37,10 @@ Report dates, original dates and dates in a citation chain keep the contributor'
 
 The local setup and production release run the date sweep after applying migrations. Saving a sighting retries its unresolved dates. To retry all unresolved dates locally, run `bun scripts/sweep-dates.ts --local`. Add `--recheck` to verify existing readings again. A failed lookup preserves the previous reading. The sweep also rebuilds source years, earliest sightings and decade counts. The paged JSON export includes a `date_readings` dictionary keyed by the original wording. The paged CSV export carries the same readings for each sighting in the `date_readings` column; the whole-dataset files keep the transcribed dates in each sighting.
 
+## Source names
+
+On a source page, open **Alternate names** to add a spelling or abbreviation for that citation. The Sources page and the title fields for direct and intermediate citations accept the start of a title or alternate name. Picking an edition fills its citation details. A new title can be entered freely. URL-only sources also match their hostname. The release runs `scripts/sweep-source-names.ts` to normalize existing names.
+
 ## Publishers
 
 The Sources page filters direct and intermediate citations by publisher. A contributor can choose a suggested publisher or enter a new name. The directory groups verified spellings such as 江蘇教育出版社 and 江苏教育出版社. Citations, exports and revision history retain the submitted name. Only publishers cited by a visible record appear in suggestions. The release runs `scripts/sweep-publishers.ts` to reconcile legacy lookup keys. The local setup runs the same sweep.
@@ -69,6 +73,7 @@ An agent can sign in, and then writes under a person's name. The site is the OAu
 | `claims` | What a record states more than once: description sequences, composition, readings, meanings, codes, related characters, IVD, categories, collections, tags |
 | `sightings` | One place the character was seen: where, page, date, context, style, source types |
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
+| `source_aliases`, `source_alias_changes`, `source_search_names` | Alternate names for individual citations, their contributor history, and the lookup index for visible sources |
 | `date_readings`, `evidence_dates` | Calendar readings and the view of transcribed dates in sources, sightings and revision history |
 | `date_index_state` | Generation used to retry writes when their date readings change |
 | `publishers`, `publisher_aliases` | Publisher identities and reviewed alternative spellings for the source filter |
@@ -102,6 +107,8 @@ The CSV export has one column for each kind of claim, and a claim names its link
 | `/api/export?format=json` | One JSON object: the licence, counts and generation time in `dataset`, then every record in `entries` |
 | `/api/export?format=csv` | One row for each piece of evidence, and one for a record without any |
 | `/api/export?format=media` | One row for each visible picture, with its record, source and direct address |
+
+Exports contain the transcribed citation fields. Alternate names and their edit history are available on the source page.
 
 The JSON file carries the record's public code, the name it is credited to, and its `claims` and `evidence`. A claim's `sightings` are as stored, so an id there may name a hidden sighting that is not in `evidence`. Images stay under the rights of their sources; the image list names each source and does not redistribute the files. Records and descriptions are under CC BY-SA 4.0. `GET /api/entries` remains the page-at-a-time cursor, with a `Link` header to the next page. The `dataset` object names the journal revision the download started from; a write during the download fails it, so a mixed file is not delivered.
 
