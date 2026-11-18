@@ -61,7 +61,7 @@
       {#if source.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${source.context}`)}</dd></div>{/if}
       {#if source.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${source.style}`)}</dd></div>{/if}
       {#if types.length}<div><dt>{t('field.sourceTypes')}</dt><dd>{types.map(type => t(`evidence.type.${type}`)).join(' · ')}</dd></div>{/if}
-      {#each source.vias as via, position (position)}<div class="wide"><dt>{t('field.via')}</dt><dd>{[via.title, via.author, via.publisher, via.url].filter(Boolean).join(' · ')}{#if via.report_date}{#if via.title || via.author || via.publisher || via.url} · {/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}</dd></div>{/each}
+      {#each source.vias as via, position (position)}<div class="wide"><dt>{t('field.via')}</dt><dd>{[via.title, via.author, via.publisher, via.url].filter(Boolean).join(' · ')}{#if via.report_date}{#if via.title || via.author || via.publisher || via.url} · {/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}{#if via.quote}<blockquote class="quote">{via.quote}</blockquote>{/if}</dd></div>{/each}
     </dl>
     {#if source.note}<p class="description">{source.note}</p>{/if}
   </div>
@@ -123,4 +123,5 @@
   .scope .text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .basis { color: var(--muted); font-size: 11.5px; white-space: nowrap }
   .url { font-size: 12.5px; overflow-wrap: anywhere }
+  .quote { max-width: 75ch; margin: 4px 0 0; padding-left: 10px; border-left: 2px solid var(--line-strong); font-size: 13px; white-space: pre-wrap }
 </style>

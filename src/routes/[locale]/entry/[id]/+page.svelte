@@ -288,6 +288,9 @@
             {#each sighting.vias as via, position (position)}{#if position}<span class="muted link-arrow" aria-hidden="true">←</span>{/if}
               <span class="link"><a class="text-link" href={href(`/source/${via.id}`)}>{via.title || via.url || t('source.title')}</a>{#if via.report_date} · <EvidenceDate text={via.report_date} reading={data.dates.get(via.report_date)} />{/if}{#if via.url && /^https?:\/\//i.test(via.url)} <a class="text-link url" href={via.url} target="_blank" rel="noopener noreferrer">↗</a>{/if}</span>{/each}</p>
         {/if}
+        {#each sighting.vias.filter(via => via.quote) as via (via.id)}
+          <blockquote class="via-quote">{via.quote}<cite>{via.title || via.url || t('source.title')}</cite></blockquote>
+        {/each}
         <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
           {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
@@ -359,6 +362,8 @@
   .url { overflow-wrap:anywhere }
   .via { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; margin:0; overflow-wrap:anywhere }
   .via .link { min-width:0 }
+  .via-quote { max-width:75ch; margin:0; padding:2px 0 2px 12px; border-left:2px solid var(--line-strong); white-space:pre-wrap; overflow-wrap:anywhere }
+  .via-quote cite { display:block; margin-top:4px; color:var(--muted); font-size:12px; font-style:normal }
   @media(max-width:700px) { .panel { padding:16px } .plate { width:72px; height:72px } .styles { gap:8px } .styles .plate { width:64px; height:64px } }
   .first-seen { align-self:center; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; text-decoration:underline; text-decoration-color:var(--line-strong); text-underline-offset:3px }
   .first-seen:hover { color:var(--ink) }

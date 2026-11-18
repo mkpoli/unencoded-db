@@ -176,7 +176,10 @@ function sightingForm(input: Json) {
   for (const type of items(input.types)) form.append('types', choice(type, SIGHTING_TYPES, 'types'))
   const vias = items(input.vias).map(record)
   if (vias.length > VIAS_MAX) throw new Refusal(`A sighting names up to ${VIAS_MAX} vias.`)
-  for (const via of vias) for (const field of CITATION_FIELDS) form.append(`via_${field}`, field === 'url' ? link(via.url, 'A via url') : text(via[field]))
+  for (const via of vias) {
+    for (const field of CITATION_FIELDS) form.append(`via_${field}`, field === 'url' ? link(via.url, 'A via url') : text(via[field]))
+    form.append('via_quote', text(via.quote))
+  }
   return form
 }
 
@@ -336,7 +339,7 @@ export const INSTRUCTIONS = `珍字集覽 (Rare Character Compendium) records ra
 To add a character:
 1. Read the form from the evidence picture and write it as an ideographic description sequence (IDS), such as ⿰山東. A code point or a description given by whoever reported the character is a claim to check against the picture.
 2. Call find_similar_records with the IDS and compare the pictures of what comes back. When a record shows the same form, call add_sighting on it. Otherwise call add_record.
-3. Cite the work the character appears in as the sighting's source, with author, title, publisher, date and page. Cite where you found it, such as a post or a chat message that shows the page, as a via, with its author, date and link.
+3. Cite the work the character appears in as the sighting's source, with author, title, publisher, date and page. Cite where you found it, such as a post or a chat message that shows the page, as a via, with its author, date, link and the words you quote.
 
 Record every attested form, whether or not Unicode encodes it; an encoded character takes an encoding with charset "unicode". State only the readings, meanings and relations the evidence gives.`
 
@@ -357,7 +360,7 @@ const SIGHTING = {
   style: { type: 'string', enum: STYLES, description: 'The writing style.' },
   types: { type: 'array', items: { type: 'string', enum: SIGHTING_TYPES }, description: 'What the source provides: mention (discusses the character), attestation (uses it in a text), description (says how it is written), definition (gives a meaning), reading (gives a pronunciation), relation (names a variant or the same character).' },
   note: { type: 'string', description: 'A note on this source.' },
-  vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: CITATION } },
+  vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' } } } },
   pictures: {
     type: 'array', maxItems: MEDIA_MAX, description: `Evidence pictures, fetched from their addresses and kept by the site. JPEG, PNG or WebP, up to ${FETCHES_MAX} from other sites in one call.`,
     items: {

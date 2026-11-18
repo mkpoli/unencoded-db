@@ -49,15 +49,16 @@ test('export carries the via chain in JSON and CSV', async () => {
   const { db, raw } = fixture()
   raw.exec("INSERT INTO sources(hash, title) VALUES ('a', 'Book'), ('b', 'A post'), ('c', 'A thread')")
   raw.exec("UPDATE sightings SET source_id = 1 WHERE entry_id = 1 AND place = 'source 0'")
-  raw.exec("INSERT INTO sighting_vias(sighting_id, position, source_id) SELECT id, 1, 3 FROM sightings WHERE place = 'source 0'; INSERT INTO sighting_vias(sighting_id, position, source_id) SELECT id, 0, 2 FROM sightings WHERE place = 'source 0'")
+  raw.exec("INSERT INTO sighting_vias(sighting_id, position, source_id, quote) SELECT id, 1, 3, NULL FROM sightings WHERE place = 'source 0'; INSERT INTO sighting_vias(sighting_id, position, source_id, quote) SELECT id, 0, 2, 'Quoted words' FROM sightings WHERE place = 'source 0'")
   const body = await (await exportGet({ url: new URL('https://example.test/api/entries?limit=5&format=json'), platform: { env: { DB: db } } } as any)).json() as any
-  const via = (id: number, title: string) => ({ id, url: null, title, author: null, publisher: null, report_date: null })
-  expect(body.entries[0].evidence[0]).toMatchObject({ title: 'Book', vias: [via(2, 'A post'), via(3, 'A thread')] })
+  const via = (id: number, title: string, quote: string | null) => ({ id, url: null, title, author: null, publisher: null, report_date: null, quote })
+  expect(body.entries[0].evidence[0]).toMatchObject({ title: 'Book', vias: [via(2, 'A post', 'Quoted words'), via(3, 'A thread', null)] })
   expect(body.entries[0].evidence[1].vias).toEqual([])
   const csv = await (await exportGet({ url: new URL('https://example.test/api/entries?limit=5&format=csv'), platform: { env: { DB: db } } } as any)).text()
   const [head, first] = csv.split('\r\n')
   expect(head).toContain('"vias"')
   expect(first).toContain('A thread')
+  expect(first).toContain('Quoted words')
 })
 
 test('export links preserve the sighting cursor in JSON and CSV', async () => {

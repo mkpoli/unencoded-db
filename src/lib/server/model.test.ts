@@ -205,8 +205,8 @@ describe('sources', () => {
   })
 })
 
-const post = { url: 'https://example.test/post/1', title: 'A post', author: 'someone', publisher: null, report_date: '2026-05-01' }
-const thread = { url: null, title: 'A thread', author: null, publisher: 'A forum', report_date: null }
+const post = { url: 'https://example.test/post/1', title: 'A post', author: 'someone', publisher: null, report_date: '2026-05-01', quote: null }
+const thread = { url: null, title: 'A thread', author: null, publisher: 'A forum', report_date: null, quote: null }
 const count = (raw: ReturnType<typeof open>['raw']) => (raw.query('SELECT COUNT(*) AS n FROM sources').get() as { n: number }).n
 const chain = (sighting: { vias: object[] }) => sighting.vias.map(via => (({ id: _, ...rest }: any) => rest)(via))
 
@@ -238,10 +238,31 @@ describe('found via', () => {
     expect(raw.query('SELECT position FROM sighting_vias WHERE sighting_id = ? ORDER BY position').all(sighting.id)).toEqual([{ position: 0 }, { position: 1 }])
     expect(chain((await getSighting(db, sighting.id))!)).toEqual([post, thread])
     const form = new FormData()
-    for (const via of [post, thread, post, { url: null, title: null, author: null, publisher: null, report_date: null }]) {
-      form.append('via_url', via.url ?? ''); form.append('via_title', via.title ?? ''); form.append('via_author', via.author ?? ''); form.append('via_publisher', via.publisher ?? ''); form.append('via_report_date', via.report_date ?? '')
+    const quoted = { ...thread, quote: 'A quoted line' }
+    for (const via of [post, quoted, post, { url: null, title: null, author: null, publisher: null, report_date: null, quote: null }]) {
+      form.append('via_url', via.url ?? ''); form.append('via_title', via.title ?? ''); form.append('via_author', via.author ?? ''); form.append('via_publisher', via.publisher ?? ''); form.append('via_report_date', via.report_date ?? ''); form.append('via_quote', via.quote ?? '')
     }
-    expect(readSightingFields(form).vias).toEqual([post, thread])
+    expect(readSightingFields(form).vias).toEqual([post, quoted])
+  })
+
+  test('a quote stays with the sighting and does not split the source', async () => {
+    const { db, raw } = open()
+    const quoted = { ...post, quote: '《字書》頁三：「東」' }
+    const a = await createEntry(db, fields(), seen({ ...book, vias: [quoted] }), [], who)
+    expect(count(raw)).toBe(2)
+    const b = await createEntry(db, fields(), seen({ ...book, vias: [{ ...post, quote: 'another passage' }] }), [], who)
+    // The same post is one source row; the quote is this sighting's link to it.
+    expect(count(raw)).toBe(2)
+    const sighting = (await getEntry(db, a))!.sightings[0]
+    expect(sighting.vias.map(via => [via.title, via.quote])).toEqual([['A post', '《字書》頁三：「東」']])
+    expect((await getEntry(db, b))!.sightings[0].vias[0].id).toBe(sighting.vias[0].id)
+    // An edit replaces the words, and a restore brings them back.
+    await editSighting(db, sighting.id, 1, seen({ ...book, vias: [{ ...post, quote: 'New words' }] }), null, who, null, a)
+    expect(chain((await getSighting(db, sighting.id))!)).toEqual([{ ...post, quote: 'New words' }])
+    const old = sightingSnapshot((await history(db, a)).find(row => row.sighting_id === sighting.id && row.rev === 1)!.snapshot)!
+    expect(old.vias).toEqual([quoted])
+    expect(await restoreSighting(db, a, sighting.id, 2, old, who, 1)).toEqual({ ok: true, rev: 3 })
+    expect(chain((await getSighting(db, sighting.id))!)).toEqual([quoted])
   })
 
   test('a form chain is aligned by position, capped at four and checked as one link', () => {
@@ -269,7 +290,7 @@ describe('found via', () => {
     expect(await getSighting(db, sighting.id)).toMatchObject({ vias: [], title: '字書' })
     // A source still cited as a via stays: the book becomes the via of a sighting that no longer cites it.
     const other = await addSighting(db, id, seen({ ...book, vias: [post] }), [], who)
-    const swapped = { ...post, vias: [{ url: null, title: '字書', author: '某', publisher: '某社', report_date: '1900' }] }
+    const swapped = { ...post, vias: [{ url: null, title: '字書', author: '某', publisher: '某社', report_date: '1900', quote: null }] }
     await editSighting(db, other!, 1, seen(swapped), null, who, null, id)
     expect(count(raw)).toBe(2)
     expect(await getSighting(db, other!)).toMatchObject({ title: 'A post' })
@@ -334,7 +355,7 @@ describe('found via', () => {
     expect(viaPage!.sightings[0].media.map(m => m.image_key)).toEqual(['q.jpg'])
     expect((await sourcePage(db, work))!.sightings.map(s => [s.tile.id, s.via])).toEqual([[a, false]])
     // A sighting that cites one source both ways is listed once.
-    const c = await createEntry(db, fields(), seen({ ...book, vias: [{ url: null, title: '字書', author: '某', publisher: '某社', report_date: '1900' }] }), [], who)
+    const c = await createEntry(db, fields(), seen({ ...book, vias: [{ url: null, title: '字書', author: '某', publisher: '某社', report_date: '1900', quote: null }] }), [], who)
     expect((await sourcePage(db, (await getEntry(db, c))!.sightings[0].source_id!))!.sightings.map(s => [s.tile.id, s.via])).toEqual([[a, false], [c, false]])
     await setHidden(db, { entry: a }, true, who, null)
     expect((await sourcePage(db, work))!.sightings.map(s => s.tile.id)).toEqual([c])

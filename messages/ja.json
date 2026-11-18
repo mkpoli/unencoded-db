@@ -141,6 +141,7 @@
   "field.viaHint": "書物の頁を写した投稿など、見つけた経路。",
   "field.viaAdd": "経由を追加",
   "field.viaRemove": "削除",
+  "field.quote": "引用",
   "field.sourceTypes": "出典の種類",
   "evidence.type.mention": "言及",
   "evidence.type.mention.hint": "字そのものを話題にした記述。",

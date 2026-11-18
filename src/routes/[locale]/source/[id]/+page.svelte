@@ -49,6 +49,7 @@
           {#if sighting.via}<span class="badge via">{t('source.foundVia')}</span>{/if}
           {#if sighting.place}<h3>{sighting.place}</h3>{/if}
           {#if sighting.types.length}<div class="row badges">{#each sighting.types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
+          {#if sighting.quote}<blockquote class="quote">{sighting.quote}</blockquote>{/if}
           <dl class="facts">{#each seenFacts as fact}{#if sighting[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{#if fact.key === 'original_date'}<EvidenceDate text={sighting.original_date} reading={data.dates.get(sighting.original_date ?? '')} />{:else}{sighting[fact.key]}{/if}</dd></div>{/if}{/each}
             {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
             {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
@@ -76,6 +77,7 @@
   .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr)); gap:12px } .pictures.single { grid-template-columns:minmax(0,1fr) }
   .pictures:not(.single) { --picture-height:260px }
   .note { margin:0; white-space:pre-wrap; overflow-wrap:anywhere }
+  .quote { max-width:75ch; margin:0; padding:2px 0 2px 12px; border-left:2px solid var(--line-strong); white-space:pre-wrap; overflow-wrap:anywhere }
   h3 { margin:0 } .badge.via { align-self:start }
   @media(max-width:600px) { .panel { padding:16px } .seen { grid-template-columns:minmax(0,1fr) } .record { flex-direction:row; justify-content:flex-start; gap:10px } .plate { width:56px; height:56px } }
 </style>

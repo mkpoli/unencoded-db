@@ -7,7 +7,7 @@
   import { cleanLinkInput } from '$lib/link-input'
   import { fetchPost, postId, type PostInfo } from '$lib/source-url'
   import { t } from '$lib/t'
-  import type { Citation, SightingFields } from '$lib/server/entries'
+  import type { SightingFields, Via } from '$lib/server/entries'
   import { VIAS_MAX } from '$lib/scripts'
 
   let { values = {}, onphotos }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void } = $props()
@@ -26,12 +26,12 @@
   let publisher = $state(untrack(() => values.publisher ?? ''))
 
   // The chain, nearest the cited work first. One empty row is always there to fill.
-  type Via = { key: number; url: string; title: string; author: string; publisher: string; date: string }
+  type Row = { key: number; url: string; title: string; author: string; publisher: string; date: string; quote: string }
   let nextKey = 0
-  const via = (from?: Partial<Citation>): Via => ({ key: nextKey++, url: from?.url ?? '', title: from?.title ?? '', author: from?.author ?? '', publisher: from?.publisher ?? '', date: from?.report_date ?? '' })
-  let vias = $state<Via[]>(untrack(() => values.vias?.length ? values.vias.map(via) : [via()]))
+  const via = (from?: Partial<Via>): Row => ({ key: nextKey++, url: from?.url ?? '', title: from?.title ?? '', author: from?.author ?? '', publisher: from?.publisher ?? '', date: from?.report_date ?? '', quote: from?.quote ?? '' })
+  let vias = $state<Row[]>(untrack(() => values.vias?.length ? values.vias.map(via) : [via()]))
   let viaOpen = $state(untrack(() => Boolean(values.vias?.length)))
-  const blankVia = (row: Via) => !(row.url || row.title || row.author || row.publisher || row.date)
+  const blankVia = (row: Row) => !(row.url || row.title || row.author || row.publisher || row.date)
   function removeVia(key: number) {
     vias = vias.filter(row => row.key !== key)
     if (!vias.length) vias = [via()]
@@ -145,6 +145,7 @@
         <div class="field"><label for="{uid}-via_publisher-{row.key}">{t('field.publisher')}</label><input id="{uid}-via_publisher-{row.key}" class="input" name="via_publisher" bind:value={row.publisher} maxlength="300" /></div>
         <div class="field"><label for="{uid}-via_report_date-{row.key}">{t('field.reportDate')}</label><input id="{uid}-via_report_date-{row.key}" class="input" name="via_report_date" bind:value={row.date} /></div>
       </div>
+      <div class="field"><label for="{uid}-via_quote-{row.key}">{t('field.quote')}</label><textarea id="{uid}-via_quote-{row.key}" class="input" name="via_quote" rows="2" maxlength="5000" bind:value={row.quote}></textarea></div>
       <div><button type="button" class="text-button" onclick={() => removeVia(row.key)}>{t('field.viaRemove')}</button></div>
     </fieldset>
   {/each}
@@ -158,6 +159,7 @@
         <div class="field"><label for="{uid}-via_publisher-next">{t('field.publisher')}</label><input id="{uid}-via_publisher-next" class="input" name="via_publisher" maxlength="300" /></div>
         <div class="field"><label for="{uid}-via_report_date-next">{t('field.reportDate')}</label><input id="{uid}-via_report_date-next" class="input" name="via_report_date" /></div>
       </div>
+      <div class="field"><label for="{uid}-via_quote-next">{t('field.quote')}</label><textarea id="{uid}-via_quote-next" class="input" name="via_quote" rows="2" maxlength="5000"></textarea></div>
     </fieldset></noscript>
   {/if}
   {#if vias.length < VIAS_MAX}<div><button type="button" class="button" onclick={() => vias.push(via())}>{t('field.viaAdd')}</button></div>{/if}
