@@ -2,11 +2,15 @@ import decodeWebp, { init as initWebp } from '@jsquash/webp/decode.js'
 import { initWasm, Resvg } from '@resvg/resvg-wasm'
 import { encode as encodePng } from 'fast-png'
 import { Buffer } from 'node:buffer'
+import { GLYPH_STYLES } from '$lib/composer'
+import { translate } from '$lib/i18n'
+import { boxesOf, type Box } from '$lib/picture'
+import type { CardPicture } from '$lib/server/entries'
 import { drawGlyph, type ComposerAssets, type Glyph } from '$lib/server/glyphs'
 import { MAX_THUMB, sniff } from '$lib/server/image'
 
 const NIGHT = '#101824', INK = '#f8efe2', MUTED = '#c6cbd6', ACCENT = '#b7aaff'
-const PAPER = '#f0e6d5', PRINT = '#242638'
+const PAPER = '#f0e6d5', PRINT = '#242638', MARK_RED = '#e0241b'
 const FONT = 'Noto Sans CJK TC'
 const FONT_STACK = `${FONT}, Noto Sans CJK KR`
 const MARK = '<path d="M4 4h9v9H4zM19 4h9v9h-9zM4 19h9v9H4z"/><path d="M19 19h9v9h-9z" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"/>'
@@ -19,7 +23,8 @@ const cards = new Map<string, { png: Uint8Array<ArrayBuffer>; expires: number }>
 const CARD_CACHE_LIMIT = 8
 const CACHEABLE_PNG_BYTES = 1024 * 1024
 const MAX_EVIDENCE_PIXELS = 1_048_576
-const ART_WIDTH = 380, ART_HEIGHT = 432
+const PANEL_X = 744, PANEL_WIDTH = 456, PANEL_HEIGHT = 630
+const PLATE = 116, PLATE_GAP = 13, PLATE_Y = 398
 
 async function renderer() {
   initialized ??= import('@resvg/resvg-wasm/index_bg.wasm').then(wasm => initWasm(wasm.default)).catch(error => {
@@ -29,7 +34,8 @@ async function renderer() {
   await initialized
 }
 
-async function webpAsPng(bytes: ArrayBuffer) {
+// Decodes a WebP and samples the region the panel shows, no larger than the panel needs.
+async function webpRegion(bytes: ArrayBuffer, [left, top, width, height]: Box) {
   webpInitialized ??= import('@jsquash/webp/codec/dec/webp_dec.wasm').then(({ default: module }) => initWebp({
     instantiateWasm(imports: WebAssembly.Imports, receive: (instance: WebAssembly.Instance) => void) {
       const instance = new WebAssembly.Instance(module, imports)
@@ -42,23 +48,19 @@ async function webpAsPng(bytes: ArrayBuffer) {
   })
   await webpInitialized
   const image = await decodeWebp(bytes)
-  if (image.width * image.height > MAX_EVIDENCE_PIXELS) return null
-  const scale = Math.min(1, ART_WIDTH / image.width, ART_HEIGHT / image.height)
-  if (scale === 1) return encodePng(image)
-
-  // Sample into the card's viewport before creating the intermediate PNG.
-  const width = Math.max(1, Math.round(image.width * scale))
-  const height = Math.max(1, Math.round(image.height * scale))
-  const data = new Uint8Array(width * height * 4)
-  for (let y = 0; y < height; y++) {
-    const row = Math.floor((y + 0.5) * image.height / height) * image.width
-    for (let x = 0; x < width; x++) {
-      const from = (row + Math.floor((x + 0.5) * image.width / width)) * 4
-      const to = (y * width + x) * 4
+  const scale = Math.min(1, Math.max(PANEL_WIDTH / width, PANEL_HEIGHT / height))
+  const outWidth = Math.max(1, Math.round(width * scale))
+  const outHeight = Math.max(1, Math.round(height * scale))
+  const data = new Uint8Array(outWidth * outHeight * 4)
+  for (let y = 0; y < outHeight; y++) {
+    const row = Math.min(image.height - 1, Math.floor(top + (y + 0.5) * height / outHeight)) * image.width
+    for (let x = 0; x < outWidth; x++) {
+      const from = (row + Math.min(image.width - 1, Math.floor(left + (x + 0.5) * width / outWidth))) * 4
+      const to = (y * outWidth + x) * 4
       for (let channel = 0; channel < 4; channel++) data[to + channel] = image.data[from + channel]
     }
   }
-  return encodePng({ width, height, data })
+  return { png: encodePng({ width: outWidth, height: outHeight, data }), width: outWidth, height: outHeight }
 }
 
 async function cardAsset(assets: Fetcher, origin: string, path: string) {
@@ -75,8 +77,8 @@ function escapeXml(value: string) {
   return value.replace(/[\u0000-\u001f\ufffe\uffff]/g, '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
 }
 
-function text(value: string, x: number, y: number, size: number, fill: string) {
-  return `<text x="${x}" y="${y}" fill="${fill}" font-family="${FONT_STACK}" font-size="${size}">${escapeXml(value)}</text>`
+function text(value: string, x: number, y: number, size: number, fill: string, anchor = 'start') {
+  return `<text x="${x}" y="${y}" fill="${fill}" font-family="${FONT_STACK}" font-size="${size}" text-anchor="${anchor}">${escapeXml(value)}</text>`
 }
 
 // Budget a full em for wide glyphs. The common Latin letters have narrower advances in this face.
@@ -118,50 +120,92 @@ function lines(value: string, limit: number, count: number) {
   return result
 }
 
-async function evidenceHref(bucket: Pick<R2Bucket, 'get'>, key: string) {
+// The part of a picture the panel shows: the whole picture cut to the panel's shape, or, around a marked
+// character, enough of the page to show it in its line.
+export function panelView(width: number, height: number, focus: Box | null): Box {
+  const aspect = PANEL_WIDTH / PANEL_HEIGHT
+  let viewHeight = focus ? Math.max(focus[3] * 4, focus[2] * 4 / aspect) : height
+  let viewWidth = viewHeight * aspect
+  if (viewWidth > width) [viewWidth, viewHeight] = [width, width / aspect]
+  if (viewHeight > height) [viewWidth, viewHeight] = [height * aspect, height]
+  const [centerX, centerY] = focus ? [focus[0] + focus[2] / 2, focus[1] + focus[3] / 2] : [width / 2, height / 2]
+  const clamp = (value: number, most: number) => Math.min(Math.max(0, value), Math.max(0, most))
+  return [clamp(centerX - viewWidth / 2, width - viewWidth), clamp(centerY - viewHeight / 2, height - viewHeight), viewWidth, viewHeight]
+}
+
+async function evidenceFile(bucket: Pick<R2Bucket, 'get'>, key: string) {
   const object = await bucket.get(key)
-  if (!object) return ''
+  if (!object) return null
   if (object.size > MAX_THUMB) {
     await object.body.cancel()
-    return ''
+    return null
   }
   const bytes = await object.arrayBuffer()
   const image = sniff(new Uint8Array(bytes))
-  if (!image?.width || !image.height || image.width * image.height > MAX_EVIDENCE_PIXELS) return ''
-  const png = image.type === 'image/webp' ? await webpAsPng(bytes).catch(() => null) : null
-  if (!png && image.type === 'image/webp') return ''
-  const data = (png ? Buffer.from(png) : Buffer.from(bytes)).toString('base64')
-  return `data:${png ? 'image/png' : image.type};base64,${data}`
+  if (!image?.width || !image.height || image.width * image.height > MAX_EVIDENCE_PIXELS) return null
+  return { bytes, image }
 }
 
-function evidenceImage(href: string, inset = false) {
-  if (!href) return ''
-  const bounds = inset ? 'x="958" y="112" width="142" height="380"'
-    : `x="719" y="83" width="${ART_WIDTH}" height="${ART_HEIGHT}"`
-  return `<image ${bounds} href="${href}"/>`
+// The evidence fills the card's right side. A marked picture is read whole, so its mark keeps the page
+// around it; its thumbnail, which holds only the mark, stands in when the picture is too large to read.
+export async function evidencePanel(bucket: Pick<R2Bucket, 'get'>, picture: CardPicture) {
+  const marked = boxesOf(picture.box)[0] ?? null
+  const whole = marked ? await evidenceFile(bucket, picture.image_key) : null
+  const file = whole ?? await evidenceFile(bucket, picture.thumb_key)
+  if (!file) return ''
+  const { width, height, type } = file.image
+  const ratio = whole ? width / (picture.image_w || width) : 1
+  const focus = whole && marked ? marked.map(value => value * ratio) as Box : null
+  let view = panelView(width, height, focus)
+  let image = { href: `data:${type};base64,${Buffer.from(file.bytes).toString('base64')}`, width, height }
+  let mark = focus
+  if (type === 'image/webp') {
+    const region = await webpRegion(file.bytes, view).catch(() => null)
+    if (!region) return ''
+    const scale = region.width / view[2]
+    mark = focus && [(focus[0] - view[0]) * scale, (focus[1] - view[1]) * scale, focus[2] * scale, focus[3] * scale]
+    image = { href: `data:image/png;base64,${Buffer.from(region.png).toString('base64')}`, width: region.width, height: region.height }
+    view = [0, 0, region.width, region.height]
+  }
+  const stroke = view[2] / PANEL_WIDTH * 3
+  const margin = mark ? Math.max(stroke * 2, Math.min(mark[2], mark[3]) * 0.12) : 0
+  const outline = mark ? `<rect x="${mark[0] - margin}" y="${mark[1] - margin}" width="${mark[2] + margin * 2}" height="${mark[3] + margin * 2}" fill="none" stroke="${MARK_RED}" stroke-width="${stroke}"/>` : ''
+  return `<svg x="${PANEL_X}" y="0" width="${PANEL_WIDTH}" height="${PANEL_HEIGHT}" viewBox="${view.join(' ')}" preserveAspectRatio="xMidYMid slice"><image width="${image.width}" height="${image.height}" href="${image.href}"/>${outline}</svg>`
 }
 
-export async function evidenceArtwork(bucket: Pick<R2Bucket, 'get'>, key: string) {
-  return evidenceImage(await evidenceHref(bucket, key))
-}
+export type CardArt = { glyphs: { name: string; drawing: string }[]; evidence: string }
 
+// The record drawn in every style the site offers, beside its cover.
 export async function recordArtwork(
-  bucket: Pick<R2Bucket, 'get' | 'put'>, glyph: Glyph, cover: string | null,
-  context: { assets: ComposerAssets; origin: string },
-) {
-  const [path, evidence] = await Promise.all([
-    drawGlyph(bucket, glyph, context).catch(() => null),
-    cover ? evidenceHref(bucket, cover) : '',
+  bucket: Pick<R2Bucket, 'get' | 'put'>, glyph: Glyph, cover: CardPicture | null,
+  context: { assets: ComposerAssets; origin: string; locale: string },
+): Promise<CardArt> {
+  const [evidence, ...drawings] = await Promise.all([
+    cover ? evidencePanel(bucket, cover) : '',
+    ...GLYPH_STYLES.map(style => drawGlyph(bucket, glyph, { ...context, style }).catch(() => null)),
   ])
-  if (!path) return evidenceImage(evidence)
-
-  const bounds = evidence ? 'x="713" y="190" width="228" height="228"'
-    : 'x="748" y="132" width="320" height="320"'
-  const drawing = `<svg ${bounds} viewBox="0 0 1000 1000" color="${PRINT}" fill="${PRINT}">${path.startsWith('<') ? path : `<path d="${path}"/>`}</svg>`
-  return evidence ? `${drawing}<path d="M949 130v344" stroke="#c9bdad"/>${evidenceImage(evidence, true)}` : drawing
+  const glyphs = GLYPH_STYLES.flatMap((style, index) => {
+    const drawing = drawings[index]
+    return drawing ? [{ name: translate(context.locale, `glyphStyle.${style}`), drawing }] : []
+  })
+  return { glyphs, evidence }
 }
 
-type Card = { key: string; label: string; title: string; detail?: string | null; caption?: string; art?: () => Promise<string>; size?: number }
+export async function evidenceArtwork(bucket: Pick<R2Bucket, 'get'>, picture: CardPicture): Promise<CardArt> {
+  return { glyphs: [], evidence: await evidencePanel(bucket, picture) }
+}
+
+function plates(glyphs: CardArt['glyphs']) {
+  return glyphs.map(({ name, drawing }, index) => {
+    const x = 68 + index * (PLATE + PLATE_GAP)
+    const inset = 12
+    return `<rect x="${x}" y="${PLATE_Y}" width="${PLATE}" height="${PLATE}" rx="3" fill="${PAPER}"/>
+    <svg x="${x + inset}" y="${PLATE_Y + inset}" width="${PLATE - inset * 2}" height="${PLATE - inset * 2}" viewBox="0 0 1000 1000" color="${PRINT}" fill="${PRINT}">${drawing.startsWith('<') ? drawing : `<path d="${drawing}"/>`}</svg>
+    ${text(name, x + PLATE / 2, PLATE_Y + PLATE + 27, 18, MUTED, 'middle')}`
+  }).join('')
+}
+
+type Card = { key: string; label: string; title: string; detail?: string | null; caption?: string; art?: () => Promise<CardArt>; size?: number }
 
 const pngResponse = (png: Uint8Array<ArrayBuffer>) => new Response(png, {
   headers: { 'content-type': 'image/png', 'cache-control': 'no-store' },
@@ -180,37 +224,42 @@ export async function renderCard(assets: Fetcher, origin: string, card: Card): P
   await renderer()
   const art = await card.art?.()
   const files = ['social-card.otf']
-  const content = `${card.label}${card.title}${card.detail ?? ''}${card.caption ?? ''}${art ?? ''}`
+  const names = art?.glyphs.map(glyph => glyph.name).join('') ?? ''
+  const content = `${card.label}${card.title}${card.detail ?? ''}${card.caption ?? ''}${names}`
   if (/\p{Script=Hangul}/u.test(content)) files.push('social-card-hangul.otf')
   if (/[\u{20000}-\u{323af}]/u.test(content)) files.push('social-card-supplementary.otf')
   const [background, ...fontBuffers] = await Promise.all([
     cardAsset(assets, origin, '/social-card-backdrop.jpg'),
     ...files.map(file => cardAsset(assets, origin, `/fonts/${file}`)),
   ])
+  // Plates take the lower half of the text column, so the title moves up and keeps to two lines.
+  const plated = Boolean(art?.glyphs.length)
   const size = card.size ?? 60
-  const title = lines(card.title, 565 / size, 3)
-  const titleStart = title.length === 3 ? 237 : 263
+  const title = lines(card.title, 620 / size, plated ? 2 : 3)
+  const labelY = plated ? 156 : 183
+  const titleStart = plated ? Math.round(178 + size * 0.73) : title.length === 3 ? 237 : 263
   const heading = title.map((line, position) => text(line, 68, titleStart + position * (size + 4), size, INK)).join('')
   const detailStart = titleStart + (title.length - 1) * (size + 4) + 52
-  const detail = card.detail ? lines(card.detail, 22, 2).map((line, position) => text(line, 68, detailStart + position * 33, 26, MUTED)).join('') : ''
-  const caption = card.caption && lines(card.caption, ART_WIDTH / 21 - 0.5, 1)[0]
+  const detail = card.detail ? lines(card.detail, 24, 2).map((line, position) => text(line, 68, detailStart + position * 33, 26, MUTED)).join('') : ''
+  const footY = plated ? 592 : 573
+  const caption = card.caption ? lines(card.caption, 12, 1)[0] : ''
   const backdrop = Buffer.from(background).toString('base64')
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" color="${INK}" fill="${INK}">
     <defs><linearGradient id="scrim"><stop stop-color="${NIGHT}" stop-opacity=".97"/><stop offset=".73" stop-color="${NIGHT}" stop-opacity=".88"/><stop offset="1" stop-color="${NIGHT}" stop-opacity="0"/></linearGradient></defs>
     <rect width="1200" height="630" fill="${NIGHT}"/>
     <image width="1200" height="630" href="data:image/jpeg;base64,${backdrop}"/>
     <rect width="800" height="630" fill="url(#scrim)"/>
+    ${art?.evidence ? `<rect width="${PANEL_X}" height="630" fill="${NIGHT}" opacity=".9"/>` : ''}
     <g transform="translate(64 48)">${MARK}</g>
     ${text('珍字集覽  ·  GLYPH ATLAS', 111, 71, 23, INK)}
-    <path d="M68 125h62" stroke="${ACCENT}" stroke-width="3"/>
-    ${text(lines(card.label, 23, 1)[0] ?? '', 68, 183, 26, ACCENT)}
+    <path d="M68 ${labelY - 58}h62" stroke="${ACCENT}" stroke-width="3"/>
+    ${text(lines(card.label, 23, 1)[0] ?? '', 68, labelY, 26, ACCENT)}
     ${heading}
     ${detail}
-    <path d="M68 533h510" stroke="${ACCENT}" stroke-opacity=".42"/>
-    ${text('rare.glyphatlas.org', 68, 573, 22, MUTED)}
-    ${art ? `<rect x="697" y="62" width="424" height="512" fill="#0b101b" opacity=".8" transform="translate(9 10)"/>
-    <rect x="697" y="62" width="424" height="512" rx="2" fill="${PAPER}"/>
-    ${art}${caption ? text(caption, 719, 552, 21, PRINT) : ''}` : ''}
+    ${plated ? plates(art!.glyphs) : `<path d="M68 533h510" stroke="${ACCENT}" stroke-opacity=".42"/>`}
+    ${text('rare.glyphatlas.org', 68, footY, 22, MUTED)}
+    ${caption ? text(caption, PANEL_X - 44, footY, 22, MUTED, 'end') : ''}
+    ${art?.evidence ? `<rect x="${PANEL_X}" width="${PANEL_WIDTH}" height="${PANEL_HEIGHT}" fill="${PAPER}"/>${art.evidence}<path d="M${PANEL_X + 0.5} 0v630" stroke="#05080e" stroke-opacity=".6"/>` : ''}
   </svg>`
   const render = new Resvg(svg, { font: { fontBuffers, defaultFontFamily: FONT } })
   try {
