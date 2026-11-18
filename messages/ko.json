@@ -249,6 +249,8 @@
   "entry.addSenses": "뜻과 음 추가",
   "field.senses": "뜻과 음",
   "entry.openIds": "IDS Workshop에서 열기",
+  "entry.share": "공유",
+  "entry.shareLink": "공유 링크",
   "entry.copy": "복사",
   "entry.copied": "복사됨",
   "entry.cite": "이 기록 인용하기",

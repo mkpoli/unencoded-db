@@ -25,7 +25,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   const { pathname, search } = event.url
   if (foreignForm(event)) return new Response(`Cross-site ${event.request.method} form submissions are forbidden`, { status: 403 })
   const first = pathname.split('/')[1]
-  if (!isLocale(first) && !UNPREFIXED.test(pathname)) {
+  if (!isLocale(first) && !UNPREFIXED.test(pathname) && event.route.id !== '/r/[id]') {
     const locale = negotiate(event.cookies.get(LOCALE_COOKIE), event.request.headers.get('accept-language'))
     redirect(302, `/${locale}${pathname === '/' ? '' : pathname}${search}`)
   }

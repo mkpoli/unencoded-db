@@ -249,6 +249,8 @@
   "entry.addSenses": "添加字义和读音",
   "field.senses": "字义和读音",
   "entry.openIds": "在IDS Workshop中打开",
+  "entry.share": "分享",
+  "entry.shareLink": "分享链接",
   "entry.copy": "复制",
   "entry.copied": "已复制",
   "entry.cite": "引用此记录",

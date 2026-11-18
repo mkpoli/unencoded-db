@@ -249,6 +249,8 @@
   "entry.addSenses": "Add meanings and readings",
   "field.senses": "Meanings and readings",
   "entry.openIds": "Open in the IDS Workshop",
+  "entry.share": "Share",
+  "entry.shareLink": "Share link",
   "entry.copy": "Copy",
   "entry.copied": "Copied",
   "entry.cite": "Cite this record",
