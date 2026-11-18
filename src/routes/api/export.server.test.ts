@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test'
 import { openTestDb } from '$lib/server/testdb'
 import { exportPage, sameIds } from '$lib/server/entries'
 import { GET as exportGet } from './entries/+server'
+import { GET as fontExport } from './font-export/+server'
+import { GLYPH_STYLES } from '$lib/composer'
 
 function fixture() {
   const { db, raw } = openTestDb()
@@ -146,4 +148,18 @@ test('export and exact match use their indexes without temporary sorts', async (
     missing.raw.exec(`DROP INDEX ${index}`)
     await expect(exportPage(missing.db, 0, 10)).rejects.toThrow()
   }
+})
+
+test('font downloads read current visible records and the deployed styles', async () => {
+  const { db, raw } = fixture()
+  const load = async () => {
+    const response = await fontExport({ platform: { env: { DB: db } } } as any)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    return await response.json() as { records: { id: number; ids: string | null; layout: string | null; cover_key: string | null }[]; styles: { style: string }[] }
+  }
+  const first = await load()
+  expect(first.records.map(row => row.id)).toEqual([1, 3])
+  expect(first.styles.map(face => face.style)).toEqual([...GLYPH_STYLES])
+  raw.exec("UPDATE entries SET merged_into = 1 WHERE id = 3; UPDATE entries SET ids = '⿱木木' WHERE id = 1")
+  expect((await load()).records).toEqual([{ id: 1, ids: '⿱木木', layout: null, cover_key: null }])
 })
