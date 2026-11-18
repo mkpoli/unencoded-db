@@ -144,6 +144,7 @@
   "field.placeHint": "書名とページ、通り、ウェブサイトなど、もう一度見つける手がかりを記入してください。",
   "field.url": "リンク",
   "field.description": "気づいたこと",
+  "field.notes": "備考",
   "field.ids": "漢字構成記述（IDS）",
   "field.idsBuild": "IDSエディター",
   "field.idsLoading": "エディターを読み込んでいます…",

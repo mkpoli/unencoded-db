@@ -144,6 +144,7 @@
   "field.placeHint": "书名和页码、街道、网站等，能帮助他人再次找到即可。",
   "field.url": "链接",
   "field.description": "你的发现",
+  "field.notes": "备注",
   "field.ids": "汉字结构描述（IDS）",
   "field.idsBuild": "IDS编辑器",
   "field.idsLoading": "正在加载编辑器…",
