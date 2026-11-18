@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PublisherField from '$lib/components/PublisherField.svelte'
   import EvidenceDate from '$lib/components/EvidenceDate.svelte'
   import Seo from '$lib/components/Seo.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
@@ -8,9 +9,10 @@
   let { data } = $props()
   const host = (url: string | null) => { try { return url ? new URL(url).host : null } catch { return null } }
   const count = (n: number) => t(n === 1 ? 'source.record' : 'source.records', { n })
-  const sorted = (sort: string, after?: string | null) => {
+  const sorted = (sort: string, after?: string | null, publisher = data.publisher) => {
     const query = new URLSearchParams()
     if (sort !== 'new') query.set('sort', sort)
+    if (publisher) query.set('publisher', publisher)
     if (after) query.set('after', after)
     return query.size ? `?${query}` : href('/sources')
   }
@@ -19,6 +21,14 @@
 <Seo title={t('nav.sources')} />
 <div class="page stack">
   <h1>{t('nav.sources')}</h1>
+  <search>
+    <form class="publisher-filter" action={href('/sources')} method="GET">
+      {#if data.sort !== 'new'}<input type="hidden" name="sort" value={data.sort} />{/if}
+      {#key data.publisher}<PublisherField id="publisher" name="publisher" value={data.publisher} />{/key}
+      <button type="submit" class="button">{t('sources.filter')}</button>
+      {#if data.publisher}<a class="text-link" href={sorted(data.sort, null, '')}>{t('sources.clear')}</a>{/if}
+    </form>
+  </search>
   <nav class="sort" aria-label={t('sources.sort')}>
     {#each SOURCE_SORTS as sort}<a class="chip" class:on={data.sort === sort} aria-current={data.sort === sort ? 'true' : undefined} href={sorted(sort)}>{t(`sources.sort.${sort}`)}</a>{/each}
   </nav>
@@ -51,12 +61,15 @@
       {/each}
     </div>
   {:else if data.next === null}
-    <p class="empty muted">{t('sources.empty')}</p>
+    <p class="empty muted">{t(data.publisher ? 'sources.noPublisherMatches' : 'sources.empty')}</p>
   {/if}
   {#if data.next !== null}<a class="button more" href={sorted(data.sort, data.next)}>{t('browse.more')}</a>{/if}
 </div>
 
 <style>
+  .publisher-filter { display:flex; flex-wrap:wrap; gap:8px; align-items:end }
+  .publisher-filter :global(.field) { width:min(100%, 22rem) }
+  .publisher-filter .text-link { align-self:end; padding:8px }
   .sort { display:flex; flex-wrap:wrap; gap:4px }
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr)); gap:20px }
   .card { display:flex; flex-direction:column; min-width:0; border:1px solid var(--line); border-radius:10px; background:var(--surface); overflow:hidden }
