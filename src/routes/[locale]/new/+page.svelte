@@ -7,6 +7,8 @@
   import CompositionField from '$lib/components/CompositionField.svelte'
   import IdentityFields from '$lib/components/IdentityFields.svelte'
   import SenseFields from '$lib/components/SenseFields.svelte'
+  import RelationFields from '$lib/components/RelationFields.svelte'
+  import { createSenseDraft } from '$lib/sense-draft.svelte'
   import TagFields from '$lib/components/TagFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { compositionOf, primaryLayoutOf, valuesOf } from '$lib/claims'
@@ -59,6 +61,11 @@
   const layout = untrack(() => primaryLayoutOf(form?.values.claims ?? []))
   let primary = $state(descriptions[0] ?? '')
   const composition = $derived.by(() => { const found = compositionOf(claims); return found ? JSON.stringify(found) : '' })
+  const senses = createSenseDraft({ claims: untrack(() => claims), evidence: untrack(() => evidence) })
+  onMount(() => senses.start())
+  $effect(() => {
+    if (filled) senses.applyFill(filled)
+  })
 
   // A form heavier than the server takes is stopped here, where what was typed is still on the page.
   let heavy = $state(false)
@@ -200,7 +207,7 @@
   <header class="heading"><h1>{t('add.title')}</h1><a class="text-link" href={href('/batch')}>{t('batch.link')}</a></header>
   {#if message}<p class="notice bad" role="alert" tabindex="-1" bind:this={notice}>{message}</p>{/if}
   <form class="form" method="POST" enctype="multipart/form-data" bind:this={formEl} onsubmit={weigh} oninvalidcapture={invalid} oninput={clearInvalid} onchange={clearInvalid}>
-    <section class="panel">
+    <section class="panel character">
       <CharacterFields values={descriptions} {layout} bind:primary onfill={facts => filled = facts}>
         <div class="sheet">
           <CompositionField ids={primary} value={composition} />
@@ -208,9 +215,9 @@
           <IdentityFields {claims} radical={values?.radical} strokes={values?.strokes} fill={filled} />
         </div>
       </CharacterFields>
+      <div class="related"><RelationFields senses={senses} {evidence} /></div>
     </section>
-    <section class="panel titled"><label class="section-title" for="description">{t('field.description')}</label><textarea class="input" id="description" name="description" rows="3">{values?.description ?? ''}</textarea></section>
-    <section class="panel"><SenseFields {claims} {evidence} fill={filled} /></section>
+    <section class="panel"><SenseFields {evidence} {senses} /></section>
     <section class="group"><h2>{t('entry.sightings')}</h2>
       {#each sightings as item, index (item.key)}
         <fieldset class="panel sighting" bind:this={sections[item.key]} tabindex="-1" data-sighting>
@@ -227,6 +234,10 @@
       <summary class="section-title">{t('field.filing')}</summary>
       <div class="group filed"><TagFields tags={data.tags} selected={valuesOf(claims, 'tag')} collections={valuesOf(claims, 'collection')} /></div>
     </details>
+    <section class="panel noted">
+      <div class="titled"><label class="section-title" for="description">{t('field.notes')}</label><span class="subtitle" id="description-note">{t('field.description')}</span></div>
+      <textarea class="input" id="description" name="description" rows="3" aria-describedby="description-note">{values?.description ?? ''}</textarea>
+    </section>
     <SubmitBar {busy} label={t('nav.add')} cancel={href()} sticky />
   </form>
 </div>
@@ -236,8 +247,12 @@
   .group, .sighting { display:flex; flex-direction:column; gap:16px; min-width:0 }
   .heading { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:6px 16px }
   .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
+  .character { display:flex; flex-direction:column; gap:20px }
   .sheet { display:flex; flex-direction:column; gap:10px; padding-top:10px; border-top:1px dashed var(--line) }
+  .related { padding-top:18px; border-top:1px dashed var(--line) }
   .titled { display:flex; flex-direction:column; gap:8px; min-width:0 }
+  .noted { display:flex; flex-direction:column; gap:8px }
+  .noted .subtitle { margin-top:-4px; color:var(--muted); font-size:13px }
   .sighting { position:relative; margin:0 }
   .sighting:focus-visible { outline-offset:4px }
   legend { padding:0 6px; margin-inline-start:-6px; font-weight:600 }

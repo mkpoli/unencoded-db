@@ -86,43 +86,93 @@ function text(value: string, x: number, y: number, size: number, fill: string, a
   return `<text x="${x}" y="${y}" fill="${fill}" font-family="${FONT_STACK}" font-size="${size}" text-anchor="${anchor}">${escapeXml(value)}</text>`
 }
 
-// Budget a full em for wide glyphs. The common Latin letters have narrower advances in this face.
+// Approximate advances in this face, in ems. CJK, kana and Hangul take a full em; Latin letters are narrower.
 function units(character: string) {
-  if (character === ' ') return 0.4
+  if (character === ' ') return 0.26
   const letter = character.normalize('NFD')[0]
-  if ('MWmwÆŒæœ'.includes(letter)) return 1
-  if (/^[A-Z]$/.test(letter)) return 0.85
-  return /^[a-z0-9.,:!+\-]$/.test(letter) ? 0.65 : 1
+  if ('MWÆŒ'.includes(letter)) return 1
+  if ('mwæœ'.includes(letter)) return 0.86
+  if (/^[ijlt.,:;!'|]$/.test(letter)) return 0.3
+  if (/^[frI()\-]$/.test(letter)) return 0.4
+  if (/^[A-Z]$/.test(letter)) return 0.66
+  return /^[a-z0-9+?"]$/.test(letter) ? 0.56 : 1
+}
+const widthOf = (value: string) => [...value].reduce((sum, char) => sum + units(char), 0)
+
+// Han and kana break between words without spaces; other scripts break only at spaces.
+const WIDE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}　-〿＀-￯]/u
+const WORDS = new Intl.Segmenter(undefined, { granularity: 'word' })
+const GLUE = ' '
+type Piece = { text: string; space: boolean }
+
+// The places a line may break, keeping each phrase in `keep` whole.
+function pieces(value: string, keep: readonly string[]) {
+  let source = value
+  for (const phrase of keep) if (phrase.includes(' ')) source = source.replaceAll(phrase, phrase.replaceAll(' ', GLUE))
+  const result: Piece[] = []
+  let space = false
+  for (const { segment } of WORDS.segment(source)) {
+    if (segment === ' ') {
+      space = true
+      continue
+    }
+    const last = result.at(-1)
+    const joined = last && !space && (segment.startsWith(GLUE) || last.text.endsWith(GLUE)
+      || !(WIDE.test(last.text.at(-1)!) || WIDE.test(segment[0])) || /^[\p{Pe}\p{Pf}\p{Po}]/u.test(segment))
+    if (joined) last.text += segment
+    else result.push({ text: segment, space })
+    space = false
+  }
+  return result.map(piece => ({ text: piece.text.replaceAll(GLUE, ' '), space: piece.space }))
 }
 
-function lines(value: string, limit: number, count: number) {
-  const words = value.normalize('NFC').trim().replace(/\s+/g, ' ').split(' ')
+// Fills lines one character at a time and ends with an ellipsis when the text does not fit.
+function clipped(value: string, limit: number, count: number) {
   const result: string[] = []
   let line = '', width = 0
-  for (const word of words) {
-    const length = [...word].reduce((sum, char) => sum + units(char), 0)
-    if (line && width + units(' ') + length > limit) {
+  for (const char of value) {
+    if (width + units(char) > limit) {
       result.push(line.trimEnd())
-      line = ''
-      width = 0
+      if (result.length === count) break
+      line = char === ' ' ? '' : char
+      width = units(line)
+      continue
     }
-    if (result.length === count) break
-    const chunk = line ? ` ${word}` : word
-    for (const char of chunk) {
-      if (width + units(char) > limit) {
-        result.push(line.trimEnd())
-        line = ''
-        width = 0
-        if (result.length === count) break
-      }
-      line += char
-      width += units(char)
-    }
-    if (result.length === count) break
+    line += char
+    width += units(char)
   }
-  if (line) result.push(line)
-  if (result.join(' ').replaceAll(' ', '') !== words.join('') && result.length) result[result.length - 1] = `${[...result.at(-1)!].slice(0, -1).join('')}…`
+  if (result.length < count && line) result.push(line)
+  if (result.join('').replaceAll(' ', '') !== value.replaceAll(' ', '')) result[result.length - 1] = `${[...result.at(-1)!].slice(0, -1).join('')}…`
   return result
+}
+
+// The fewest lines that hold the text, as even in length as the breaks allow.
+export function lines(value: string, limit: number, count: number, keep: readonly string[] = []) {
+  const text = value.normalize('NFC').trim().replace(/\s+/g, ' ')
+  if (!text) return []
+  let list = pieces(text, keep)
+  if (list.some(piece => widthOf(piece.text) > limit)) list = pieces(text, [])
+  const join = (from: number, to: number) => list.slice(from, to).map((piece, at) => at && piece.space ? ` ${piece.text}` : piece.text).join('')
+  for (let total = 1; total <= Math.min(count, list.length); total++) {
+    let best: { breaks: number[]; widest: number } | null = null
+    const search = (from: number, left: number, breaks: number[], widest: number) => {
+      if (best && widest >= best.widest) return
+      if (left === 1) {
+        const last = widthOf(join(from, list.length))
+        if (last <= limit && (!best || Math.max(widest, last) < best.widest)) best = { breaks, widest: Math.max(widest, last) }
+        return
+      }
+      for (let to = from + 1; to <= list.length - left + 1; to++) {
+        const width = widthOf(join(from, to))
+        if (width > limit) break
+        search(to, left - 1, [...breaks, to], Math.max(widest, width))
+      }
+    }
+    search(0, total, [], 0)
+    const found = best as { breaks: number[] } | null
+    if (found) return [0, ...found.breaks].map((from, at) => join(from, found.breaks[at] ?? list.length))
+  }
+  return clipped(text, limit, count)
 }
 
 // The part of a picture the panel shows: the whole picture cut to the panel's shape, or, around a marked
@@ -208,7 +258,7 @@ function plates(glyphs: CardArt['glyphs']) {
   }).join('')
 }
 
-type Card = { key: string; label: string; title: string; detail?: string | null; caption?: string; art?: () => Promise<CardArt>; size?: number }
+type Card = { key: string; label: string; title: string; keep?: readonly string[]; detail?: string | null; caption?: string; art?: () => Promise<CardArt>; size?: number }
 
 const pngResponse = (png: Uint8Array<ArrayBuffer>) => new Response(png, {
   headers: { 'content-type': 'image/png', 'cache-control': 'no-store' },
@@ -238,7 +288,7 @@ export async function renderCard(assets: Fetcher, origin: string, card: Card): P
   // Plates take the lower half of the text column, so the title moves up and keeps to two lines.
   const plated = Boolean(art?.glyphs.length)
   const size = card.size ?? 60
-  const title = lines(card.title, 620 / size, plated ? 2 : 3)
+  const title = lines(card.title, 620 / size, plated ? 2 : 3, card.keep)
   const labelY = plated ? 156 : 183
   const titleStart = plated ? Math.round(178 + size * 0.73) : title.length === 3 ? 237 : 263
   const heading = title.map((line, position) => text(line, 68, titleStart + position * (size + 4), size, INK)).join('')

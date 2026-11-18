@@ -13,11 +13,12 @@ export const load: PageServerLoad = async (event) => {
   const cursor = after === null ? null : parseSourceCursor(sort, after)
   if (after !== null && !cursor) error(404)
   const db = env(event).DB
+  const query = (event.url.searchParams.get('q') ?? '').trim().slice(0, 300)
   const typed = event.url.searchParams.get('publisher')?.trim() ?? ''
   const found = typed ? await publicPublisher(db, typed) : null
-  const page = typed && !found ? { sources: [], next: null } : await sourceList(db, sort, cursor, found?.id ?? null)
+  const page = typed && !found ? { sources: [], next: null } : await sourceList(db, sort, cursor, found?.id ?? null, query)
   const publisher = found?.name ?? typed
   const glyphs = await tileGlyphs(event.platform, event.url.origin, page.sources.flatMap(source => source.tiles), event.locals.glyphStyle)
   const dates = await readDates(env(event).DB, page.sources.map(s => s.report_date))
-  return { ...page, sort, glyphs, dates, publisher }
+  return { ...page, sort, glyphs, dates, publisher, query }
 }

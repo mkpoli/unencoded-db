@@ -1,4 +1,6 @@
-import { nameKey, nameLabel } from '../name-key'
+import { sampledSightings } from './source-sightings'
+import { sourceMatches } from './source-aliases'
+import { nameKey, nameLabel, sourceNameKey } from '../name-key'
 // The store of records: an entry is a character, a claim is one thing the record states about it, a
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
@@ -24,11 +26,13 @@ import { ORDER, PAGE, SEEDS, seedOf, type Order, type SourceSort } from '$lib/or
 export type EntryFields = { script: string; script_other: string | null; description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
 // A source as its five citation fields. A sighting's `vias` list them from the one nearest the cited work outward.
 export type Citation = Record<typeof CITATION_FIELDS[number], string | null>
-export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; vias: Citation[]; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null }
+// A link in a sighting's chain: the source, and the words of it this sighting quotes.
+export type Via = Citation & { quote: string | null }
+export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; vias: Via[]; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
 export type Entry = Omit<EntryFields, 'claims'> & { status: Status | null; id: number; rev: number; ids: string | null; layout: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
-export type Sighting = Omit<SightingFields, 'vias'> & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; vias: (Citation & { id: number })[]; media: StoredImage[]; hidden_at: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
+export type Sighting = Omit<SightingFields, 'vias'> & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; vias: (Via & { id: number })[]; media: StoredImage[]; hidden_at: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
 
 // What an entry has one of. What it has several of is in `claims`.
 export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical', 'strokes'] as const
@@ -37,7 +41,7 @@ export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical',
 // a page of the cited work, say.
 export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date'] as const
 // The form sends each via as one value of each of these, repeated once per via and aligned by position.
-export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date'] as const
+export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_quote'] as const
 export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'context', 'style', 'types', 'note'] as const
 export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'original_date', 'page', 'context', 'style', 'types', 'note'] as const
 export const IMAGE_FIELDS = ['image_key', 'image_type', 'image_w', 'image_h', 'thumb_key', 'box'] as const
@@ -56,8 +60,8 @@ const link = (form: FormData, name: string) => cleanLink(form.get(name))
 
 const citationKey = (citation: Citation) => JSON.stringify(CITATION_FIELDS.map(field => citation[field]))
 // The vias of a chain: rows with no field are dropped, a row that repeats an earlier one is dropped, and
-// at most VIAS_MAX are kept.
-export const tidyVias = (vias: readonly Citation[]): Citation[] => {
+// at most VIAS_MAX are kept. The quote stays with the link that carries it.
+export const tidyVias = (vias: readonly Via[]): Via[] => {
   const seen = new Set<string>()
   return vias.filter(via => {
     const key = citationKey(via)
@@ -69,7 +73,7 @@ export const tidyVias = (vias: readonly Citation[]): Citation[] => {
 // Whether a sighting names a web address, as its source or in its chain.
 export const hasLink = (fields: Pick<SightingFields, 'url' | 'vias'>) => Boolean(fields.url) || fields.vias.some(via => via.url)
 // The vias a form sends, in the order of the page.
-function readVias(form: FormData): Citation[] {
+function readVias(form: FormData): Via[] {
   const columns = VIA_INPUTS.map(name => form.getAll(name))
   const rows = Math.max(...columns.map(column => column.length))
   return tidyVias(Array.from({ length: rows }, (_, index) => ({
@@ -78,6 +82,7 @@ function readVias(form: FormData): Citation[] {
     author: clean(columns[2][index], 300),
     publisher: clean(columns[3][index], 300),
     report_date: dateText(columns[4][index]),
+    quote: clean(columns[5][index], 5000),
   })))
 }
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
@@ -350,24 +355,27 @@ async function citationOf(db: D1Database, values: (string | null)[], dates: Date
       WHERE NOT EXISTS (SELECT 1 FROM publisher_aliases WHERE lookup = ?2) ON CONFLICT(lookup) DO NOTHING`)
       .bind(nameLabel(publisher), key))
   }
-  statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null))
+  const [url, title, author, imprint, date] = values
+  const sourceName = sourceNameKey(title || url || author || imprint || date || '')
+  statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName))
   return { hash, statements }
 }
-// The hash of the cited work, and the hashes of the vias in the order of the chain.
+// The hash of the cited work, and the links of the chain with the words each quotes.
 async function sourceOf(db: D1Database, fields: SightingFields, dates: DateBook) {
-  const [work, ...vias] = await Promise.all([citationOf(db, CITATION_FIELDS.map(field => fields[field]), dates), ...tidyVias(fields.vias).map(via => citationOf(db, CITATION_FIELDS.map(field => via[field]), dates))])
-  return { hash: work.hash, vias: vias.flatMap(via => via.hash === null ? [] : [via.hash]), statements: [...work.statements, ...vias.flatMap(via => via.statements)] }
+  const chain = tidyVias(fields.vias)
+  const [work, ...vias] = await Promise.all([citationOf(db, CITATION_FIELDS.map(field => fields[field]), dates), ...chain.map(via => citationOf(db, CITATION_FIELDS.map(field => via[field]), dates))])
+  return { hash: work.hash, vias: vias.flatMap((via, index) => via.hash === null ? [] : [{ hash: via.hash, quote: chain[index].quote }]), statements: [...work.statements, ...vias.flatMap(via => via.statements)] }
 }
 const SOURCE_ID = '(SELECT id FROM sources WHERE hash = ?)'
 // The chain of a sighting as rows: position 0 is the via nearest the cited work.
-function insertVias(db: D1Database, sighting: number | string, hashes: readonly string[]) {
+function insertVias(db: D1Database, sighting: number | string, vias: readonly { hash: string; quote: string | null }[]) {
   const { sql, values } = owned(sighting)
-  return db.prepare(`INSERT INTO sighting_vias(sighting_id, position, source_id) SELECT ${sql}, CAST(j.key AS INTEGER), (SELECT id FROM sources WHERE hash = j.value) FROM json_each(?) j`).bind(...values, JSON.stringify(hashes))
+  return db.prepare(`INSERT INTO sighting_vias(sighting_id, position, source_id, quote) SELECT ${sql}, CAST(j.key AS INTEGER), (SELECT id FROM sources WHERE hash = json_extract(j.value, '$.hash')), json_extract(j.value, '$.quote') FROM json_each(?) j`).bind(...values, JSON.stringify(vias))
 }
 
 const snapshotOf = <T extends object>(row: T, fields: readonly (keyof T)[]) => Object.fromEntries(fields.map(field => [field, row[field] ?? null]))
 const entrySnapshot = (fields: EntryFields) => JSON.stringify({ ...snapshotOf(fields, ENTRY_FIELDS), claims: fields.claims })
-const sightingSnapshot = (row: SightingFields, media: readonly StoredImage[]) => JSON.stringify({ ...snapshotOf(row, SIGHTING_FIELDS), vias: row.vias.map(via => snapshotOf(via, CITATION_FIELDS)), media })
+const sightingSnapshot = (row: SightingFields, media: readonly StoredImage[]) => JSON.stringify({ ...snapshotOf(row, SIGHTING_FIELDS), vias: row.vias.map(via => ({ ...snapshotOf(via, CITATION_FIELDS), quote: via.quote ?? null })), media })
 
 type Who = { actor: string; ip: string | null }
 function revision(db: D1Database, who: Who, row: { entry: number; sighting?: number | null; kind: string; rev: number; snapshot: string; summary?: string | null }) {
@@ -589,7 +597,7 @@ async function writeSighting(db: D1Database, id: number, baseRev: number, fields
         db.prepare('DELETE FROM sighting_vias WHERE sighting_id = ?').bind(id),
         insertVias(db, id, source.vias),
         // A source no sighting cites any more, as its work or as a via, is not kept.
-        ...[...new Set([current.source_id, ...current.vias.map(via => via.id)])].filter(id => id !== null).map(id => db.prepare('DELETE FROM sources WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM sightings WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM sighting_vias WHERE source_id = ?1)').bind(id)),
+        ...[...new Set([current.source_id, ...current.vias.map(via => via.id)])].filter(id => id !== null).map(id => db.prepare('DELETE FROM sources WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM sightings WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM sighting_vias WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_aliases WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_alias_changes WHERE source_id = ?1)').bind(id)),
         ...(media ? [db.prepare('DELETE FROM sighting_media WHERE sighting_id = ?').bind(id), insertMedia(db, id, media)] : []),
         db.prepare('UPDATE entries SET updated_at = ? WHERE id = ?').bind(now(), current.entry_id),
         revision(db, who, { entry: current.entry_id, sighting: id, kind: 'sighting_edit', rev, snapshot: sightingSnapshot(fields, kept), summary }),
@@ -746,14 +754,14 @@ function withMedia<T extends { id: number }>(sightings: T[], media: MediaRow[]) 
   for (const { sighting_id, ...image } of media) found.set(sighting_id, [...(found.get(sighting_id) ?? []), image])
   return sightings.map(sighting => ({ ...sighting, media: found.get(sighting.id) ?? [] }))
 }
-type ViaRow = Citation & { id: number; sighting_id: number; position: number }
+type ViaRow = Via & { id: number; sighting_id: number; position: number }
 // A sighting's vias in chain order; the queries leave the order of a sighting's few rows to here.
 function withVias<T extends { id: number }>(sightings: T[], vias: ViaRow[]) {
-  const found = new Map<number, (Citation & { id: number })[]>()
+  const found = new Map<number, (Via & { id: number })[]>()
   for (const { sighting_id, position: _, ...via } of [...vias].sort((a, b) => a.sighting_id - b.sighting_id || a.position - b.position)) found.set(sighting_id, [...(found.get(sighting_id) ?? []), via])
   return sightings.map(sighting => ({ ...sighting, vias: found.get(sighting.id) ?? [] }))
 }
-const VIA_COLUMNS = `v.sighting_id, v.position, v.source_id AS id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}`
+const VIA_COLUMNS = `v.sighting_id, v.position, v.quote, v.source_id AS id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}`
 // D1 bounds a statement to 100 parameters; a chain read names its sightings in chunks of this size.
 const VIA_READ = 90
 // The whole chains of the sightings named, read by the key of `sighting_vias` in one batch.
@@ -1025,7 +1033,7 @@ export const chronicleBackStatement = (db: D1Database, before: [number, number],
   db.prepare(`SELECT ${CHRONICLE_COLUMNS} FROM ${CHRONICLE_FROM} WHERE ${CHRONICLE_DATED} AND (t.year, t.entry_id) < (?, ?) ORDER BY t.year DESC, t.entry_id DESC LIMIT ?`).bind(before[0], before[1], limit)
 
 type ChronicleRow = TileRow & { year: number; s_id: number | null; s_place: string | null; s_original: string | null; c_title: string | null; c_author: string | null; c_report: string | null }
-export type ChronicleEntry = { year: number; tile: Tile; sighting: { id: number; place: string | null; title: string | null; author: string | null; date: string | null; vias: (Citation & { id: number })[] } | null }
+export type ChronicleEntry = { year: number; tile: Tile; sighting: { id: number; place: string | null; title: string | null; author: string | null; date: string | null; vias: (Via & { id: number })[] } | null }
 export type ChroniclePlace = { at: [number, number] } | { before: [number, number] }
 const placeOf = (row: { year: number; id: number }) => `${row.year}.${row.id}`
 const toEntry = ({ year, s_id, s_place, s_original, c_title, c_author, c_report, ...tile }: ChronicleRow): ChronicleEntry => ({
@@ -1141,7 +1149,7 @@ export const getSourceArtwork = (db: D1Database, id: number) => db.prepare(`
 export const SOURCE_PAGE = 200
 
 // A source and the records seen in it, each once, with the pages it was seen on.
-export type SourceSighting = Pick<Sighting, 'id' | 'entry_id' | 'place' | 'original_date' | 'page' | 'context' | 'style' | 'note' | 'media'> & { types: SightingType[]; tile: Tile; via: boolean; vias: (Citation & { id: number })[] }
+export type SourceSighting = Pick<Sighting, 'id' | 'entry_id' | 'place' | 'original_date' | 'page' | 'context' | 'style' | 'note' | 'media'> & { types: SightingType[]; tile: Tile; via: boolean; vias: (Via & { id: number })[] }
 const SOURCE_SIGHTING = ['place', 'original_date', 'page', 'context', 'style', 'types', 'note'].map(field => `s.${field} AS s_${field}`).join(', ')
 
 // A source with the visible sightings that cite it, each with its pictures and the record it belongs to:
@@ -1173,7 +1181,7 @@ export async function sourcePage(db: D1Database, id: number) {
 
 export const SOURCES_PAGE = 24
 // The sightings read for each source and way it is cited, hidden or not, and the records a card draws.
-export const SOURCE_CARD_READ = 32
+export { SOURCE_CARD_READ } from './source-sightings'
 export const SOURCE_CARD_RECORDS = 6
 
 // Where a page of the gallery starts: after the source with this sort key and id. A cursor without a key
@@ -1204,29 +1212,25 @@ type SourceRead = typeof SOURCE_READS[keyof typeof SOURCE_READS]
 
 // Up to `limit` sources in one order after `cursor`. Each reads its first SOURCE_CARD_READ sightings of
 // each way from its index and keeps the visible ones, so a source costs the same however long it is.
-function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | null, limit: number, publisher: number | null) {
-  const ways = [
-    { from: 'sightings s INDEXED BY sightings_by_source WHERE s.source_id = c.id ORDER BY s.id', extra: '' },
-    { from: 'sighting_vias v INDEXED BY sighting_vias_by_source CROSS JOIN sightings s ON s.id = v.sighting_id WHERE v.source_id = c.id ORDER BY v.sighting_id', extra: ' AND r.source_id IS NOT c.id' },
-  ]
-  const seen = (way: typeof ways[number]) => `(SELECT json_group_array(json_array(r.entry_id, x.thumb_key)) FROM (SELECT s.id, s.entry_id, s.source_id, s.hidden_at FROM ${way.from} LIMIT ${SOURCE_CARD_READ}) r CROSS JOIN entries e ON e.id = r.entry_id LEFT JOIN sighting_media x ON x.sighting_id = r.id AND x.position = 0 WHERE r.hidden_at IS NULL AND ${LIVE}${way.extra})`
+function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | null, limit: number, publisher: number | null, query: string) {
+  const seen = (via: boolean) => `(SELECT json_group_array(json_array(r.entry_id, x.thumb_key)) ${sampledSightings(via)})`
   const direction = order.descending ? 'DESC' : 'ASC', past = order.descending ? '<' : '>'
   const start = order.descending ? Number.MAX_SAFE_INTEGER : 0
   const after = order.key ? `(c.${order.key}, c.id) ${past} (?, ?)` : `c.id ${past} ?`
   const bound = order.key ? [cursor?.key ?? start, cursor?.id ?? start] : [cursor?.id ?? start]
   type Row = Source & { year: number | null; records: number; direct: string; via: string }
-  return db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(ways[0])} AS direct, ${seen(ways[1])} AS via FROM sources c INDEXED BY ${order.index}${publisher !== null ? '_publisher' : ''} WHERE ${order.where} ${publisher !== null ? 'AND c.publisher_id = ?' : ''} AND ${after} ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction} LIMIT ?`)
-    .bind(...(publisher !== null ? [publisher] : []), ...bound, limit).all<Row>().then(({ results }) => results)
+  return db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(false)} AS direct, ${seen(true)} AS via FROM ${query ? `(SELECT DISTINCT source_id FROM (${sourceMatches})) m CROSS JOIN sources c ON c.id = m.source_id` : `sources c INDEXED BY ${order.index}${publisher !== null ? '_publisher' : ''}`} WHERE ${order.where} ${publisher !== null ? 'AND c.publisher_id = ?' : ''} AND ${after} ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction} LIMIT ?`)
+    .bind(...(query ? [sourceNameKey(query), sourceNameKey(query)] : []), ...(publisher !== null ? [publisher] : []), ...bound, limit).all<Row>().then(({ results }) => results)
 }
 
 // A page of the source gallery in one order: its sources, each with the records seen in it, and the cursor
 // of the next page.
-export async function sourceList(db: D1Database, sort: SourceSort = 'new', cursor: SourceCursor | null = null, publisher: number | null = null) {
+export async function sourceList(db: D1Database, sort: SourceSort = 'new', cursor: SourceCursor | null = null, publisher: number | null = null, query = '') {
   const dated = sort === 'earliest' || sort === 'latest'
   const tail = dated && cursor !== null && cursor.key === null
   const order = SOURCE_READS[tail ? 'undated' : sort]
-  let rows = await sourceRun(db, order, cursor, SOURCES_PAGE + 1, publisher)
-  if (dated && !tail && rows.length <= SOURCES_PAGE) rows = [...rows, ...await sourceRun(db, SOURCE_READS.undated, null, SOURCES_PAGE + 1 - rows.length, publisher)]
+  let rows = await sourceRun(db, order, cursor, SOURCES_PAGE + 1, publisher, query)
+  if (dated && !tail && rows.length <= SOURCES_PAGE) rows = [...rows, ...await sourceRun(db, SOURCE_READS.undated, null, SOURCES_PAGE + 1 - rows.length, publisher, query)]
   const page = rows.slice(0, SOURCES_PAGE), end = page.at(-1)
   // A page that ends on an undated source goes on among the undated ones, by id.
   const next = rows.length > SOURCES_PAGE && end ? sourceCursorText({ key: order.key === null ? null : order.key === 'year' && end.year === null ? null : end[order.key], id: end.id }) : null
@@ -1306,7 +1310,7 @@ export async function openReports(db: D1Database, after = 0) {
 export const EXPORT_PAGE_MAX = 200
 const EXPORT_SIGHTING_COLUMNS = ['id', 'entry_id', 'first_entry', 'rev', 'source_id', ...OCCURRENCE_FIELDS, 'hidden_at', 'created_by', 'created_at', 'updated_at'] as const
 const EXPORT_MEDIA = `(SELECT json_group_array(json_object(${IMAGE_FIELDS.map(field => `'${field}', x.${field}`).join(', ')})) FROM (SELECT * FROM sighting_media WHERE sighting_id = s.id ORDER BY position) x)`
-const EXPORT_VIAS = `(SELECT json_group_array(json_object('id', x.id, ${CITATION_FIELDS.map(field => `'${field}', x.${field}`).join(', ')})) FROM (SELECT c.* FROM sighting_vias v JOIN sources c ON c.id = v.source_id WHERE v.sighting_id = s.id ORDER BY v.position) x)`
+const EXPORT_VIAS = `(SELECT json_group_array(json_object('id', x.id, 'quote', x.quote, ${CITATION_FIELDS.map(field => `'${field}', x.${field}`).join(', ')})) FROM (SELECT c.*, v.quote FROM sighting_vias v JOIN sources c ON c.id = v.source_id WHERE v.sighting_id = s.id ORDER BY v.position) x)`
 const EXPORT_EVIDENCE = `CASE WHEN s.id IS NULL THEN NULL ELSE json_object(${EXPORT_SIGHTING_COLUMNS.map(column => `'${column}', s.${column}`).join(', ')}, ${CITATION_FIELDS.map(field => `'${field}', c.${field}`).join(', ')}, 'vias', json(${EXPORT_VIAS}), 'media', json(${EXPORT_MEDIA}), 'by_id', COALESCE(m.id, p.id), 'by_name', COALESCE(m.name, p.name)) END AS evidence_json`
 // The name a record is credited to, after the anonymous people merged into an account take its name.
 const EXPORT_AUTHOR = `(SELECT COALESCE(am.name, ap.name) FROM people ap LEFT JOIN people am ON am.id = ap.merged_into WHERE ap.id = e.created_by) AS created_by_name`

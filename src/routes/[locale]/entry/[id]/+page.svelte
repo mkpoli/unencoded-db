@@ -21,7 +21,7 @@
   import { equivalentSpellings, spellingGroups } from '$lib/ids-variants'
   import CompositionField from '$lib/components/CompositionField.svelte'
   import IdentityFields from '$lib/components/IdentityFields.svelte'
-  import SenseFields from '$lib/components/SenseFields.svelte'
+  import SenseEditor from '$lib/components/SenseEditor.svelte'
   import SenseList from '$lib/components/SenseList.svelte'
   import TagFields from '$lib/components/TagFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
@@ -261,7 +261,7 @@
           </div>
         </CharacterFields>
         <div class="field" id="edit-description"><label for="description">{t('field.description')}</label><textarea id="description" class="input" name="description">{editValues.description ?? ''}</textarea></div>
-        <div id="edit-senses"><SenseFields claims={editValues.claims} evidence={options} fill={filled} /></div>
+        <div id="edit-senses"><SenseEditor claims={editValues.claims} evidence={options} fill={filled} /></div>
         <details class="filing" id="edit-filing" open>
           <summary class="section-title">{t('field.filing')}</summary>
           <div class="stack filed"><TagFields tags={data.tags} selected={valuesOf(editValues.claims, 'tag')} collections={valuesOf(editValues.claims, 'collection')} /></div>

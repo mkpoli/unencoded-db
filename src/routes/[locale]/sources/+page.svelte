@@ -9,9 +9,10 @@
   let { data } = $props()
   const host = (url: string | null) => { try { return url ? new URL(url).host : null } catch { return null } }
   const count = (n: number) => t(n === 1 ? 'source.record' : 'source.records', { n })
-  const sorted = (sort: string, after?: string | null, publisher = data.publisher) => {
+  const sorted = (sort: string, after?: string | null, publisher = data.publisher, text = data.query) => {
     const query = new URLSearchParams()
     if (sort !== 'new') query.set('sort', sort)
+    if (text) query.set('q', text)
     if (publisher) query.set('publisher', publisher)
     if (after) query.set('after', after)
     return query.size ? `?${query}` : href('/sources')
@@ -24,9 +25,10 @@
   <search>
     <form class="publisher-filter" action={href('/sources')} method="GET">
       {#if data.sort !== 'new'}<input type="hidden" name="sort" value={data.sort} />{/if}
+      <div class="field"><label for="source-name">{t('sources.name')}</label><input class="input" id="source-name" name="q" value={data.query} maxlength="300" /></div>
       {#key data.publisher}<PublisherField id="publisher" name="publisher" value={data.publisher} />{/key}
       <button type="submit" class="button">{t('sources.filter')}</button>
-      {#if data.publisher}<a class="text-link" href={sorted(data.sort, null, '')}>{t('sources.clear')}</a>{/if}
+      {#if data.publisher || data.query}<a class="text-link" href={sorted(data.sort, null, '', '')}>{t('sources.clear')}</a>{/if}
     </form>
   </search>
   <nav class="sort" aria-label={t('sources.sort')}>
@@ -61,7 +63,7 @@
       {/each}
     </div>
   {:else if data.next === null}
-    <p class="empty muted">{t(data.publisher ? 'sources.noPublisherMatches' : 'sources.empty')}</p>
+    <p class="empty muted">{t(data.query ? 'sources.noMatches' : data.publisher ? 'sources.noPublisherMatches' : 'sources.empty')}</p>
   {/if}
   {#if data.next !== null}<a class="button more" href={sorted(data.sort, data.next)}>{t('browse.more')}</a>{/if}
 </div>
