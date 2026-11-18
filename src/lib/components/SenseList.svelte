@@ -7,6 +7,7 @@
   import { claimLabel, doculectName } from '$lib/claim-label'
   import { t } from '$lib/t'
   import CopyButton from './CopyButton.svelte'
+  import RelationCharacter from './RelationCharacter.svelte'
 
   // `sightings` are the ids the page shows, so that a claim links only to evidence that is on it.
   let { claims, sightings }: { claims: Claim[]; sightings: number[] } = $props()
@@ -22,7 +23,7 @@
 </script>
 
 {#snippet basis(claim: Claim)}{@const shown = claim.sightings.filter(id => sightings.includes(id))}{#if shown.length}<span class="bases">{#each shown as id (id)}<a class="basis" href="#sighting-{id}">#{id}</a>{/each}</span>{/if}{/snippet}
-{#snippet related(relation: Claim)}<a class="related" href="#claim-{relation.key}"><span class="character">{relation.value}</span>{t(`relationship.${String(relation.data?.relationship)}`)}</a>{/snippet}
+{#snippet related(relation: Claim)}<a class="related" href="#claim-{relation.key}"><span class="character"><RelationCharacter value={relation.value} compact /></span>{t(`relationship.${String(relation.data?.relationship)}`)}</a>{/snippet}
 {#snippet read(reading: Claim, target: boolean, listed: Claim[] = [])}
   <li class="claim" id={target ? `claim-${reading.key}` : undefined}>
     {#if doculect(reading)}<span class="badge doculect" title={doculect(reading)}>{doculectName(doculect(reading))}</span>{/if}<span class="reading">{reading.value}</span>{@render basis(reading)}
@@ -64,7 +65,7 @@
       {#each relations as relation (relation.key)}
         {@const scopes = scopesOf(claims, relation)}
         <li class="relation claim" id="claim-{relation.key}">
-          <span class="character">{relation.value}</span><CopyButton text={relation.value} />
+          <span class="character"><RelationCharacter value={relation.value} /></span><CopyButton text={relation.value} />
           <span class="relation-body">
             <span class="stated"><span class="badge">{t(`relationship.${String(relation.data?.relationship)}`)}</span>{@render basis(relation)}</span>
             {#if scopes.length}

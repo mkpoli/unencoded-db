@@ -46,3 +46,18 @@ export function encodedCharacter(code: string) {
   const value = point ? parseInt(point[1], 16) : -1
   return value >= 0x20 && value <= 0x10FFFF && !(value >= 0xD800 && value <= 0xDFFF) ? String.fromCodePoint(value) : ''
 }
+
+/** The characters a text of Unicode codes such as `U+5D20 U+E0100` names, or '' when the text is not only codes. */
+export function codePointCharacters(text: string) {
+  const tokens = text.trim().split(/\s+/u)
+  if (!tokens[0]) return ''
+  const characters: string[] = []
+  for (const token of tokens) {
+    const point = /^U\+([0-9A-F]{4,6})$/i.exec(token)
+    if (!point) return ''
+    const value = parseInt(point[1], 16)
+    if (value < 0x20 || value > 0x10FFFF || (value >= 0xD800 && value <= 0xDFFF)) return ''
+    characters.push(String.fromCodePoint(value))
+  }
+  return characters.join('')
+}
