@@ -63,7 +63,9 @@
   // A form heavier than the server takes is stopped here, where what was typed is still on the page.
   let heavy = $state(false)
   let notice = $state<HTMLElement>()
+  let formEl = $state<HTMLFormElement>()
   async function weigh(event: SubmitEvent) {
+    invalidRevealed = false
     const files = [...(event.currentTarget as HTMLFormElement).querySelectorAll<HTMLInputElement>('input[type=file]')].flatMap(input => [...(input.files ?? [])])
     heavy = files.reduce((sum, file) => sum + file.size, 0) > PICTURES_BODY_MAX - 1024 * 1024
     if (!heavy) return
@@ -72,13 +74,132 @@
     notice?.scrollIntoView({ block: 'center' })
   }
   const message = $derived(heavy ? t('error.tooLarge') : form?.error ? `${form.sighting ? `${t('add.sighting', { n: form.sighting })} · ` : ''}${t(`error.${form.error}`, { max: ADD_SIGHTINGS_MAX })}` : null)
+
+  // A field the browser rejects, or one the server names, is marked and brought into view. The server
+  // error arrives with the rejected form, so the page opens the line and section that holds the field.
+  let invalidRevealed = false
+  const FIELD_SELECTORS: Record<string, string[]> = {
+    ids: ['.descriptions input:not([type="hidden"])'],
+    readings: ['input[name="reading_doculect"]', 'input[name="reading"]', 'textarea[name="meaning"]'],
+    encodings: ['input[name="encoding_charset"]', 'input[name="encoding_code"]', 'select[name="encoding_charset"]'],
+    relatedCharacters: ['input[name="related_character"][required]'],
+    ivd: ['input[name="ivd_sequence"]', 'select[name="ivd_status"]'],
+    tags: ['input[name="tags"]'],
+    tag: ['input[name="tag_new"]', 'input[name="tags"]'],
+  }
+
+  function errorField(error: string, sighting: number): { target: HTMLElement; marks: HTMLElement[] } | null {
+    const scope = sighting ? formEl?.querySelectorAll<HTMLElement>('[data-sighting]')[sighting - 1] ?? null : formEl
+    const inSighting = (selector: string) => scope?.querySelector<HTMLElement>(selector) ?? null
+    if (error === 'place') {
+      const place = inSighting('input[name="place"]')
+      return place ? { target: place, marks: [place] } : null
+    }
+    if (error === 'evidence') {
+      const url = inSighting('input[name="url"]'), pictures = inSighting('[data-pictures]')
+      const target = url ?? pictures
+      return target ? { target, marks: [url, pictures].filter((item): item is HTMLElement => Boolean(item)) } : null
+    }
+    if (error === 'image') {
+      const pictures = inSighting('[data-pictures]')
+      if (!pictures) return null
+      const files = [...pictures.querySelectorAll<HTMLInputElement>('input[type="file"]')]
+      return { target: files[0] ?? pictures, marks: [pictures, ...files] }
+    }
+    if (error === 'ivd' && formEl) {
+      const sequence = formEl.querySelector<HTMLElement>('input[name="ivd_sequence"]')
+      const status = formEl.querySelector<HTMLElement>('select[name="ivd_status"]')
+      if (sequence) return { target: sequence, marks: [sequence, status].filter((item): item is HTMLElement => Boolean(item)) }
+    }
+    if (error === 'ids' && formEl) {
+      const descriptions = formEl.querySelector<HTMLElement>('.descriptions')
+      const field = descriptions?.querySelector<HTMLElement>('input:not([type="hidden"])')
+      if (descriptions && field) return { target: field, marks: [descriptions] }
+    }
+    const selectors = FIELD_SELECTORS[error]
+    if (!formEl || !selectors) return null
+    for (const selector of selectors) {
+      const marks = [...formEl.querySelectorAll<HTMLElement>(selector)]
+      if (marks.length) return { target: marks[0], marks }
+    }
+    return null
+  }
+
+  async function reveal(target: HTMLElement) {
+    for (let node: Element | null = target; node; node = node.parentElement) {
+      if (node instanceof HTMLDetailsElement) node.open = true
+    }
+    await tick()
+    target.scrollIntoView({ block: 'center' })
+    if (target.matches('[data-pictures]')) {
+      target.querySelector<HTMLInputElement>('input[type="file"]')?.focus({ preventScroll: true })
+      return
+    }
+    const control = target.matches('input:not([type=hidden]), select, textarea')
+      ? target
+      : target.querySelector<HTMLElement>('input:not([type=hidden]), select, textarea')
+    control?.focus({ preventScroll: true })
+  }
+
+  function invalid(event: Event) {
+    const control = event.target
+    if (!(control instanceof HTMLElement)) return
+    control.setAttribute('aria-invalid', 'true')
+    control.closest('[data-pictures]')?.setAttribute('aria-invalid', 'true')
+    if (invalidRevealed) return
+    invalidRevealed = true
+    void reveal(control)
+  }
+
+  function clearInvalid(event: Event) {
+    const control = event.target
+    if (!(control instanceof HTMLElement)) return
+    if (control.closest('.descriptions')) formEl?.querySelector('.descriptions')?.removeAttribute('aria-invalid')
+    else control.removeAttribute('aria-invalid')
+    control.closest('[data-pictures]')?.removeAttribute('aria-invalid')
+    // The choice and its sequence are one answer, and so are a code and its set.
+    if (control.matches('[name="ivd_status"], [name="ivd_sequence"]')) formEl?.querySelectorAll('[name="ivd_status"], [name="ivd_sequence"]').forEach(item => item.removeAttribute('aria-invalid'))
+    if (control.matches('[name="encoding_charset"], [name="encoding_code"]')) formEl?.querySelectorAll('[name="encoding_charset"], [name="encoding_code"]').forEach(item => item.removeAttribute('aria-invalid'))
+    // A link or a picture answers the evidence rule for the whole sighting.
+    const section = control.closest('[data-sighting]')
+    if (section) {
+      const url = section.querySelector<HTMLInputElement>('input[name="url"]')
+      const via = [...section.querySelectorAll<HTMLInputElement>('input[name="via_url"]')].some(input => input.value.trim())
+      const image = section.querySelector<HTMLInputElement>('input[name="image"]')
+      if (url?.value.trim() || via || image?.files?.length) {
+        url?.removeAttribute('aria-invalid')
+        section.querySelector('[data-pictures]')?.removeAttribute('aria-invalid')
+      }
+    }
+    invalidRevealed = false
+  }
+
+  async function showError(error: string, sighting: number) {
+    await tick()
+    const found = errorField(error, sighting)
+    for (const mark of found?.marks ?? []) mark.setAttribute('aria-invalid', 'true')
+    if (found) await reveal(found.target)
+    else notice?.focus()
+  }
+
+  // A rejected form comes back with the error it named; open the field it belongs to once.
+  let reported = ''
+  $effect(() => {
+    const root = formEl, error = form?.error
+    if (!root) return
+    if (!error) { reported = ''; return }
+    const key = `${error}:${form.sighting ?? 0}`
+    if (reported === key) return
+    reported = key
+    void showError(error, form.sighting ?? 0)
+  })
 </script>
 
 <Seo title={t('add.title')} />
 <div class="page narrow stack">
   <header class="heading"><h1>{t('add.title')}</h1><a class="text-link" href={href('/batch')}>{t('batch.link')}</a></header>
-  {#if message}<p class="notice bad" role="alert" bind:this={notice}>{message}</p>{/if}
-  <form class="form" method="POST" enctype="multipart/form-data" onsubmit={weigh}>
+  {#if message}<p class="notice bad" role="alert" tabindex="-1" bind:this={notice}>{message}</p>{/if}
+  <form class="form" method="POST" enctype="multipart/form-data" bind:this={formEl} onsubmit={weigh} oninvalidcapture={invalid} oninput={clearInvalid} onchange={clearInvalid}>
     <section class="panel">
       <CharacterFields values={descriptions} {layout} bind:primary onfill={facts => filled = facts}>
         <div class="sheet">

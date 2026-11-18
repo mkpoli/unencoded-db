@@ -106,6 +106,16 @@ h2, .section-title { font-size: 16px; font-weight: 600 }
 .input, select.input, textarea.input { display: block; width: 100%; min-inline-size: 0; min-block-size: max(42px, var(--target-size)); padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); font-size: max(1rem, 1em) }
 textarea.input { min-height: 96px; resize: vertical; line-height: 1.55 }
 .input::placeholder { color: var(--muted) }
+/* What the browser or the server rejected: the field, its label and a picture area all carry the mark. */
+.input[aria-invalid="true"], .input:user-invalid { border-color: var(--wrong); background: var(--wrong-light) }
+[aria-invalid="true"] { outline: 2px solid var(--wrong); outline-offset: 1px }
+[aria-invalid="true"]:focus-visible { outline-color: var(--wrong) !important }
+.descriptions[aria-invalid="true"] { border-radius: 8px; outline: 2px solid var(--wrong); outline-offset: 2px }
+.descriptions[aria-invalid="true"] input { outline-color: var(--wrong) !important }
+.descriptions[aria-invalid="true"] .ids-title, .descriptions[aria-invalid="true"] .plain > label { color: var(--wrong) }
+.ids-field:has([aria-invalid="true"]) .ids-title, .descriptions:has([aria-invalid="true"]) .ids-title, .descriptions:has([aria-invalid="true"]) .plain > label { color: var(--wrong) }
+.field:has(> [aria-invalid="true"]) > label, .field:has(> .input:user-invalid) > label, [data-pictures][aria-invalid="true"] .label { color: var(--wrong) }
+[data-pictures][aria-invalid="true"] .drop { border-color: var(--wrong); color: var(--wrong) }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0 }
 .field > label, .field > .label, .label { font-weight: 500 }
 .hint { color: var(--muted); font-size: 12.5px; line-height: 1.45 }
