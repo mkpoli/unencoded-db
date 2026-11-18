@@ -82,6 +82,7 @@
   const separate = $derived(adjusting || Boolean(activeLayout))
   const activePreview = $derived(preview?.style === style ? preview : null)
   const parted = $derived(separate && activePreview?.separate === true)
+  let step = $state<'idle' | 'loading' | 'composed' | 'final' | 'failed' | 'capped' | 'unavailable'>('idle')
   const pickedMoved = $derived(Boolean(picked && activeLayout?.[placeOf(picked)]))
 
   // A plate in a folded form asks for nothing until the form is opened.
@@ -156,12 +157,10 @@
 </script>
 
 <div class="drawing" class:adjusting bind:this={host}>
-  {#if kit && activePreview && tree !== undefined}
+  {#if kit && preview && tree !== undefined}
     <div class="stage">
-      {#key style}
-        <kit.IdsPreview adapter={{ preview: activePreview.draw }} {tree} chosen={adjusting ? picked : chosen} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
-          session={parted ? session : null} {version} editable={adjusting && parted} onchoose={path => picked = path} onedit={read} />
-      {/key}
+      <kit.IdsPreview adapter={{ preview: preview.draw }} {tree} chosen={adjusting ? picked : chosen} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
+        session={parted ? session : null} {version} bind:step editable={adjusting && parted && step === 'composed'} onchoose={path => picked = path} onedit={read} />
     </div>
   {:else}
     <div class="plate" class:empty={!drawn} role={drawn ? 'img' : undefined} aria-label={drawn ? sequence : undefined} aria-hidden={drawn ? undefined : 'true'}>
