@@ -37,9 +37,11 @@ Report dates, original dates and dates in a citation chain keep the contributor'
 
 The local setup and production release run the date sweep after applying migrations. Saving a sighting retries its unresolved dates. To retry all unresolved dates locally, run `bun scripts/sweep-dates.ts --local`. Add `--recheck` to verify existing readings again. A failed lookup preserves the previous reading. The sweep also rebuilds source years, earliest sightings and decade counts. The paged JSON export includes a `date_readings` dictionary keyed by the original wording. The paged CSV export carries the same readings for each sighting in the `date_readings` column; the whole-dataset files keep the transcribed dates in each sighting.
 
-## Publishers
+## Source names
 
 On a source page, open **Alternate names** to add a spelling or abbreviation for that citation. The Sources page and the title fields for direct and intermediate citations accept the start of a title or alternate name. Picking an edition fills its citation details. A new title can be entered freely.
+
+## Publishers
 
 The Sources page filters direct and intermediate citations by publisher. A contributor can choose a suggested publisher or enter a new name. The directory groups verified spellings such as 江蘇教育出版社 and 江苏教育出版社. Citations, exports and revision history retain the submitted name. Only publishers cited by a visible record appear in suggestions. The release runs `scripts/sweep-publishers.ts` to reconcile legacy lookup keys. The local setup runs the same sweep.
 
