@@ -1,6 +1,6 @@
 {
   "app.name": "Rare Character Compendium",
-  "app.tagline": "Variants, misprints and characters Unicode lacks",
+  "app.tagline": "Rare characters and their sources",
   "app.description": "A Glyph Atlas evidence wiki for rare characters: ones Unicode lacks, variants, misprints and uncertain forms, each recorded with where it was seen.",
   "nav.browse": "Records",
   "nav.history": "History",
