@@ -1,19 +1,21 @@
 import { readDates, sightingDates } from './date-readings'
 import { CONTEXTS, STYLES, VIAS_MAX, isStoredSightingTypes } from '$lib/scripts'
-import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, tidyVias, type Citation, type EntryFields, type SightingFields } from './entries'
+import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, tidyVias, type EntryFields, type SightingFields, type Via } from './entries'
 
 // Only entry fields are public; a snapshot can also hold sighting or internal data.
 export const entrySnapshot = (raw: string): EntryFields | null => entryFieldsOf(raw)
 
-// The chain of a snapshot: at most VIAS_MAX objects of the five citation fields, each link a web address or null.
-function parseVias(raw: unknown): Citation[] | null {
+// The chain of a snapshot: at most VIAS_MAX objects of the five citation fields and an optional quote, each
+// link a web address or null. A snapshot written before quotes were kept reads as one that quotes nothing.
+function parseVias(raw: unknown): Via[] | null {
   if (!Array.isArray(raw) || raw.length > VIAS_MAX) return null
-  const vias: Citation[] = []
+  const vias: Via[] = []
   for (const item of raw) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return null
     for (const field of CITATION_FIELDS) if (typeof item[field] !== 'string' && item[field] !== null) return null
+    if (typeof item.quote !== 'string' && item.quote !== null && item.quote !== undefined) return null
     if (item.url !== null && !/^https?:\/\//i.test(item.url)) return null
-    vias.push(Object.fromEntries(CITATION_FIELDS.map(field => [field, item[field]])) as Citation)
+    vias.push({ ...Object.fromEntries(CITATION_FIELDS.map(field => [field, item[field]])), quote: typeof item.quote === 'string' ? item.quote : null } as Via)
   }
   return tidyVias(vias)
 }

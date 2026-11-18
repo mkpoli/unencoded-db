@@ -4,9 +4,9 @@
   import EvidenceDate from './EvidenceDate.svelte'
   import type { DateReading } from '$lib/dates'
   import { href, t } from '$lib/t'
-  import type { Citation } from '$lib/server/entries'
+  import type { Via as StoredVia } from '$lib/server/entries'
 
-  type Via = Citation & { id?: number }
+  type Via = StoredVia & { id?: number }
   let { vias, label = true, dates }: { vias: readonly Via[]; label?: boolean; dates?: Map<string, DateReading | null> } = $props()
   const web = (url: string | null) => Boolean(url && /^https?:\/\//i.test(url))
 </script>
@@ -18,7 +18,7 @@
       {#each vias as via, position (position)}
         <li class="item">
           {#if position}<span class="arrow" aria-hidden="true">←</span>{/if}
-          <span class="node">
+          <div class="node">
             <span class="title">
               {#if via.id}
                 <a class="text-link" href={href(`/source/${via.id}`)}>{via.title || via.url || t('source.title')}</a>
@@ -36,7 +36,8 @@
                 {#if via.report_date}{#if via.author || via.publisher}{' · '}{/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}
               </span>
             {/if}
-          </span>
+            {#if via.quote}<blockquote class="quote">{via.quote}</blockquote>{/if}
+          </div>
         </li>
       {/each}
     </ul>
@@ -52,4 +53,5 @@
   .node { min-width: 0; overflow-wrap: anywhere; line-height: 1.55 }
   .meta { display: block; margin-top: 1px; color: var(--muted); font-size: 12.5px }
   .url { overflow-wrap: anywhere }
+  .quote { max-width: 75ch; margin: 4px 0 0; padding: 2px 0 2px 10px; border-left: 2px solid var(--line-strong); white-space: pre-wrap; overflow-wrap: anywhere }
 </style>

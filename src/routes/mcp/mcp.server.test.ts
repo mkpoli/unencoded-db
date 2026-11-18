@@ -101,7 +101,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
     categories: ['kokuji'], tags: ['signage'],
     sightings: [
       { ...sighting, pictures: [{ url: 'https://img.example/sign.png', marks: [[1, 1, 6, 6]] }] },
-      { place: 'A dictionary', title: 'Book', author: 'Someone', report_date: '1936', page: '12', types: ['definition', 'reading'], context: 'running_text', vias: [{ url: 'https://example.test/post/1', author: '@poster', publisher: 'X', report_date: '2026-11-14' }] },
+      { place: 'A dictionary', title: 'Book', author: 'Someone', report_date: '1936', page: '12', types: ['definition', 'reading'], context: 'running_text', vias: [{ url: 'https://example.test/post/1', author: '@poster', publisher: 'X', report_date: '2026-11-14', quote: '書影 p. 3' }] },
     ],
   })
   expect(added).toEqual({ failed: false, value: { id: 1, code: 'R+0001', url: `${ORIGIN}/entry/1` } })
@@ -117,6 +117,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
   expect(JSON.parse(of('reading').under)).toEqual([of('meaning').key])
   expect(JSON.parse(of('relation').under)).toEqual([of('reading').key])
   expect(count('sighting_vias')).toBe(1)
+  expect(raw.query('SELECT quote FROM sighting_vias').get()).toEqual({ quote: '書影 p. 3' })
   expect(raw.query("SELECT kind FROM revisions ORDER BY id").all()).toEqual([{ kind: 'create' }, { kind: 'sighting' }, { kind: 'sighting' }])
 
   const read = await call('get_record', { record: 'R+0001' })
@@ -124,7 +125,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
     id: 1, script: 'han', status: 'encoded', description: 'On a shop sign.',
     sightings: [
       { id: 1, place: 'A shop sign', pictures: [{ url: expect.stringMatching(/^https:\/\/example\.test\/media\/v2\/[a-f0-9]{64}\.png$/), width: 10, height: 10, marks: [[1, 1, 6, 6]] }] },
-      { id: 2, title: 'Book', types: ['definition', 'reading'], vias: [{ url: 'https://example.test/post/1', author: '@poster' }] },
+      { id: 2, title: 'Book', types: ['definition', 'reading'], vias: [{ url: 'https://example.test/post/1', author: '@poster', quote: '書影 p. 3' }] },
     ],
   })
   expect(read.value.claims.find((claim: { kind: string }) => claim.kind === 'reading')).toMatchObject({ value: 'tōge', data: { doculect: 'ja' }, evidence: [1, 2] })

@@ -164,6 +164,7 @@
   "field.viaHint": "Where you came across it, such as a post showing a page of the book.",
   "field.viaAdd": "Add via",
   "field.viaRemove": "Remove",
+  "field.quote": "Quote",
   "field.sourceTypes": "Source type",
   "evidence.type.mention": "Mention",
   "evidence.type.mention.hint": "Discusses the character as a topic.",
