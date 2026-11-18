@@ -23,9 +23,9 @@ export const GET: RequestHandler = async event => {
         ? translate(locale, 'history.globalTitle')
         : scriptName(locale, entry.script, entry.script_other)
       return await renderCard(bindings.ASSETS, event.url.origin, {
-        key: JSON.stringify([kind, locale, id, label, entry.ids, entry.layout, cover, entry.cover_place]),
+        key: JSON.stringify([kind, locale, id, label, entry.ids, entry.layout, cover]),
         label, title: recordCode(entry.id), detail: recordName(entry.id),
-        caption: entry.cover_place ?? '', size: 78,
+        size: 78,
         art: () => recordArtwork(bindings.MEDIA, entry, cover),
       })
     }
