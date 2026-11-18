@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte'
+  import { afterNavigate } from '$app/navigation'
   import Seo from '$lib/components/Seo.svelte'
   import PictureList from '$lib/components/PictureList.svelte'
   import StoredPicture from '$lib/components/StoredPicture.svelte'
@@ -17,6 +18,28 @@
   let removed = $state<string[]>(untrack(() => form?.removeMedia ?? []))
   const drawn = $derived(form?.marks?.length === data.sighting.media.length ? form.marks : null)
   const room = $derived(MEDIA_MAX - data.sighting.media.length + removed.length)
+
+  // The IRG panel links to the part of this form that fills a check. The citation panel is folded until
+  // someone opens it, so open it before bringing the field into view.
+  afterNavigate(() => {
+    const hash = location.hash.slice(1)
+    let id = hash
+    try { id = decodeURIComponent(hash) } catch { /* a malformed hash names nothing */ }
+    const target = id ? document.getElementById(id) : null
+    if (!target) return
+    for (let node: Element | null = target; node; node = node.parentElement) {
+      if (node instanceof HTMLDetailsElement) node.open = true
+    }
+    requestAnimationFrame(() => {
+      // A picture check brings the panel's picture area to the top; its file field is hidden, so nothing
+      // there takes focus.
+      if (target.id === 'pictures') { target.scrollIntoView({ block: 'start' }); return }
+      const field = target.matches('input:not([type=hidden]), select, textarea')
+        ? target
+        : target.querySelector<HTMLElement>('input:not([type=hidden]), select, textarea')
+      ;(field ?? target).scrollIntoView({ block: 'center' })
+    })
+  })
 </script>
 
 <Seo {title} />
@@ -26,15 +49,17 @@
   <form class="stack" method="POST" enctype="multipart/form-data">
     <input type="hidden" name="rev" value={data.sighting.rev} />
     <section class="panel stack">
-      {#if data.sighting.media.length}
-        <div class="current">
-          {#each data.sighting.media as picture, position (picture.image_key)}
-            <StoredPicture {picture} {position} drawn={drawn?.[position] ?? null} bind:removed onready={(working) => marking[position] = working} />
-          {/each}
-        </div>
-      {/if}
-      <PictureList bind:this={pictures} max={room} onready={(working) => adding = working} />
-      <SightingFields values={form?.values ?? data.sighting} onphotos={files => pictures?.offer(files)} />
+      <div class="pictures" id="pictures">
+        {#if data.sighting.media.length}
+          <div class="current">
+            {#each data.sighting.media as picture, position (picture.image_key)}
+              <StoredPicture {picture} {position} drawn={drawn?.[position] ?? null} bind:removed onready={(working) => marking[position] = working} />
+            {/each}
+          </div>
+        {/if}
+        <PictureList bind:this={pictures} max={room} onready={(working) => adding = working} />
+      </div>
+      <SightingFields values={form?.values ?? data.sighting} anchor="source" onphotos={files => pictures?.offer(files)} />
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" value={form?.summary ?? ''} /></div>
     </section>
     {#if form?.error === 'conflict'}<button class="button" type="submit" disabled>{t('form.save')}</button>{:else}<SubmitBar {busy} cancel={href(`/entry/${data.id}`)} />{/if}
@@ -42,6 +67,7 @@
 </div>
 <style>
   .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
-  .current { display:flex; flex-direction:column; gap:16px }
+  .current, .pictures { display:flex; flex-direction:column; gap:16px; min-width:0 }
+  .pictures, :global(#source), :global(#source-style), :global(#source-context) { scroll-margin-block:24px }
   @media(max-width:700px) { .panel { padding:16px } }
 </style>

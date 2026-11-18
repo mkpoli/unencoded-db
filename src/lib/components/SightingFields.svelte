@@ -10,8 +10,12 @@
   import type { Citation, SightingFields } from '$lib/server/entries'
   import { VIAS_MAX } from '$lib/scripts'
 
-  let { values = {}, onphotos }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void } = $props()
+  let { values = {}, onphotos, anchor }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void; anchor?: string } = $props()
   const uid = $props.id()
+  // The edit page names the citation panel and the two fields the IRG checks jump to; elsewhere the ids
+  // stay unique to this instance.
+  const contextId = untrack(() => anchor ? `${anchor}-context` : `${uid}-context`)
+  const styleId = untrack(() => anchor ? `${anchor}-style` : `${uid}-style`)
   const selected = $derived(new Set(parseSightingTypes(values.types)))
   const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.original_date || values.page || values.context || values.style || values.types || values.note))
 
@@ -117,7 +121,7 @@
     {/each}
   </div>
 </fieldset>
-<details class="more" bind:open>
+<details class="more" id={anchor} bind:open>
   <summary>{t('field.source')}</summary>
   <div class="grid-2">
     <div class="field"><label for="{uid}-title">{t('field.title')}</label><input id="{uid}-title" class="input" name="title" bind:value={title} maxlength="300" /></div>
@@ -126,10 +130,10 @@
     <div class="field"><label for="{uid}-page">{t('field.page')}</label><input id="{uid}-page" class="input" name="page" bind:value={page} maxlength="80" /></div>
     <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" value={values.report_date ?? ''} maxlength="40" /><p class="hint">{t('field.reportDateHint')}</p></div>
     <div class="field"><label for="{uid}-original_date">{t('field.originalDate')}</label><input id="{uid}-original_date" class="input" name="original_date" value={values.original_date ?? ''} maxlength="40" /><p class="hint">{t('field.originalDateHint')}</p></div>
-    <div class="field"><label for="{uid}-context">{t('field.context')}</label>
-      <select id="{uid}-context" class="input" name="context" value={values.context ?? ''}><option value="">{t('field.unset')}</option>{#each CONTEXTS as item}<option value={item}>{t(`context.${item}`)}</option>{/each}</select></div>
-    <div class="field"><label for="{uid}-style">{t('field.style')}</label>
-      <select id="{uid}-style" class="input" name="style" value={values.style ?? ''}><option value="">{t('field.unset')}</option>{#each STYLES as item}<option value={item}>{t(`style.${item}`)}</option>{/each}</select></div>
+    <div class="field"><label for={contextId}>{t('field.context')}</label>
+      <select id={contextId} class="input" name="context" value={values.context ?? ''}><option value="">{t('field.unset')}</option>{#each CONTEXTS as item}<option value={item}>{t(`context.${item}`)}</option>{/each}</select></div>
+    <div class="field"><label for={styleId}>{t('field.style')}</label>
+      <select id={styleId} class="input" name="style" value={values.style ?? ''}><option value="">{t('field.unset')}</option>{#each STYLES as item}<option value={item}>{t(`style.${item}`)}</option>{/each}</select></div>
   </div>
   <div class="field"><label for="{uid}-note">{t('field.note')}</label><textarea id="{uid}-note" class="input" name="note" rows="2" maxlength="5000">{values.note ?? ''}</textarea></div>
 </details>

@@ -30,7 +30,7 @@
   import { codePage, marksOf, registryLabel } from '$lib/registries'
   import { COLLECTIONS, implicationClosure, tagLabels, tagLookup } from '$lib/tags'
   import { boxesOf, evidenceFile } from '$lib/picture'
-  import { CHECKS, readiness } from '$lib/readiness'
+  import { CHECKS, readiness, readyTarget, type Check } from '$lib/readiness'
   import { parseSightingTypes } from '$lib/scripts'
   import type { Sighting, StoredImage } from '$lib/server/entries'
   import { href, locale, media, t, day } from '$lib/t'
@@ -125,6 +125,16 @@
   const brief = (text: string) => [...text].length > 40 ? [...text].slice(0, 39).join('') + '…' : text
   const options = $derived(data.sightings.map(sighting => ({ token: String(sighting.id), value: String(sighting.id), label: `#${sighting.id} ${brief(sighting.place || sighting.title || sighting.url || '')}` })))
   const ready = $derived(readiness({ ids: entry.ids, radical: entry.radical, strokes: entry.strokes }, data.sightings))
+  // An unfilled check leads to the field that fills it: the record's edit form for its own facts, the
+  // sighting's edit form for its evidence.
+  const readyField = (check: Check) => check === 'ids' ? 'ids' : check === 'radical' ? 'identity' : undefined
+  function readyHref(check: Check) {
+    if (check === 'ids') return '#edit-ids'
+    if (check === 'radical') return '#edit-identity'
+    if (check === 'second' || !data.sightings.length) return href(`/entry/${entry.id}/sighting/new`)
+    const target = readyTarget(check, data.sightings)
+    return target ? href(`/entry/${entry.id}/sighting/${target.id}/edit#${target.place}`) : href(`/entry/${entry.id}/sighting/new`)
+  }
 
   const sourceFields = [
     { key: 'author', label: 'field.author' },
@@ -260,7 +270,7 @@
   {#if entry.status !== 'encoded'}
   <section class="panel stack">
     <h2>{t('ready.title')}</h2>
-    <ul class="checks">{#each CHECKS as check}<li class:done={ready[check]}><span class="tick" aria-hidden="true">{ready[check] ? '✓' : '○'}</span>{t(`ready.${check}`)}</li>{/each}</ul>
+    <ul class="checks">{#each CHECKS as check}{@const done = ready[check]}<li class:done class:missing={!done}>{#if done}<span class="tick" aria-hidden="true">✓</span><span>{t(`ready.${check}`)}</span>{:else}<a href={readyHref(check)} data-edit={readyField(check)}><span class="tick" aria-hidden="true">○</span><span>{t(`ready.${check}`)}</span></a>{/if}</li>{/each}</ul>
     <a class="text-link small" href="https://www.unicode.org/irg/pp/" target="_blank" rel="noopener">{t('ready.rules')} ↗</a>
   </section>
   {/if}
@@ -349,7 +359,7 @@
   .supported .kind { flex:none; color:var(--muted); font-size:11.5px } .supported .text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
   article:target { outline:2px solid var(--accent); outline-offset:2px } article { scroll-margin-block:16px }
   .checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:6px 16px; margin:0; padding:0; list-style:none; color:var(--muted) }
-  .checks li { display:flex; gap:8px } .checks li.done { color:var(--ink) } .checks li.done .tick { color:var(--good) } .tick { flex:none; width:1em; text-align:center }
+  .checks li { display:flex; gap:8px } .checks li.done { color:var(--ink) } .checks li.done .tick { color:var(--good) } .checks li.missing { color:var(--wrong) } .checks li a { display:flex; gap:8px; color:inherit } .checks li a:hover { text-decoration:underline; text-underline-offset:3px } .tick { flex:none; width:1em; text-align:center }
   .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px } .pictures.single { grid-template-columns:minmax(0,1fr) }
   figure { display:flex; flex-direction:column; gap:6px; margin:0; min-width:0 }
   .pictures:not(.single) { --picture-height: 260px }
