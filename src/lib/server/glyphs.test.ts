@@ -46,6 +46,19 @@ test('a bundled Bopomofo part draws through the build\'s asset binding', async (
   expect(await drawGlyph(bucket, { ids: 'ㄍ' }, context)).toMatch(/^M/)
 })
 
+test('overlapping cold drawings read bundled assets through their own request', async () => {
+  const { bucket, context } = await bopomofo()
+  const reads = [0, 0]
+  const paths = await Promise.all(['ㄍ', 'ㄎ'].map((ids, i) => drawGlyph(bucket, { ids }, {
+    ...context, assets: { fetch: async () => {
+      reads[i]++
+      return context.assets.fetch()
+    } }
+  })))
+  expect(paths.every(path => path?.startsWith('M'))).toBe(true)
+  expect(reads.every(count => count > 0)).toBe(true)
+})
+
 test('a description with a layout is drawn part by part as markup, and kept under its own name', async () => {
   const { bucket, kept, context } = await bopomofo()
   const moved = { ids: '⿰ㄍㄎ', layout: '{"0":[1,0,0,1,-40,12]}' }
