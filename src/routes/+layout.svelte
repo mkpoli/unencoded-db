@@ -2,7 +2,7 @@
   import '../app.css'
   import { afterNavigate } from '$app/navigation'
   import { page } from '$app/state'
-  import { onMount } from 'svelte'
+  import { tick } from 'svelte'
   import { LOCALES, LOCALE_NAMES, LOCALE_COOKIE } from '$lib/i18n'
   import { href, locale, t } from '$lib/t'
   import { syncFavourites } from '$lib/favourites.svelte'
@@ -12,7 +12,9 @@
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
   const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
   $effect(() => { syncFavourites(data.person?.id ?? null, data.favourites) })
-  let compact = $state(true)
+  type NavMode = 'full' | 'priority' | 'compact'
+  let navMode = $state<NavMode>()
+  let navigation = $state<HTMLElement>()
   let navLinks = $state<HTMLDivElement>()
   let navToggle = $state<HTMLButtonElement>()
   let menu = $state<HTMLDetailsElement>()
@@ -20,12 +22,46 @@
   const showSignIn = $derived(!data.person && data.signIn)
   const account = $derived(data.person?.name ?? (showSignIn ? t('nav.signIn') : t('me.name')))
 
-  onMount(() => {
-    const layout = matchMedia('(max-width: 70rem)')
-    const update = () => { compact = layout.matches }
-    update()
-    layout.addEventListener('change', update)
-    return () => layout.removeEventListener('change', update)
+  // Measure the actual translated labels at their inline size, including moderator navigation.
+  // The nav owns the space left between the wordmark and the actions.
+  $effect(() => {
+    const nav = navigation
+    if (!nav || !('showPopover' in HTMLElement.prototype)) return
+    void locale()
+    void data.person?.moderator
+    let live = true
+    function fit() {
+      if (!live || !nav) return
+      const focus = document.activeElement
+      const focusedLink = focus instanceof HTMLAnchorElement && nav.contains(focus) ? focus.getAttribute('href') : null
+      nav.setAttribute('data-measuring', '')
+      const links = [...nav.querySelectorAll<HTMLAnchorElement>('a')]
+      const available = nav.getBoundingClientRect().width
+      const gap = parseFloat(getComputedStyle(nav).columnGap)
+      const widths = links.map(link => link.getBoundingClientRect().width)
+      const all = widths.reduce((sum, width) => sum + width, 0) + gap * (widths.length - 1)
+      const priority = widths.slice(0, 2).reduce((sum, width) => sum + width, 0) + 2 * gap + (navToggle?.offsetWidth ?? 0)
+      nav.removeAttribute('data-measuring')
+      const next: NavMode = all <= available ? 'full' : priority <= available ? 'priority' : 'compact'
+      if (nav.dataset.mode === next) {
+        if (navLinks?.matches(':popover-open')) positionNavigation()
+        return
+      }
+      if (navLinks?.matches(':popover-open')) navLinks.hidePopover()
+      navMode = next
+      if (focusedLink || focus === navToggle) void tick().then(() => {
+        if (!live) return
+        const target = [...nav.querySelectorAll<HTMLAnchorElement>('a')].find(link => link.getAttribute('href') === focusedLink)
+        if (target?.getClientRects().length) target.focus()
+        else if (next === 'full') nav.querySelector('a')?.focus()
+        else navToggle?.focus()
+      })
+    }
+    const observer = new ResizeObserver(fit)
+    observer.observe(nav)
+    document.fonts.addEventListener('loadingdone', fit)
+    void document.fonts.ready.then(fit)
+    return () => { live = false; observer.disconnect(); document.fonts.removeEventListener('loadingdone', fit) }
   })
 
   afterNavigate(() => {
@@ -33,8 +69,8 @@
     if (menu) menu.open = false
   })
 
-  function placeNavigation(event: ToggleEvent) {
-    if (event.newState !== 'open' || !navToggle || !navLinks) return
+  function positionNavigation() {
+    if (!navToggle || !navLinks) return
     const { left, bottom } = navToggle.getBoundingClientRect()
     navLinks.style.setProperty('--nav-left', `${left}px`)
     navLinks.style.setProperty('--nav-top', `${bottom}px`)
@@ -57,19 +93,24 @@
 
 <svelte:window onpointerdown={closeMenu} onkeydown={dismissSettings} />
 
+{#snippet primaryLinks()}
+  <a class:active={section === 'browse'} aria-current={section === 'browse' ? 'page' : undefined} href={href()}>{t('nav.browse')}</a>
+  <a class:active={section === 'fonts'} aria-current={section === 'fonts' ? 'page' : undefined} href={href('/fonts')}>{t('nav.fonts')}</a>
+{/snippet}
+
 <header class="site-header">
   <a class="wordmark" href={href()} aria-label={t('app.name')}>
     <svg viewBox="0 0 32 32" fill="none" width="26" height="26" aria-hidden="true"><path d="M4 4h9v9H4z" fill="currentColor"/><path d="M19 4h9v9h-9z" fill="currentColor"/><path d="M4 19h9v9H4z" fill="currentColor"/><path d="M19 19h9v9h-9z" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"/></svg>
     <span class="name">{t('app.name')}</span>
     <small class="by" lang="en">GLYPH <b>ATLAS</b></small>
   </a>
-  <nav class="site-nav">
+  <nav class="site-nav" bind:this={navigation} data-mode={navMode}>
+    {#if navMode === 'priority'}{@render primaryLinks()}{/if}
     <button class="button nav-toggle" bind:this={navToggle} type="button" aria-label={t('nav.navigation')} aria-controls="site-links" popovertarget="site-links">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
-    <div class="site-links" id="site-links" bind:this={navLinks} popover={compact ? 'auto' : undefined} onbeforetoggle={placeNavigation}>
-      <a class:active={section === 'browse'} aria-current={section === 'browse' ? 'page' : undefined} href={href()}>{t('nav.browse')}</a>
-      <a class:active={section === 'fonts'} aria-current={section === 'fonts' ? 'page' : undefined} href={href('/fonts')}>{t('nav.fonts')}</a>
+    <div class="site-links" id="site-links" bind:this={navLinks} popover={navMode === 'full' ? undefined : 'auto'} onbeforetoggle={event => { if (event.newState === 'open') positionNavigation() }}>
+      {#if navMode !== 'priority'}{@render primaryLinks()}{/if}
       <a class:active={section === 'radicals'} aria-current={section === 'radicals' ? 'page' : undefined} href={href('/radicals')}>{t('nav.radicals')}</a>
       <a class:active={section === 'tags'} aria-current={section === 'tags' ? 'page' : undefined} href={href('/tags')}>{t('nav.tags')}</a>
       <a class:active={section === 'chronology'} aria-current={section === 'chronology' ? 'page' : undefined} href={href('/chronology')}>{t('nav.chronology')}</a>
@@ -124,11 +165,13 @@
   .name { font-size: 1.0625rem; font-weight: 600; letter-spacing: .02em }
   .by { padding-inline-start: 10px; border-inline-start: 1px solid var(--line); color: var(--muted); font-size: 10.5px; letter-spacing: .12em; font-weight: 400; white-space: nowrap }
   .by b { font-weight: 600 }
-  .site-nav { min-inline-size: 0; max-inline-size: 100% }
+  .site-nav { display: flex; flex: 1 1 0; min-inline-size: max(40px, var(--target-size)); align-self: stretch; align-items: center; column-gap: clamp(12px, 1.5vw, 26px); margin-block: -12px }
+  .site-nav > a { align-self: stretch }
+  .site-nav[data-mode="full"] .site-links { align-self: stretch; align-items: stretch }
   .site-links { position: static; display: flex; flex-wrap: wrap; align-items: center; gap: 2px clamp(12px, 1.5vw, 26px); inline-size: auto; margin: 0; padding: 0; border: 0; background: none; color: inherit }
-  .site-links a { display: flex; align-items: center; min-block-size: var(--target-size); padding-block: 8px; border-bottom: 2px solid transparent; color: var(--muted) }
-  .site-links a:hover { color: var(--ink) }
-  .site-links a.active { color: var(--ink); border-bottom-color: var(--ink) }
+  .site-nav a { white-space: nowrap; display: flex; align-items: center; min-block-size: var(--target-size); padding-block: 8px; border-bottom: 2px solid transparent; color: var(--muted) }
+  .site-nav a:hover { color: var(--ink) }
+  .site-nav a.active { color: var(--ink); border-bottom-color: var(--ink) }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-inline-size: 0; margin-inline-start: auto }
   .who-name { max-inline-size: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .menu { position: relative; flex: none }
@@ -148,46 +191,52 @@
   @media (max-width: 80rem) {
     .by { display: none }
   }
-  @media (width > 70rem) {
-    .site-nav { display: flex; align-self: stretch; margin-block: -12px }
-    .site-links { block-size: auto; align-items: stretch; overflow: visible }
-  }
   @media (max-width: 70rem) {
-    .wordmark { flex: 1 1 auto }
     .who, .add { padding-inline: 10px }
-
-    @supports selector(:popover-open) {
-      .nav-toggle { display: inline-flex }
-      .site-links[popover] {
-        --nav-size: min(18rem, calc(100% - 2 * var(--page-gutter)));
-        --nav-offset: min(calc(var(--nav-top, 4rem) + 6px), 50dvb);
-        position: absolute;
-        display: none;
-        inset: auto;
-        inset-block-start: calc(var(--nav-offset) + var(--nav-scroll, 0px));
-        inset-inline-start: clamp(var(--page-gutter), var(--nav-left, var(--page-gutter)), calc(100% - var(--page-gutter) - var(--nav-size)));
-        inline-size: var(--nav-size);
-        max-inline-size: none;
-        max-block-size: min(calc(100dvb - var(--nav-offset) - 8px), 24rem);
-        margin: 0;
-        padding: 6px;
-        overflow: auto;
-        overscroll-behavior: contain;
-        border: 1px solid var(--line);
-        border-radius: 9px;
-        background: var(--surface);
-        box-shadow: 0 8px 28px rgb(0 0 0 / 14%);
-      }
-      .site-links[popover]:popover-open { display: grid }
-      .site-links a { padding: 8px 10px; border: 0; border-radius: 5px }
-      .site-links a:hover, .site-links a.active { background: var(--surface-selected) }
-    }
   }
-  @media (max-width: 34rem) {
+  @supports selector(:popover-open) {
+    .site-nav:not([data-mode="full"]) .nav-toggle { display: inline-flex }
+    .site-links[popover] {
+      --nav-size: min(18rem, calc(100% - 2 * var(--page-gutter)));
+      --nav-offset: min(calc(var(--nav-top, 4rem) + 6px), 50dvb);
+      position: absolute;
+      display: none;
+      inset: auto;
+      inset-block-start: calc(var(--nav-offset) + var(--nav-scroll, 0px));
+      inset-inline-start: clamp(var(--page-gutter), var(--nav-left, var(--page-gutter)), calc(100% - var(--page-gutter) - var(--nav-size)));
+      inline-size: var(--nav-size);
+      max-inline-size: none;
+      max-block-size: min(calc(100dvb - var(--nav-offset) - 8px), 24rem);
+      margin: 0;
+      padding: 6px;
+      overflow: auto;
+      overscroll-behavior: contain;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--surface);
+      box-shadow: 0 8px 28px rgb(0 0 0 / 14%);
+    }
+    .site-links[popover]:popover-open { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) }
+    .site-links[popover] a { white-space: normal; overflow-wrap: anywhere; padding: 8px 10px; border: 0; border-radius: 5px }
+    .site-links[popover] a:hover, .site-links[popover] a.active { background: var(--surface-selected) }
+  }
+  @media (min-width: 94rem) {
+    .site-nav:not([data-mode]) .nav-toggle { display: none }
+    .site-nav:not([data-mode]) .site-links { display: flex; position: static; inline-size: auto; max-block-size: none; overflow: visible; padding: 0; border: 0; box-shadow: none; align-self: stretch; align-items: stretch }
+    .site-nav:not([data-mode]) .site-links a { padding-inline: 0 }
+  }
+  @media (max-width: 42rem) {
     .wordmark { flex-basis: 100% }
     .who { min-inline-size: max(40px, var(--target-size)) }
     .who, .add { padding-inline: 8px }
     .who:not(.sign-in) .who-name, .sign-in svg { display: none }
     .site-links { --nav-top: 7rem }
   }
+  @supports not selector(:popover-open) {
+    .site-nav { order: 3; flex: 1 1 100%; margin-block: 0 }
+  }
+  /* Keep measurements independent of the open panel's grid, padding and wrapping. */
+  .site-nav:global([data-measuring]) .site-links { display: flex; position: absolute; visibility: hidden; inline-size: max-content; max-inline-size: none; flex-wrap: nowrap; padding: 0; border: 0 }
+  .site-nav:global([data-measuring]) a { padding-inline: 0; white-space: nowrap; inline-size: max-content; flex: none }
+  .site-nav:global([data-measuring]) .nav-toggle { display: inline-flex; flex: none }
 </style>
