@@ -46,6 +46,19 @@ test('a bundled Bopomofo part draws through the build\'s asset binding', async (
   expect(await drawGlyph(bucket, { ids: 'ㄍ' }, context)).toMatch(/^M/)
 })
 
+test('overlapping cold drawings read bundled assets through their own request', async () => {
+  const { bucket, context } = await bopomofo()
+  const reads = [0, 0]
+  const paths = await Promise.all(['ㄍ', 'ㄎ'].map((ids, i) => drawGlyph(bucket, { ids }, {
+    ...context, assets: { fetch: async () => {
+      reads[i]++
+      return context.assets.fetch()
+    } }
+  })))
+  expect(paths.every(path => path?.startsWith('M'))).toBe(true)
+  expect(reads.every(count => count > 0)).toBe(true)
+})
+
 test('a description with a layout is drawn part by part as markup, and kept under its own name', async () => {
   const { bucket, kept, context } = await bopomofo()
   const moved = { ids: '⿰ㄍㄎ', layout: '{"0":[1,0,0,1,-40,12]}' }
@@ -87,4 +100,16 @@ test('the server lists every bundled file the composer reads', async () => {
   const { composerData } = await import('$lib/composer-data')
   // The Unicode shards are listed by the build; the rest by name.
   expect(Object.keys(dataUrls).filter(name => !name.startsWith('unicode/') && !(name in composerData))).toEqual([])
+})
+
+test('simultaneous requests for the same glyph own their R2 reads', async () => {
+  let reads = 0
+  const bucket = {
+    get: async () => {
+      const value = 'M' + ++reads
+      return { text: async () => value }
+    }
+  } as unknown as Pick<R2Bucket, 'get' | 'put'>
+  const paths = await Promise.all([drawGlyph(bucket, { ids: '木' }), drawGlyph(bucket, { ids: '木' })])
+  expect(new Set(paths)).toEqual(new Set(['M1', 'M2']))
 })

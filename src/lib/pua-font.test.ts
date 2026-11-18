@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test'
+import { expect, spyOn, test } from 'bun:test'
 import { parse } from 'opentype.js'
 import { fontFiles } from './font-files'
 import { missingOutline, outline } from './pua-font'
@@ -30,7 +30,7 @@ test('browser preview embeds only the selected records with the downloadable fac
   const rows = [1, 6401].map(id => ({ id, ids: null, layout: null, cover_key: null, marked_sighting: null }))
   const face = { style: 'serif', version: 'test', source: '' } as const
   const controller = new AbortController()
-  const preview = parse(await previewFont(rows, face, controller.signal))
+  const preview = parse((await previewFont(rows, face, controller.signal)).buffer!)
   const archiveFont = fontFiles('Serif', rows.map(({ id }) => ({ id, path: missingOutline() })), new Date())
   const exported = parse(Object.values(archiveFont)[0].buffer as ArrayBuffer)
   expect(preview.names.fontFamily.en).toBe(exported.names.fontFamily.en)
@@ -42,4 +42,38 @@ test('browser preview embeds only the selected records with the downloadable fac
   }
   controller.abort()
   await expect(previewFont(rows, face, controller.signal)).rejects.toThrow()
+})
+
+test('a failed glyph leaves the rest visible and only that glyph is requested on retry', async () => {
+  const { previewFont } = await import('./font-preview')
+  const rows = ['木', '水'].map((ids, i) => ({ id: i + 1, ids, layout: null, cover_key: null, marked_sighting: null }))
+  const face = { style: 'sans', version: 'test', source: '' } as const
+  const paths = new Map()
+  const signal = new AbortController().signal
+  const fetcher = spyOn(globalThis, 'fetch')
+  const calls: string[] = []
+  let recovered = false
+  const respond = async (input: Parameters<typeof fetch>[0]) => {
+    const ids = new URL(String(input), 'https://example.test').searchParams.get('ids')!
+    calls.push(ids)
+    return ids === '水' && !recovered ? new Response(null, { status: 500 }) : Response.json({ d: 'M0 0H10V10Z' })
+  }
+  fetcher.mockImplementation(Object.assign(respond, { preconnect: fetch.preconnect }))
+  try {
+    const unavailable = await previewFont(rows.slice(1), face, signal, paths)
+    expect(unavailable).toEqual({ buffer: null, failed: [2] })
+    calls.length = 0
+    const partial = await previewFont(rows, face, signal, paths)
+    expect(partial.failed).toEqual([2])
+    expect(parse(partial.buffer!).charToGlyphIndex(String.fromCodePoint(privateCode(1)))).toBeGreaterThan(0)
+    expect(calls.filter(ids => ids === '水')).toHaveLength(2)
+    recovered = true
+    calls.length = 0
+    const complete = await previewFont(rows, face, signal, paths)
+    expect(calls).toEqual(['水'])
+    expect(complete.failed).toEqual([])
+    expect(complete.buffer).toBeInstanceOf(ArrayBuffer)
+  } finally {
+    fetcher.mockRestore()
+  }
 })

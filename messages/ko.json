@@ -360,6 +360,7 @@
   "fonts.prev": "이전 글자",
   "fonts.next": "다음 글자",
   "fonts.empty": "공개된 글자가 없습니다.",
+  "fonts.partial": "불러오지 못한 글자: {n}",
   "fonts.previewError": "글꼴을 불러오지 못했습니다.",
   "fonts.retry": "다시 시도",
   "about.fontDownload": "PUA 글꼴 (TTF, OTF)",
