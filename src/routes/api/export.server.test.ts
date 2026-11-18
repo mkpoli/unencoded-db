@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test'
 import { openTestDb } from '$lib/server/testdb'
 import { exportPage, sameIds } from '$lib/server/entries'
 import { GET as exportGet } from './entries/+server'
+import { GET as fontExport } from './font-export/+server'
+import { composerDrawing, GLYPH_STYLES } from '$lib/composer'
 
 function fixture() {
   const { db, raw } = openTestDb()
@@ -146,4 +148,30 @@ test('export and exact match use their indexes without temporary sorts', async (
     missing.raw.exec(`DROP INDEX ${index}`)
     await expect(exportPage(missing.db, 0, 10)).rejects.toThrow()
   }
+})
+
+test('font downloads read current visible records and the deployed styles', async () => {
+  const { db, raw } = fixture()
+  const load = async () => {
+    const response = await fontExport({ platform: { env: { DB: db } } } as any)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    return await response.json() as { records: { id: number; ids: string | null; layout: string | null; cover_key: string | null; marked_sighting: number | null }[]; styles: { style: string; version: string; adjustedVersion?: string }[] }
+  }
+  raw.exec(`UPDATE entries SET cover_key = 'thumb' WHERE id = 3;
+    INSERT INTO sightings(id, entry_id, first_entry, place, created_by, created_at, updated_at)
+    VALUES(999, 3, 3, 'book', 'p', '2026', '2026');
+    INSERT INTO sighting_media VALUES(999, 0, 'image', 'image/png', 30, 40, 'thumb', NULL)`)
+  expect((await load()).records[1].marked_sighting).toBeNull()
+  raw.exec("UPDATE sighting_media SET box = '[[1,2,3,4]]' WHERE sighting_id = 999")
+  expect((await load()).records[1].marked_sighting).toBe(999)
+  raw.exec("UPDATE sightings SET hidden_at = '2026' WHERE id = 999")
+  const first = await load()
+  expect(first.records[1].marked_sighting).toBeNull()
+  expect(first.records.map(row => row.id)).toEqual([1, 3])
+  expect(first.styles.map(face => face.style)).toEqual([...GLYPH_STYLES])
+  expect(first.styles[0]).toMatchObject({ style: 'sans', version: composerDrawing('sans'), adjustedVersion: composerDrawing('sans', true) })
+  expect(first.styles[0].version).not.toBe(first.styles[0].adjustedVersion)
+  expect(first.styles.filter(face => face.adjustedVersion)).toHaveLength(1)
+  raw.exec("UPDATE entries SET merged_into = 1 WHERE id = 3; UPDATE entries SET ids = '⿱木木' WHERE id = 1")
+  expect((await load()).records).toEqual([{ id: 1, ids: '⿱木木', layout: null, cover_key: null, marked_sighting: null }])
 })

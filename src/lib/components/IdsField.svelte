@@ -190,7 +190,7 @@
 
 <style>
   /* One grid for the first description and the rows under it, so their fields share an edge. */
-  .descriptions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 10px; min-width: 0 }
+  .descriptions { container: descriptions / inline-size; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 10px; min-width: 0 }
   .descriptions > *, .more > * { grid-column: 1 / -1 }
   .main, .more, .row-item { display: grid; grid-template-columns: subgrid; align-items: start; gap: 8px 10px; min-width: 0 }
   /* Level with the field under its label. */
@@ -218,9 +218,8 @@
   @media (prefers-reduced-motion: reduce) { .chevron { transition: none } }
   .tools { padding-top: 4px }
   .tools[hidden] { display: none }
-  @media (max-width: 700px) {
-    .descriptions { grid-template-columns: minmax(0, 1fr) 36px }
-    .main > :global(*) { grid-column: 1 / -1 }
+  @container descriptions (inline-size < 23rem) {
+    .main { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) }
     .build { min-height: 40px; margin-top: 0; justify-self: start }
   }
 </style>

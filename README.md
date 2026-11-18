@@ -31,6 +31,12 @@ Sign-in requires a confidential client registered with the Glyph Atlas issuer fo
 
 Without client credentials, the site offers anonymous contributions. Signing in links the browser's anonymous contributions to the account; signing out ends the local session.
 
+## Evidence dates
+
+Report dates, original dates and dates in a citation chain keep the contributor's transcription. Chinese and Japanese era dates use the [HuTime Calendar Conversion API](https://ap.hutime.org/cal/). Each HuTime conversion records its query, precision and inclusive Western-calendar bounds. For example, 明萬曆34年 runs from 1606-02-07 through 1607-01-27. The chronology files it under 1606. Dates already in the Western calendar use the same 1582 Julian/Gregorian cutover. An ambiguous or unreadable expression stays available as entered. A dynasty name or the prefix 日本 can identify the intended calendar.
+
+The local setup and production release run the date sweep after applying migrations. Saving a sighting retries its unresolved dates. To retry all unresolved dates locally, run `bun scripts/sweep-dates.ts --local`. Add `--recheck` to verify existing readings again. A failed lookup preserves the previous reading. The sweep also rebuilds source years, earliest sightings and decade counts. The paged JSON export includes a `date_readings` dictionary keyed by the original wording. The paged CSV export carries the same readings for each sighting in the `date_readings` column; the whole-dataset files keep the transcribed dates in each sighting.
+
 ## Agents
 
 `https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. In Claude Code:
@@ -58,7 +64,9 @@ An agent can sign in, and then writes under a person's name. The site is the OAu
 | `entries` | One character: script, status, description, radical, strokes, and the summary a gallery tile draws |
 | `claims` | What a record states more than once: description sequences, composition, readings, meanings, codes, related characters, IVD, categories, collections, tags |
 | `sightings` | One place the character was seen: where, page, date, context, style, source types |
-| `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and, optionally, a second source it was found through |
+| `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
+| `date_readings`, `evidence_dates` | Calendar readings and the view of transcribed dates in sources, sightings and revision history |
+| `date_index_state` | Generation used to retry writes when their date readings change |
 | `sighting_media` | A sighting's pictures, each with its mark and thumbnail |
 | `revisions` | The journal: every state of an entry or a sighting, with its author |
 | `categories`, `category_changes` | The categories, each with a fixed name, a label, a parent and a place among its siblings, and the log of their changes |
@@ -94,6 +102,12 @@ The JSON file carries the record's public code, the name it is credited to, and 
 
 A download is generated in one Worker request, so D1's query budget per invocation bounds how large it can grow; a dataset beyond that budget is read through the paged API.
 
+## PUA fonts
+
+The **Fonts** page previews each glyph style, lets readers type or insert characters from the gallery, and links each glyph to its record. **Download fonts (TTF + OTF)** downloads a ZIP built from the public records and composer versions current when the download starts. Each glyph style has its own font family. Install either format for each family.
+
+The archive includes component licences and a `mapping.json` that pairs each record code with its copyable character and private-use code point. Assignments start at U+E000 for record 1 and continue through the supplementary private-use areas. Hidden and merged records leave gaps. Each style uses the record’s primary drawing and layout. Where a drawing is unavailable, the font uses a monochrome tracing of the marked character in the cover image or, if that too is unavailable, a hollow square. Descriptions with Shuishu components use a placeholder because the chart font has no stated redistribution terms. The mapping identifies the source for each record and style and links to the sighting for a marked cover.
+
 ## Record codes
 
 A record's id is stored as an integer and shown in hexadecimal as `R+A1C2`, beside the same digits spelled with the first sixteen characters of the 千字文 (天 = 0 … 張 = F): 盈地辰玄. The 千字文 digits were proposed by NGWU YOH (chat message, 2026-11-14, unpublished).
@@ -117,10 +131,15 @@ Each entry indexes at most 400 distinct terms, drawn from its fields, its claims
 ## Character drawings
 
 The gallery draws each record's IDS with [han-compose](https://github.com/mkpoli/han-compose), from the composer export at `https://ids-input-composer.mkpoli.workers.dev/`. The export's files and the drawn paths stay in the `MEDIA` bucket under `composer/` and `glyphs/`. A missing drawing is composed in the background, and `/api/glyph?ids=…&v=…` answers one the page did not have. Only descriptions on visible records are drawn. A record's page draws one set of styles for each form its descriptions name; descriptions that normalize or spell the same form share the drawing.
+In the character form, open **Adjust layout** and choose a glyph style before moving or resizing its parts. Each of the five styles saves its own placement.
 
-A description can carry a layout: the parts moved, scaled or turned from where the composer puts them, each as an SVG matrix under its place in the description (`1.0` is the first part of the second part). The form's drawing adjusts the first description's layout with ids-input's layer document, and the gallery draws the description through it; `/api/glyph?ids=…&v=…&layout=…` answers such a drawing.
+A description can carry a layout. The keys are component paths such as `1.0`, the first part of the second part, and the values are six-number SVG affine matrices. The character form adjusts the first description, and the gallery uses the saved layout for each drawing.
+
+Records returned by `/api/entries` may carry a plain map of placements shared by every style, or an object with a `faces` map keyed by glyph style and an optional legacy `shared` map. A missing face uses `shared` when present. An empty face map restores the composer's layout for that face. For `/api/glyph?ids=…&v=…&layout=…`, pass only the matrix map for the requested style.
 
 ## Third-party materials
+
+The list of Japanese era names used to disambiguate HuTime responses is adapted from the [DILA Time Authority Database](https://github.com/DILA-edu/Authority-Databases/tree/b4cf4b4/authority_time), licensed under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
 
 The IDS editor uses separately licensed data and fonts. See the [third-party notices](static/third-party/ids-input/NOTICE.md); redistribution rights for some materials remain unverified.
 

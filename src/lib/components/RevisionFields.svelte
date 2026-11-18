@@ -1,6 +1,8 @@
 <script lang="ts">
   // A past version of a record or a sighting, as it read then. A record's claims are listed by kind, each
   // with the claims it held under and the sightings it rested on.
+  import EvidenceDate from './EvidenceDate.svelte'
+  import type { DateReading } from '$lib/dates'
   import { doculectKey } from '$lib/doculects'
   import { CLAIM_KINDS, claimsOf, compositionOf, layoutOf, scopesOf, type Claim, type ClaimKind } from '$lib/claims'
   import { analyze } from '$lib/composition'
@@ -9,9 +11,10 @@
   import { COLLECTIONS, type TagType } from '$lib/tags'
   import { parseSightingTypes } from '$lib/scripts'
   import { statusOf } from '$lib/status'
+  import RelationCharacter from './RelationCharacter.svelte'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
   import { locale, t } from '$lib/t'
-  let { fields, sighting = false, labels = new Map(), tagTypes = new Map() }: { fields: EntryFields | SightingFields; sighting?: boolean; labels?: ReadonlyMap<string, string>; tagTypes?: ReadonlyMap<string, TagType> } = $props()
+  let { fields, dates, sighting = false, labels = new Map(), tagTypes = new Map() }: { dates?: Map<string, DateReading | null>; fields: EntryFields | SightingFields; sighting?: boolean; labels?: ReadonlyMap<string, string>; tagTypes?: ReadonlyMap<string, TagType> } = $props()
   const sourceFields = [
     { key: 'title', label: 'field.title' },
     { key: 'author', label: 'field.author' },
@@ -55,11 +58,11 @@
       {#if source.url}<a class="text-link url" href={source.url} target="_blank" rel="noopener noreferrer">{source.url} ↗</a>{/if}
     </div>
     <dl class="facts">
-      {#each sourceFields as field}{#if source[field.key]}<div><dt>{t(field.label)}</dt><dd>{source[field.key]}</dd></div>{/if}{/each}
+      {#each sourceFields as field}{#if source[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={source[field.key]} reading={dates?.get(source[field.key] ?? '')} />{:else}{source[field.key]}{/if}</dd></div>{/if}{/each}
       {#if source.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${source.context}`)}</dd></div>{/if}
       {#if source.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${source.style}`)}</dd></div>{/if}
       {#if types.length}<div><dt>{t('field.sourceTypes')}</dt><dd>{types.map(type => t(`evidence.type.${type}`)).join(' · ')}</dd></div>{/if}
-      {#each source.vias as via, position (position)}<div class="wide"><dt>{t('field.via')}</dt><dd>{[via.title, via.author, via.publisher, via.report_date, via.url].filter(Boolean).join(' · ')}</dd></div>{/each}
+      {#each source.vias as via, position (position)}<div class="wide"><dt>{t('field.via')}</dt><dd>{[via.title, via.author, via.publisher, via.url].filter(Boolean).join(' · ')}{#if via.report_date}{#if via.title || via.author || via.publisher || via.url} · {/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}</dd></div>{/each}
     </dl>
     {#if source.note}<p class="description">{source.note}</p>{/if}
   </div>
@@ -87,7 +90,7 @@
       <div class="relations">
         {#each claimsOf(entry.claims, 'relation') as relation}
           <dl class="facts relation">
-            <div><dt>{t('field.relatedCharacter')}</dt><dd class="relation-character">{relation.value}</dd></div>
+            <div><dt>{t('field.relatedCharacter')}</dt><dd class="relation-character"><RelationCharacter value={relation.value} /></dd></div>
             <div><dt>{t('field.relatedRelationship')}</dt><dd class="linked">{t(`relationship.${String(relation.data?.relationship ?? '')}`)}{@render scopes(relation, entry.claims)}</dd></div>
             {#if relation.sightings.length}<div><dt>{t('field.basis')}</dt><dd class="linked">{@render bases(relation)}</dd></div>{/if}
             {#if relation.data?.difference}<div class="wide"><dt>{t('field.relatedDifference')}</dt><dd>{relation.data.difference}</dd></div>{/if}
@@ -104,7 +107,7 @@
   .source-head { display: flex; flex-direction: column; gap: 3px; min-width: 0 }
   .source-head h3 { font-size: 16px; font-weight: 600 }
   .description { max-width: 75ch; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6 }
-  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px 20px; margin: 0 }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 10px 20px; margin: 0 }
   .facts:empty { display: none }
   dt { color: var(--muted); font-size: 11px }
   dd { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere }

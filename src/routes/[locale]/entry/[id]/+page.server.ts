@@ -1,3 +1,4 @@
+import { readDates, sightingDates } from '$lib/server/date-readings'
 import { createTag, tagList } from '$lib/server/tags'
 import { error, fail, redirect } from '@sveltejs/kit'
 import { isDescription } from 'ids-input'
@@ -23,11 +24,12 @@ export const load: PageServerLoad = async (event) => {
   const filed = path && held ? filedUnder(path, held.counts, held.stated).map(({ path, radical }) => ({ path, radical })) : []
   const sightings = found.sightings.filter(s => !s.hidden_at)
   // The record's earliest attestation, and which piece of evidence holds it.
-  const earliest = earliestSighting(sightings)
+  const dates = await readDates(env(event).DB, sightingDates(sightings))
+  const earliest = earliestSighting(sightings, dates)
   // A description another page proposes to add, ?ids_add=: one, and only a whole one. It is added to the form, not saved.
   const proposed = cleanIds(event.url.searchParams.get('ids_add') ?? '')
   const idsAdd = isDescription(proposed) ? proposed : null
-  return { idsAdd, entry: found.entry, claims: found.claims, sightings, filed, tags: await tagList(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
+  return { dates, idsAdd, entry: found.entry, claims: found.claims, sightings, filed, tags: await tagList(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
 }
 
 export const actions: Actions = {

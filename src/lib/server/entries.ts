@@ -15,6 +15,8 @@ import type { Tag } from '$lib/tags'
 import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
+import { dateText } from '$lib/dates'
+import { datedYear, prepareDates, readDates, sightingDates, type DateBook } from './date-readings'
 import { hashHex } from './image'
 import { ORDER, PAGE, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
 
@@ -74,7 +76,7 @@ function readVias(form: FormData): Citation[] {
     title: clean(columns[1][index], 300),
     author: clean(columns[2][index], 300),
     publisher: clean(columns[3][index], 300),
-    report_date: clean(columns[4][index], 40),
+    report_date: dateText(columns[4][index]),
   })))
 }
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
@@ -108,9 +110,9 @@ export function readSightingFields(form: FormData): SightingFields {
     title: text(form, 'title', 300),
     author: text(form, 'author', 300),
     publisher: text(form, 'publisher', 300),
-    report_date: text(form, 'report_date', 40),
+    report_date: dateText(form.get('report_date')),
     vias: readVias(form),
-    original_date: text(form, 'original_date', 40),
+    original_date: dateText(form.get('original_date')),
     page: text(form, 'page', 80),
     context: oneOf(text(form, 'context', 20), CONTEXTS),
     style: oneOf(text(form, 'style', 20), STYLES),
@@ -203,28 +205,22 @@ function partTags(claims: readonly Claim[]) {
   return [...new Set(claims.filter(claim => claim.kind === 'ids').flatMap(claim => partsOf(claim.value)))].map(part => `p:${part}`)
 }
 
-// A date is free text, so the first four- or three-digit run is read as the year and the rest is left alone.
-function firstYear(value: string | null) {
-  const match = value?.match(/\d{3,4}/)
-  return match ? { text: match[0], n: Number(match[0]) } : null
-}
-
 // The year a list is read by: a record's first year as a number, which keeps no leading zero.
 const yearOf = (text: string | null) => text === null ? null : Number(text)
 
 // A sighting's year: the work's own date when it is the earlier, else the date it was reported.
-function sightingYear(sighting: Pick<SightingFields, 'report_date' | 'original_date'>) {
-  const report = firstYear(sighting.report_date), original = firstYear(sighting.original_date)
+function sightingYear(sighting: Pick<SightingFields, 'report_date' | 'original_date'>, dates: DateBook) {
+  const report = datedYear(sighting.report_date, dates), original = datedYear(sighting.original_date, dates)
   return original && (!report || original.n <= report.n) ? { ...original, kind: 'original' as const } : report ? { ...report, kind: 'report' as const } : null
 }
 
 // The earliest attestation among visible sightings, and the sighting that holds it: the first added
 // of those that share its year.
-export function earliestSighting<T extends Pick<SightingFields, 'report_date' | 'original_date'> & { id?: number; hidden_at?: string | null }>(sightings: T[]) {
+export function earliestSighting<T extends Pick<SightingFields, 'report_date' | 'original_date'> & { id?: number; hidden_at?: string | null }>(sightings: T[], dates: DateBook = new Map()) {
   let found: { text: string; n: number; kind: YearKind; sighting: T } | null = null
   for (const sighting of sightings) {
     if (sighting.hidden_at) continue
-    const year = sightingYear(sighting)
+    const year = sightingYear(sighting, dates)
     if (year && (!found || year.n < found.n)) found = { ...year, sighting }
   }
   return found
@@ -235,12 +231,12 @@ type SightingState = SightingFields & { media?: StoredImage[]; hidden_at?: strin
 // What a tile shows of a record, read from its visible sightings: the cover, where it was seen, which
 // source types it has and the earliest year among them. An older work in a recent post dates the
 // sighting, not the post.
-function summarize(sightings: SightingState[]) {
+function summarize(sightings: SightingState[], dates: DateBook) {
   const visible = sightings.filter(sighting => !sighting.hidden_at)
   const cover = visible.find(sighting => sighting.media?.length)
   const types = new Set<SightingType>()
   for (const sighting of visible) for (const type of parseSightingTypes(sighting.types)) types.add(type)
-  const year = earliestSighting(visible)
+  const year = earliestSighting(visible, dates)
   const added = visible.filter(sighting => !(sighting as { id?: number }).id)
   const held = (year?.sighting as { id?: number } | undefined)?.id
   // The sighting that holds the year: a stored one by its id, or one this write inserts, by how many of
@@ -287,8 +283,10 @@ const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summ
 
 // Brings a record's tags, counts and summary up to date. It answers the statements, to run with the
 // write they belong to.
-async function reindex(db: D1Database, id: number, entry: Entry, claims: readonly Claim[], sightings: SightingState[]) {
-  const summary = summarize(sightings)
+async function reindex(db: D1Database, id: number, entry: Entry, claims: readonly Claim[], sightings: SightingState[], prepared?: DateBook) {
+  const dates = await readDates(db, sightingDates(sightings))
+  for (const [text, reading] of prepared ?? []) dates.set(text, reading)
+  const summary = summarize(sightings, dates)
   const live = !entry.merged_into && !entry.hidden_at
   const next = live ? tagsOf(entry, claims, summary) : []
   const { results } = await db.prepare(`SELECT tag FROM entry_tags WHERE entry_id = ? AND NOT (${TAG_ROWS})`).bind(id).all<{ tag: string }>()
@@ -339,15 +337,15 @@ const CITED_IN_SNAPSHOT = `UPDATE revisions SET snapshot = json_set(snapshot, '$
 
 // The citation is the source's identity: the same five fields are the same row, whether a sighting cites
 // it as its work or as where it was found.
-async function citationOf(db: D1Database, values: (string | null)[]) {
+async function citationOf(db: D1Database, values: (string | null)[], dates: DateBook) {
   if (values.every(value => value === null)) return { hash: null, statements: [] }
   const hash = await hashHex(JSON.stringify(values))
-  const year = firstYear(values[CITATION_FIELDS.indexOf('report_date')])?.n ?? null
+  const year = datedYear(values[CITATION_FIELDS.indexOf('report_date')], dates)?.n ?? null
   return { hash, statements: [db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year) VALUES(?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year)] }
 }
 // The hash of the cited work, and the hashes of the vias in the order of the chain.
-async function sourceOf(db: D1Database, fields: SightingFields) {
-  const [work, ...vias] = await Promise.all([citationOf(db, CITATION_FIELDS.map(field => fields[field])), ...tidyVias(fields.vias).map(via => citationOf(db, CITATION_FIELDS.map(field => via[field])))])
+async function sourceOf(db: D1Database, fields: SightingFields, dates: DateBook) {
+  const [work, ...vias] = await Promise.all([citationOf(db, CITATION_FIELDS.map(field => fields[field]), dates), ...tidyVias(fields.vias).map(via => citationOf(db, CITATION_FIELDS.map(field => via[field]), dates))])
   return { hash: work.hash, vias: vias.flatMap(via => via.hash === null ? [] : [via.hash]), statements: [...work.statements, ...vias.flatMap(via => via.statements)] }
 }
 const SOURCE_ID = '(SELECT id FROM sources WHERE hash = ?)'
@@ -390,45 +388,65 @@ function recount(db: D1Database, entry: number | string, also: (number | null)[]
 // claim of `fields` names the ones that support it by their place among them: 1 is `sighting`, 2 the
 // first of `more`.
 export async function createEntry(db: D1Database, fields: EntryFields, sighting: SightingFields, media: StoredImage[], who: Who, more: SightingDraft[] = []) {
-  const at = now()
-  const drafts = [{ fields: sighting, media }, ...more]
-  const claims = mapSightings(fields.claims, place => Number.isInteger(place) && place >= 1 && place <= drafts.length ? place : null)
-  const sources = await Promise.all(drafts.map(draft => sourceOf(db, draft.fields)))
-  const summary = summarize(drafts.map(draft => ({ ...draft.fields, media: draft.media })))
-  await ensureTags(db, valuesOf(claims, 'tag'), who)
-  const tags = [...new Set(tagsOf({ ...fields, merged_into: null, hidden_at: null } as unknown as Entry, claims, summary))]
-  // AUTOINCREMENT sequences are read inside the same transaction as the inserts.
-  const results = await db.batch<{ id: number }>([
-    db.prepare(`INSERT INTO entries(${ENTRY_FIELDS.join(', ')}, created_by, created_at, updated_at) VALUES(${ENTRY_FIELDS.map(() => '?').join(', ')}, ?, ?, ?) RETURNING id`)
-      .bind(...ENTRY_FIELDS.map(field => fields[field]), who.actor, at, at),
-    insertClaims(db, ENTRY_SEQ, claims),
-    db.prepare(`INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at, ip_hash) VALUES(${ENTRY_SEQ}, 'create', 1, ?, ?, ?, ?)`)
-      .bind(entrySnapshot({ ...fields, claims }), who.actor, at, who.ip),
-    ...drafts.flatMap((draft, index) => [
-      ...sources[index].statements,
-      db.prepare(`INSERT INTO sightings(entry_id, first_entry, source_id, ${OCCURRENCE_COLUMNS}, created_by, created_at, updated_at) VALUES(${ENTRY_SEQ}, ${ENTRY_SEQ}, ${SOURCE_ID}, ${OCCURRENCE_MARKS}, ?, ?, ?)`)
-        .bind(sources[index].hash, ...OCCURRENCE_FIELDS.map(field => draft.fields[field]), who.actor, at, at),
-      insertVias(db, SIGHTING_SEQ, sources[index].vias),
-      insertMedia(db, SIGHTING_SEQ, draft.media),
-      db.prepare(`INSERT INTO revisions(entry_id, sighting_id, kind, rev, snapshot, actor, at, ip_hash) VALUES(${ENTRY_SEQ}, ${SIGHTING_SEQ}, 'sighting', 1, ?, ?, ?, ?)`)
-        .bind(sightingSnapshot(draft.fields, draft.media), who.actor, at, who.ip),
-    ]),
-    ...(claims.some(claim => claim.sightings.length) ? [db.prepare(CITED_BY_PLACE), db.prepare(CITED_IN_SNAPSHOT)] : []),
-    db.prepare(`UPDATE entries SET ${SUMMARY_SET} WHERE id = ${ENTRY_SEQ}`).bind(...summaryValues(claims, summary)),
-    db.prepare(`INSERT INTO entry_tags(tag, entry_id, sightings, year) SELECT value, ${ENTRY_SEQ}, CASE WHEN value GLOB '[wp]:*' THEN 0 ELSE ? END, CASE WHEN value GLOB '[wp]:*' THEN NULL ELSE ? END FROM json_each(?)`).bind(summary.visible.length, yearOf(summary.first_year), JSON.stringify(tags)),
-    db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),
-    ...tagRows(db, ENTRY_SEQ),
-    recount(db, ENTRY_SEQ),
-  ])
-  return results[0].results[0].id
+  return withDateIndex(db, async guard => {
+    const at = now()
+    const drafts = [{ fields: sighting, media }, ...more]
+    const claims = mapSightings(fields.claims, place => Number.isInteger(place) && place >= 1 && place <= drafts.length ? place : null)
+    const dates = await prepareDates(db, sightingDates(drafts.map(draft => draft.fields)))
+    const sources = await Promise.all(drafts.map(draft => sourceOf(db, draft.fields, dates.book)))
+    const summary = summarize(drafts.map(draft => ({ ...draft.fields, media: draft.media })), dates.book)
+    await ensureTags(db, valuesOf(claims, 'tag'), who)
+    const tags = [...new Set(tagsOf({ ...fields, merged_into: null, hidden_at: null } as unknown as Entry, claims, summary))]
+    // AUTOINCREMENT sequences are read inside the same transaction as the inserts.
+    const results = await db.batch<{ id: number }>([
+      db.prepare(`INSERT INTO entries(${ENTRY_FIELDS.join(', ')}, created_by, created_at, updated_at) VALUES(${ENTRY_FIELDS.map(() => '?').join(', ')}, ?, ?, ?) RETURNING id`)
+        .bind(...ENTRY_FIELDS.map(field => fields[field]), who.actor, at, at),
+      guard,
+      ...dates.save,
+      insertClaims(db, ENTRY_SEQ, claims),
+      db.prepare(`INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at, ip_hash) VALUES(${ENTRY_SEQ}, 'create', 1, ?, ?, ?, ?)`)
+        .bind(entrySnapshot({ ...fields, claims }), who.actor, at, who.ip),
+      ...drafts.flatMap((draft, index) => [
+        ...sources[index].statements,
+        db.prepare(`INSERT INTO sightings(entry_id, first_entry, source_id, ${OCCURRENCE_COLUMNS}, created_by, created_at, updated_at) VALUES(${ENTRY_SEQ}, ${ENTRY_SEQ}, ${SOURCE_ID}, ${OCCURRENCE_MARKS}, ?, ?, ?)`)
+          .bind(sources[index].hash, ...OCCURRENCE_FIELDS.map(field => draft.fields[field]), who.actor, at, at),
+        insertVias(db, SIGHTING_SEQ, sources[index].vias),
+        insertMedia(db, SIGHTING_SEQ, draft.media),
+        db.prepare(`INSERT INTO revisions(entry_id, sighting_id, kind, rev, snapshot, actor, at, ip_hash) VALUES(${ENTRY_SEQ}, ${SIGHTING_SEQ}, 'sighting', 1, ?, ?, ?, ?)`)
+          .bind(sightingSnapshot(draft.fields, draft.media), who.actor, at, who.ip),
+      ]),
+      ...(claims.some(claim => claim.sightings.length) ? [db.prepare(CITED_BY_PLACE), db.prepare(CITED_IN_SNAPSHOT)] : []),
+      db.prepare(`UPDATE entries SET ${SUMMARY_SET} WHERE id = ${ENTRY_SEQ}`).bind(...summaryValues(claims, summary)),
+      db.prepare(`INSERT INTO entry_tags(tag, entry_id, sightings, year) SELECT value, ${ENTRY_SEQ}, CASE WHEN value GLOB '[wp]:*' THEN 0 ELSE ? END, CASE WHEN value GLOB '[wp]:*' THEN NULL ELSE ? END FROM json_each(?)`).bind(summary.visible.length, yearOf(summary.first_year), JSON.stringify(tags)),
+      db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),
+      ...tagRows(db, ENTRY_SEQ),
+      recount(db, ENTRY_SEQ),
+      ...dates.reindex,
+    ])
+    return results[0].results[0].id
+  })
 }
 
 export type EditResult = { ok: true; rev: number } | { ok: false; code: 'missing' | 'conflict' | 'merged' }
 
-const revisionMark = async (db: D1Database, id: number) => (await db.prepare('SELECT COALESCE(MAX(id), 0) AS mark FROM revisions WHERE entry_id = ?').bind(id).first<{ mark: number }>())!.mark
+const generation = '(SELECT generation FROM date_index_state)'
+const markSql = `SELECT COALESCE(MAX(id), 0) + ${generation} AS mark FROM revisions WHERE entry_id = ?`
+const revisionMark = async (db: D1Database, id: number) => (await db.prepare(markSql).bind(id).first<{ mark: number }>())!.mark
+// Create and refresh have no edited revision to guard. Compare the date index inside their write batch.
+async function withDateIndex<T>(db: D1Database, write: (guard: D1PreparedStatement) => Promise<T>): Promise<T> {
+  const current = () => db.prepare('SELECT generation FROM date_index_state').first<{ generation: number }>()
+  for (let attempt = 0; ; attempt++) {
+    const version = (await current())!.generation
+    const guard = db.prepare('UPDATE date_index_state SET generation = -1 WHERE generation != ?').bind(version)
+    try { return await write(guard) }
+    catch (error) {
+      if (attempt >= 4 || (await current())!.generation === version) throw error
+    }
+  }
+}
 // A row of an unknown kind breaks the journal's CHECK, which undoes the whole batch.
 const abort = "'conflict', 0, '{}'"
-const checkMark = (db: D1Database, id: number, mark: number, who: Who) => db.prepare(`INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) SELECT ?, ${abort}, ?, ? WHERE (SELECT COALESCE(MAX(id), 0) FROM revisions WHERE entry_id = ?) != ?`).bind(id, who.actor, now(), id, mark)
+const checkMark = (db: D1Database, id: number, mark: number, who: Who) => db.prepare(`INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) SELECT ?, ${abort}, ?, ? WHERE (${markSql}) != ?`).bind(id, who.actor, now(), id, mark)
 const checkChanged = (db: D1Database, id: number, who: Who) => db.prepare(`INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) SELECT ?, ${abort}, ?, ? WHERE changes() = 0`).bind(id, who.actor, now())
 
 // A redaction writes to the journal, so one made after the mark is read stops the batch; this catches
@@ -481,18 +499,20 @@ export class SightingLimitError extends Error {
 }
 
 export async function addSighting(db: D1Database, id: number, fields: SightingFields, media: StoredImage[], who: Who) {
-  const source = await sourceOf(db, fields)
   for (let attempt = 0; ; attempt++) {
     const mark = await revisionMark(db, id)
     const entry = await getEntryRow(db, id)
     if (!entry || entry.hidden_at || entry.merged_into) return null
     const sightings = await sightingRows(db, id)
     if (sightings.length >= SIGHTINGS_MAX) throw new SightingLimitError()
-    const index = await reindex(db, id, entry, await claimRows(db, id), [...sightings, { ...fields, media }])
+    const dates = await prepareDates(db, sightingDates([fields]))
+    const source = await sourceOf(db, fields, dates.book)
+    const index = await reindex(db, id, entry, await claimRows(db, id), [...sightings, { ...fields, media }], dates.book)
     const at = now()
     const before = [
       checkMark(db, id, mark, who),
       db.prepare(`INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) SELECT ?, ${abort}, ?, ? WHERE EXISTS (SELECT 1 FROM sightings WHERE entry_id = ? LIMIT 1 OFFSET ${SIGHTINGS_MAX - 1})`).bind(id, who.actor, at, id),
+      ...dates.save,
       ...source.statements,
     ]
     try {
@@ -507,6 +527,7 @@ export async function addSighting(db: D1Database, id: number, fields: SightingFi
           .bind(id, sightingSnapshot(fields, media), who.actor, at, who.ip),
         ...index,
         recount(db, id),
+        ...dates.reindex,
       ])
       return results[before.length].results[0].id
     } catch (error) {
@@ -527,7 +548,6 @@ export async function restoreSighting(db: D1Database, entryId: number, sightingI
 }
 
 async function writeSighting(db: D1Database, id: number, baseRev: number, fields: SightingFields, media: StoredImage[] | null, who: Who, summary: string | null, expectedEntry: number, from: number | null = null): Promise<EditResult> {
-  const source = await sourceOf(db, fields)
   for (let attempt = 0; ; attempt++) {
     const initial = await sightingRow(db, id)
     if (!initial || initial.entry_id !== expectedEntry) return { ok: false, code: 'missing' }
@@ -545,10 +565,13 @@ async function writeSighting(db: D1Database, id: number, baseRev: number, fields
     if (entry.merged_into) return { ok: false, code: 'merged' }
     const rev = current.rev + 1
     const kept = media ?? current.media
-    const index = await reindex(db, current.entry_id, entry, await claimRows(db, current.entry_id), sightings.map(s => s.id === id ? { ...s, ...fields, media: kept } : s))
+    const dates = await prepareDates(db, sightingDates([fields]))
+    const source = await sourceOf(db, fields, dates.book)
+    const index = await reindex(db, current.entry_id, entry, await claimRows(db, current.entry_id), sightings.map(s => s.id === id ? { ...s, ...fields, media: kept } : s), dates.book)
     try {
       await db.batch([
         checkMark(db, current.entry_id, mark, who),
+        ...dates.save,
         ...source.statements,
         db.prepare(`UPDATE sightings SET source_id = ${SOURCE_ID}, ${OCCURRENCE_FIELDS.map(column => `${column} = ?`).join(', ')}, rev = ?, updated_at = ? WHERE id = ? AND entry_id = ? AND rev = ? AND hidden_at IS NULL AND EXISTS (SELECT 1 FROM entries WHERE id = sightings.entry_id AND hidden_at IS NULL AND merged_into IS NULL)`)
           .bind(source.hash, ...OCCURRENCE_FIELDS.map(field => fields[field]), rev, now(), id, current.entry_id, baseRev),
@@ -562,6 +585,7 @@ async function writeSighting(db: D1Database, id: number, baseRev: number, fields
         revision(db, who, { entry: current.entry_id, sighting: id, kind: 'sighting_edit', rev, snapshot: sightingSnapshot(fields, kept), summary }),
         ...index,
         recount(db, current.entry_id, [current.source_id, ...current.vias.map(via => via.id)]),
+        ...dates.reindex,
       ])
       return { ok: true, rev }
     } catch (error) {
@@ -606,6 +630,7 @@ export async function redactRevision(db: D1Database, entry: number, revisionId: 
   if (!row || row.current === row.rev) return false
   await db.batch([
     db.prepare(`UPDATE revisions SET snapshot = '{}', summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
+    db.prepare('DELETE FROM date_readings WHERE transcription NOT IN (SELECT value FROM evidence_dates WHERE value IS NOT NULL)'),
     revision(db, who, { entry, sighting: row.sighting_id, kind: 'redact', rev: row.rev, snapshot: JSON.stringify({ revision: revisionId }), summary }),
   ])
   return true
@@ -677,8 +702,10 @@ export async function setHidden(db: D1Database, target: { entry: number; sightin
 
 /** Brings one record's tags, counts and summary up to date from what it holds. */
 export async function refresh(db: D1Database, id: number) {
-  const entry = await getEntryRow(db, id)
-  if (entry) await db.batch([...await reindex(db, id, entry, await claimRows(db, id), await sightingRows(db, id)), recount(db, id)])
+  await withDateIndex(db, async guard => {
+    const entry = await getEntryRow(db, id)
+    if (entry) await db.batch([guard, ...await reindex(db, id, entry, await claimRows(db, id), await sightingRows(db, id)), recount(db, id)])
+  })
 }
 
 export async function report(db: D1Database, target: { entry: number; sighting?: number | null }, reason: string, reporter: string) {
