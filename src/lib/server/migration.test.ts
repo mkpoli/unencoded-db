@@ -553,3 +553,30 @@ test('0029 indexes existing public names and simplified spellings and restores t
   expect(names()).toEqual(['彙音字典', '汇音字典'])
   raw.close()
 })
+
+test('0030 moves reviewed words to their link, preserves identity and skips later edits', async () => {
+  const { raw, db } = openTestDb()
+  const run = () => raw.exec(migration('0030_recover_via_quotes.sql'))
+  const words = '⿰米兆', url = 'https://x.com/zoenshiueh_lieu/status/1923670644786594004'
+  const author = '@zoenshiueh_lieu', date = '2025-05-17'
+  const hash = (title: string | null) => new Bun.CryptoHasher('sha256').update(JSON.stringify([url, title, author, 'X', date])).digest('hex')
+  raw.exec("INSERT INTO people(id,name,created_at) VALUES ('p','Person','2026')")
+  raw.exec("INSERT INTO entries(id,script,created_by,created_at,updated_at) VALUES (348,'han','p','2026','2026')")
+  raw.prepare('INSERT INTO sources(id,hash,url,title,author,publisher,report_date,records) VALUES (1979,?,?,?,?,?,?,1)').run(hash(words), url, words, author, 'X', date)
+  raw.exec("INSERT INTO sightings(id,entry_id,first_entry,place,created_by,created_at,updated_at) VALUES (353,348,348,'Page 1','p','2026','2026')")
+  raw.exec("INSERT INTO sighting_vias VALUES (353,0,1979,'Contributor correction')")
+  run()
+  expect(raw.query('SELECT title FROM sources WHERE id=1979').get()).toEqual({ title: words })
+  raw.exec('UPDATE sighting_vias SET quote=NULL')
+  run()
+  expect(raw.query('SELECT hash,title FROM sources WHERE id=1979').get()).toEqual({ hash: hash(null), title: null })
+  expect(raw.query('SELECT source_id,quote FROM sighting_vias').get()).toEqual({ source_id: 1979, quote: words })
+  expect(raw.query('SELECT lookup,spelling FROM source_aliases WHERE source_id=1979').get()).toEqual({ lookup: words, spelling: words })
+  const snapshot = raw.query('SELECT snapshot FROM revisions WHERE sighting_id=353 AND rev=2').get() as { snapshot: string }
+  expect(sightingSnapshot(snapshot.snapshot)?.vias[0]).toMatchObject({ url, title: null, quote: words })
+  expect((await getEntry(db, 348))?.sightings[0].rev).toBe(2)
+  run()
+  expect(raw.query('SELECT count(*) AS n FROM revisions').get()).toEqual({ n: 1 })
+  expect(raw.query('PRAGMA foreign_key_check').all()).toEqual([])
+  raw.close()
+})
