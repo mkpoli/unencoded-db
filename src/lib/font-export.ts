@@ -120,7 +120,7 @@ export async function exportFonts(progress: (done: number, total: number) => voi
     character: String.fromCodePoint(privateCode(row.id)), sources: {} as Record<string, string> }))
   const covers = new Map<string, Promise<Path | null>>()
   // The CFF charset includes standard strings and a custom string for each glyph name.
-  const partSize = 64000
+  const partSize = 16000
   let done = 0
   const total = records.length * styles.length
   for (const face of styles) {
