@@ -3,7 +3,7 @@ import { openTestDb } from '$lib/server/testdb'
 import { exportPage, sameIds } from '$lib/server/entries'
 import { GET as exportGet } from './entries/+server'
 import { GET as fontExport } from './font-export/+server'
-import { GLYPH_STYLES } from '$lib/composer'
+import { composerDrawing, GLYPH_STYLES } from '$lib/composer'
 
 function fixture() {
   const { db, raw } = openTestDb()
@@ -155,7 +155,7 @@ test('font downloads read current visible records and the deployed styles', asyn
   const load = async () => {
     const response = await fontExport({ platform: { env: { DB: db } } } as any)
     expect(response.headers.get('cache-control')).toBe('no-store')
-    return await response.json() as { records: { id: number; ids: string | null; layout: string | null; cover_key: string | null; marked_sighting: number | null }[]; styles: { style: string }[] }
+    return await response.json() as { records: { id: number; ids: string | null; layout: string | null; cover_key: string | null; marked_sighting: number | null }[]; styles: { style: string; version: string; adjustedVersion?: string }[] }
   }
   raw.exec(`UPDATE entries SET cover_key = 'thumb' WHERE id = 3;
     INSERT INTO sightings(id, entry_id, first_entry, place, created_by, created_at, updated_at)
@@ -169,6 +169,9 @@ test('font downloads read current visible records and the deployed styles', asyn
   expect(first.records[1].marked_sighting).toBeNull()
   expect(first.records.map(row => row.id)).toEqual([1, 3])
   expect(first.styles.map(face => face.style)).toEqual([...GLYPH_STYLES])
+  expect(first.styles[0]).toMatchObject({ style: 'sans', version: composerDrawing('sans'), adjustedVersion: composerDrawing('sans', true) })
+  expect(first.styles[0].version).not.toBe(first.styles[0].adjustedVersion)
+  expect(first.styles.filter(face => face.adjustedVersion)).toHaveLength(1)
   raw.exec("UPDATE entries SET merged_into = 1 WHERE id = 3; UPDATE entries SET ids = '⿱木木' WHERE id = 1")
   expect((await load()).records).toEqual([{ id: 1, ids: '⿱木木', layout: null, cover_key: null, marked_sighting: null }])
 })

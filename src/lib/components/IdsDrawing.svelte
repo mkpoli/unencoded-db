@@ -47,14 +47,18 @@
   import { onMount, untrack } from 'svelte'
   import { parse } from 'ids-input'
   import { cleanIds } from '$lib/ids'
-  import { carryLayout, layoutText, placeOf, type Layout } from '$lib/layout'
+  import { carryLayout, layoutForStyle, layoutText, placeOf, withStyleLayout, type Layout } from '$lib/layout'
   import { page } from '$app/state'
   import { glyphStyleOf } from '$lib/composer'
   import { locale } from '$lib/t'
+  import GlyphStyleTabs from './GlyphStyleTabs.svelte'
 
   let { ids, layout = null, chosen = null, adjusting = $bindable(false) }: { ids: string; layout?: Layout | null; chosen?: number[] | null; adjusting?: boolean } = $props()
 
   const at = locale()
+  const uid = $props.id()
+  let selectedStyle = $state<GlyphStyle | null>(null)
+  const style = $derived(selectedStyle ?? glyphStyleOf(page.data.glyphStyle))
   const sequence = $derived(cleanIds(ids))
   // Empty places are parts of a description that is being built; an empty field is no description.
   const tree = $derived(sequence ? parse(sequence, { open: true }).tree : undefined)
@@ -65,7 +69,8 @@
   let near = $state(false)
   let kit = $state.raw<Tools | null>(null)
   // The composer that last loaded, and whether it draws parts one by one: the plate adjusts only what such a one drew.
-  let preview = $state.raw<{ draw: ComposerPreview; separate: boolean } | null>(null)
+  let preview = $state.raw<{ draw: ComposerPreview; separate: boolean; style: GlyphStyle } | null>(null)
+  const sessions = new Map<GlyphStyle, DocumentSession>()
   let session = $state.raw<DocumentSession | null>(null)
   // The session's document changes in place; its version tells the preview to read it again.
   let version = $state(0)
@@ -74,10 +79,12 @@
   let statedFor = $state(untrack(() => cleanIds(ids)))
   let picked = $state.raw<number[] | null>(null)
   let undoable = $state(false)
-  const moved = $derived(Boolean(stated))
-  const separate = $derived(adjusting || moved)
-  const parted = $derived(separate && preview?.separate === true)
-  const pickedMoved = $derived(Boolean(picked && stated?.[placeOf(picked)]))
+  const activeLayout = $derived(layoutForStyle(stated, style))
+  const separate = $derived(adjusting || Boolean(activeLayout))
+  const activePreview = $derived(preview?.style === style ? preview : null)
+  const parted = $derived(separate && activePreview?.separate === true)
+  let step = $state<'idle' | 'loading' | 'composed' | 'final' | 'failed' | 'capped' | 'unavailable'>('idle')
+  const pickedMoved = $derived(Boolean(picked && activeLayout?.[placeOf(picked)]))
 
   // A plate in a folded form asks for nothing until the form is opened.
   onMount(() => {
@@ -98,12 +105,11 @@
 
   // The export's manifest and layout are read while the first description is still being typed.
   // Only a change of style, not every change of the page's data, asks for another composer.
-  const style = $derived(glyphStyleOf(page.data.glyphStyle))
   $effect(() => {
     if (!near) return
     let live = true
-    const kind = separate
-    composer(kind, style).then(found => { found.warm(); if (live) preview = { draw: found, separate: kind } }, () => {})
+    const kind = separate, face = style
+    composer(kind, face).then(found => { found.warm(); if (live) preview = { draw: found, separate: kind, style: face } }, () => {})
     return () => { live = false }
   })
 
@@ -111,19 +117,23 @@
   // part at its place keeps the move, and one that replaces the part does not. Text that is no
   // description yet leaves the layout with the last one that was.
   $effect(() => {
-    const found = kit, text = sequence
+    const found = kit, text = sequence, face = style
     if (!found) return
     untrack(() => {
-      if (session && text === statedFor) return
-      const carried = carryLayout(stated, statedFor, text)
-      const document = found.layoutDocument(text, carried)
-      if (!document) { session = null; picked = null; undoable = false; return }
-      if (session) session.open(document)
-      else session = found.createDocumentSession(document)
-      stated = carried
-      statedFor = text
-      picked = null
-      undoable = false
+      let next = text === statedFor ? sessions.get(face) : undefined
+      if (!next) {
+        const carried = carryLayout(stated, statedFor, text)
+        const document = found.layoutDocument(text, layoutForStyle(carried, face))
+        if (!document) { session = null; picked = null; undoable = false; return }
+        if (text !== statedFor) sessions.clear()
+        stated = carried
+        statedFor = text
+        next = found.createDocumentSession(document)
+        sessions.set(face, next)
+      }
+      session = next
+      picked = found.chosenPath(next)
+      undoable = next.canUndo
       version++
     })
   })
@@ -131,7 +141,7 @@
   // After a move, an undo or a reset: what the session now holds.
   function read() {
     if (!kit || !session) return
-    stated = kit.documentLayout(session.document, statedFor)
+    stated = withStyleLayout(stated, style, kit.documentLayout(session.document, statedFor))
     picked = kit.chosenPath(session)
     undoable = session.canUndo
     version++
@@ -151,7 +161,7 @@
   {#if kit && preview && tree !== undefined}
     <div class="stage">
       <kit.IdsPreview adapter={{ preview: preview.draw }} {tree} chosen={adjusting ? picked : chosen} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
-        session={parted ? session : null} {version} editable={adjusting && parted} onchoose={path => picked = path} onedit={read} />
+        session={parted ? session : null} preserveStroke={style === 'sans'} {version} bind:step editable={adjusting && parted && step === 'composed'} onchoose={path => picked = path} onedit={read} />
     </div>
   {:else}
     <div class="plate" class:empty={!drawn} role={drawn ? 'img' : undefined} aria-label={drawn ? sequence : undefined} aria-hidden={drawn ? undefined : 'true'}>
@@ -160,12 +170,17 @@
   {/if}
   {#if kit && whole}
     <div class="tools">
-      <button type="button" class="tool" aria-pressed={adjusting} title={kit.say('ids.adjust.hint')} onclick={() => adjusting = !adjusting}>{kit.say('ids.adjust.title')}</button>
+      <button type="button" class="tool" aria-pressed={adjusting} title={kit.say('ids.adjust.hint')} onclick={() => adjusting = !adjusting}>{kit.say(adjusting ? 'ids.adjust.done' : 'ids.adjust.title')}</button>
       {#if adjusting}
         <button type="button" class="tool" disabled={!undoable} onclick={undo}>{kit.say('ids.undo.label')}</button>
         <button type="button" class="tool" disabled={!pickedMoved} onclick={reset}>{kit.say('ids.adjust.reset')}</button>
       {/if}
     </div>
+    {#if adjusting}
+      <div class="tools">
+        <GlyphStyleTabs value={style} onchange={next => selectedStyle = next} />
+      </div>
+    {/if}
   {/if}
   <input type="hidden" name="layout" value={layoutText(stated)} />
   <input type="hidden" name="layout_ids" value={statedFor} />

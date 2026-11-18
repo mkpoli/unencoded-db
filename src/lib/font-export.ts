@@ -5,9 +5,10 @@ import { Path } from 'opentype.js'
 import { recordCode } from './code'
 import { fontFiles, missingOutline, outline, privateCode } from './pua-font'
 import type { GlyphStyle } from './composer'
+import { cleanLayout, layoutForStyle, layoutText } from './layout'
 
 type Row = { id: number; ids: string | null; layout: string | null; cover_key: string | null; marked_sighting: number | null }
-type Face = { style: GlyphStyle; version: string; source: string }
+type Face = { style: GlyphStyle; version: string; adjustedVersion?: string; source: string }
 const names: Record<GlyphStyle, string> = {
   sans: 'Sans', serif: 'Serif', fangsong: 'Fangsong', regular: 'Kai', 'pen-writing': 'Pen'
 }
@@ -72,8 +73,10 @@ async function drawing(row: Row, face: Face, covers: Map<string, Promise<Path | 
   // The upstream chart font has no stated redistribution permission, including for components.
   if (isShuishu(row.ids)) return { path: missingOutline(), source: 'placeholder-shuishu' }
   if (row.ids) {
-    const query = new URLSearchParams({ ids: row.ids, style: face.style, v: face.version })
-    if (row.layout) query.set('layout', row.layout)
+    const layout = layoutText(layoutForStyle(cleanLayout(row.layout, row.ids), face.style))
+    const version = layout ? face.adjustedVersion ?? face.version : face.version
+    const query = new URLSearchParams({ ids: row.ids, style: face.style, v: version })
+    if (layout) query.set('layout', layout)
     const url = '/api/glyph?' + query
     let response = await fetch(url)
     if (response.status === 503) response = await fetch(url, { cache: 'reload' })
