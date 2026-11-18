@@ -13,6 +13,9 @@ export const GET: RequestHandler = async event => {
      FROM entries e INDEXED BY entries_live_export
      WHERE e.hidden_at IS NULL AND e.merged_into IS NULL ORDER BY e.id`
   ).all()
-  const styles = GLYPH_STYLES.map(style => ({ style, version: composerDrawing(style), source: composerUrl(style) }))
+  const styles = GLYPH_STYLES.map(style => {
+    const version = composerDrawing(style), adjustedVersion = composerDrawing(style, true)
+    return { style, version, ...(adjustedVersion !== version && { adjustedVersion }), source: composerUrl(style) }
+  })
   return json({ records, styles }, { headers: { 'cache-control': 'no-store' } })
 }
