@@ -62,6 +62,10 @@
   let primary = $state(descriptions[0] ?? '')
   const composition = $derived.by(() => { const found = compositionOf(claims); return found ? JSON.stringify(found) : '' })
   const senses = createSenseDraft({ claims: untrack(() => claims), evidence: untrack(() => evidence) })
+  onMount(() => senses.start())
+  $effect(() => {
+    if (filled) senses.applyFill(filled)
+  })
 
   // A form heavier than the server takes is stopped here, where what was typed is still on the page.
   let heavy = $state(false)
@@ -213,7 +217,7 @@
       </CharacterFields>
       <div class="related"><RelationFields senses={senses} {evidence} /></div>
     </section>
-    <section class="panel"><SenseFields {evidence} fill={filled} senses={senses} relations={false} /></section>
+    <section class="panel"><SenseFields {evidence} {senses} /></section>
     <section class="group"><h2>{t('entry.sightings')}</h2>
       {#each sightings as item, index (item.key)}
         <fieldset class="panel sighting" bind:this={sections[item.key]} tabindex="-1" data-sighting>

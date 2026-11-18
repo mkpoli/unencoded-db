@@ -19,6 +19,14 @@
     await tick()
     group?.querySelector<HTMLElement>(`[data-row="${row.key}"] [data-first]`)?.focus()
   }
+  $effect(() => {
+    const key = senses.focusRequest
+    if (!key) return
+    tick().then(() => {
+      group?.querySelector<HTMLElement>(`[data-row="${key}"] [data-first]`)?.focus()
+      senses.clearFocus()
+    })
+  })
 </script>
 
 <fieldset class="group" bind:this={group}>

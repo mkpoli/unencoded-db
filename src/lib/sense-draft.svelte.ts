@@ -13,9 +13,9 @@ import { OTHER_DOCULECT, isDoculect } from './doculects'
 import type { Choice } from './components/ChoiceGroup.svelte'
 
 type Links = { key: string; evidence: string[]; under: string[] }
-export type Meaning = Links & { value: string }
-export type Reading = Links & { value: string; doculect: string; other: string }
-export type Relation = Links & { character: string; relationship: string; difference: string; note: string }
+type Meaning = Links & { value: string }
+type Reading = Links & { value: string; doculect: string; other: string }
+type Relation = Links & { character: string; relationship: string; difference: string; note: string }
 
 export type SenseDraft = ReturnType<typeof createSenseDraft>
 
@@ -36,6 +36,8 @@ export function createSenseDraft({ claims = [], evidence = [] }: { claims?: Clai
   let readings = $state<Reading[]>(untrack(() => { const found = claimsOf(claims, 'reading').map(claim => ({ ...links(claim), value: claim.value, ...stated(claim.data?.doculect) })); return found.length ? found : [{ ...blank(), value: '', doculect: '', other: '' }] }))
   let relations = $state<Relation[]>(untrack(() => claimsOf(claims, 'relation').map(claim => ({ ...links(claim), character: claim.value, relationship: String(claim.data?.relationship ?? 'uncertain'), difference: String(claim.data?.difference ?? ''), note: String(claim.data?.evidence ?? '') }))))
 
+  let focusRequest = $state('')
+
   const meaningChoices = $derived(meanings.filter(row => row.key && row.value.trim()).map((row): Choice => ({ token: row.key, value: row.key, label: row.value.trim() })))
   const readingChoices = $derived(readings.filter(row => row.key && row.value.trim()).map((row): Choice => {
     const doculect = row.doculect === OTHER_DOCULECT ? row.other.trim() : row.doculect
@@ -45,6 +47,8 @@ export function createSenseDraft({ claims = [], evidence = [] }: { claims?: Clai
   function start() {
     for (const row of [...meanings, ...readings, ...relations]) row.key ||= newClaimKey()
   }
+  function requestFocus(key: string) { focusRequest = key }
+  function clearFocus() { focusRequest = '' }
   function addMeaning() { const row = { ...fresh(), value: '' }; meanings.push(row); return row }
   function addReading(under: string[] = []) { const row = { ...fresh(under), value: '', doculect: '', other: '' }; readings.push(row); return row }
   function addRelation(under: string[] = []) { const row = { ...fresh(under), character: '', relationship: 'uncertain', difference: '', note: '' }; relations.push(row); return row }
@@ -67,7 +71,10 @@ export function createSenseDraft({ claims = [], evidence = [] }: { claims?: Clai
     get meaningChoices() { return meaningChoices },
     get readingChoices() { return readingChoices },
     get unlisted() { return unlisted },
+    get focusRequest() { return focusRequest },
     start,
+    requestFocus,
+    clearFocus,
     addMeaning,
     addReading,
     addRelation,
