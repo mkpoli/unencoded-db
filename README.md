@@ -80,6 +80,12 @@ Only a meaning or a reading can be a scope. A reading may hold under meanings, a
 
 The CSV export has one column for each kind of claim, and a claim names its links after its value: `東 (usage) [under: east | cmn:dōng] [evidence: #3 #7]`, where the numbers are values of `sighting_id`. The JSON export carries `key`, `sightings` and `under` as stored.
 
+## PUA fonts
+
+On the About page, **PUA fonts (TTF and OTF)** downloads a ZIP built from the public records and composer versions current when the download starts. Each glyph style has its own font family. Install either format for each family.
+
+The archive includes component licences and a `mapping.json` that pairs each record code with its copyable character and private-use code point. Assignments start at U+E000 for record 1 and continue through the supplementary private-use areas. Hidden and merged records leave gaps. Each style uses the record’s primary drawing and layout. Where a drawing is unavailable, the font uses a monochrome tracing of the marked character in the cover image or, if that too is unavailable, a hollow square. Descriptions with Shuishu components use a placeholder because the chart font has no stated redistribution terms. The mapping identifies the source for each record and style and links to the sighting for a marked cover.
+
 ## Record codes
 
 A record's id is stored as an integer and shown in hexadecimal as `R+A1C2`, beside the same digits spelled with the first sixteen characters of the 千字文 (天 = 0 … 張 = F): 盈地辰玄. The 千字文 digits were proposed by NGWU YOH (chat message, 2026-11-14, unpublished).
@@ -105,7 +111,9 @@ Each entry indexes at most 400 distinct terms, drawn from its fields, its claims
 The gallery draws each record's IDS with [han-compose](https://github.com/mkpoli/han-compose), from the composer export at `https://ids-input-composer.mkpoli.workers.dev/`. The export's files and the drawn paths stay in the `MEDIA` bucket under `composer/` and `glyphs/`. A missing drawing is composed in the background, and `/api/glyph?ids=…&v=…` answers one the page did not have. Only descriptions on visible records are drawn. A record's page draws one set of styles for each form its descriptions name; descriptions that normalize or spell the same form share the drawing.
 In the character form, open **Adjust layout** and choose a glyph style before moving or resizing its parts. Each of the five styles saves its own placement.
 
-A description can carry a layout: the parts moved, scaled or turned from where the composer puts them, each as an SVG matrix under its place in the description (`1.0` is the first part of the second part). The form's drawing adjusts the first description's layout with ids-input's layer document, and the gallery draws the description through it; `/api/glyph?ids=…&v=…&layout=…` answers such a drawing.
+A description can carry a layout. The keys are component paths such as `1.0`, the first part of the second part, and the values are six-number SVG affine matrices. The character form adjusts the first description, and the gallery uses the saved layout for each drawing.
+
+Records returned by `/api/entries` may carry a plain map of placements shared by every style, or an object with a `faces` map keyed by glyph style and an optional legacy `shared` map. A missing face uses `shared` when present. An empty face map restores the composer's layout for that face. For `/api/glyph?ids=…&v=…&layout=…`, pass only the matrix map for the requested style.
 
 ## Third-party materials
 

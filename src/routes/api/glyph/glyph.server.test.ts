@@ -75,3 +75,12 @@ test('each face serves only its effective layout on a visible claim', async () =
   expect((await glyph(event(ask(second, layout, 'serif')))).status).toBe(404)
   expect((await glyph(event(ask(second, layout, 'pen-writing')))).status).toBe(200)
 })
+
+test('a temporarily unavailable object store returns a retryable status', async () => {
+  const { event } = fixture()
+  const request = event(ask(first))
+  request.platform.env.MEDIA.get = async () => { throw new Error('temporarily unavailable') }
+  const response = await glyph(request)
+  expect(response.status).toBe(503)
+  expect(response.headers.get('cache-control')).toBe('no-store')
+})

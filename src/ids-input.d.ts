@@ -104,6 +104,10 @@ declare module 'han-compose' {
   export function composerPreview(options: { base: string; separate?: boolean; fontStyle?: 'sans' | 'serif' | 'regular' | 'fangsong' | 'pen-writing'; loaders?: Record<string, string> }): ComposerPreview
 }
 
+declare module 'han-compose/tree' {
+  export function isShuishu(text: string | null): boolean
+}
+
 declare module 'han-compose/source' {
   import type { ComposerSource } from 'han-compose'
   export function traitsOf(sequence: string): Record<string, boolean>
