@@ -1,23 +1,25 @@
 <script lang="ts">
-  // A sighting's picture with a box drawn over each marked character, linked to the full image.
+  // A sighting's picture with a box drawn over each marked character, linked to the full image and
+  // enlarged or moved in place.
   import { media } from '$lib/t'
   import { boxesOf } from '$lib/picture'
   import type { StoredImage } from '$lib/server/entries'
+  import ZoomablePicture from './ZoomablePicture.svelte'
 
   let { picture, alt }: { picture: StoredImage; alt: string } = $props()
   const boxes = $derived(boxesOf(picture.box))
+  const src = $derived(media(picture.image_key))
 </script>
 
-<a class="image" href={media(picture.image_key)}>
-  <span class="frame">
-    <img src={media(picture.image_key)} {alt} width={picture.image_w} height={picture.image_h} loading="lazy" />
-    {#each boxes as box}<span class="mark" style:left="{box[0] / picture.image_w * 100}%" style:top="{box[1] / picture.image_h * 100}%" style:width="{box[2] / picture.image_w * 100}%" style:height="{box[3] / picture.image_h * 100}%"></span>{/each}
-  </span>
-</a>
+<div class="image">
+  <ZoomablePicture {src} {alt} width={picture.image_w} height={picture.image_h} loading="lazy" href={src}>
+    {#snippet overlay()}
+      {#each boxes as box}<span class="mark" style:left="{box[0] / picture.image_w * 100}%" style:top="{box[1] / picture.image_h * 100}%" style:width="{box[2] / picture.image_w * 100}%" style:height="{box[3] / picture.image_h * 100}%"></span>{/each}
+    {/snippet}
+  </ZoomablePicture>
+</div>
 
 <style>
-  .image { display:flex; justify-content:center; background:var(--surface-sunken); border-radius:6px; overflow:hidden }
-  .frame { position:relative; display:inline-block; max-width:100%; line-height:0 }
-  .frame img { display:block; width:auto; height:auto; max-width:100%; max-height:var(--picture-height, 65vh) }
-  .mark { position:absolute; border:2px solid var(--mark); pointer-events:none }
+  .image { background: var(--surface-sunken); border-radius: 6px; overflow: hidden }
+  .mark { position: absolute; border: calc(2px * var(--inv, 1)) solid var(--mark); pointer-events: none }
 </style>
