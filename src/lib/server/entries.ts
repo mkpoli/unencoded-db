@@ -1,3 +1,5 @@
+import { error } from '@sveltejs/kit'
+import { quotations, QUOTATIONS_MAX } from '../quotations'
 import { sampledSightings } from './source-sightings'
 import { sourceMatches } from './source-aliases'
 import { nameKey, nameLabel, sourceNameKey } from '../name-key'
@@ -28,7 +30,7 @@ export type EntryFields = { script: string; script_other: string | null; descrip
 export type Citation = Record<typeof CITATION_FIELDS[number], string | null>
 // A link in a sighting's chain: the source, and the words of it this sighting quotes.
 export type Via = Citation & { quote: string | null }
-export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; vias: Via[]; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null }
+export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; vias: Via[]; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
 export type Entry = Omit<EntryFields, 'claims'> & { status: Status | null; id: number; rev: number; ids: string | null; layout: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
@@ -42,8 +44,8 @@ export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical',
 export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date'] as const
 // The form sends each via as one value of each of these, repeated once per via and aligned by position.
 export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_quote'] as const
-export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'context', 'style', 'types', 'note'] as const
-export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'original_date', 'page', 'context', 'style', 'types', 'note'] as const
+export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'context', 'style', 'types', 'note', 'quotes'] as const
+export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'original_date', 'page', 'context', 'style', 'types', 'note', 'quotes'] as const
 export const IMAGE_FIELDS = ['image_key', 'image_type', 'image_w', 'image_h', 'thumb_key', 'box'] as const
 
 const clean = (raw: unknown, max: number) => {
@@ -107,6 +109,13 @@ export function readEntryFields(form: FormData, tags: readonly Pick<Tag, 'name' 
 
 export function readSightingFields(form: FormData): SightingFields {
   const safeUrl = link(form, 'url')
+  const locators = form.getAll('quote_locator')
+  const texts = form.getAll('quote_text')
+  if (texts.length > QUOTATIONS_MAX || locators.length > QUOTATIONS_MAX) error(400, 'Too many quotations')
+  const quotes = texts.flatMap((value, i) => {
+    const text = clean(value, 5000)?.replace(/[\uD800-\uDBFF]$/, '')
+    return text ? [{ text, locator: clean(locators[i], 300) }] : []
+  })
   const chosen = new Set(form.getAll('types').map(String))
   const types = SIGHTING_TYPES.filter(type => chosen.has(type))
   return {
@@ -124,6 +133,7 @@ export function readSightingFields(form: FormData): SightingFields {
     style: oneOf(text(form, 'style', 20), STYLES),
     types: types.length ? JSON.stringify(types) : null,
     note: text(form, 'note', 5000),
+    quotes: quotes.length ? JSON.stringify(quotes) : null,
   }
 }
 
@@ -200,6 +210,7 @@ function wordTags(entry: TagInput, claims: readonly Claim[], sightings: Sighting
   // A Unicode code is found by the character it names, which is what another site links with.
   for (const claim of claims) if (claim.kind === 'encoding' && claim.data?.charset === 'unicode') add(encodedCharacter(claim.value))
   for (const sighting of sightings) for (const field of ['place', 'title', 'author', 'publisher', 'note'] as const) add(sighting[field])
+  for (const sighting of sightings) for (const quote of quotations(sighting.quotes)) { add(quote.text); add(quote.locator) }
   for (const sighting of sightings) for (const via of sighting.vias) for (const field of ['title', 'quote', 'author', 'publisher'] as const) add(via[field])
   return [...words].slice(0, WORDS_MAX).map(word => `w:${word}`)
 }
@@ -1152,8 +1163,8 @@ export const getSourceArtwork = (db: D1Database, id: number) => db.prepare(`
 export const SOURCE_PAGE = 200
 
 // A source and the records seen in it, each once, with the pages it was seen on.
-export type SourceSighting = Pick<Sighting, 'id' | 'entry_id' | 'place' | 'original_date' | 'page' | 'context' | 'style' | 'note' | 'media'> & { types: SightingType[]; tile: Tile; via: boolean; vias: (Via & { id: number })[] }
-const SOURCE_SIGHTING = ['place', 'original_date', 'page', 'context', 'style', 'types', 'note'].map(field => `s.${field} AS s_${field}`).join(', ')
+export type SourceSighting = Pick<Sighting, 'id' | 'entry_id' | 'place' | 'original_date' | 'page' | 'context' | 'style' | 'note' | 'quotes' | 'media'> & { types: SightingType[]; tile: Tile; via: boolean; vias: (Via & { id: number })[] }
+const SOURCE_SIGHTING = ['place', 'original_date', 'page', 'context', 'style', 'types', 'note', 'quotes'].map(field => `s.${field} AS s_${field}`).join(', ')
 
 // A source with the visible sightings that cite it, each with its pictures and the record it belongs to:
 // first those that cite it as their work, then those found through it. A sighting that cites one source
@@ -1173,9 +1184,9 @@ export async function sourcePage(db: D1Database, id: number) {
     ]),
   ])
   const source = found.results[0] as Source | undefined
-  type Row = TileRow & { s_id: number; s_place: string; s_original_date: string | null; s_page: string | null; s_context: string | null; s_style: string | null; s_types: string | null; s_note: string | null }
-  const listed = [false, true].flatMap((isVia, way) => withMedia((queries[way * 2].results as Row[]).map(({ s_id, s_place, s_original_date, s_page, s_context, s_style, s_types, s_note, ...tile }) => ({
-    id: s_id, entry_id: tile.id, place: s_place, original_date: s_original_date, page: s_page, context: s_context, style: s_style, note: s_note, types: parseSightingTypes(s_types), tile: toTile(tile), via: isVia,
+  type Row = TileRow & { s_id: number; s_place: string; s_original_date: string | null; s_page: string | null; s_context: string | null; s_style: string | null; s_types: string | null; s_note: string | null; s_quotes: string | null }
+  const listed = [false, true].flatMap((isVia, way) => withMedia((queries[way * 2].results as Row[]).map(({ s_id, s_place, s_original_date, s_page, s_context, s_style, s_types, s_note, s_quotes, ...tile }) => ({
+    id: s_id, entry_id: tile.id, place: s_place, original_date: s_original_date, page: s_page, context: s_context, style: s_style, note: s_note, quotes: s_quotes, types: parseSightingTypes(s_types), tile: toTile(tile), via: isVia,
   })), (queries[way * 2 + 1].results as (MediaRow & { position: number })[]).sort((a, b) => a.sighting_id - b.sighting_id || a.position - b.position).map(({ position: _, ...image }) => image)) as Omit<SourceSighting, 'vias'>[]).slice(0, SOURCE_PAGE)
   // A citation is shown only while a visible sighting gives it.
   if (!source || !listed.length) return null

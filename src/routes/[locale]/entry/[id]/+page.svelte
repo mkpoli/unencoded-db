@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SourceQuotations from '$lib/components/SourceQuotations.svelte'
   import EvidenceDate from '$lib/components/EvidenceDate.svelte'
   import { page } from '$app/state'
   import { claimLabel } from '$lib/claim-label'
@@ -304,6 +305,7 @@
           {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
         </dl>
+        <SourceQuotations quotes={sighting.quotes} url={sighting.url} />
         {#if sighting.note}<p class="description">{sighting.note}</p>{/if}
         {#if supportedBy(claims, sighting.id).length}
           <p class="supports"><span class="muted">{t('sighting.supports')}</span>

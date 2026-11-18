@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SourceQuotations from '$lib/components/SourceQuotations.svelte'
   import EvidenceDate from '$lib/components/EvidenceDate.svelte'
   import Seo from '$lib/components/Seo.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
@@ -84,6 +85,7 @@
             {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
             {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
           </dl>
+          {#if !sighting.via}<SourceQuotations quotes={sighting.quotes} url={source.url} />{/if}
           {#if sighting.note}<p class="note">{sighting.note}</p>{/if}
           <div class="row"><a class="button small" href={href(`/new?sighting=${sighting.id}`)}>{t('sighting.addAnother')}</a></div>
         </div>

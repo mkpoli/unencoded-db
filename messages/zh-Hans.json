@@ -164,6 +164,8 @@
   "field.viaHint": "发现它的途径，例如拍下书页的帖子。",
   "field.viaAdd": "添加经由",
   "field.viaRemove": "移除",
+  "field.quoteLocator": "位置或引文出处",
+  "field.addQuote": "添加引文",
   "field.quote": "引文",
   "field.sourceTypes": "出处类型",
   "evidence.type.mention": "提及",

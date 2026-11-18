@@ -30,7 +30,7 @@ const status = { id: '2119717540968738934', text: 'どんな「器」見せて�
 test('a post whose author names the book in a reply gives the book', () => {
   const info = postInfo({ status, thread: [status, { id: '2119717622229110988', text: '和名類聚抄 20巻', author }] })
   expect(info).toEqual({
-    place: 'X', publisher: 'X', author: '@someone', title: 'どんな「器」見せてんだよ笑 ちなみにU外字です',
+    place: 'X', publisher: 'X', author: '@someone', quote: 'どんな「器」見せてんだよ笑\nちなみにU外字です',
     url: 'https://x.com/someone/status/2119717540968738934', date: '2026-11-09', work: { title: '和名類聚抄', page: '20巻' },
   })
 })
@@ -59,4 +59,10 @@ test('a post is published by Twitter before the rename and by X from it', () => 
   expect(at('2023-07-23T23:59:59Z')).toMatchObject({ publisher: 'Twitter', place: 'Twitter' })
   expect(at('2023-07-24T00:00:00Z')).toMatchObject({ publisher: 'X', place: 'X' })
   expect(postInfo({ status: { ...status, created_timestamp: undefined }, thread: [] })).toMatchObject({ publisher: 'X' })
+})
+
+test('visible post text retains supplementary characters and a cited URL', () => {
+  const visible = '⿰月𱼚 https://t.co/source'
+  const raw_text = { text: visible + ' https://t.co/photo', display_text_range: [0, Array.from(visible).length] }
+  expect(postInfo({ status: { ...status, raw_text } })?.quote).toBe(visible)
 })
