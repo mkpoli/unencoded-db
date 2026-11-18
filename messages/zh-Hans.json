@@ -330,6 +330,7 @@
   "browse.alsoSearched": "同时搜索了{n}种其他写法",
   "browse.pageLeft": "还有{n}页",
   "browse.pagesLeft": "还有{n}页",
+  "browse.searching": "正在搜索…",
   "browse.continueSearch": "继续搜索",
   "history.kind.sighting_revert": "恢复证据文字",
   "history.restoreSighting": "恢复文字，保留当前图片",

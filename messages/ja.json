@@ -330,6 +330,7 @@
   "browse.alsoSearched": "ほかの表記{n}件も検索",
   "browse.pageLeft": "残り{n}ページ",
   "browse.pagesLeft": "残り{n}ページ",
+  "browse.searching": "検索中…",
   "browse.continueSearch": "検索を続ける",
   "history.kind.sighting_revert": "証拠の文章を復元",
   "history.restoreSighting": "文章を復元し、現在の画像を残す",

@@ -330,6 +330,7 @@
   "browse.alsoSearched": "Also searched {n} other spellings",
   "browse.pageLeft": "{n} more page",
   "browse.pagesLeft": "{n} more pages",
+  "browse.searching": "Searching…",
   "browse.continueSearch": "Continue search",
   "history.kind.sighting_revert": "Restored evidence text",
   "history.restoreSighting": "Restore text; keep current picture",
