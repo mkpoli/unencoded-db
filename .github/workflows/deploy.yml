@@ -36,3 +36,4 @@ jobs:
       - run: bunx wrangler deploy
       - run: bun scripts/sweep-publishers.ts --remote
       - run: bun scripts/sweep-dates.ts --remote
+      - run: bun scripts/warm-glyphs.ts https://rare.glyphatlas.org
