@@ -218,7 +218,9 @@ export async function evidencePanel(bucket: Pick<R2Bucket, 'get'>, picture: Card
   return `<svg x="${PANEL_X}" y="${PANEL_Y}" width="${PANEL_WIDTH}" height="${PANEL_HEIGHT}" viewBox="${view.join(' ')}" preserveAspectRatio="xMidYMid slice"><image width="${image.width}" height="${image.height}" href="${image.href}"/></svg>`
 }
 
-export type CardArt = { glyphs: { name: string; drawing: string }[]; evidence: string }
+// `late` is set when a style missed the time budget, so the card is served but not kept.
+export type CardArt = { glyphs: { name: string; drawing: string }[]; evidence: string; late?: boolean }
+const LATE = Symbol('late')
 
 // The record drawn in every style the site offers, beside its cover.
 export async function recordArtwork(
@@ -230,14 +232,14 @@ export async function recordArtwork(
     // A style still drawing after the budget is left off this card; its drawing is still stored for the next one.
     ...GLYPH_STYLES.map(style => Promise.race([
       drawGlyph(bucket, glyph, { ...context, style }).catch(() => null),
-      new Promise<null>(resolve => setTimeout(resolve, STYLE_BUDGET_MS, null)),
+      new Promise<typeof LATE>(resolve => setTimeout(resolve, STYLE_BUDGET_MS, LATE)),
     ])),
   ])
   const glyphs = GLYPH_STYLES.flatMap((style, index) => {
     const drawing = drawings[index]
-    return drawing ? [{ name: translate(context.locale, `glyphStyle.${style}`), drawing }] : []
+    return typeof drawing === 'string' && drawing ? [{ name: translate(context.locale, `glyphStyle.${style}`), drawing }] : []
   })
-  return { glyphs, evidence }
+  return { glyphs, evidence, late: drawings.includes(LATE) }
 }
 
 export async function evidenceArtwork(bucket: Pick<R2Bucket, 'get'>, picture: CardPicture): Promise<CardArt> {
@@ -278,8 +280,8 @@ export async function renderCard(
   const address = new Request(`${origin}${event.url.pathname}?v=${version.slice(0, 16)}`)
   const found = await cache?.match(address)
   if (found) return found
-  const response = await draw(assets, origin, card)
-  if (cache) {
+  const { response, late } = await draw(assets, origin, card)
+  if (cache && !late) {
     const stored = cache.put(address, response.clone()).catch(cause => console.error('Could not cache social card', cause))
     if (event.platform?.ctx) event.platform.ctx.waitUntil(stored)
     else await stored
@@ -287,7 +289,7 @@ export async function renderCard(
   return response
 }
 
-async function draw(assets: Fetcher, origin: string, card: Card): Promise<Response> {
+async function draw(assets: Fetcher, origin: string, card: Card): Promise<{ response: Response; late: boolean }> {
   await renderer()
   const art = await card.art?.()
   const files = ['social-card.otf']
@@ -333,7 +335,7 @@ async function draw(assets: Fetcher, origin: string, card: Card): Promise<Respon
     const rendered = render.render()
     try {
       const png = rendered.asPng().slice()
-      return pngResponse(png)
+      return { response: pngResponse(png), late: Boolean(art?.late) }
     } finally { rendered.free() }
   } finally { render.free() }
 }
