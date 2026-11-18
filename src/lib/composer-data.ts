@@ -1,6 +1,8 @@
 // The outlines the composer carries beside the export, as URLs this build emits. The export has no
 // Bopomofo, Tangut, seal, New Korean, Shuishu, Jurchen or palette glyphs, so a drawing of one asks for
 // the file here rather than a path inside the package.
+import mincho from 'ids-input/data/ucv-outlines.json.gz?url'
+import gothic from 'ids-input/data/ucv-outlines-sans.json.gz?url'
 import tangut from 'han-compose/data/sources/tangut/outlines.json.gz?url'
 import bopomofo from 'han-compose/data/sources/bopomofo/outlines.json.gz?url'
 import newKorean from 'han-compose/data/sources/new-korean/outlines.json.gz?url'
@@ -31,3 +33,5 @@ export const composerData: Record<string, string> = {
   'numbered-five-context.json': numberedContext,
   'custom-forms.json.gz': customForms,
 }
+
+export const composerDataFor = (style: string) => ({ ...composerData, 'host/outlines.json.gz': style === 'sans' ? gothic : mincho })

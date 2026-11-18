@@ -11,8 +11,8 @@
         "fast-png": "8.0.0",
         "fflate": "^0.8.3",
         "fonteditor-core": "^2.6.3",
-        "han-compose": "github:mkpoli/han-compose#c61d3cbe9ec0927e92cf35a11cbb742cb1a3d147",
-        "ids-input": "github:mkpoli/ids-input#94e81bbf9f67248b20751c448eb1c7c77ef120e8",
+        "han-compose": "github:mkpoli/han-compose#8f6843a9fbaacc1ecba3725d3ab14a41339c9e60",
+        "ids-input": "github:mkpoli/ids-input#80c24f1403664e7fcb59c9d3ccef4bfddcf0b315",
         "jose": "^6.2.15",
         "opentype.js": "1.3.4",
         "svgpath": "^2.6.0",
@@ -301,9 +301,9 @@
 
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
 
-    "han-compose": ["han-compose-monorepo@github:mkpoli/han-compose#c61d3cb", {}, "mkpoli-han-compose-c61d3cb", "sha512-7Btvg/g9gwOyaSpvvK7uQbXdGgruI3rn50jLmmQpyVpV4JIep6QDjuraZu5LKflBFlO91GoYwEKT+BttIlalgw=="],
+    "han-compose": ["han-compose-monorepo@github:mkpoli/han-compose#8f6843a", {}, "mkpoli-han-compose-8f6843a", "sha512-GfPXlO+CqQ64RqCRy77rB1SZ2OXVO2oAhDLomCAl6ARQtGkd3NNRxXSqAPLei97AcTH6Lky2PdSgP0HiACNVPQ=="],
 
-    "ids-input": ["ids-input@github:mkpoli/ids-input#94e81bb", { "dependencies": { "@cf-wasm/resvg": "^0.4.0", "@han-compose/composer": "file:../composer" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-94e81bb", "sha512-l5LcLISwz3hsXS82ZERaBIOQvrGCN8Fk80gpyw/ThtKqP66SHfzY/PgEKeoCiI7lwZeUxsxSH/mPo3fpTbO6Pw=="],
+    "ids-input": ["ids-input@github:mkpoli/ids-input#80c24f1", { "dependencies": { "@cf-wasm/resvg": "^0.4.0", "@han-compose/composer": "file:../composer" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-80c24f1", "sha512-WM+m2MS6hhQ2Wj+hUbg0mLKH1nn4A0dmtBCtkWrsuzxDzClZwyqI/v0dsRfzJRJqZ48iQaKT1Y4GIIIMptRFyA=="],
 
     "internmap": ["internmap@2.0.3", "", {}, "sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg=="],
 

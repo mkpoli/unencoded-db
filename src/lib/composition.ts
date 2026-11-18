@@ -1,8 +1,9 @@
+import { compatibilitySequences } from 'ids-input'
 // The parts an editor tags for a record's first description, the role each part plays, and the
 // formation those roles imply. The parsed parts are a starting point: an editor may replace them,
 // type a role outside the standard three, and name a formation the roles cannot express.
 import { isNode, parse, write, type IdsPart } from 'ids-input'
-import { IDS_LENGTH_MAX, splitIds, preserveGrassVariants } from './ids'
+import { IDS_LENGTH_MAX, splitIds } from './ids'
 
 export const ROLES = ['semantic', 'phonetic', 'symbol'] as const
 export type Role = (typeof ROLES)[number]
@@ -57,7 +58,7 @@ export function parseComposition(value: unknown): Composition | null {
   try { data = JSON.parse(value) } catch { return null }
   if (!data || typeof data !== 'object') return null
   const stored = data as { ids?: unknown; parts?: unknown; roles?: unknown; formation?: unknown }
-  const partText = (value: unknown, max: number) => typeof value === 'string' ? clean(preserveGrassVariants(value), max) : ''
+  const partText = (value: unknown, max: number) => typeof value === 'string' ? clean(compatibilitySequences(value), max) : ''
   const ids = partText(stored.ids, IDS_LENGTH_MAX)
   if (!ids) return null
   const roles = cleanList(stored.roles, ROLE_MAX) ?? []
