@@ -8,8 +8,8 @@
         "d3-contour": "^4.0.3",
         "fflate": "^0.8.3",
         "fonteditor-core": "^2.6.3",
-        "han-compose": "github:mkpoli/han-compose#1cbf35942fa10f742e40b85fc7fbd4547aac5b6d",
-        "ids-input": "github:mkpoli/ids-input#eae9436bf4ad6f1a0e516750d7e006698bc188d0",
+        "han-compose": "github:mkpoli/han-compose#8f6843a9fbaacc1ecba3725d3ab14a41339c9e60",
+        "ids-input": "github:mkpoli/ids-input#80c24f1403664e7fcb59c9d3ccef4bfddcf0b315",
         "jose": "^6.2.15",
         "opentype.js": "1.3.4",
         "svgpath": "^2.6.0",
@@ -294,9 +294,9 @@
 
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
 
-    "han-compose": ["han-compose-monorepo@github:mkpoli/han-compose#1cbf359", {}, "mkpoli-han-compose-1cbf359", "sha512-1jgaEjWnFxW9UDLDDYTO/iynlAdH4bg6dPs7pl2EszexrsO+XM0f+/YsGoAMnZvBrdmjm9nWSlL6FHXizUSQXw=="],
+    "han-compose": ["han-compose-monorepo@github:mkpoli/han-compose#8f6843a", {}, "mkpoli-han-compose-8f6843a", "sha512-GfPXlO+CqQ64RqCRy77rB1SZ2OXVO2oAhDLomCAl6ARQtGkd3NNRxXSqAPLei97AcTH6Lky2PdSgP0HiACNVPQ=="],
 
-    "ids-input": ["ids-input@github:mkpoli/ids-input#eae9436", { "dependencies": { "@cf-wasm/resvg": "^0.4.0", "@han-compose/composer": "file:../composer" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-eae9436", "sha512-TCpO0zO8Gf/cBB6kB9nFFB7GcZJ47a7hNKGmTiIa/xOsNdSR8OxlRRQQwVLpp6MmVkAdQpx7vl/h3SiRlzCtbA=="],
+    "ids-input": ["ids-input@github:mkpoli/ids-input#80c24f1", { "dependencies": { "@cf-wasm/resvg": "^0.4.0", "@han-compose/composer": "file:../composer" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-80c24f1", "sha512-WM+m2MS6hhQ2Wj+hUbg0mLKH1nn4A0dmtBCtkWrsuzxDzClZwyqI/v0dsRfzJRJqZ48iQaKT1Y4GIIIMptRFyA=="],
 
     "internmap": ["internmap@2.0.3", "", {}, "sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg=="],
 
