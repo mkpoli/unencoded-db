@@ -12,6 +12,7 @@
   import { parseSightingTypes } from '$lib/scripts'
   import { statusOf } from '$lib/status'
   import ViaChain from '$lib/components/ViaChain.svelte'
+  import RelationCharacter from './RelationCharacter.svelte'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
   import { locale, t } from '$lib/t'
   let { fields, dates, sighting = false, labels = new Map(), tagTypes = new Map() }: { dates?: Map<string, DateReading | null>; fields: EntryFields | SightingFields; sighting?: boolean; labels?: ReadonlyMap<string, string>; tagTypes?: ReadonlyMap<string, TagType> } = $props()
@@ -90,7 +91,7 @@
       <div class="relations">
         {#each claimsOf(entry.claims, 'relation') as relation}
           <dl class="facts relation">
-            <div><dt>{t('field.relatedCharacter')}</dt><dd class="relation-character">{relation.value}</dd></div>
+            <div><dt>{t('field.relatedCharacter')}</dt><dd class="relation-character"><RelationCharacter value={relation.value} /></dd></div>
             <div><dt>{t('field.relatedRelationship')}</dt><dd class="linked">{t(`relationship.${String(relation.data?.relationship ?? '')}`)}{@render scopes(relation, entry.claims)}</dd></div>
             {#if relation.sightings.length}<div><dt>{t('field.basis')}</dt><dd class="linked">{@render bases(relation)}</dd></div>{/if}
             {#if relation.data?.difference}<div class="wide"><dt>{t('field.relatedDifference')}</dt><dd>{relation.data.difference}</dd></div>{/if}
