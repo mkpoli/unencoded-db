@@ -301,6 +301,8 @@
   "history.globalTitle": "이력",
   "history.empty": "아직 변경 사항이 없습니다.",
   "history.older": "이전 항목",
+  "social.addEvidence": "근거 추가",
+  "social.contributor": "기여자",
   "person.title": "{name} 님의 기여",
   "person.empty": "아직 기여한 내용이 없습니다.",
   "person.since": "{date}부터 활동",

@@ -301,6 +301,8 @@
   "history.globalTitle": "History",
   "history.empty": "No changes yet.",
   "history.older": "Older",
+  "social.addEvidence": "Add evidence",
+  "social.contributor": "Contributor",
   "person.title": "Contributions of {name}",
   "person.empty": "No contributions yet.",
   "person.since": "Here since {date}",
