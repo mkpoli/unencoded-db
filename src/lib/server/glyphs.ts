@@ -7,7 +7,7 @@ import { onlyBundled } from 'han-compose/local'
 import { exportSource, sourceFor, traitKey, traitsOf } from 'han-compose/source'
 import { documentRenderer, scopesMarkup } from 'ids-input/document'
 import { composerDrawing, composerUrl, composerVersion, GLYPH_STYLE, type GlyphStyle } from '$lib/composer'
-import { composerData } from '$lib/composer-data'
+import { composerDataFor } from '$lib/composer-data'
 import { cleanIds } from '$lib/ids'
 import { cleanLayout, cleanMatrices, layoutForStyle, layoutText } from '$lib/layout'
 import { layoutDocument } from '$lib/layout-document'
@@ -101,8 +101,8 @@ function glyphDrawer(bucket: Bucket, context: Context) {
     const key = sourceKey(ids, context, separate)
     let found = sources.get(key)
     if (!found) {
-      exported ??= exportSource(composerUrl(style), { loaders: composerData, fetch: reader(bucket, style), read: bundled(context) })
-      found = sourceFor(ids, { base: composerUrl(style), fontStyle: style, traits: traitsOf(ids), separate, exported, loaders: composerData, read: bundled(context) })
+      exported ??= exportSource(composerUrl(style), { loaders: composerDataFor(style), fetch: reader(bucket, style), read: bundled(context) })
+      found = sourceFor(ids, { base: composerUrl(style), fontStyle: style, traits: traitsOf(ids), separate, exported, loaders: composerDataFor(style), read: bundled(context) })
       sources.set(key, found)
     }
     return found

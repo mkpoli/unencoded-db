@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { CLAIM_LIMITS, CLAIM_SCOPES_MAX, CLAIM_SIGHTINGS_MAX, claimsUnder, idsForms, isClaimKey, mapSightings, newClaimKey, parseClaims, readClaims, scopesOf, splitCharacters, supportedBy, validClaim, type Claim } from './claims'
 import { cleanTag } from './tags'
-import { IDS_LENGTH_MAX, IDS_MAX } from './ids'
+import { cleanIds, IDS_LENGTH_MAX, IDS_MAX } from './ids'
 
 // A claim without its key, which a test names only where the key matters.
 type Stated = Omit<Claim, 'key'>
@@ -400,4 +400,11 @@ test('preserves compatibility grass forms in the IDS, component roles and layout
   const result = read([['ids', raw], ['layout_ids', raw], ['layout', JSON.stringify(layout)], ['composition', JSON.stringify(composition)]])
   expect(result.claims?.find(c => c.kind === 'ids')).toMatchObject({ value: ids, data: { layout } })
   expect(result.claims?.find(c => c.kind === 'composition')).toMatchObject({ value: ids, data: { parts: ['艹\uFE00', '艹\uFE01'], roles: composition.roles } })
+})
+
+test('preserves UCV compatibility spellings along with nested selections', () => {
+  expect(cleanIds('⿰歹北')).toEqual('⿰歹\uFE00北\uFE01')
+  for (const ids of ['⿰半\u{E0101}肖\u{E0100}', '⿰査舍', '⿱&GW-u51ab-01;木']) {
+    expect(cleanIds(ids)).toBe(ids)
+  }
 })

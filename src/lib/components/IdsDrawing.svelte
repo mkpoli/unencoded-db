@@ -4,7 +4,7 @@
   import type { ComposerPreview } from 'han-compose'
   import type { DocumentSession } from 'ids-input/document'
   import { composerUrl, type GlyphStyle } from '$lib/composer'
-  import { composerData } from '$lib/composer-data'
+  import { composerDataFor } from '$lib/composer-data'
   import { idsMessages } from '$lib/ids-messages'
 
   const composers = new Map<string, Promise<ComposerPreview>>()
@@ -12,7 +12,7 @@
     const key = `${style}:${separate}`
     let found = composers.get(key)
     if (!found) {
-      found = import('han-compose').then(({ composerPreview, dataUrls }) => composerPreview({ base: composerUrl(style), fontStyle: style, separate, loaders: { ...dataUrls, ...composerData } }))
+      found = import('han-compose').then(({ composerPreview, dataUrls }) => composerPreview({ base: composerUrl(style), fontStyle: style, separate, loaders: { ...dataUrls, ...composerDataFor(style) } }))
       composers.set(key, found)
       found.catch(() => composers.delete(key))
     }

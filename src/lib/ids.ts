@@ -1,8 +1,7 @@
+import { compatibilitySequences } from 'ids-input'
 // A description sequence as a person types it: the operators and the parts, with spaces taken out.
-// These compatibility ideographs decompose to bare 艹 under NFC. Their
-// standardized variation sequences carry the original shape through NFC.
-export const preserveGrassVariants = (text: string) => text.replace(/艹/gu, '艹\uFE00').replace(/艹/gu, '艹\uFE01')
-export const cleanIds = (text: string) => preserveGrassVariants(text).normalize('NFC').replace(/\s+/gu, '')
+// Encode compatibility glyphs as their standardized sequences before normalizing the field.
+export const cleanIds = (text: string) => compatibilitySequences(text).normalize('NFC').replace(/\s+/gu, '')
 
 export const IDS_MAX = 20
 export const IDS_LENGTH_MAX = 200
