@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 import { LOCALES } from '$lib/i18n'
-import { URL_LIMIT, indexNowUrls, notifyIndexNow } from './indexnow'
+import { URL_LIMIT, citedBy, indexNowUrls, notifyIndexNow } from './indexnow'
 import { openTestDb } from './testdb'
 import { GET } from '../../routes/[key=indexnowKey]/+server'
 import { match } from '../../params/indexnowKey'
@@ -70,4 +70,9 @@ test('the key file is served only at the configured key', async () => {
 test('the key matcher leaves short record codes and other paths alone', () => {
   expect(match('abcdef123456.txt')).toBe(true)
   for (const code of ['RN', 'en', 'abcdef123456', 'short.txt', 'a/b.txt']) expect(match(code)).toBe(false)
+})
+
+test('the sources a sighting cited before a write are named, its own and its vias', () => {
+  expect(citedBy({ source_id: 7, vias: [{ id: 9 }, { id: 11 }] })).toEqual([7, 9, 11])
+  expect(citedBy({ source_id: null, vias: [] })).toEqual([])
 })

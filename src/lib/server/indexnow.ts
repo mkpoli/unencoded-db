@@ -45,6 +45,10 @@ async function send(db: D1Database, key: string, changed: Changed) {
   }
 }
 
+// The sources a sighting cited before a write, so the pages it leaves are recrawled too.
+export const citedBy = (sighting: { source_id: number | null; vias: readonly { id: number }[] }) =>
+  [sighting.source_id, ...sighting.vias.map(via => via.id)].filter((id): id is number => id !== null)
+
 // Tells IndexNow the pages of these records, and of the sources they cite, changed. It runs after the
 // response and does nothing without a configured key.
 export function notifyIndexNow(event: Pick<RequestEvent, 'platform'>, changed: Changed) {

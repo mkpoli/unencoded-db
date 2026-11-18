@@ -1,7 +1,7 @@
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
 import { editSighting, hasLink, getEntryRow, getSighting, readSightingFields } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
-import { notifyIndexNow } from '$lib/server/indexnow'
+import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
 import { MEDIA_MAX } from '$lib/limits'
 import { keptPictures, positiveId, readMarks, uploadedImages } from '../../../../../../_submission.server'
@@ -47,7 +47,7 @@ export const actions: Actions = {
     const person = await writer(event, DB)
     const result = await editSighting(DB, sighting.id, rev, values, media, { actor: person.id, ip: await ipHash(event) }, summary || null, id)
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code, values, summary, removeMedia, marks: null })
-    notifyIndexNow(event, { entries: [id] })
+    notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
     redirect(303, `/${event.params.locale}/entry/${id}`)
   },
 }
