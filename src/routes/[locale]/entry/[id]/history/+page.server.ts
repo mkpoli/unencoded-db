@@ -26,7 +26,7 @@ export const load: PageServerLoad = async (event) => {
       ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
       sightingRev: sighting_id ? visibleSightings.get(sighting_id) : null,
     }))
-  return { id, rev: found.entry.rev, rows, dates: await revisionDates(db, rows), next, tags: tags.map(({ name, label, type }) => ({ name, label, type })) }
+  return { id, rev: found.entry.rev, updated_at: found.entry.updated_at, rows, dates: await revisionDates(db, rows), next, tags: tags.map(({ name, label, type }) => ({ name, label, type })) }
 }
 
 export const actions: Actions = {

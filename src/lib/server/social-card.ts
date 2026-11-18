@@ -2,12 +2,12 @@ import decodeWebp, { init as initWebp } from '@jsquash/webp/decode.js'
 import { initWasm, Resvg } from '@resvg/resvg-wasm'
 import { encode as encodePng } from 'fast-png'
 import { Buffer } from 'node:buffer'
-import { GLYPH_STYLES } from '$lib/composer'
+import { composerRevision, GLYPH_STYLES } from '$lib/composer'
 import { translate } from '$lib/i18n'
 import { boxesOf, type Box } from '$lib/picture'
 import type { CardPicture } from '$lib/server/entries'
 import { drawGlyph, type ComposerAssets, type Glyph } from '$lib/server/glyphs'
-import { MAX_THUMB, sniff } from '$lib/server/image'
+import { hashHex, MAX_THUMB, sniff } from '$lib/server/image'
 
 const NIGHT = '#101824', INK = '#f8efe2', MUTED = '#c6cbd6', ACCENT = '#b7aaff'
 const PAPER = '#f0e6d5'
@@ -18,10 +18,6 @@ const MARK = '<path d="M4 4h9v9H4zM19 4h9v9h-9zM4 19h9v9H4z"/><path d="M19 19h9v
 let initialized: Promise<void> | undefined
 let webpInitialized: Promise<void> | undefined
 const assetsRead = new Map<string, Uint8Array>()
-// Moderation is checked before consulting this cache. Short-lived entries also let newly drawn glyphs appear.
-const cards = new Map<string, { png: Uint8Array<ArrayBuffer>; expires: number }>()
-const CARD_CACHE_LIMIT = 8
-const CACHEABLE_PNG_BYTES = 1024 * 1024
 const MAX_EVIDENCE_PIXELS = 1_048_576
 // A marked picture is read whole to show the page around the mark.
 const MAX_MARKED_BYTES = 3 * 1024 * 1024, MAX_MARKED_PIXELS = 4_194_304
@@ -260,20 +256,38 @@ function plates(glyphs: CardArt['glyphs']) {
 
 type Card = { key: string; label: string; title: string; keep?: readonly string[]; detail?: string | null; caption?: string; art?: () => Promise<CardArt>; size?: number }
 
+// Bumped when the card's layout or backdrop changes, so cards drawn before it are not served again.
+const CARD_DESIGN = 1
+const CARD_MAX_AGE = 86400
+
 const pngResponse = (png: Uint8Array<ArrayBuffer>) => new Response(png, {
-  headers: { 'content-type': 'image/png', 'cache-control': 'no-store' },
+  headers: { 'content-type': 'image/png', 'cache-control': `public, max-age=${CARD_MAX_AGE}` },
 })
 
-export async function renderCard(assets: Fetcher, origin: string, card: Card): Promise<Response> {
-  const memo = cards.get(card.key)
-  if (memo) {
-    cards.delete(card.key)
-    if (memo.expires > Date.now()) {
-      cards.set(card.key, memo)
-      return pngResponse(memo.png)
-    }
+// Cards are cached under an address made from what they show, never from the requested `?v=`, which only
+// keeps crawlers from holding an older card. Routes check visibility before they call this, and their
+// `key` holds only what is visible, so a hidden record or picture has no cached card to reach.
+export async function renderCard(
+  event: { url: URL; platform?: Readonly<App.Platform> },
+  assets: Fetcher,
+  card: Card,
+): Promise<Response> {
+  const origin = event.url.origin
+  const cache = typeof caches === 'undefined' ? null : (caches as unknown as { default: Cache }).default
+  const version = await hashHex(JSON.stringify([CARD_DESIGN, composerRevision, card.key, card.label, card.title, card.detail, card.caption, card.size]))
+  const address = new Request(`${origin}${event.url.pathname}?v=${version.slice(0, 16)}`)
+  const found = await cache?.match(address)
+  if (found) return found
+  const response = await draw(assets, origin, card)
+  if (cache) {
+    const stored = cache.put(address, response.clone()).catch(cause => console.error('Could not cache social card', cause))
+    if (event.platform?.ctx) event.platform.ctx.waitUntil(stored)
+    else await stored
   }
+  return response
+}
 
+async function draw(assets: Fetcher, origin: string, card: Card): Promise<Response> {
   await renderer()
   const art = await card.art?.()
   const files = ['social-card.otf']
@@ -319,13 +333,6 @@ export async function renderCard(assets: Fetcher, origin: string, card: Card): P
     const rendered = render.render()
     try {
       const png = rendered.asPng().slice()
-      if (png.byteLength <= CACHEABLE_PNG_BYTES) {
-        if (cards.size >= CARD_CACHE_LIMIT) {
-          const oldest = cards.keys().next().value
-          if (oldest !== undefined) cards.delete(oldest)
-        }
-        cards.set(card.key, { png, expires: Date.now() + 90_000 })
-      }
       return pngResponse(png)
     } finally { rendered.free() }
   } finally { render.free() }

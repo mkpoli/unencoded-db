@@ -19,7 +19,7 @@ export const GET: RequestHandler = async event => {
   const image = source ? await getSourceArtwork(DB, source.id) : null
   const detail = card.detail ? translate(locale, card.detail) : [source?.title, source?.report_date].filter(Boolean).join(' · ')
   try {
-    return await renderCard(ASSETS, event.url.origin, {
+    return await renderCard(event, ASSETS, {
       key: JSON.stringify([locale, name, entry?.id, entry?.ids, entry?.layout, cover, source?.id, image]),
       label: translate(locale, name === 'home' || name === 'fallback' ? 'nav.browse' : 'app.name'),
       title: socialPageTitle(locale, card.title), keep: [translate(locale, 'app.name')], detail, caption: entry ? recordCode(entry.id) : undefined,
