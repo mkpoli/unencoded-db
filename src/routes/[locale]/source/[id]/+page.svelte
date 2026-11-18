@@ -22,7 +22,8 @@
   const records = $derived(new Set(data.sightings.map(sighting => sighting.entry_id)).size)
 </script>
 
-<Seo title={heading} />
+<Seo title={heading} description={[t('source.title'), heading, source.author, source.publisher, source.report_date].filter(Boolean).join(' · ')}
+  image={href(`/source/${source.id}/card.png`)} imageAlt={heading} />
 <div class="page narrow stack">
   <a class="text-link back" href={href('/sources')}>← {t('nav.sources')}</a>
   <section class="panel stack intro">

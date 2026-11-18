@@ -325,6 +325,8 @@
   "history.globalTitle": "歷史",
   "history.empty": "暫無更改。",
   "history.older": "更早",
+  "social.addEvidence": "新增例證",
+  "social.contributor": "貢獻者",
   "person.title": "{name}的貢獻",
   "person.empty": "暫無貢獻。",
   "person.since": "加入於{date}",

@@ -5,7 +5,7 @@
 
 </script>
 
-<Seo title={t('about.title')} />
+<Seo title={t('about.title')} description={t('about.what')} />
 <div class="page narrow stack">
   <h1>{t('about.title')}</h1>
   <p>{t('about.what')}</p>

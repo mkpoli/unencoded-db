@@ -7,7 +7,7 @@ import { limitWriteBody, MAX_AGENT_BODY, MAX_PICTURES_BODY } from '$lib/server/b
 import { guardWrite, writeLimitFor } from '$lib/server/guard'
 import { TILE_SIZE_COOKIE, tileSizeOf } from '$lib/tile-size'
 
-const UNPREFIXED = /^\/(media|api|auth|mcp|oauth\/(register|token|revoke)$|\.well-known\/|_app|robots\.txt|favicon)/
+const UNPREFIXED = /^\/(media|api|auth|mcp|oauth\/(register|token|revoke)$|\.well-known\/|_app|robots\.txt|favicon|sitemap(?:-[\w-]+)?\.xml$)/
 
 // A form post changes things under the visitor's cookie, so it must come from this site's own pages: the
 // rule SvelteKit applies by itself when left to. The token endpoints of agent sign-in are posted to by

@@ -6,7 +6,7 @@
   let { data, form } = $props()
 </script>
 
-<Seo title={t('history.title', { id: recordCode(data.id) })} />
+<Seo title={t('history.title', { id: recordCode(data.id) })} image={href(`/entry/${data.id}/card.png?view=history`)} />
 <div class="page narrow stack">
   <a class="text-link back" href={href(`/entry/${data.id}`)}>← {t('history.back')}</a>
   <h1>{t('history.title', { id: recordCode(data.id) })}</h1>

@@ -1110,6 +1110,34 @@ export async function tagCounts(db: D1Database) {
 }
 
 export type Source = { id: number; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null }
+
+export const getVisibleSource = (db: D1Database, id: number) => db.prepare(`
+  SELECT id, ${CITATION_FIELDS.join(', ')} FROM sources
+  WHERE id = ? AND (EXISTS (${CITING}) OR EXISTS (${CITING_AS_VIA}))
+`).bind(id).first<Source>()
+
+/** A picture as a social card crops it: the file, its thumbnail, its size and the characters marked on it. */
+export type CardPicture = Pick<StoredImage, 'image_key' | 'thumb_key' | 'image_w' | 'image_h' | 'box'>
+const CARD_PICTURE = 'x.image_key, x.thumb_key, x.image_w, x.image_h, x.box'
+
+// A record's cover, by its thumbnail, while a visible sighting still shows it.
+export const getCoverPicture = (db: D1Database, thumbKey: string) => db.prepare(`
+  SELECT ${CARD_PICTURE} FROM sighting_media x INDEXED BY sighting_media_by_thumb
+  JOIN sightings s ON s.id = x.sighting_id JOIN entries e ON e.id = s.entry_id
+  WHERE x.thumb_key = ? AND s.hidden_at IS NULL AND ${LIVE}
+  LIMIT 1
+`).bind(thumbKey).first<CardPicture>()
+
+// A source's cover comes from a visible sighting that cites the work itself.
+export const getSourceArtwork = (db: D1Database, id: number) => db.prepare(`
+  SELECT ${CARD_PICTURE} FROM sightings s INDEXED BY sightings_by_source
+  CROSS JOIN entries e ON e.id = s.entry_id
+  JOIN sighting_media x ON x.sighting_id = s.id
+  WHERE s.source_id = ? AND s.hidden_at IS NULL AND ${LIVE}
+  ORDER BY s.id, x.position
+  LIMIT 1
+`).bind(id).first<CardPicture>()
+
 export const SOURCE_PAGE = 200
 
 // A source and the records seen in it, each once, with the pages it was seen on.

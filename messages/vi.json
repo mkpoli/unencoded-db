@@ -325,6 +325,8 @@
   "history.globalTitle": "Lịch sử",
   "history.empty": "Chưa có thay đổi nào.",
   "history.older": "Cũ hơn",
+  "social.addEvidence": "Thêm dẫn chứng",
+  "social.contributor": "Người đóng góp",
   "person.title": "Đóng góp của {name}",
   "person.empty": "Chưa có đóng góp nào.",
   "person.since": "Tham gia từ {date}",
