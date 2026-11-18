@@ -233,8 +233,8 @@
 </div>
 
 <style>
-  .stack { display: grid; gap: 12px }
-  .type-group { display: grid; gap: 6px }
+  .stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px }
+  .type-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px }
   .type-heading { font-size: 12px; font-weight: 600; color: var(--muted) }
   .type-heading[data-tag-type=region] { color: var(--tag-region-ink) }
   .type-heading[data-tag-type=language] { color: var(--tag-language-ink) }
@@ -245,12 +245,12 @@
   .implied-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 7px; background: var(--surface-sunken); font-size: 12.5px }
   .implied-label { color: var(--muted); font-weight: 500 }
   .via { font-size: 11.5px; opacity: 0.8 }
-  .new-tag { border: 1px solid var(--line); border-radius: 7px; padding: 8px 12px }
+  .new-tag { container: new-tag / inline-size; border: 1px solid var(--line); border-radius: 7px; padding: 8px 12px }
   .new-tag summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 500 }
   .new-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr) minmax(0, 1.2fr) auto; gap: 8px; align-items: end; margin-top: 10px }
   .new-action { display: flex; align-items: end }
   .error-inline { margin: 8px 0 0; font-size: 13px; color: var(--wrong) }
-  @media (max-width: 720px) {
+  @container new-tag (inline-size < 36rem) {
     .new-grid { grid-template-columns: minmax(0, 1fr) }
   }
 </style>

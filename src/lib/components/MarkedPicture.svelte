@@ -20,4 +20,5 @@
   .frame { position:relative; display:inline-block; max-width:100%; line-height:0 }
   .frame img { display:block; width:auto; height:auto; max-width:100%; max-height:var(--picture-height, 65vh) }
   .mark { position:absolute; border:2px solid var(--mark); pointer-events:none }
+  @supports (height: 1dvh) { .frame img { max-height:var(--picture-height, 65dvh) } }
 </style>

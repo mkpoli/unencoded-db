@@ -104,7 +104,7 @@
   .source-head { display: flex; flex-direction: column; gap: 3px; min-width: 0 }
   .source-head h3 { font-size: 16px; font-weight: 600 }
   .description { max-width: 75ch; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6 }
-  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px 20px; margin: 0 }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 10px 20px; margin: 0 }
   .facts:empty { display: none }
   dt { color: var(--muted); font-size: 11px }
   dd { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere }
