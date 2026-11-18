@@ -84,7 +84,7 @@ The CSV export has one column for each kind of claim, and a claim names its link
 
 On the About page, **PUA fonts (TTF and OTF)** downloads a ZIP built from the public records and composer versions current when the download starts. Each glyph style has its own font family. Install either format for each family.
 
-The archive includes component licences and a `mapping.json` that pairs each record code with its copyable character and private-use code point. Assignments start at U+E000 for record 1 and continue through the supplementary private-use areas. Hidden and merged records leave gaps. Each style uses the record’s primary drawing and layout. Where a drawing is unavailable, the font uses a monochrome tracing of the marked character in the cover image or, if that too is unavailable, a hollow square. The mapping identifies the source for each record and style and links to the sighting for a marked cover.
+The archive includes component licences and a `mapping.json` that pairs each record code with its copyable character and private-use code point. Assignments start at U+E000 for record 1 and continue through the supplementary private-use areas. Hidden and merged records leave gaps. Each style uses the record’s primary drawing and layout. Where a drawing is unavailable, the font uses a monochrome tracing of the marked character in the cover image or, if that too is unavailable, a hollow square. Descriptions with Shuishu components use a placeholder because the chart font has no stated redistribution terms. The mapping identifies the source for each record and style and links to the sighting for a marked cover.
 
 ## Record codes
 

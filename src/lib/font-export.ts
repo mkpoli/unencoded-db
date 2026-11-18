@@ -1,3 +1,4 @@
+import { isShuishu } from 'han-compose/tree'
 import { contours } from 'd3-contour'
 import { strToU8, zipSync } from 'fflate'
 import { Path } from 'opentype.js'
@@ -68,6 +69,8 @@ async function trace(blob: Blob, size: number, evidence = false) {
 }
 
 async function drawing(row: Row, face: Face, covers: Map<string, Promise<Path | null>>) {
+  // The upstream chart font has no stated redistribution permission, including for components.
+  if (isShuishu(row.ids)) return { path: missingOutline(), source: 'placeholder-shuishu' }
   if (row.ids) {
     const query = new URLSearchParams({ ids: row.ids, style: face.style, v: face.version })
     if (row.layout) query.set('layout', row.layout)
@@ -116,14 +119,15 @@ export async function exportFonts(progress: (done: number, total: number) => voi
     evidence: row.marked_sighting ? new URL('/en/entry/' + row.id + '#sighting-' + row.marked_sighting, location.origin).href : undefined,
     character: String.fromCodePoint(privateCode(row.id)), sources: {} as Record<string, string> }))
   const covers = new Map<string, Promise<Path | null>>()
+  // The CFF charset includes standard strings and a custom string for each glyph name.
+  const partSize = 64000
   let done = 0
   const total = records.length * styles.length
   for (const face of styles) {
     const manifest = await (await checked(face.source + '/manifest.json')).json() as { licences: unknown }
     files['licences/' + face.style + '.json'] = strToU8(JSON.stringify(manifest.licences, null, 2))
-    // Both SFNT formats have a 16-bit glyph count, including .notdef.
-    for (let start = 0; start < records.length || start === 0; start += 65534) {
-      const batch = records.slice(start, start + 65534)
+    for (let start = 0; start < records.length || start === 0; start += partSize) {
+      const batch = records.slice(start, start + partSize)
       const glyphs = []
       for (let first = 0; first < batch.length; first += 4) {
         const group = batch.slice(first, first + 4)
@@ -135,7 +139,7 @@ export async function exportFonts(progress: (done: number, total: number) => voi
         done += group.length
         progress(done, total)
       }
-      const part = records.length > 65534 ? ' ' + (1 + start / 65534) : ''
+      const part = start > 0 ? ' ' + (1 + start / partSize) : ''
       Object.assign(files, fontFiles(names[face.style] + part, glyphs, date))
     }
   }
