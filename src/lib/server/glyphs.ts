@@ -23,10 +23,6 @@ const folderOf = (style: GlyphStyle) => `composer/${composerVersion(style)}`
 const drawingsOf = (style: GlyphStyle, name: string) => `glyphs/${composerDrawing(style, name.includes('\n'))}`
 const IMMUTABLE = 'public, max-age=31536000, immutable'
 
-const sources = new WeakMap<Bucket, Map<string, Source>>()
-const exports = new WeakMap<Bucket, Map<string, ReturnType<typeof exportSource>>>()
-const pending = new Map<string, Promise<string | null>>()
-
 const typeOf = (name: string) => /^[gp]\//.test(name) ? 'application/octet-stream' : 'application/json'
 
 // The export's files pass through the bucket, so a shard fetched once stays here.
@@ -68,31 +64,6 @@ export function sourceKey(sequence: string, context: Context, separate = false) 
   return `${style}:${local ? 'local' : 'remote'}:${traitKey(traits)}:${context.assets ? 1 : 0}:${separate ? 1 : 0}`
 }
 
-// One export source for each style: whatever a description calls for, the export's manifest, layout
-// and identity table are read and parsed once.
-function exportOf(bucket: Bucket, context: Context, style: GlyphStyle) {
-  let byStyle = exports.get(bucket)
-  if (!byStyle) exports.set(bucket, byStyle = new Map())
-  const key = `${style}:${context.assets ? 1 : 0}`
-  let found = byStyle.get(key)
-  if (!found) byStyle.set(key, found = exportSource(composerUrl(style), { loaders: composerData, fetch: reader(bucket, style), read: bundled(context) }))
-  return found
-}
-
-function sourceOf(bucket: Bucket, sequence: string, context: Context, separate = false) {
-  let byTrait = sources.get(bucket)
-  if (!byTrait) sources.set(bucket, byTrait = new Map())
-  const traits = traitsOf(sequence)
-  const style = context.style ?? GLYPH_STYLE
-  const key = sourceKey(sequence, context, separate)
-  let source = byTrait.get(key)
-  if (!source) {
-    source = sourceFor(sequence, { base: composerUrl(style), fontStyle: style, traits, separate, exported: exportOf(bucket, context, style), loaders: composerData, read: bundled(context) })
-    byTrait.set(key, source)
-  }
-  return source
-}
-
 /** What tells one drawing from another: the description, and its layout when it has one. */
 export function glyphName(glyph: Glyph, style: GlyphStyle = GLYPH_STYLE) {
   const ids = cleanIds(glyph.ids ?? '')
@@ -120,28 +91,42 @@ async function adjusted(from: Source, ids: string, layout: string, name: string,
   return defs + body
 }
 
-export function drawGlyph(bucket: Bucket, glyph: Glyph, context: Context = {}): Promise<string | null> {
-  const style = context.style ?? GLYPH_STYLE, name = glyphName(glyph, style)
-  if (!name) return Promise.resolve(null)
-  const task = `${style}\n${name}`
-  let run = pending.get(task)
-  if (!run) {
-    run = (async () => {
+// A source retains promises for R2 and asset reads. Only drawings owned by this request
+// can await those reads. Finished paths and composer files remain shared through R2.
+function glyphDrawer(bucket: Bucket, context: Context) {
+  const style = context.style ?? GLYPH_STYLE
+  const sources = new Map<string, Source>()
+  let exported: ReturnType<typeof exportSource> | undefined
+  function source(ids: string, separate = false) {
+    const key = sourceKey(ids, context, separate)
+    let found = sources.get(key)
+    if (!found) {
+      exported ??= exportSource(composerUrl(style), { loaders: composerData, fetch: reader(bucket, style), read: bundled(context) })
+      found = sourceFor(ids, { base: composerUrl(style), fontStyle: style, traits: traitsOf(ids), separate, exported, loaders: composerData, read: bundled(context) })
+      sources.set(key, found)
+    }
+    return found
+  }
+  return async (glyph: Glyph) => {
+    const name = glyphName(glyph, style)
+    if (!name) return null
+    try {
       const stored = await read(bucket, name, style)
       if (stored) return stored
       const [ids, layout] = name.split('\n')
-      const drawn = (layout ? await adjusted(sourceOf(bucket, ids, context, true), ids, layout, name, style) : null) ?? (await compose(sourceOf(bucket, ids, context), ids, { fontStyle: style })).d
+      const drawn = (layout ? await adjusted(source(ids, true), ids, layout, name, style) : null) ?? (await compose(source(ids), ids, { fontStyle: style })).d
       if (!drawn) return null
       await bucket.put(`${drawingsOf(style, name)}/${await hashHex(name)}.txt`, drawn, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
       return drawn
-    })().catch(error => {
-      // A drawing that fails leaves the description on the page; the log says why.
+    } catch (error) {
       console.error(`glyph ${style} ${name}:`, error)
       throw error
-    }).finally(() => pending.delete(task))
-    pending.set(task, run)
+    }
   }
-  return run
+}
+
+export function drawGlyph(bucket: Bucket, glyph: Glyph, context: Context = {}) {
+  return glyphDrawer(bucket, context)(glyph)
 }
 
 // The drawings a page already has, by `glyphName`. A glyph without one keeps its description until it is drawn.
@@ -163,9 +148,10 @@ export async function glyphPaths(bucket: Bucket | undefined, glyphs: Glyph[], st
 // Draw the glyphs a page did not have, a few at a time, after its response.
 export async function warmGlyphs(bucket: Bucket | undefined, glyphs: Glyph[], context: Context = {}) {
   if (!bucket?.get) return
+  const draw = glyphDrawer(bucket, context)
   let next = 0
   const worker = async () => {
-    while (next < glyphs.length) await drawGlyph(bucket, glyphs[next++], context).catch(() => null)
+    while (next < glyphs.length) await draw(glyphs[next++]).catch(() => null)
   }
   await Promise.all(Array.from({ length: Math.min(2, glyphs.length) }, worker))
 }

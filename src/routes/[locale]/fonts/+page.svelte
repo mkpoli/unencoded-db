@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Path } from 'opentype.js'
   import { onDestroy, untrack } from 'svelte'
   import { href, t } from '$lib/t'
   import { recordCode } from '$lib/code'
@@ -31,26 +32,40 @@
   })
   const instance = $props.id()
   const family = 'RCCPreview' + instance.replace(/[^a-zA-Z0-9]/g, '')
-  let previewState = $state<'loading' | 'ready' | 'error'>('loading')
+  let previewState = $state<'loading' | 'retrying' | 'ready' | 'error'>('loading')
+  let failedCount = $state(0)
+  const request = $derived.by(() => ({
+    face: data.catalogue.styles.find(face => face.style === style),
+    records: selection ? selection.split(',').map(i => rows[Number(i)]) : [],
+    paths: new Map<number, Path>()
+  }))
   let installed: FontFace | undefined
   onDestroy(() => { if (installed) document.fonts.delete(installed) })
   $effect(() => {
-    const face = data.catalogue.styles.find(face => face.style === style)
-    const indices = selection
-    const catalogue = rows
+    const { face, records, paths } = request
     void retry
-    if (!face || !indices) { previewState = 'ready'; return }
+    if (!face || !records.length) {
+      failedCount = 0
+      previewState = 'ready'
+      if (installed) document.fonts.delete(installed)
+      installed = undefined
+      return
+    }
     const controller = new AbortController()
-    previewState = 'loading'
+    previewState = paths.size ? 'retrying' : 'loading'
+    if (!paths.size) failedCount = 0
     const timer = setTimeout(async () => {
       try {
         const { previewFont } = await import('$lib/font-preview')
-        const buffer = await previewFont(indices.split(',').map(i => catalogue[Number(i)]), face, controller.signal)
+        const { buffer, failed } = await previewFont(records, face, controller.signal, paths)
+        if (controller.signal.aborted) return
+        if (!buffer) { previewState = 'error'; return }
         const loaded = await new FontFace(family, buffer).load()
         if (controller.signal.aborted) return
         document.fonts.add(loaded)
         if (installed) document.fonts.delete(installed)
         installed = loaded
+        failedCount = failed.length
         previewState = 'ready'
       } catch {
         if (!controller.signal.aborted) previewState = 'error'
@@ -80,8 +95,8 @@
     <textarea id="font-sample" bind:this={editor} bind:value={sample} maxlength={sampleLimit} spellcheck="false" style:font-size={size + 'px'}></textarea>
     <div class="controls">
       <label>{t('fonts.size')} <input type="range" min="24" max="120" step="2" bind:value={size} /> <output>{size} px</output></label>
-      <span role="status">{previewState === 'loading' ? t('about.fontPreparing') : previewState === 'error' ? t('fonts.previewError') : ''}</span>
-      {#if previewState === 'error'}<button class="button" onclick={() => retry++}>{t('fonts.retry')}</button>{/if}
+      <span role="status">{previewState === 'loading' || previewState === 'retrying' ? t('about.fontPreparing') : previewState === 'error' ? t('fonts.previewError') : failedCount ? t('fonts.partial', { n: failedCount }) : ''}</span>
+      {#if previewState === 'error' || failedCount}<button class="button" disabled={previewState === 'retrying'} onclick={() => retry++}>{t('fonts.retry')}</button>{/if}
     </div>
   </section>
   <section>
@@ -99,7 +114,7 @@
       <ul class="gallery">
         {#each visible as row (row.id)}
           <li>
-            <button class="specimen" aria-label={t('fonts.insert', { code: recordCode(row.id) })} title={t('fonts.insert', { code: recordCode(row.id) })} onclick={() => insert(glyph(row.id))}>{previewState === 'ready' ? glyph(row.id) : '·'}</button>
+            <button class="specimen" aria-label={t('fonts.insert', { code: recordCode(row.id) })} title={t('fonts.insert', { code: recordCode(row.id) })} onclick={() => insert(glyph(row.id))}>{previewState === 'ready' || previewState === 'retrying' ? glyph(row.id) : '·'}</button>
             <a href={href('/entry/' + row.id)}>{recordCode(row.id)}</a>
             <small>U+{privateCode(row.id).toString(16).toUpperCase()}</small>
           </li>
