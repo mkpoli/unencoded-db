@@ -3,7 +3,7 @@ import { initWasm, Resvg } from '@resvg/resvg-wasm'
 import { encode as encodePng } from 'fast-png'
 import { Buffer } from 'node:buffer'
 import { glyphName, glyphPaths } from '$lib/server/glyphs'
-import { mediaVisible, type Entry } from '$lib/server/entries'
+import type { Entry } from '$lib/server/entries'
 import { MAX_THUMB, sniff } from '$lib/server/image'
 
 const PAPER = '#fafafa', INK = '#19191c', MUTED = '#67676f', ACCENT = '#6356e5'
@@ -15,6 +15,12 @@ const BOOK = '<path d="M53 199V69c39-12 73-6 97 14 24-20 58-26 97-14v130c-39-12-
 let initialized: Promise<void> | undefined
 let webpInitialized: Promise<void> | undefined
 const fonts = new Map<string, Uint8Array>()
+// Moderation is checked before consulting this cache. Short-lived entries also let newly drawn glyphs appear.
+const cards = new Map<string, { png: Uint8Array<ArrayBuffer>; expires: number }>()
+const CARD_CACHE_LIMIT = 24
+const CACHEABLE_PNG_BYTES = 192 * 1024
+const MAX_EVIDENCE_PIXELS = 1_048_576
+const ART_WIDTH = 334, ART_HEIGHT = 322
 
 async function renderer() {
   initialized ??= import('@resvg/resvg-wasm/index_bg.wasm').then(wasm => initWasm(wasm.default)).catch(error => {
@@ -36,7 +42,24 @@ async function webpAsPng(bytes: ArrayBuffer) {
     throw error
   })
   await webpInitialized
-  return encodePng(await decodeWebp(bytes))
+  const image = await decodeWebp(bytes)
+  if (image.width * image.height > MAX_EVIDENCE_PIXELS) return null
+  const scale = Math.min(1, ART_WIDTH / image.width, ART_HEIGHT / image.height)
+  if (scale === 1) return encodePng(image)
+
+  // Sample into the card's viewport before creating the intermediate PNG.
+  const width = Math.max(1, Math.round(image.width * scale))
+  const height = Math.max(1, Math.round(image.height * scale))
+  const data = new Uint8Array(width * height * 4)
+  for (let y = 0; y < height; y++) {
+    const row = Math.floor((y + 0.5) * image.height / height) * image.width
+    for (let x = 0; x < width; x++) {
+      const from = (row + Math.floor((x + 0.5) * image.width / width)) * 4
+      const to = (y * width + x) * 4
+      for (let channel = 0; channel < 4; channel++) data[to + channel] = image.data[from + channel]
+    }
+  }
+  return encodePng({ width, height, data })
 }
 
 async function cardFont(assets: Fetcher, origin: string, file: string) {
@@ -59,14 +82,14 @@ function text(value: string, x: number, y: number, size: number, fill: string) {
 
 // Latin letters occupy a little over half an em in the card face. Fullwidth scripts use one em.
 function lines(value: string, limit: number, count: number) {
-  const words = value.trim().replace(/\s+/g, ' ').split(' ')
+  const words = value.normalize('NFC').trim().replace(/\s+/g, ' ').split(' ')
   const result: string[] = []
   let line = '', width = 0
-  const units = (char: string) => /^[\u0020-\u052f]$/u.test(char) ? 0.65 : 1
+  const units = (char: string) => /^[\u0020-\u052f\u1e00-\u1eff]$/u.test(char) ? 0.65 : 1
   for (const word of words) {
     const length = [...word].reduce((sum, char) => sum + units(char), 0)
     if (line && width + 0.65 + length > limit) {
-      result.push(line)
+      result.push(line.trimEnd())
       line = ''
       width = 0
     }
@@ -74,7 +97,7 @@ function lines(value: string, limit: number, count: number) {
     const chunk = line ? ` ${word}` : word
     for (const char of chunk) {
       if (width + units(char) > limit) {
-        result.push(line)
+        result.push(line.trimEnd())
         line = ''
         width = 0
         if (result.length === count) break
@@ -89,37 +112,53 @@ function lines(value: string, limit: number, count: number) {
   return result
 }
 
-export async function recordArtwork(env: App.Platform['env'], entry: Entry) {
+export async function recordArtwork(bucket: R2Bucket, entry: Entry) {
   const key = entry.cover_key
-  if (key && await mediaVisible(env.DB, key)) {
-    const object = await env.MEDIA.get(key)
+  if (key) {
+    const object = await bucket.get(key)
     if (object && object.size <= MAX_THUMB) {
       const bytes = await object.arrayBuffer()
       const image = sniff(new Uint8Array(bytes))
-      if (image?.width && image.height && image.width * image.height <= 4_000_000) {
+      if (image?.width && image.height && image.width * image.height <= MAX_EVIDENCE_PIXELS) {
         const png = image.type === 'image/webp' ? await webpAsPng(bytes).catch(() => null) : null
         if (png || image.type !== 'image/webp') {
           const data = (png ? Buffer.from(png) : Buffer.from(bytes)).toString('base64')
-          return `<image x="737" y="154" width="334" height="322" href="data:${png ? 'image/png' : image.type};base64,${data}"/>`
+          return `<image x="737" y="154" width="${ART_WIDTH}" height="${ART_HEIGHT}" href="data:${png ? 'image/png' : image.type};base64,${data}"/>`
         }
       }
     } else if (object) await object.body.cancel()
   }
   if (entry.ids) {
     const glyph = { ids: entry.ids, layout: entry.layout }
-    const path = (await glyphPaths(env.MEDIA, [glyph]))[glyphName(glyph) ?? '']
+    const path = (await glyphPaths(bucket, [glyph]))[glyphName(glyph) ?? '']
     if (path) return `<svg x="769" y="180" width="270" height="270" viewBox="0 0 1000 1000">${path.startsWith('<') ? path : `<path d="${path}"/>`}</svg>`
     return lines(entry.ids, 8, 2).map((line, position) => text(line, 760, 310 + 44 * position, 36, INK)).join('')
   }
   return `<g transform="translate(807 218) scale(6)">${MARK}</g>`
 }
 
-type Card = { label: string; title: string; detail?: string | null; art?: string; source?: boolean }
+type Card = { key: string; label: string; title: string; detail?: string | null; art?: () => Promise<string>; source?: boolean }
+
+const pngResponse = (png: Uint8Array<ArrayBuffer>) => new Response(png, {
+  headers: { 'content-type': 'image/png', 'cache-control': 'no-store' },
+})
 
 export async function renderCard(assets: Fetcher, origin: string, card: Card): Promise<Response> {
+  const memo = cards.get(card.key)
+  if (memo) {
+    cards.delete(card.key)
+    if (memo.expires > Date.now()) {
+      cards.set(card.key, memo)
+      return pngResponse(memo.png)
+    }
+  }
+
   await renderer()
+  const art = await card.art?.()
   const files = ['social-card.otf']
-  if (/\p{Script=Hangul}/u.test(`${card.label}${card.title}${card.detail ?? ''}${card.art ?? ''}`)) files.push('social-card-hangul.otf')
+  const content = `${card.label}${card.title}${card.detail ?? ''}${art ?? ''}`
+  if (/\p{Script=Hangul}/u.test(content)) files.push('social-card-hangul.otf')
+  if (/[\u{20000}-\u{323af}]/u.test(content)) files.push('social-card-supplementary.otf')
   const fontBuffers = await Promise.all(files.map(file => cardFont(assets, origin, file)))
   const size = card.source ? 48 : 64
   const title = lines(card.title, card.source ? 12 : 9, 2)
@@ -134,13 +173,21 @@ export async function renderCard(assets: Fetcher, origin: string, card: Card): P
     ${detail ? text(detail, 72, title.length > 1 ? 422 : 365, 29, MUTED) : ''}
     ${text('珍字集覽  ·  Rare Character Compendium', 72, 511, 23, MUTED)}
     <rect x="680" y="122" width="448" height="386" rx="20" fill="#f1f1f3" stroke="#e3e3e7" stroke-width="2"/>
-    ${card.art || `<g transform="translate(754 166)">${BOOK}</g>`}
+    ${art || `<g transform="translate(754 166)">${BOOK}</g>`}
   </svg>`
   const render = new Resvg(svg, { font: { fontBuffers, defaultFontFamily: FONT } })
   try {
-    const png = render.render()
+    const rendered = render.render()
     try {
-      return new Response(png.asPng().slice(), { headers: { 'content-type': 'image/png', 'cache-control': 'no-store' } })
-    } finally { png.free() }
+      const png = rendered.asPng().slice()
+      if (png.byteLength <= CACHEABLE_PNG_BYTES) {
+        if (cards.size >= CARD_CACHE_LIMIT) {
+          const oldest = cards.keys().next().value
+          if (oldest !== undefined) cards.delete(oldest)
+        }
+        cards.set(card.key, { png, expires: Date.now() + 90_000 })
+      }
+      return pngResponse(png)
+    } finally { rendered.free() }
   } finally { render.free() }
 }

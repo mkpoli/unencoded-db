@@ -33,8 +33,8 @@ The names and licences of the full faces are recorded in `../third-party/ids-inp
 
 ## Social card face
 
-`social-card.otf` and `social-card-hangul.otf` are subsets of the Traditional Chinese and Korean faces
-from Noto Sans CJK 2.004. The Worker loads the Korean subset when a card contains Hangul. Both fonts
+The social card fonts are subsets of the Traditional Chinese and Korean faces from Noto Sans CJK
+2.004. The Worker loads the supplementary Han and Hangul subsets when a card needs them. The fonts
 are under the [SIL Open Font License 1.1](../third-party/ids-input/fonts/OFL-NotoSansCJK.txt).
 
 ```sh
@@ -43,5 +43,8 @@ uv run --with fonttools pyftsubset NotoSansCJK-Regular.ttc --font-number=3 \
   --no-hinting --no-layout-closure --layout-features=kern
 uv run --with fonttools pyftsubset NotoSansCJK-Regular.ttc --font-number=1 \
   --output-file=social-card-hangul.otf --unicodes='U+1100-11FF,U+3130-318F,U+AC00-D7FF' \
+  --no-hinting --no-layout-closure --layout-features=kern
+uv run --with fonttools pyftsubset NotoSansCJK-Regular.ttc --font-number=3 \
+  --output-file=social-card-supplementary.otf --unicodes='U+20000-323AF' \
   --no-hinting --no-layout-closure --layout-features=kern
 ```
