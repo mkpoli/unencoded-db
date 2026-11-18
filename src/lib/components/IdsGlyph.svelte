@@ -18,7 +18,7 @@
   // drawing for a year; a new export or composer must therefore come with a new address.
   const style = $derived(named ?? page.data.glyphStyle ?? GLYPH_STYLE)
   const laidOut = $derived(layoutText(layoutForStyle(cleanLayout(layout, ids), style)))
-  const wanted = $derived(ids ? `/api/glyph?ids=${encodeURIComponent(ids)}&v=${encodeURIComponent(composerDrawing(style))}${laidOut ? `&layout=${encodeURIComponent(laidOut)}` : ''}${style !== GLYPH_STYLE ? `&style=${style}` : ''}` : '')
+  const wanted = $derived(ids ? `/api/glyph?ids=${encodeURIComponent(ids)}&v=${encodeURIComponent(composerDrawing(style, Boolean(laidOut)))}${laidOut ? `&layout=${encodeURIComponent(laidOut)}` : ''}${style !== GLYPH_STYLE ? `&style=${style}` : ''}` : '')
   // What was fetched belongs to the drawing it was asked for, so a glyph given another description starts again.
   let fetched = $state.raw<{ of: string; d: string } | null>(null)
   const path = $derived(given ?? (fetched?.of === wanted ? fetched.d : null))

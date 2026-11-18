@@ -14,13 +14,13 @@ export const GET: RequestHandler = async (event) => {
   const raw = event.url.searchParams.get('ids') ?? '', given = event.url.searchParams.get('layout') ?? ''
   const asked = event.url.searchParams.get('style'), style = glyphStyleOf(asked)
   if (asked !== null && asked !== style) return new Response(null, { status: 404 })
-  // The address names the export and the composer, and the answer is cached for a year: a drawing
-  // made by another of either must not answer for this one.
-  if (event.url.searchParams.get('v') !== composerDrawing(style)) return new Response(null, { status: 404 })
   const ids = cleanIds(raw)
   if (raw.length > 200 || given.length > 8000 || (!ids || ([...ids].length > 1 && !isDescription(ids)))) return new Response(null, { status: 404 })
   const layout = layoutText(cleanMatrices(given, ids)) || null
   if (given && !layout) return new Response(null, { status: 404 })
+  // The address names the export and the composer, and the answer is cached for a year: a drawing
+  // made by another of either must not answer for this one.
+  if (event.url.searchParams.get('v') !== composerDrawing(style, Boolean(layout))) return new Response(null, { status: 404 })
   const bindings = env(event)
   // Match the layout of this face on a visible claim. An empty face map can explicitly
   // override a legacy shared layout, so test for its presence before looking at the shared map.

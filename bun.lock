@@ -9,7 +9,7 @@
         "fflate": "^0.8.3",
         "fonteditor-core": "^2.6.3",
         "han-compose": "github:mkpoli/han-compose#ee187e83945db805620d54c44df31584d2d64553",
-        "ids-input": "github:mkpoli/ids-input#fc79c7e7214b",
+        "ids-input": "github:mkpoli/ids-input#3b9c30d348bd895eacc78959266e91fcaf64836c",
         "jose": "^6.2.15",
         "opentype.js": "1.3.4",
         "svgpath": "^2.6.0",
@@ -296,7 +296,7 @@
 
     "han-compose": ["han-compose-monorepo@github:mkpoli/han-compose#ee187e8", {}, "mkpoli-han-compose-ee187e8", "sha512-zsCXMFTOwpPoLE1q5+ZO7kam22PYWYRwjni8BNi7rYWhKiY8JyyvfDlqmb2YOIhgLKFzwqFzz5akrHNyILXwgQ=="],
 
-    "ids-input": ["ids-input@github:mkpoli/ids-input#fc79c7e", { "dependencies": { "@cf-wasm/resvg": "^0.4.0", "@han-compose/composer": "file:../composer" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-fc79c7e", "sha512-Tm1Bs8M4wn1DduCbZUyunO+o1kDdkP7kBgan3ns6I86teu+XUN8Efg7qfRL9/UCGQF7M6T0D0gKTZW5EXv5iVg=="],
+    "ids-input": ["ids-input@github:mkpoli/ids-input#3b9c30d", { "dependencies": { "@cf-wasm/resvg": "^0.4.0", "@han-compose/composer": "file:../composer" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-3b9c30d", "sha512-t0xnMV9yKNMaAynAmDBWQ0Mi3dFm7wBumOrPWXOSDvMfDghH63nPvfZIcJdfypJy+JwPvN2Ee3vPSAEI26FuKg=="],
 
     "internmap": ["internmap@2.0.3", "", {}, "sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg=="],
 
@@ -426,7 +426,7 @@
 
     "@types/node/undici-types": ["undici-types@8.9.0", "", {}, "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="],
 
-    "ids-input/@han-compose/composer": ["@han-compose/composer@file:../../../../../.bun/install/cache/composer", {}],
+    "ids-input/@han-compose/composer": ["@han-compose/composer@file:../../../../.bun/install/cache/composer", {}],
 
     "youch/cookie": ["cookie@1.1.1", "", {}, "sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ=="],
   }
