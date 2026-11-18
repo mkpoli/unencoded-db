@@ -160,7 +160,7 @@
     <div class="stage">
       {#key style}
         <kit.IdsPreview adapter={{ preview: activePreview.draw }} {tree} chosen={adjusting ? picked : chosen} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
-          session={parted ? session : null} {version} editable={adjusting && parted} onchoose={path => picked = path} onedit={read} />
+          session={parted ? session : null} preserveStroke={style === 'sans'} {version} editable={adjusting && parted} onchoose={path => picked = path} onedit={read} />
       {/key}
     </div>
   {:else}

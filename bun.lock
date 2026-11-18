@@ -6,7 +6,7 @@
       "name": "unencoded-db",
       "dependencies": {
         "han-compose": "github:mkpoli/han-compose#ee187e83945db805620d54c44df31584d2d64553",
-        "ids-input": "github:mkpoli/ids-input#fc79c7e7214b",
+        "ids-input": "github:mkpoli/ids-input#38847b4b68ca61b552919dc532ed8c902e06b506",
         "jose": "^6.2.15",
       },
       "devDependencies": {
@@ -268,7 +268,7 @@
 
     "han-compose": ["han-compose-monorepo@github:mkpoli/han-compose#ee187e8", {}, "mkpoli-han-compose-ee187e8", "sha512-zsCXMFTOwpPoLE1q5+ZO7kam22PYWYRwjni8BNi7rYWhKiY8JyyvfDlqmb2YOIhgLKFzwqFzz5akrHNyILXwgQ=="],
 
-    "ids-input": ["ids-input@github:mkpoli/ids-input#fc79c7e", { "dependencies": { "@cf-wasm/resvg": "^0.4.0", "@han-compose/composer": "file:../composer" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-fc79c7e", "sha512-Tm1Bs8M4wn1DduCbZUyunO+o1kDdkP7kBgan3ns6I86teu+XUN8Efg7qfRL9/UCGQF7M6T0D0gKTZW5EXv5iVg=="],
+    "ids-input": ["ids-input@github:mkpoli/ids-input#38847b4", { "dependencies": { "@cf-wasm/resvg": "^0.4.0", "@han-compose/composer": "file:../composer" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-38847b4", "sha512-FnJlNqKjjGk0osjtHvrX1R1j19mBPpzlck6vs1dSEN2W52XWiRsC42skZ3fGFDdFTTH60WQonJHtzzggXS1GAQ=="],
 
     "is-reference": ["is-reference@3.0.3", "", { "dependencies": { "@types/estree": "^1.0.6" } }, "sha512-ixkJoqQvAP88E6wLydLGGqCJsrFUnqoH6HnaczB8XmDH1oaWU+xxdptvikTgaEhtZ53Ky6YXiBuUI2WXLMCwjw=="],
 
@@ -388,7 +388,7 @@
 
     "@types/node/undici-types": ["undici-types@8.9.0", "", {}, "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="],
 
-    "ids-input/@han-compose/composer": ["@han-compose/composer@file:../../../../../.bun/install/cache/composer", {}],
+    "ids-input/@han-compose/composer": ["@han-compose/composer@file:../../../../.bun/install/cache/composer", {}],
 
     "youch/cookie": ["cookie@1.1.1", "", {}, "sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ=="],
   }

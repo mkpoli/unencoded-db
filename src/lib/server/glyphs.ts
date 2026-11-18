@@ -5,7 +5,7 @@ import { documentView } from 'han-compose/document-view'
 import { compose, sketch } from 'han-compose/loader'
 import { onlyBundled } from 'han-compose/local'
 import { exportSource, sourceFor, traitKey, traitsOf } from 'han-compose/source'
-import { layerFrames, renderScopes, scopesMarkup } from 'ids-input/document'
+import { documentRenderer, scopesMarkup } from 'ids-input/document'
 import { composerDrawing, composerUrl, composerVersion, GLYPH_STYLE, type GlyphStyle } from '$lib/composer'
 import { composerData } from '$lib/composer-data'
 import { cleanIds } from '$lib/ids'
@@ -113,7 +113,7 @@ async function adjusted(from: Source, ids: string, layout: string, name: string,
   if (!document) return null
   const drawn = await compose(from, ids, { separate: true, fontStyle: style })
   const leaves = await sketch(from, ids, { fontStyle: style })
-  const view = documentView(document, drawn, leaves, { renderer: { layerFrames, renderScopes } })
+  const view = documentView(document, drawn, leaves, { renderer: documentRenderer(style === 'sans' ? drawn.stroke : null) })
   if (!view.scopes || !view.complete) return null
   // What a part takes away and the emoji among the parts are drawn as the form's own plate draws them.
   const { defs, body } = scopesMarkup(view.scopes, { ink: 'currentColor', idPrefix: `g${(await hashHex(name)).slice(0, 12)}`, emoji: drawn.emoji, cut: drawn.cut, cutLeaf: drawn.parts?.find(part => part.cut)?.leaf ?? null })
