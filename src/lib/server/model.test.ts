@@ -153,6 +153,23 @@ describe('the evidence a claim rests on', () => {
     expect((await getEntry(db, id))!.sightings.map(sighting => sighting.hidden_at)).toEqual([null, null])
   })
 
+  test('hiding a sighting, merging and unmerging each move the time of change of every record they alter', async () => {
+    const { db, id, two } = await cited()
+    const into = await createEntry(db, fields([claim('reading', 'dong')]), seen({ place: 'three' }), [], who)
+    const changed = async (record: number) => (await getEntry(db, record))!.entry.updated_at
+    const age = () => db.prepare("UPDATE entries SET updated_at = '2000-01-01T00:00:00.000Z'").run()
+    await age()
+    expect(await setHidden(db, { entry: id, sighting: two }, true, who, null)).toBe(true)
+    expect(await changed(id)).not.toBe('2000-01-01T00:00:00.000Z')
+    await age()
+    expect((await mergeEntry(db, id, into, who, null)).ok).toBe(true)
+    expect(await changed(into)).not.toBe('2000-01-01T00:00:00.000Z')
+    await age()
+    expect(await unmergeEntry(db, id, who)).toBe(true)
+    expect(await changed(into)).not.toBe('2000-01-01T00:00:00.000Z')
+    expect(await changed(id)).not.toBe('2000-01-01T00:00:00.000Z')
+  })
+
   test('an edited or restored sighting is the same evidence', async () => {
     const { db, id, two, claims } = await cited()
     expect(await editSighting(db, two, 1, seen({ place: 'two, corrected' }), [], who, null, id)).toEqual({ ok: true, rev: 2 })

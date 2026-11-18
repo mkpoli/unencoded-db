@@ -11,6 +11,18 @@ export function sitemapResponse(root: 'urlset' | 'sitemapindex', items: string[]
   })
 }
 
-export function pageSitemap(paths: readonly string[]) {
-  return sitemapResponse('urlset', LOCALES.flatMap(locale => paths.map(path => `<url><loc>${SITE_ORIGIN}/${locale}${path}</loc></url>`)))
+/** A page and, when known, when its content last changed. */
+export type SitemapPage = string | { path: string; updated?: string | null }
+
+// A timestamp in the W3C form sitemaps take, or nothing for one that does not parse.
+const lastmod = (updated: string | null | undefined) => {
+  const time = updated ? Date.parse(updated) : NaN
+  return Number.isNaN(time) ? '' : `<lastmod>${new Date(time).toISOString()}</lastmod>`
+}
+
+export function pageSitemap(pages: readonly SitemapPage[]) {
+  return sitemapResponse('urlset', LOCALES.flatMap(locale => pages.map(page => {
+    const { path, updated } = typeof page === 'string' ? { path: page, updated: null } : page
+    return `<url><loc>${SITE_ORIGIN}/${locale}${path}</loc>${lastmod(updated)}</url>`
+  })))
 }

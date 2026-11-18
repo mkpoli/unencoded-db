@@ -43,3 +43,13 @@ test('source sitemaps list sources that visible records cite', async () => {
   await expect(shard('sources-3')).rejects.toMatchObject({ status: 404 })
   await expect(shard('sources-0')).rejects.toMatchObject({ status: 404 })
 })
+
+test('record sitemaps say when each record last changed', async () => {
+  const { db, raw } = openTestDb()
+  raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026');
+    INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES
+      (1, 'han', 'p', '2026', '2026-11-16T14:13:22.122Z'), (2, 'han', 'p', '2026', 'not a time')`)
+  const xml = await (await child({ platform: { env: { DB: db } }, params: { part: '1' } } as Parameters<typeof child>[0])).text()
+  expect(xml).toContain(`<url><loc>${SITE_ORIGIN}/en/entry/1</loc><lastmod>2026-11-16T14:13:22.122Z</lastmod></url>`)
+  expect(xml).toContain(`<url><loc>${SITE_ORIGIN}/en/entry/2</loc></url>`)
+})

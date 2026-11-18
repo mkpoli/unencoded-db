@@ -16,8 +16,9 @@ export const GET: RequestHandler = async event => {
   const sources = Boolean(match[1])
   const { results } = await env(event).DB.prepare(sources
     ? 'SELECT id FROM sources WHERE id > ? AND id <= ? AND records > 0 ORDER BY id'
-    : 'SELECT id FROM entries WHERE id > ? AND id <= ? AND hidden_at IS NULL AND merged_into IS NULL ORDER BY id',
-  ).bind(end - ENTRIES_PER_SITEMAP, end).all<{ id: number }>()
+    : 'SELECT id, updated_at FROM entries WHERE id > ? AND id <= ? AND hidden_at IS NULL AND merged_into IS NULL ORDER BY id',
+  ).bind(end - ENTRIES_PER_SITEMAP, end).all<{ id: number; updated_at?: string }>()
   if (!results.length) error(404)
-  return pageSitemap(results.map(({ id }) => sources ? `/source/${id}` : `/entry/${id}`))
+  // A source keeps no time of change, so only records carry one.
+  return pageSitemap(results.map(({ id, updated_at }) => sources ? `/source/${id}` : { path: `/entry/${id}`, updated: updated_at }))
 }
