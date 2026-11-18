@@ -200,7 +200,7 @@ function wordTags(entry: TagInput, claims: readonly Claim[], sightings: Sighting
   // A Unicode code is found by the character it names, which is what another site links with.
   for (const claim of claims) if (claim.kind === 'encoding' && claim.data?.charset === 'unicode') add(encodedCharacter(claim.value))
   for (const sighting of sightings) for (const field of ['place', 'title', 'author', 'publisher', 'note'] as const) add(sighting[field])
-  for (const sighting of sightings) for (const via of sighting.vias) for (const field of ['title', 'author', 'publisher'] as const) add(via[field])
+  for (const sighting of sightings) for (const via of sighting.vias) for (const field of ['title', 'quote', 'author', 'publisher'] as const) add(via[field])
   return [...words].slice(0, WORDS_MAX).map(word => `w:${word}`)
 }
 

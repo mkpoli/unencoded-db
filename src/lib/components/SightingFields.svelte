@@ -9,7 +9,7 @@
   import { cleanLinkInput } from '$lib/link-input'
   import { fetchPost, postId, type PostInfo } from '$lib/source-url'
   import { t } from '$lib/t'
-  import type { SightingFields, Via } from '$lib/server/entries'
+  import type { Citation, SightingFields, Via } from '$lib/server/entries'
   import { VIAS_MAX } from '$lib/scripts'
 
   let { values = {}, onphotos }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void } = $props()
@@ -93,7 +93,7 @@
     fetching = failed = false
   }
 
-  function chooseVia(row: Via, source: Citation) {
+  function chooseVia(row: Row, source: Citation) {
     if (row.key === postedKey) postedKey = null
     row.url = source.url ?? ''
     row.title = source.title ?? ''
