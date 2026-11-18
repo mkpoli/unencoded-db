@@ -61,8 +61,11 @@
       row = vias.at(-1)
     }
     if (row) {
+      const before = [row.url, row.title, row.author, row.publisher, row.date].join('\u0000')
       row.url = keep(row.url, 'viaUrl'); row.title = keep(row.title, 'viaTitle'); row.author = keep(row.author, 'viaAuthor')
       row.publisher = keep(row.publisher, 'viaPublisher'); row.date = keep(row.date, 'viaDate')
+      // Words written for the source this row held no longer belong to it once a post replaces it.
+      if ([row.url, row.title, row.author, row.publisher, row.date].join('\u0000') !== before) row.quote = ''
       postedKey = found ? row.key : null
       if (row.url) viaOpen = true
       // The post is where the character was found, so its link moves out of the source's own link.
