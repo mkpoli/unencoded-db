@@ -218,7 +218,8 @@ export async function evidencePanel(bucket: Pick<R2Bucket, 'get'>, picture: Card
   return `<svg x="${PANEL_X}" y="${PANEL_Y}" width="${PANEL_WIDTH}" height="${PANEL_HEIGHT}" viewBox="${view.join(' ')}" preserveAspectRatio="xMidYMid slice"><image width="${image.width}" height="${image.height}" href="${image.href}"/></svg>`
 }
 
-// `late` is set when a style missed the time budget, so the card is served but not kept.
+// `late` is set when a style missed the time budget or failed to draw, so the card is served but not kept and
+// the next request tries the style again.
 export type CardArt = { glyphs: { name: string; drawing: string }[]; evidence: string; late?: boolean }
 const LATE = Symbol('late')
 
@@ -229,9 +230,9 @@ export async function recordArtwork(
 ): Promise<CardArt> {
   const [evidence, ...drawings] = await Promise.all([
     cover ? evidencePanel(bucket, cover) : '',
-    // A style still drawing after the budget is left off this card; its drawing is still stored for the next one.
+    // A style still drawing after the budget, or failing, is left off this card; a drawing that finishes is stored for the next one.
     ...GLYPH_STYLES.map(style => Promise.race([
-      drawGlyph(bucket, glyph, { ...context, style }).catch(() => null),
+      drawGlyph(bucket, glyph, { ...context, style }).catch(() => LATE),
       new Promise<typeof LATE>(resolve => setTimeout(resolve, STYLE_BUDGET_MS, LATE)),
     ])),
   ])
