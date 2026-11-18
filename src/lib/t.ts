@@ -6,4 +6,4 @@ export const t = (key: MessageKey | `${string}.${string}`, values?: Record<strin
 export const href = (path = '') => `/${locale()}${path}`
 export const when = (iso: string) => iso.slice(0, 16).replace('T', ' ') + ' UTC'
 export const day = (iso: string) => iso.slice(0, 10)
-export const media = (key: string) => `/media/v2/${key}`
+export { media } from './media'
