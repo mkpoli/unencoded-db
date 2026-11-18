@@ -2,6 +2,7 @@
   // Where a character was seen. A picture or a link is enough; the reference IRG wants stays folded.
   // A post link fills the place, title and author from the post, and hands its photos to `onphotos`. When the
   // post's author names the book the picture is from, the book becomes the source and the post the last via of the chain.
+  import PublisherField from './PublisherField.svelte'
   import { untrack } from 'svelte'
   import { CONTEXTS, SIGHTING_TYPES, STYLES, parseSightingTypes } from '$lib/scripts'
   import { cleanLinkInput } from '$lib/link-input'
@@ -122,7 +123,7 @@
   <div class="grid-2">
     <div class="field"><label for="{uid}-title">{t('field.title')}</label><input id="{uid}-title" class="input" name="title" bind:value={title} maxlength="300" /></div>
     <div class="field"><label for="{uid}-author">{t('field.author')}</label><input id="{uid}-author" class="input" name="author" bind:value={author} maxlength="300" /></div>
-    <div class="field"><label for="{uid}-publisher">{t('field.publisher')}</label><input id="{uid}-publisher" class="input" name="publisher" bind:value={publisher} maxlength="300" /></div>
+    <PublisherField id="{uid}-publisher" name="publisher" bind:value={publisher} />
     <div class="field"><label for="{uid}-page">{t('field.page')}</label><input id="{uid}-page" class="input" name="page" bind:value={page} maxlength="80" /></div>
     <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" value={values.report_date ?? ''} aria-describedby="{uid}-report_date-hint" /><p class="hint" id="{uid}-report_date-hint">{t('field.reportDateHint')}</p></div>
     <div class="field"><label for="{uid}-original_date">{t('field.originalDate')}</label><input id="{uid}-original_date" class="input" name="original_date" value={values.original_date ?? ''} aria-describedby="{uid}-original_date-hint" /><p class="hint" id="{uid}-original_date-hint">{t('field.originalDateHint')}</p></div>
@@ -142,7 +143,7 @@
       <div class="grid-2">
         <div class="field"><label for="{uid}-via_title-{row.key}">{t('field.title')}</label><input id="{uid}-via_title-{row.key}" class="input" name="via_title" bind:value={row.title} maxlength="300" /></div>
         <div class="field"><label for="{uid}-via_author-{row.key}">{t('field.author')}</label><input id="{uid}-via_author-{row.key}" class="input" name="via_author" bind:value={row.author} maxlength="300" /></div>
-        <div class="field"><label for="{uid}-via_publisher-{row.key}">{t('field.publisher')}</label><input id="{uid}-via_publisher-{row.key}" class="input" name="via_publisher" bind:value={row.publisher} maxlength="300" /></div>
+        <PublisherField id="{uid}-via_publisher-{row.key}" name="via_publisher" bind:value={row.publisher} />
         <div class="field"><label for="{uid}-via_report_date-{row.key}">{t('field.reportDate')}</label><input id="{uid}-via_report_date-{row.key}" class="input" name="via_report_date" bind:value={row.date} /></div>
       </div>
       <div><button type="button" class="text-button" onclick={() => removeVia(row.key)}>{t('field.viaRemove')}</button></div>

@@ -182,7 +182,7 @@ test('0005 gives every claim a key, a list of sightings and a scope, in claims a
   expect(journal.filter(row => !versions.some(version => version.id === row.id)).map(row => row.snapshot)).toEqual([sighting, '{}', '{"revision":4}', '{}', '{"from":3}'])
 
   // An old version is restored through the store, with its keys and the sighting it rested on.
-  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0019_via_chain.sql', '0016_tag_year.sql', '0018_first_sighting.sql', '0023_categories.sql', '0024_category_rows.sql', '0026_typed_tags.sql', '0027_date_readings.sql']) raw.exec(migration(name))
+  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0019_via_chain.sql', '0016_tag_year.sql', '0018_first_sighting.sql', '0023_categories.sql', '0024_category_rows.sql', '0026_typed_tags.sql', '0027_date_readings.sql', '0028_publishers.sql']) raw.exec(migration(name))
   const db = d1Over(raw)
   expect(await revertEntry(db, 1, 1, { actor: 'p', ip: null })).toEqual({ ok: true, rev: 5 })
   expect((await getEntry(db, 1))!.claims).toEqual(first)
@@ -522,4 +522,18 @@ test('0026 unifies categories and #tags into typed tags with seeded implications
   ])
   // `tag_changes` sequence stays past migrated `rev` (= 9).
   expect((raw.query("SELECT seq FROM sqlite_sequence WHERE name = 'tag_changes'").get() as { seq: number }).seq).toBeGreaterThanOrEqual(10)
+})
+
+test('0028 backfills source publishers without rewriting their citation or hash', () => {
+  const raw = new Database(':memory:')
+  for (const name of readdirSync(join(import.meta.dir, '../../../migrations')).sort().filter(n => n < '0028')) raw.exec(migration(name))
+  raw.exec("INSERT INTO sources(hash, publisher, records) VALUES ('first','江蘇教育出版社',1),('second','江苏教育出版社',1),('third','未詳',1),('fourth',NULL,1)")
+  raw.exec(migration('0028_publishers.sql'))
+  expect(raw.query(`SELECT s.hash, s.publisher, p.name FROM sources s LEFT JOIN publishers p ON p.id = s.publisher_id ORDER BY s.id`).all()).toEqual([
+    { hash: 'first', publisher: '江蘇教育出版社', name: '江苏教育出版社' },
+    { hash: 'second', publisher: '江苏教育出版社', name: '江苏教育出版社' },
+    { hash: 'third', publisher: '未詳', name: null },
+    { hash: 'fourth', publisher: null, name: null },
+  ])
+  expect(raw.query('PRAGMA foreign_key_check').all()).toEqual([])
 })
