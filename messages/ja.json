@@ -360,6 +360,7 @@
   "fonts.prev": "前の字形",
   "fonts.next": "次の字形",
   "fonts.empty": "公開中の文字はありません。",
+  "fonts.partial": "読み込めなかった字形：{n}",
   "fonts.previewError": "字形を読み込めませんでした。",
   "fonts.retry": "再試行",
   "about.fontDownload": "PUA フォント（TTF・OTF）",

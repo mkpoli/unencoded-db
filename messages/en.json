@@ -360,6 +360,7 @@
   "fonts.prev": "Previous glyphs",
   "fonts.next": "Next glyphs",
   "fonts.empty": "No public characters yet.",
+  "fonts.partial": "Glyphs unavailable: {n}",
   "fonts.previewError": "Couldn’t load the preview.",
   "fonts.retry": "Retry",
   "about.fontDownload": "PUA fonts (TTF and OTF)",
