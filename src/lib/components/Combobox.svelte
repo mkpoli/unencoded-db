@@ -3,14 +3,15 @@
 </script>
 
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import { nameKey as fold } from '../name-key'
 
   // A text field with a list to choose from: the list narrows to what is typed, and whatever is typed is kept
   // when nothing in it fits. It is a plain input until scripts run. The pattern is the ARIA editable combobox
   // with list autocomplete: arrow keys move through the list, Enter takes an option, Escape folds the list.
   // `onchange` hears the value once it is settled: an option taken, or the field left.
-  let { id, name, value = $bindable(''), options, labelledby, maxlength, placeholder, filter = true, onopen, onquery, onchange, onselect, onmore }: {
-    id: string; name: string; value?: string; options: readonly ComboOption[]; labelledby?: string; maxlength?: number; placeholder?: string; filter?: boolean; onopen?: () => void; onquery?: (text: string) => void; onchange?: (value: string) => void; onselect?: (option: ComboOption) => void; onmore?: () => void
+  let { id, name, value = $bindable(''), options, labelledby, maxlength, placeholder, filter = true, onopen, onquery, onchange, onselect, onmore, optionContent }: {
+    optionContent?: Snippet<[ComboOption]>; id: string; name: string; value?: string; options: readonly ComboOption[]; labelledby?: string; maxlength?: number; placeholder?: string; filter?: boolean; onopen?: () => void; onquery?: (text: string) => void; onchange?: (value: string) => void; onselect?: (option: ComboOption) => void; onmore?: () => void
   } = $props()
 
   let open = $state(false)
@@ -77,7 +78,10 @@
         id={optionId(index)} role="option" aria-selected={index === active} class:active={index === active}
         class:chosen={!option.key && fold(option.label) === fold(value)} class:break={index > 0 && option.group !== shown[index - 1].group}
         onpointerdown={event => event.preventDefault()} onclick={() => take(option)}
-      ><span>{option.label}</span>{#if option.hint}<span class="hint">{option.hint}</span>{/if}</li>
+      >
+        {#if optionContent && !option.more}{@render optionContent(option)}
+        {:else}<span>{option.label}</span>{#if option.hint}<span class="hint">{option.hint}</span>{/if}{/if}
+      </li>
     {/each}
   </ul>
 </div>

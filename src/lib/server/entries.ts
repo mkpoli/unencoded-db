@@ -1,3 +1,4 @@
+import { sampledSightings } from './source-sightings'
 import { sourceMatches } from './source-aliases'
 import { nameKey, nameLabel, sourceNameKey } from '../name-key'
 // The store of records: an entry is a character, a claim is one thing the record states about it, a
@@ -1148,7 +1149,7 @@ export async function sourcePage(db: D1Database, id: number) {
 
 export const SOURCES_PAGE = 24
 // The sightings read for each source and way it is cited, hidden or not, and the records a card draws.
-export const SOURCE_CARD_READ = 32
+export { SOURCE_CARD_READ } from './source-sightings'
 export const SOURCE_CARD_RECORDS = 6
 
 // Where a page of the gallery starts: after the source with this sort key and id. A cursor without a key
@@ -1180,17 +1181,13 @@ type SourceRead = typeof SOURCE_READS[keyof typeof SOURCE_READS]
 // Up to `limit` sources in one order after `cursor`. Each reads its first SOURCE_CARD_READ sightings of
 // each way from its index and keeps the visible ones, so a source costs the same however long it is.
 function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | null, limit: number, publisher: number | null, query: string) {
-  const ways = [
-    { from: 'sightings s INDEXED BY sightings_by_source WHERE s.source_id = c.id ORDER BY s.id', extra: '' },
-    { from: 'sighting_vias v INDEXED BY sighting_vias_by_source CROSS JOIN sightings s ON s.id = v.sighting_id WHERE v.source_id = c.id ORDER BY v.sighting_id', extra: ' AND r.source_id IS NOT c.id' },
-  ]
-  const seen = (way: typeof ways[number]) => `(SELECT json_group_array(json_array(r.entry_id, x.thumb_key)) FROM (SELECT s.id, s.entry_id, s.source_id, s.hidden_at FROM ${way.from} LIMIT ${SOURCE_CARD_READ}) r CROSS JOIN entries e ON e.id = r.entry_id LEFT JOIN sighting_media x ON x.sighting_id = r.id AND x.position = 0 WHERE r.hidden_at IS NULL AND ${LIVE}${way.extra})`
+  const seen = (via: boolean) => `(SELECT json_group_array(json_array(r.entry_id, x.thumb_key)) ${sampledSightings(via)})`
   const direction = order.descending ? 'DESC' : 'ASC', past = order.descending ? '<' : '>'
   const start = order.descending ? Number.MAX_SAFE_INTEGER : 0
   const after = order.key ? `(c.${order.key}, c.id) ${past} (?, ?)` : `c.id ${past} ?`
   const bound = order.key ? [cursor?.key ?? start, cursor?.id ?? start] : [cursor?.id ?? start]
   type Row = Source & { year: number | null; records: number; direct: string; via: string }
-  return db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(ways[0])} AS direct, ${seen(ways[1])} AS via FROM ${query ? `(SELECT DISTINCT source_id FROM (${sourceMatches})) m CROSS JOIN sources c ON c.id = m.source_id` : `sources c INDEXED BY ${order.index}${publisher !== null ? '_publisher' : ''}`} WHERE ${order.where} ${publisher !== null ? 'AND c.publisher_id = ?' : ''} AND ${after} ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction} LIMIT ?`)
+  return db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(false)} AS direct, ${seen(true)} AS via FROM ${query ? `(SELECT DISTINCT source_id FROM (${sourceMatches})) m CROSS JOIN sources c ON c.id = m.source_id` : `sources c INDEXED BY ${order.index}${publisher !== null ? '_publisher' : ''}`} WHERE ${order.where} ${publisher !== null ? 'AND c.publisher_id = ?' : ''} AND ${after} ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction} LIMIT ?`)
     .bind(...(query ? [sourceNameKey(query), sourceNameKey(query)] : []), ...(publisher !== null ? [publisher] : []), ...bound, limit).all<Row>().then(({ results }) => results)
 }
 

@@ -1751,3 +1751,19 @@ test('each citation occupies one suggestion even with many matching aliases', as
   for (let i = 0; i < 26; i++) await editSourceAlias(db, source.id, `Dic ${i}`, false, who.actor)
   expect((await suggestSources(db, 'Dic')).map(row => row.title)).toEqual([null, 'Dic Z'])
 })
+
+test('source suggestions show evidence from the matching public sighting', async () => {
+  const title = 'Primer'
+  await createEntry(db, fields(), seen({ title, page: 'i' }), [], who)
+  const illustrated = await createEntry(db, fields(), seen({ title, page: '12', vias: [via({ title: 'Reprint' })] }), [image], who)
+  const preview = async (name: string) => (await suggestSources(db, name))[0]
+  expect(await preview(title)).toMatchObject({ records: 2, evidence: { entry: illustrated, page: '12', thumb: image.thumb_key, via: 0 } })
+  expect(await preview('Reprint')).toMatchObject({ records: 1, evidence: { entry: illustrated, thumb: image.thumb_key, via: 1 } })
+  const sighting = (await getEntry(db, illustrated))!.sightings[0].id
+  await setHidden(db, { entry: illustrated, sighting }, true, who, null)
+  expect((await preview(title)).evidence).toMatchObject({ page: 'i', thumb: null })
+  expect(await preview('Reprint')).toBeUndefined()
+  await setHidden(db, { entry: illustrated, sighting }, false, who, null)
+  await setHidden(db, { entry: illustrated }, true, who, null)
+  expect((await preview(title)).evidence).toMatchObject({ page: 'i', thumb: null })
+})

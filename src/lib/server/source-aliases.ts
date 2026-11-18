@@ -1,4 +1,5 @@
 import { sourceNameKey } from '../name-key'
+import { sampledSightings } from './source-sightings'
 import type { Source } from './entries'
 
 const prefix = "lookup >= ? AND lookup < CAST(? || X'FF' AS TEXT)"
@@ -6,21 +7,27 @@ export const sourceMatches = `SELECT source_id FROM source_search_names WHERE ${
 export const SOURCE_SUGGESTIONS = 24
 export type NameCursor = [string, number]
 
+type EvidenceSample = { thumb: string | null; entry: number; ids: string | null; page: string | null; place: string | null; via: number }
+export type SourceMatch = Source & { lookup: string; alias: string | null; records: number; evidence: EvidenceSample | null }
+const sample = (via: boolean) => `SELECT x.thumb_key AS thumb, r.entry_id AS entry, e.ids, r.page, r.place, r.id AS sighting, ${via ? 1 : 0} AS via ${sampledSightings(via)}`
+
 export async function suggestSources(db: D1Database, text: string, cursor: NameCursor | null = null) {
   const key = sourceNameKey(text)
   if (!key || (cursor && !cursor[0].startsWith(key))) return []
-  const { results } = await db.prepare(`SELECT s.id, s.title, s.url, s.author, s.publisher, s.report_date,
+  const { results } = await db.prepare(`SELECT c.id, c.title, c.url, c.author, c.publisher, c.report_date, c.records,
+    (SELECT json_object('thumb', thumb, 'entry', entry, 'ids', ids, 'place', place, 'page', page, 'via', via)
+      FROM (${sample(false)} UNION ALL ${sample(true)}) ORDER BY thumb IS NULL, via, sighting LIMIT 1) AS evidence,
     n.lookup, a.spelling AS alias FROM (
       SELECT lookup, source_id FROM source_search_names candidate
       WHERE lookup < CAST(? || X'FF' AS TEXT) AND (lookup, source_id) > (?, ?)
       AND NOT EXISTS (SELECT 1 FROM source_search_names earlier WHERE earlier.source_id = candidate.source_id
         AND earlier.lookup >= ? AND earlier.lookup < candidate.lookup)
       ORDER BY lookup, source_id LIMIT ?
-    ) n CROSS JOIN sources s ON s.id = n.source_id
+    ) n CROSS JOIN sources c ON c.id = n.source_id
     LEFT JOIN source_aliases a ON a.source_id = n.source_id AND a.lookup = n.lookup
     ORDER BY n.lookup, n.source_id`)
-    .bind(key, cursor?.[0] ?? key, cursor?.[1] ?? 0, key, SOURCE_SUGGESTIONS + 1).all<Source & { lookup: string; alias: string | null }>()
-  return results
+    .bind(key, cursor?.[0] ?? key, cursor?.[1] ?? 0, key, SOURCE_SUGGESTIONS + 1).all<Omit<SourceMatch, 'evidence'> & { evidence: string | null }>()
+  return results.map(({ evidence, ...row }): SourceMatch => ({ ...row, evidence: evidence ? JSON.parse(evidence) : null }))
 }
 
 export async function sourceAliases(db: D1Database, id: number) {
