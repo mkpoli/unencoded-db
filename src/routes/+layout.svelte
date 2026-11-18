@@ -8,7 +8,7 @@
   let { data, children } = $props()
 
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
-  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
+  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
   $effect(() => { syncFavourites(data.person?.id ?? null, data.favourites) })
   let menu = $state<HTMLDetailsElement>()
   const remember = (tag: string) => { document.cookie = `${LOCALE_COOKIE}=${tag};path=/;max-age=31536000;samesite=lax`; if (menu) menu.open = false }
@@ -30,6 +30,7 @@
   </a>
   <nav class="site-nav" aria-label={t('nav.menu')}>
     <a class:active={section === 'browse'} aria-current={section === 'browse' ? 'page' : undefined} href={href()}>{t('nav.browse')}</a>
+    <a class:active={section === 'fonts'} aria-current={section === 'fonts' ? 'page' : undefined} href={href('/fonts')}>{t('nav.fonts')}</a>
     <a class:active={section === 'radicals'} aria-current={section === 'radicals' ? 'page' : undefined} href={href('/radicals')}>{t('nav.radicals')}</a>
     <a class:active={section === 'tags'} aria-current={section === 'tags' ? 'page' : undefined} href={href('/tags')}>{t('nav.tags')}</a>
     <a class:active={section === 'chronology'} aria-current={section === 'chronology' ? 'page' : undefined} href={href('/chronology')}>{t('nav.chronology')}</a>
@@ -82,7 +83,7 @@
   .name { font-size: 17px; font-weight: 600; letter-spacing: .02em }
   .by { padding-left: 10px; border-left: 1px solid var(--line); color: var(--muted); font-size: 10.5px; letter-spacing: .12em; font-weight: 400 }
   .by b { font-weight: 600 }
-  .site-nav { display: flex; align-items: stretch; align-self: stretch; gap: 26px; margin: -12px 0 }
+  .site-nav { display: flex; align-items: stretch; align-self: stretch; gap: 20px; margin: -12px 0; min-width: 0; overflow-x: auto }
   .site-nav a { display: flex; align-items: center; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap }
   .site-nav a:hover { color: var(--ink) }
   .site-nav a.active { color: var(--ink); border-bottom-color: var(--ink) }
@@ -100,10 +101,13 @@
   .menu-group a.on { color: var(--accent); font-weight: 500 }
   main { min-height: 60vh }
   .site-footer { padding: 18px var(--page-gutter) 36px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px }
-  @media (max-width: 960px) {
+  @media (max-width: 1360px) {
+    .by { display: none }
+    .site-header { gap: 20px }
+  }
+  @media (max-width: 1120px) {
     .site-header { flex-wrap: wrap; gap: 8px 16px }
     .site-nav { order: 3; flex: 1 1 100%; margin: 0; min-height: 40px; gap: 20px; overflow-x: auto }
-    .by { display: none }
   }
   @media (max-width: 520px) {
     .who-name { max-width: 9ch }
