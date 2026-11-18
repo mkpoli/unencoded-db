@@ -149,7 +149,7 @@
   }
   @media (width > 70rem) {
     .site-nav { display: flex; align-self: stretch; margin-block: -12px }
-    .site-links { align-items: stretch }
+    .site-links { block-size: auto; align-items: stretch; overflow: visible }
   }
   @media (max-width: 70rem) {
     .wordmark { flex: 1 1 auto }
