@@ -662,6 +662,7 @@ export async function mergeEntry(db: D1Database, from: number, into: number, who
   await db.batch([
     db.prepare('UPDATE sightings SET entry_id = ? WHERE entry_id = ?').bind(into, from),
     db.prepare('UPDATE entries SET merged_into = ?, updated_at = ? WHERE id = ?').bind(into, now(), from),
+    db.prepare('UPDATE entries SET updated_at = ? WHERE id = ?').bind(now(), into),
     revision(db, who, { entry: from, kind: 'merge', rev: source.rev, snapshot: JSON.stringify({ into }), summary }),
     revision(db, who, { entry: into, kind: 'merge', rev: target.rev, snapshot: JSON.stringify({ from }), summary }),
   ])
@@ -677,7 +678,7 @@ export async function unmergeEntry(db: D1Database, id: number, who: Who) {
   await db.batch([
     // What was merged into this record before it was merged comes back with it.
     db.prepare('UPDATE sightings SET entry_id = ? WHERE entry_id = ? AND (first_entry = ? OR first_entry IN (SELECT id FROM entries WHERE merged_into = ?))').bind(id, into, id, id),
-    db.prepare('UPDATE entries SET merged_into = NULL, updated_at = ? WHERE id = ?').bind(now(), id),
+    db.prepare('UPDATE entries SET merged_into = NULL, updated_at = ? WHERE id IN (?, ?)').bind(now(), id, into),
     revision(db, who, { entry: id, kind: 'unmerge', rev: entry.rev, snapshot: JSON.stringify({ from: into }) }),
     revision(db, who, { entry: into, kind: 'unmerge', rev: 0, snapshot: JSON.stringify({ from: id }) }),
   ])
@@ -705,6 +706,8 @@ export async function setHidden(db: D1Database, target: { entry: number; sightin
     try {
       await db.batch([
         checkMark(db, target.entry, mark, who), update,
+        // What the record's page shows changed, so its time of change moves too.
+        db.prepare('UPDATE entries SET updated_at = ? WHERE id = ?').bind(now(), target.entry),
         checkChanged(db, target.entry, who),
         revision(db, who, { entry: target.entry, sighting: target.sighting, kind: hidden ? 'hide' : 'unhide', rev: 0, snapshot: '{}', summary }),
         ...index,
