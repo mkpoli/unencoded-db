@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import { readClaims, newClaim, parseClaims, primaryLayoutOf } from './claims'
-import { carryLayout, cleanLayout, validLayout } from './layout'
+import { GLYPH_STYLES } from './composer'
+import { carryLayout, cleanLayout, layoutForStyle, validLayout, withStyleLayout, type Layout } from './layout'
 import { documentLayout, layoutDocument } from './layout-document'
 
 const IDS = '⿰亻⿱七木'
@@ -98,4 +99,23 @@ test('a stored description holds nothing but a layout of its own', () => {
   expect(parseClaims([{ ...claim, data: { layout: { '5': [1, 0, 0, 1, -40, 12] } } }])).toBeNull()
   expect(parseClaims([{ ...claim, data: { layout: { '0': [1, 0, 0, 1, -40, 12] }, other: 1 } }])).toBeNull()
   expect(parseClaims([{ ...claim, data: {} }])).toBeNull()
+})
+
+test('each face saves its own layout, with the shared layout as a fallback', () => {
+  const legacy = { '0': [1, 0, 0, 1, -40, 12] }
+  let layout: Layout | null = legacy
+  for (const [index, style] of GLYPH_STYLES.entries()) {
+    layout = withStyleLayout(layout, style, { '1.0': [1, 0, 0, 1, 15 * (index + 1), 0] })
+  }
+  const saved = readClaims(form([['ids', IDS], ['layout', JSON.stringify(layout)], ['layout_ids', IDS]]), [])
+  expect(saved.error).toBeNull()
+  const reopened = primaryLayoutOf(parseClaims(JSON.stringify(saved.claims))!)
+  for (const [index, style] of GLYPH_STYLES.entries()) {
+    expect(layoutForStyle(reopened, style)).toEqual({ '1.0': [1, 0, 0, 1, 15 * (index + 1), 0] })
+  }
+  const reset = withStyleLayout(legacy, 'serif', null)
+  expect(layoutForStyle(reset, 'serif')).toBeNull()
+  expect(layoutForStyle(reset, 'sans')).toEqual(legacy)
+  const carried = carryLayout(reopened, IDS, '⿰亻林')
+  expect(carried).toEqual({ shared: legacy, faces: Object.fromEntries(GLYPH_STYLES.map(style => [style, {}])) })
 })

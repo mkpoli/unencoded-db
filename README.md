@@ -109,8 +109,11 @@ Each entry indexes at most 400 distinct terms, drawn from its fields, its claims
 ## Character drawings
 
 The gallery draws each record's IDS with [han-compose](https://github.com/mkpoli/han-compose), from the composer export at `https://ids-input-composer.mkpoli.workers.dev/`. The export's files and the drawn paths stay in the `MEDIA` bucket under `composer/` and `glyphs/`. A missing drawing is composed in the background, and `/api/glyph?ids=…&v=…` answers one the page did not have. Only descriptions on visible records are drawn. A record's page draws one set of styles for each form its descriptions name; descriptions that normalize or spell the same form share the drawing.
+In the character form, open **Adjust layout** and choose a glyph style before moving or resizing its parts. Each of the five styles saves its own placement.
 
-A description can carry a layout: the parts moved, scaled or turned from where the composer puts them, each as an SVG matrix under its place in the description (`1.0` is the first part of the second part). The form's drawing adjusts the first description's layout with ids-input's layer document, and the gallery draws the description through it; `/api/glyph?ids=…&v=…&layout=…` answers such a drawing.
+A description can carry a layout. The keys are component paths such as `1.0`, the first part of the second part, and the values are six-number SVG affine matrices. The character form adjusts the first description, and the gallery uses the saved layout for each drawing.
+
+Records returned by `/api/entries` may carry a plain map of placements shared by every style, or an object with a `faces` map keyed by glyph style and an optional legacy `shared` map. A missing face uses `shared` when present. An empty face map restores the composer's layout for that face. For `/api/glyph?ids=…&v=…&layout=…`, pass only the matrix map for the requested style.
 
 ## Third-party materials
 

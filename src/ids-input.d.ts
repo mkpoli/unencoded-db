@@ -47,10 +47,11 @@ declare module 'ids-input/svelte' {
   export const IdsPreview: Component<{
     adapter: { preview?: import('han-compose').ComposerPreview }; tree: import('ids-input').IdsPart; chosen?: number[] | null
     messages?: Record<string, string>; locale?: string; small?: boolean; notes?: boolean; delay?: number
-    session?: import('ids-input/document').DocumentSession | null; version?: number; editable?: boolean
+    session?: import('ids-input/document').DocumentSession | null; version?: number; editable?: boolean; preserveStroke?: boolean
+    step?: 'idle' | 'loading' | 'composed' | 'final' | 'failed' | 'capped' | 'unavailable'
     scopes?: import('ids-input/document').ScopeTree | null; drawing?: import('han-compose').Drawing | null
     onchoose?: ((path: number[]) => void) | null; onedit?: (() => void) | null
-  }, {}, 'scopes' | 'drawing'>
+  }, {}, 'scopes' | 'drawing' | 'step'>
   /** The text of `key` in `messages`, else in English. */
   export function translator(messages: Record<string, string> | undefined, locale?: string): (key: string, params?: Record<string, string | number>) => string
 }
@@ -84,13 +85,12 @@ declare module 'ids-input/document' {
   export function createDocumentSession(initial?: IdsDocument): DocumentSession
   /** How a document is drawn over a composer's drawing; the composer's document view takes these two. */
   export type Renderer = { layerFrames: (...given: never[]) => unknown; renderScopes: (...given: never[]) => unknown }
-  export const layerFrames: Renderer['layerFrames']
-  export const renderScopes: Renderer['renderScopes']
+  export function documentRenderer(stroke?: number[] | null): Renderer
   export function scopesMarkup(drawing: ScopeTree, options?: { ink?: string; idPrefix?: string; emoji?: unknown[] | null; cut?: string | null; cutLeaf?: number | null }): { defs: string; body: string }
 }
 
 declare module 'han-compose' {
-  export type Drawing = { d: string; parts?: { leaf?: number; cut?: boolean }[]; slots?: unknown[]; cut?: string; emoji?: unknown[] }
+  export type Drawing = { d: string; parts?: { leaf?: number; cut?: boolean }[]; slots?: unknown[]; cut?: string; emoji?: unknown[]; stroke?: number[] | null }
   export type SketchLeaf = { index: number; box: number[]; empty: boolean }
   export type ComposerPreview = ((sequence: string, options?: { signal?: AbortSignal }) => Promise<Drawing>) & { warm(): void }
   export type ComposerSource = {

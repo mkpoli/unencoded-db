@@ -57,7 +57,8 @@
   --tag-meta-ink: light-dark(#872748, #f48eae);
   --tag-meta-bg: light-dark(#fdebf1, #381825);
   --tag-meta-line: light-dark(#eab5c6, #6b2f45);
-  --page-gutter: 56px;
+  --page-gutter: clamp(1rem, 5vi - .65rem, 3.5rem);
+  --target-size: 24px;
   --tile-size: 145px;
 }
 :lang(zh-Hans) { --cjk: "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei"; --cjk-serif: "Noto Serif CJK SC", "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif }
@@ -76,13 +77,14 @@
 :root[data-theme=light] { color-scheme: light }
 :root[data-theme=dark] { color-scheme: dark }
 * { box-sizing: border-box; scrollbar-width: thin }
-body { margin: 0; background: var(--paper); line-height: 1.5; font-size: 14px }
+body { margin: 0; background: var(--paper); line-height: 1.5; font-size: .875rem; overflow-wrap: break-word }
 a { color: inherit; text-decoration: none }
+:where(a, code) { overflow-wrap: anywhere }
 button, input, select, textarea { font: inherit; color: inherit }
 button, a { touch-action: manipulation; -webkit-tap-highlight-color: transparent }
 :focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px }
 h1, h2, h3, p { margin: 0 }
-h1 { font-size: 24px; font-weight: 600; line-height: 1.3 }
+h1 { font-size: clamp(1.3125rem, 1.2rem + .4vi, 1.5rem); font-weight: 600; line-height: 1.3 }
 h2, .section-title { font-size: 16px; font-weight: 600 }
 .text-link { text-decoration: underline; text-underline-offset: 3px }
 .text-link:hover { color: var(--accent) }
@@ -92,23 +94,23 @@ h2, .section-title { font-size: 16px; font-weight: 600 }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace }
 
 /* Controls */
-.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); cursor: pointer; white-space: nowrap }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-block-size: max(40px, var(--target-size)); min-inline-size: var(--target-size); max-inline-size: 100%; padding: 8px 14px; text-align: center; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); cursor: pointer; overflow-wrap: anywhere }
 .button:hover { border-color: var(--line-strong) }
 .button.primary { border-color: var(--action-surface); background: var(--action-surface); color: var(--on-action); font-weight: 500 }
 .button.primary:hover { opacity: .88 }
 .button.danger { color: var(--wrong) }
 .button:disabled { opacity: .5; cursor: default }
-.text-button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; text-align: start }
+.text-button { display: inline-flex; align-items: center; gap: 6px; min-block-size: max(32px, var(--target-size)); padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; text-align: start }
 .text-button:hover { text-decoration: underline; text-underline-offset: 3px }
 /* A control's text is never under 1rem, so a phone does not zoom in on the field it is typing in. */
-.input, select.input, textarea.input { display: block; width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); font-size: max(1rem, 1em) }
+.input, select.input, textarea.input { display: block; width: 100%; min-inline-size: 0; min-block-size: max(42px, var(--target-size)); padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); font-size: max(1rem, 1em) }
 textarea.input { min-height: 96px; resize: vertical; line-height: 1.55 }
 .input::placeholder { color: var(--muted) }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0 }
 .field > label, .field > .label, .label { font-weight: 500 }
 .hint { color: var(--muted); font-size: 12.5px; line-height: 1.45 }
 .required::after { content: " *"; color: var(--wrong) }
-.chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 5px 12px; border-radius: 7px; color: var(--muted); white-space: nowrap; cursor: pointer }
+.chip { display: inline-flex; align-items: center; gap: 6px; min-block-size: max(34px, var(--target-size)); max-inline-size: 100%; padding: 5px 12px; border-radius: 7px; color: var(--muted); overflow-wrap: anywhere; cursor: pointer }
 .chip:hover { color: var(--ink) }
 .chip.on { background: var(--surface-selected); color: var(--ink); font-weight: 500 }
 .count { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums }
@@ -118,8 +120,10 @@ textarea.input { min-height: 96px; resize: vertical; line-height: 1.55 }
 .badge { display: inline-flex; align-items: center; min-height: 22px; padding: 1px 8px; border-radius: 5px; background: var(--surface-sunken); font-size: 12px; color: var(--muted); white-space: nowrap }
 .tag-chip {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 5px;
+  gap: 2px 5px;
+  max-inline-size: 100%;
   padding: 2px 10px;
   border: 1px solid var(--tag-line, var(--tag-general-line));
   border-radius: 999px;
@@ -127,7 +131,7 @@ textarea.input { min-height: 96px; resize: vertical; line-height: 1.55 }
   color: var(--tag-ink, var(--tag-general-ink));
   font-size: 13px;
   line-height: 1.4;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .tag-chip.implied { border-style: dashed }
 .tag-chip[data-tag-type=general] { --tag-ink: var(--tag-general-ink); --tag-bg: var(--tag-general-bg); --tag-line: var(--tag-general-line) }
@@ -139,8 +143,8 @@ textarea.input { min-height: 96px; resize: vertical; line-height: 1.55 }
 .badge.unifiable { background: var(--accent-light); color: var(--accent) }
 .badge.homograph, .badge.variant { background: var(--uncertain-badge); color: var(--uncertain-ink) }
 .badge.encoded { background: var(--good-light); color: var(--good) }
-.page { width: 100%; max-width: 1280px; margin: 0 auto; padding: 28px var(--page-gutter) 72px }
-.page.narrow { max-width: 800px }
+.page { inline-size: 100%; max-inline-size: 1280px; margin-inline: auto; padding: clamp(1.125rem, 3vi, 1.75rem) var(--page-gutter) 72px }
+.page.narrow { max-inline-size: 800px }
 .stack { display: flex; flex-direction: column; gap: 18px; min-width: 0 }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px }
@@ -149,4 +153,5 @@ dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--s
 /* Scrolling inside an open dialog, or over its backdrop, stays there. */
 dialog:modal { overscroll-behavior: contain }
 dialog::backdrop { background: var(--backdrop); overflow: hidden; overscroll-behavior: contain }
-@media (max-width: 700px) { :root { --page-gutter: 16px } .page { padding-top: 18px } .grid-2 { grid-template-columns: minmax(0, 1fr) } h1 { font-size: 21px } }
+@media (max-width: 43.75rem) { .grid-2 { grid-template-columns: minmax(0, 1fr) } }
+@media (pointer: coarse) { :root { --target-size: 44px } }

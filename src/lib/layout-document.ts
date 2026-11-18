@@ -2,10 +2,10 @@
 // keeps the layout; the document lasts as long as the drawing or the editing session that needs it.
 import { parse } from 'ids-input'
 import { affineForChain, fromSequence, layerAtPath, pathOfLayer, type DocumentSession, type IdsDocument, type IdsLayer } from 'ids-input/document'
-import { cleanLayout, pathOf, placeOf, type Layout } from './layout'
+import { cleanMatrices, pathOf, placeOf, type Matrices } from './layout'
 
 /** The document of `ids` with each moved part drawn through its matrix, or null when `ids` has no parts to draw. */
-export function layoutDocument(ids: string, layout: Layout | null): IdsDocument | null {
+export function layoutDocument(ids: string, layout: Matrices | null): IdsDocument | null {
   if (!ids || parse(ids, { open: true }).tree == null) return null
   let document: IdsDocument
   try { document = fromSequence(ids) } catch { return null }
@@ -17,8 +17,8 @@ export function layoutDocument(ids: string, layout: Layout | null): IdsDocument 
 }
 
 /** The layout a document holds for `ids`: what each moved part's steps come to as one matrix. */
-export function documentLayout(document: IdsDocument, ids: string): Layout | null {
-  const found: Layout = {}
+export function documentLayout(document: IdsDocument, ids: string): Matrices | null {
+  const found: Matrices = {}
   const walk = (layer: IdsLayer, path: number[]) => {
     const matrix = layer.transform?.length ? affineForChain(layer.transform) : null
     if (matrix) found[placeOf(path)] = matrix
@@ -26,7 +26,7 @@ export function documentLayout(document: IdsDocument, ids: string): Layout | nul
     else if (layer.kind === 'group') walk(layer.child, path)
   }
   walk(document.root, [])
-  return cleanLayout(found, ids)
+  return cleanMatrices(found, ids)
 }
 
 /** The place of the part a session is working on, or null. */

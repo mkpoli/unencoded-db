@@ -18,24 +18,27 @@
   let chosen = $state.raw<number[] | null>(null)
 </script>
 
-<div class="character" class:adjusting>
-  <div class="plate"><IdsDrawing ids={primary} {layout} {chosen} bind:adjusting /></div>
-  <div class="described">
-    <IdsField bind:this={field} {values} bind:primary bind:chosen {exclude} {anchor} {onfill} />
-    {@render children?.()}
+<div class="character-container">
+  <div class="character" class:adjusting>
+    <div class="plate"><IdsDrawing ids={primary} {layout} {chosen} bind:adjusting /></div>
+    <div class="described">
+      <IdsField bind:this={field} {values} bind:primary bind:chosen {exclude} {anchor} {onfill} />
+      {@render children?.()}
+    </div>
   </div>
 </div>
 
 <style>
+  .character-container { container: character / inline-size }
   .character { display: grid; grid-template-columns: 208px minmax(0, 1fr); align-items: start; gap: 24px; min-width: 0 }
   .described { display: flex; flex-direction: column; gap: 16px; min-width: 0 }
   /* The drawing stays in view while the facts beside it are filled in. */
   .plate { position: sticky; inset-block-start: 16px; min-width: 0 }
   .adjusting { grid-template-columns: minmax(0, 1fr) }
   .adjusting .plate { position: static; width: min(100%, 440px); justify-self: center }
-  @media (max-width: 700px) {
+  @container character (inline-size < 36rem) {
     .character { grid-template-columns: minmax(0, 1fr); gap: 16px }
-    .plate { position: static; width: 148px; justify-self: center }
+    .plate { position: static; inline-size: min(148px, 100%); justify-self: center }
     .adjusting .plate { width: min(100%, 440px) }
   }
 </style>

@@ -57,7 +57,7 @@
 
 <style>
   .sort { display:flex; flex-wrap:wrap; gap:4px }
-  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:20px }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr)); gap:20px }
   .card { display:flex; flex-direction:column; min-width:0; border:1px solid var(--line); border-radius:10px; background:var(--surface); overflow:hidden }
   .cover { display:grid; place-items:center; aspect-ratio:16/10; background:var(--surface-sunken); overflow:hidden }
   .cover img { width:100%; height:100%; object-fit:cover; display:block }
@@ -76,5 +76,4 @@
   .count { margin-top:4px; font-size:12px; font-weight:500 }
   .empty { padding:48px 16px; text-align:center }
   .more { align-self:start }
-  @media(max-width:500px) { .cards { grid-template-columns:minmax(0,1fr) } .sort { display:grid; grid-template-columns:1fr 1fr } .sort .chip { justify-content:center } }
 </style>
