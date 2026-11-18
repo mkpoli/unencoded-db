@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import { addSighting, hasLink, getEntry, readSightingFields, SightingLimitError, SIGHTINGS_MAX } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
+import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
 import { positiveId, uploadedImages } from '../../../../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
@@ -36,6 +37,7 @@ export const actions: Actions = {
       throw cause
     }
     if (!sighting) return fail(404, { error: 'missing', values })
+    notifyIndexNow(event, { entries: [id] })
     redirect(303, `/${event.params.locale}/entry/${id}`)
   },
 }

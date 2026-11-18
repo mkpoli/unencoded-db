@@ -5,6 +5,7 @@ import { readNewTag } from '$lib/tags'
 import { ADD_SIGHTINGS_MAX } from '$lib/limits'
 import { CITATION_FIELDS, hasLink, type SightingFields, createEntry, getEntryRow, getSighting, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
+import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
 import { positiveId, readImages, sightingForms, storeImages, type ReadImage } from '../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
@@ -71,6 +72,7 @@ export const actions: Actions = {
     const who = { actor: person.id, ip: await ipHash(event) }
     if (fresh && !(await createTag(DB, tags, fresh, who)).ok) return reject(400, 'tag')
     const id = await createEntry(DB, entry, drafts[0].fields, drafts[0].media, who, drafts.slice(1))
+    notifyIndexNow(event, { entries: [id] })
     redirect(303, `/${event.params.locale}/entry/${id}`)
   },
 }

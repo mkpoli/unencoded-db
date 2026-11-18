@@ -1,6 +1,7 @@
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
 import { openReports, resolveReport, setHidden } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
+import { notifyIndexNow } from '$lib/server/indexnow'
 import { positiveId } from '../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
@@ -51,6 +52,7 @@ async function visibility(event: RequestEvent, hidden: boolean) {
   const db = env(event).DB
   const report = await db.prepare('SELECT entry_id, sighting_id FROM reports WHERE id = ? AND resolved_at IS NULL').bind(id).first<{ entry_id: number; sighting_id: number | null }>()
   if (!report || !await setHidden(db, { entry: report.entry_id, sighting: report.sighting_id }, hidden, { actor: person.id, ip: await ipHash(event) }, null)) error(404)
+  notifyIndexNow(event, { entries: [report.entry_id] })
   redirect(303, `/${event.params.locale}/moderate`)
 }
 
@@ -66,6 +68,7 @@ async function restore(event: RequestEvent, sighting: boolean) {
     ? await db.prepare('SELECT entry_id FROM sightings WHERE id = ? AND hidden_at IS NOT NULL').bind(id).first<{ entry_id: number }>()
     : await db.prepare('SELECT id AS entry_id FROM entries WHERE id = ? AND hidden_at IS NOT NULL').bind(id).first<{ entry_id: number }>()
   if (!target || !await setHidden(db, { entry: target.entry_id, sighting: sighting ? id : null }, false, { actor: person.id, ip: await ipHash(event) }, null)) error(404)
+  notifyIndexNow(event, { entries: [target.entry_id] })
   redirect(303, `/${event.params.locale}/moderate`)
 }
 
