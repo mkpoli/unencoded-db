@@ -39,6 +39,8 @@ The local setup and production release run the date sweep after applying migrati
 
 ## Publishers
 
+On a source page, open **Alternate names** to add a spelling or abbreviation for that citation. The Sources page and the title fields for direct and intermediate citations accept the start of a title or alternate name. Picking an edition fills its citation details. A new title can be entered freely.
+
 The Sources page filters direct and intermediate citations by publisher. A contributor can choose a suggested publisher or enter a new name. The directory groups verified spellings such as 江蘇教育出版社 and 江苏教育出版社. Citations, exports and revision history retain the submitted name. Only publishers cited by a visible record appear in suggestions. The release runs `scripts/sweep-publishers.ts` to reconcile legacy lookup keys. The local setup runs the same sweep.
 
 ## Agents
@@ -69,6 +71,7 @@ An agent can sign in, and then writes under a person's name. The site is the OAu
 | `claims` | What a record states more than once: description sequences, composition, readings, meanings, codes, related characters, IVD, categories, collections, tags |
 | `sightings` | One place the character was seen: where, page, date, context, style, source types |
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
+| `source_aliases` | Alternate names for individual citations, including names shared by several editions |
 | `date_readings`, `evidence_dates` | Calendar readings and the view of transcribed dates in sources, sightings and revision history |
 | `date_index_state` | Generation used to retry writes when their date readings change |
 | `publishers`, `publisher_aliases` | Publisher identities and reviewed alternative spellings for the source filter |
