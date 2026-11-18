@@ -6,7 +6,7 @@
   const n = (count: number) => new Intl.NumberFormat(page.params.locale).format(count)
 </script>
 
-<Seo title={t('data.title')} description={t('data.intro')} />
+<Seo data={data.structured} title={t('data.title')} description={t('data.intro')} />
 <div class="page narrow stack data-page">
   <header class="stack head">
     <h1>{t('data.title')}</h1>
