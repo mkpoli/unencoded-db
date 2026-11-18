@@ -73,3 +73,33 @@ test('titles break between words, evenly, and keep the site name whole', () => {
   expect(lines('R+06C6', 3, 1)).toEqual(['R+0…'])
   expect(lines('合併字學集韻合併字學集韻', 5, 2)).toEqual(['合併字學集', '韻合併字…'])
 })
+
+test('cards are looked up in the cache only after visibility, under an address made from their content', async () => {
+  const { db, raw } = openTestDb()
+  raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026');
+    INSERT INTO entries(id, script, ids, created_by, created_at, updated_at, hidden_at) VALUES
+      (1, 'han', '永', 'p', '2026', '2026', null),
+      (2, 'han', '永', 'p', '2026', '2026', 'hidden');`)
+  const looked: string[] = []
+  const cached = new Response('png', { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' } })
+  const globals = globalThis as unknown as { caches?: unknown }
+  const original = globals.caches
+  globals.caches = { default: { match: async (request: Request) => (looked.push(request.url), cached.clone()) } }
+  try {
+    const card = (id: number, search = '') => Promise.resolve(GET({
+      params: { locale: 'en', kind: 'entry', id: String(id) }, url: new URL(`https://rare.glyphatlas.org/en/entry/${id}/card.png${search}`), platform: { env: { DB: db } },
+    } as unknown as Parameters<typeof GET>[0]))
+    await expect(card(2)).rejects.toMatchObject({ status: 404 })
+    expect(looked).toEqual([])
+    const response = await card(1, '?v=2026-01-01')
+    expect(await response.text()).toBe('png')
+    expect(response.headers.get('cache-control')).toBe('private, max-age=86400')
+    await card(1, '?v=another')
+    expect(looked).toHaveLength(2)
+    expect(looked[0]).toBe(looked[1])
+    expect(looked[0]).toMatch(/^https:\/\/rare\.glyphatlas\.org\/en\/entry\/1\/card\.png\?v=[0-9a-f]{16}$/)
+    raw.exec("UPDATE entries SET ids = '木' WHERE id = 1")
+    await card(1, '?v=2026-01-01')
+    expect(looked[2]).not.toBe(looked[0])
+  } finally { globals.caches = original }
+})

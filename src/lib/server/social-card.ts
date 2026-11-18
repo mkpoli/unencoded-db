@@ -2,12 +2,12 @@ import decodeWebp, { init as initWebp } from '@jsquash/webp/decode.js'
 import { initWasm, Resvg } from '@resvg/resvg-wasm'
 import { encode as encodePng } from 'fast-png'
 import { Buffer } from 'node:buffer'
-import { GLYPH_STYLES } from '$lib/composer'
+import { composerRevision, GLYPH_STYLES } from '$lib/composer'
 import { translate } from '$lib/i18n'
 import { boxesOf, type Box } from '$lib/picture'
 import type { CardPicture } from '$lib/server/entries'
 import { drawGlyph, type ComposerAssets, type Glyph } from '$lib/server/glyphs'
-import { MAX_THUMB, sniff } from '$lib/server/image'
+import { hashHex, MAX_THUMB, sniff } from '$lib/server/image'
 
 const NIGHT = '#101824', INK = '#f8efe2', MUTED = '#c6cbd6', ACCENT = '#b7aaff'
 const PAPER = '#f0e6d5'
@@ -18,10 +18,6 @@ const MARK = '<path d="M4 4h9v9H4zM19 4h9v9h-9zM4 19h9v9H4z"/><path d="M19 19h9v
 let initialized: Promise<void> | undefined
 let webpInitialized: Promise<void> | undefined
 const assetsRead = new Map<string, Uint8Array>()
-// Moderation is checked before consulting this cache. Short-lived entries also let newly drawn glyphs appear.
-const cards = new Map<string, { png: Uint8Array<ArrayBuffer>; expires: number }>()
-const CARD_CACHE_LIMIT = 8
-const CACHEABLE_PNG_BYTES = 1024 * 1024
 const MAX_EVIDENCE_PIXELS = 1_048_576
 // A marked picture is read whole to show the page around the mark.
 const MAX_MARKED_BYTES = 3 * 1024 * 1024, MAX_MARKED_PIXELS = 4_194_304
@@ -222,7 +218,10 @@ export async function evidencePanel(bucket: Pick<R2Bucket, 'get'>, picture: Card
   return `<svg x="${PANEL_X}" y="${PANEL_Y}" width="${PANEL_WIDTH}" height="${PANEL_HEIGHT}" viewBox="${view.join(' ')}" preserveAspectRatio="xMidYMid slice"><image width="${image.width}" height="${image.height}" href="${image.href}"/></svg>`
 }
 
-export type CardArt = { glyphs: { name: string; drawing: string }[]; evidence: string }
+// `late` is set when a style missed the time budget or failed to draw, so the card is served but not kept and
+// the next request tries the style again.
+export type CardArt = { glyphs: { name: string; drawing: string }[]; evidence: string; late?: boolean }
+const LATE = Symbol('late')
 
 // The record drawn in every style the site offers, beside its cover.
 export async function recordArtwork(
@@ -231,17 +230,17 @@ export async function recordArtwork(
 ): Promise<CardArt> {
   const [evidence, ...drawings] = await Promise.all([
     cover ? evidencePanel(bucket, cover) : '',
-    // A style still drawing after the budget is left off this card; its drawing is still stored for the next one.
+    // A style still drawing after the budget, or failing, is left off this card; a drawing that finishes is stored for the next one.
     ...GLYPH_STYLES.map(style => Promise.race([
-      drawGlyph(bucket, glyph, { ...context, style }).catch(() => null),
-      new Promise<null>(resolve => setTimeout(resolve, STYLE_BUDGET_MS, null)),
+      drawGlyph(bucket, glyph, { ...context, style }).catch(() => LATE),
+      new Promise<typeof LATE>(resolve => setTimeout(resolve, STYLE_BUDGET_MS, LATE)),
     ])),
   ])
   const glyphs = GLYPH_STYLES.flatMap((style, index) => {
     const drawing = drawings[index]
-    return drawing ? [{ name: translate(context.locale, `glyphStyle.${style}`), drawing }] : []
+    return typeof drawing === 'string' && drawing ? [{ name: translate(context.locale, `glyphStyle.${style}`), drawing }] : []
   })
-  return { glyphs, evidence }
+  return { glyphs, evidence, late: drawings.includes(LATE) }
 }
 
 export async function evidenceArtwork(bucket: Pick<R2Bucket, 'get'>, picture: CardPicture): Promise<CardArt> {
@@ -260,20 +259,42 @@ function plates(glyphs: CardArt['glyphs']) {
 
 type Card = { key: string; label: string; title: string; keep?: readonly string[]; detail?: string | null; caption?: string; art?: () => Promise<CardArt>; size?: number }
 
-const pngResponse = (png: Uint8Array<ArrayBuffer>) => new Response(png, {
-  headers: { 'content-type': 'image/png', 'cache-control': 'no-store' },
+// Bumped when the card's layout or backdrop changes, so cards drawn before it are not served again.
+const CARD_DESIGN = 1
+const CARD_MAX_AGE = 86400
+
+// Browsers and crawlers keep a card for a day, but no shared cache may: a shared cache in front of the Worker
+// would answer before the visibility check and keep showing a record after it is hidden. Only the Worker's
+// own cache, read after that check, holds cards for everyone.
+const PRIVATE = `private, max-age=${CARD_MAX_AGE}`, SHARED = `public, max-age=${CARD_MAX_AGE}`
+const pngResponse = (body: BodyInit | null, scope: string) => new Response(body, {
+  headers: { 'content-type': 'image/png', 'cache-control': scope },
 })
 
-export async function renderCard(assets: Fetcher, origin: string, card: Card): Promise<Response> {
-  const memo = cards.get(card.key)
-  if (memo) {
-    cards.delete(card.key)
-    if (memo.expires > Date.now()) {
-      cards.set(card.key, memo)
-      return pngResponse(memo.png)
-    }
+// Cards are cached under an address made from what they show, never from the requested `?v=`, which only
+// keeps crawlers from holding an older card. Routes check visibility before they call this, and their
+// `key` holds only what is visible, so a hidden record or picture has no cached card to reach.
+export async function renderCard(
+  event: { url: URL; platform?: Readonly<App.Platform> },
+  assets: Fetcher,
+  card: Card,
+): Promise<Response> {
+  const origin = event.url.origin
+  const cache = typeof caches === 'undefined' ? null : (caches as unknown as { default: Cache }).default
+  const version = await hashHex(JSON.stringify([CARD_DESIGN, composerRevision, card.key, card.label, card.title, card.detail, card.caption, card.size]))
+  const address = new Request(`${origin}${event.url.pathname}?v=${version.slice(0, 16)}`)
+  const found = await cache?.match(address)
+  if (found) return pngResponse(found.body, PRIVATE)
+  const { png, late } = await draw(assets, origin, card)
+  if (cache && !late) {
+    const stored = cache.put(address, pngResponse(png.slice(), SHARED)).catch(cause => console.error('Could not cache social card', cause))
+    if (event.platform?.ctx) event.platform.ctx.waitUntil(stored)
+    else await stored
   }
+  return pngResponse(png, PRIVATE)
+}
 
+async function draw(assets: Fetcher, origin: string, card: Card): Promise<{ png: Uint8Array<ArrayBuffer>; late: boolean }> {
   await renderer()
   const art = await card.art?.()
   const files = ['social-card.otf']
@@ -319,14 +340,7 @@ export async function renderCard(assets: Fetcher, origin: string, card: Card): P
     const rendered = render.render()
     try {
       const png = rendered.asPng().slice()
-      if (png.byteLength <= CACHEABLE_PNG_BYTES) {
-        if (cards.size >= CARD_CACHE_LIMIT) {
-          const oldest = cards.keys().next().value
-          if (oldest !== undefined) cards.delete(oldest)
-        }
-        cards.set(card.key, { png, expires: Date.now() + 90_000 })
-      }
-      return pngResponse(png)
+      return { png, late: Boolean(art?.late) }
     } finally { rendered.free() }
   } finally { render.free() }
 }

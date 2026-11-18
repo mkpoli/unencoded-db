@@ -22,7 +22,7 @@ export const GET: RequestHandler = async event => {
       const label = event.url.searchParams.get('view') === 'history'
         ? translate(locale, 'history.globalTitle')
         : scriptName(locale, entry.script, entry.script_other)
-      return await renderCard(bindings.ASSETS, event.url.origin, {
+      return await renderCard(event, bindings.ASSETS, {
         key: JSON.stringify([kind, locale, id, label, entry.ids, entry.layout, cover]),
         label, title: recordCode(entry.id), detail: recordName(entry.id),
         size: 78,
@@ -31,7 +31,7 @@ export const GET: RequestHandler = async event => {
     }
     if (source) {
       const image = await getSourceArtwork(bindings.DB, id)
-      return await renderCard(bindings.ASSETS, event.url.origin, {
+      return await renderCard(event, bindings.ASSETS, {
         key: JSON.stringify([kind, locale, source, image]),
         label: translate(locale, 'source.title'), title: source.title || source.url || `#${source.id}`,
         detail: [source.author, source.report_date].filter(Boolean).join(' · '), size: 55,
