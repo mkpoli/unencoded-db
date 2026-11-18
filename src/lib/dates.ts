@@ -7,13 +7,17 @@ export type DateReading = {
   query?: string
 }
 
+// Longer transcriptions remain in the evidence verbatim. Only bounded expressions enter the calendar parser or cache.
+export const MAX_READING_LENGTH = 256
+
 export function dateText(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : null
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
 function westernPeriod(value: string): DateReading | null {
-  const match = /^(\d{1,4})(?:年(?:([0-9]{1,2})月(?:([0-9]{1,2})日)?)?|(?:-([0-9]{1,2})(?:-([0-9]{1,2}))?)?)$/.exec(value)
+  if (/^\d{3,4}\/\d{1,2}(?:\/\d{1,2})?$/.test(value)) value = value.replaceAll('/', '-')
+  const match = /^(\d{3,4})(?:年(?:([0-9]{1,2})月(?:([0-9]{1,2})日)?)?|(?:-([0-9]{1,2})(?:-([0-9]{1,2}))?)?)$/.exec(value)
   if (!match) return null
   const year = Number(match[1]), month = Number(match[2] ?? match[4] ?? 1), day = Number(match[3] ?? match[5] ?? 1)
   const leap = year % 4 === 0 && (year < 1582 || year % 100 !== 0 || year % 400 === 0)
@@ -29,15 +33,17 @@ function westernPeriod(value: string): DateReading | null {
 
 // Interpret the whole expression. A number embedded in an arbitrary transcription cannot date a work.
 export function westernDate(raw: string): DateReading | null {
+  if (raw.length > MAX_READING_LENGTH) return null
   let value = raw.normalize('NFKC').trim()
   const approx = /^(?:c\.|ca\.|circa|約|约)\s*/i
-  const approximate = approx.test(value)
-  value = value.replace(approx, '')
-  // An explicit Western year supplied alongside an era date.
-  const stated = /^\p{Script=Han}+[\d元一二三四五六七八九十]+年\s*\((\d{3,4})\)$/u.exec(value)
-  const single = westernPeriod(stated?.[1] ?? value)
+  const suffix = /(?:頃|ごろ|\?)$/
+  const approximate = approx.test(value) || suffix.test(value)
+  value = value.replace(approx, '').replace(suffix, '').trim().replace(/^\[(.+)\]$/, '$1')
+  const decade = /^(\d{2,3}0)(?:年代|s)$/.exec(value)
+  if (decade) return { start: decade[1].padStart(4, '0') + '-01-01', end: String(Number(decade[1]) + 9).padStart(4, '0') + '-12-31', precision: 'range', ...(approximate && { approximate }) }
+  const single = westernPeriod(value)
   if (single) return approximate ? { ...single, approximate } : single
-  const range = /^(.*?)\s*(?:[–—〜～~至]|\s+to\s+)\s*(.*?)$/i.exec(value) ?? /^(\d{3,4})\s*-\s*(\d{3,4})$/.exec(value)
+  const range = /^(.*?)\s*(?:[–—〜～~至]|\s+(?:to|-)\s+)\s*(.*?)$/i.exec(value) ?? /^(\d{3,4})\s*-\s*(\d{3,4})$/.exec(value)
   if (!range) return null
   const first = westernPeriod(range[1]), last = westernPeriod(range[2])
   return first && last && first.start <= last.end ? { start: first.start, end: last.end, precision: 'range', ...(approximate && { approximate }) } : null

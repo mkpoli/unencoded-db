@@ -30,3 +30,5 @@ INSERT OR IGNORE INTO entry_tags(tag, entry_id, sightings, year)
 DELETE FROM tag_counts WHERE tag GLOB 'y:*' AND NOT EXISTS (SELECT 1 FROM entry_tags t WHERE t.tag = tag_counts.tag);
 INSERT INTO tag_counts(tag, n) SELECT tag, count(*) FROM entry_tags WHERE tag GLOB 'y:*' GROUP BY tag
   ON CONFLICT(tag) DO UPDATE SET n = excluded.n WHERE n != excluded.n;
+
+UPDATE date_index_state SET generation = generation + 1;
