@@ -49,8 +49,9 @@
   import { cleanIds } from '$lib/ids'
   import { carryLayout, layoutForStyle, layoutText, placeOf, withStyleLayout, type Layout } from '$lib/layout'
   import { page } from '$app/state'
-  import { GLYPH_STYLES, glyphStyleOf } from '$lib/composer'
-  import { locale, t } from '$lib/t'
+  import { glyphStyleOf } from '$lib/composer'
+  import { locale } from '$lib/t'
+  import GlyphStyleTabs from './GlyphStyleTabs.svelte'
 
   let { ids, layout = null, chosen = null, adjusting = $bindable(false) }: { ids: string; layout?: Layout | null; chosen?: number[] | null; adjusting?: boolean } = $props()
 
@@ -176,15 +177,9 @@
       {/if}
     </div>
     {#if adjusting}
-      <fieldset class="faces">
-        <legend>{t('nav.glyphStyle')}</legend>
-        {#each GLYPH_STYLES as option (option)}
-          <label>
-            <input type="radio" name="{uid}-glyph-style" checked={style === option} onchange={() => selectedStyle = option} />
-            {t(`glyphStyle.${option}`)}
-          </label>
-        {/each}
-      </fieldset>
+      <div class="tools">
+        <GlyphStyleTabs value={style} onchange={next => selectedStyle = next} />
+      </div>
     {/if}
   {/if}
   <input type="hidden" name="layout" value={layoutText(stated)} />
@@ -210,11 +205,6 @@
   .stage :global(.ids-preview-large:has(svg:focus-visible)) { outline: 3px solid var(--focus-ring); outline-offset: 2px }
   /* The badge speaks only when the composer could not draw the description as written. */
   .stage :global(.ids-preview:is([data-label='draft'], [data-label='loading'], [data-label='final']) .ids-preview-meta) { display: none }
-  .faces { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; margin: 0; padding: 0; border: 0 }
-  .faces legend { margin-bottom: 4px; font-size: 12px; color: var(--muted) }
-  .faces label { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px; cursor: pointer; font-size: 12.5px }
-  .faces input { margin: 0; accent-color: var(--accent) }
-  @media (pointer: coarse) { .faces label { min-height: 48px } }
   .tools { display: flex; flex-wrap: wrap; gap: 6px }
   .tool { min-height: 30px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer }
   .tool:hover:not(:disabled) { border-color: var(--ink) }
