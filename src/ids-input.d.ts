@@ -21,8 +21,8 @@ declare module 'ids-input/svelte' {
     readonly draft: string
     /** What is wrong with the text, in the editor's language, or '' when nothing is. */
     readonly problem: string
-    /** The part the tools are working on, by its place in the description, or null. */
     readonly picked: import('ids-input').IdsPart | undefined
+    /** The part the tools are working on, by its place in the description, or null. */
     readonly chosen: number[] | null
     readonly canUndo: boolean
     readonly canRedo: boolean
