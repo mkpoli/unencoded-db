@@ -50,7 +50,7 @@
   }
 </script>
 
-<Seo title={t('favourites.title')} index={false} />
+<Seo title={t('favourites.title')} />
 
 <div class="page stack favourites">
   <header class="head">

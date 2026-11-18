@@ -31,7 +31,8 @@
   import { COLLECTIONS, implicationClosure, tagLabels, tagLookup } from '$lib/tags'
   import { boxesOf, evidenceFile } from '$lib/picture'
   import { CHECKS, readiness } from '$lib/readiness'
-  import { parseSightingTypes } from '$lib/scripts'
+  import { parseSightingTypes, scriptName } from '$lib/scripts'
+  import { snippet } from '$lib/seo'
   import type { Sighting, StoredImage } from '$lib/server/entries'
   import { href, locale, media, t, day } from '$lib/t'
   import { recordCode, recordName } from '$lib/code'
@@ -117,6 +118,16 @@
   const analysis = $derived(sequences[0] ? analyze(sequences[0], compositionOf(claims)) : null)
   const ivd = $derived(valuesOf(claims, 'ivd')[0] ?? null)
   const encodings = $derived(encodingsOf(claims))
+  const recordLabel = $derived(`${recordCode(entry.id)} ${recordName(entry.id)}`)
+  const unicode = $derived(encodings.find(encoding => encoding.charset === 'unicode'))
+  const subject = $derived(entry.ids || (unicode && encodedCharacter(unicode.code)))
+  const seoTitle = $derived(subject ? `${snippet(subject, 36)} · ${recordLabel}` : recordLabel)
+  const seoDescription = $derived([
+    t('entry.record', { id: recordLabel }),
+    scriptName(locale(), entry.script, entry.script_other),
+    entry.status && t(`status.${entry.status}`),
+    entry.description || entry.cover_place,
+  ].filter(Boolean).join(' · '))
   const marks = $derived(marksOf(encodings))
   const tagsByName = $derived(tagLookup(data.tags))
   const labels = $derived(tagLabels(data.tags))
@@ -153,7 +164,7 @@
 </script>
 
 <svelte:window onclick={edit} />
-<Seo title={`${recordCode(entry.id)} ${recordName(entry.id)}`} image={entry.cover_key ? media(entry.cover_key) : null} />
+<Seo title={seoTitle} description={seoDescription} image={entry.cover_key ? media(entry.cover_key) : null} />
 <div class="page narrow stack">
   <div class="row"><a class="text-link back" href={href()}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
   <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: data.earliest.year })}</a>{/if}</div></div><FavouriteButton id={entry.id} initial={data.favourites.includes(entry.id)} onerror={message => favError = message} /></div>

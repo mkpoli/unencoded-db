@@ -1,4 +1,5 @@
 User-agent: *
-Disallow: /*?
 Disallow: /api/
 Disallow: /auth/
+
+Sitemap: https://rare.glyphatlas.org/sitemap.xml
