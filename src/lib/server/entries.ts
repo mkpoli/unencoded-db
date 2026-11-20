@@ -12,7 +12,7 @@ import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
-import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, readClaims, valuesOf, type Claim, type ClaimError } from '$lib/claims'
+import { encodingsOf, joinClaims, mapSightings, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, valuesOf, type Claim, type ClaimError } from '$lib/claims'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { FILE_ROWS, ensureTags, filedUnder } from './tags'
@@ -38,6 +38,8 @@ export type Sighting = Omit<SightingFields, 'vias'> & { id: number; entry_id: nu
 
 // What an entry has one of. What it has several of is in `claims`.
 export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical', 'strokes'] as const
+// The fields a record may take from a duplicate when it has none of its own.
+const FILLED_FIELDS = ['description', 'radical', 'strokes'] as const
 // A sighting's citation is its source; the other fields are the sighting's own. Its `vias` are the sources
 // it passed through, from the one nearest the cited work to the one the contributor saw: a post that shows
 // a page of the cited work, say.
@@ -645,7 +647,7 @@ export function entryFieldsOf(raw: string): EntryFields | null {
 
 // Any revision of a record's fields can be made current again; the journal gains a row and loses none.
 export async function revertEntry(db: D1Database, id: number, revisionId: number, who: Who) {
-  const old = await db.prepare(`SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id IS NULL AND redacted_at IS NULL AND kind IN ('create','edit','revert')`).bind(revisionId, id).first<{ snapshot: string; rev: number }>()
+  const old = await db.prepare(`SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id IS NULL AND redacted_at IS NULL AND kind IN ('create','edit','revert','merge','unmerge')`).bind(revisionId, id).first<{ snapshot: string; rev: number }>()
   const entry = await getEntryRow(db, id)
   const fields = old ? entryFieldsOf(old.snapshot) : null
   if (!old || !entry || !fields) return { ok: false as const, code: 'missing' as const }
@@ -655,47 +657,115 @@ export async function revertEntry(db: D1Database, id: number, revisionId: number
 // A redacted revision keeps its row, author and time, and no longer says what the record held. The
 // state a record or a sighting holds now is not a past one, and stays.
 export async function redactRevision(db: D1Database, entry: number, revisionId: number, who: Who, summary: string | null) {
-  const row = await db.prepare(`SELECT r.rev, r.sighting_id, CASE WHEN r.sighting_id IS NULL THEN e.rev ELSE s.rev END AS current FROM revisions r JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id WHERE r.id = ? AND r.entry_id = ? AND r.redacted_at IS NULL AND r.kind IN ('create','edit','revert','sighting','sighting_edit')`).bind(revisionId, entry).first<{ rev: number; sighting_id: number | null; current: number | null }>()
+  const row = await db.prepare(`SELECT r.rev, r.sighting_id, CASE WHEN r.sighting_id IS NULL THEN e.rev ELSE s.rev END AS current FROM revisions r JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id WHERE r.id = ? AND r.entry_id = ? AND r.redacted_at IS NULL AND r.kind IN ('create','edit','revert','merge','unmerge','sighting','sighting_edit')`).bind(revisionId, entry).first<{ rev: number; sighting_id: number | null; current: number | null }>()
   if (!row || row.current === row.rev) return false
   await db.batch([
-    db.prepare(`UPDATE revisions SET snapshot = '{}', summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
+    // A redacted merge still says which record it joined and what it gave, by key, so it can be undone.
+    db.prepare(`UPDATE revisions SET snapshot = CASE WHEN kind IN ('merge','unmerge') THEN json_object('from', json_extract(snapshot, '$.from'), 'into', json_extract(snapshot, '$.into'), 'added', json(json_extract(snapshot, '$.added')), 'scoped', json(json_extract(snapshot, '$.scoped')), 'filled', json(json_extract(snapshot, '$.filled'))) ELSE '{}' END, summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
     db.prepare('DELETE FROM date_readings WHERE transcription NOT IN (SELECT value FROM evidence_dates WHERE value IS NOT NULL)'),
     revision(db, who, { entry, sighting: row.sighting_id, kind: 'redact', rev: row.rev, snapshot: JSON.stringify({ revision: revisionId }), summary }),
   ])
   return true
 }
 
-export async function mergeEntry(db: D1Database, from: number, into: number, who: Who, summary: string | null) {
-  if (from === into) return { ok: false as const, code: 'self' as const }
-  const source = await getEntryRow(db, from), target = await getEntryRow(db, into)
-  if (!source || !target || target.merged_into || target.hidden_at) return { ok: false as const, code: 'missing' as const }
-  if (source.merged_into) return { ok: false as const, code: 'merged' as const }
-  await db.batch([
-    db.prepare('UPDATE sightings SET entry_id = ? WHERE entry_id = ?').bind(into, from),
-    db.prepare('UPDATE entries SET merged_into = ?, updated_at = ? WHERE id = ?').bind(into, now(), from),
-    db.prepare('UPDATE entries SET updated_at = ? WHERE id = ?').bind(now(), into),
-    revision(db, who, { entry: from, kind: 'merge', rev: source.rev, snapshot: JSON.stringify({ into }), summary }),
-    revision(db, who, { entry: into, kind: 'merge', rev: target.rev, snapshot: JSON.stringify({ from }), summary }),
-  ])
-  await refresh(db, from)
-  await refresh(db, into)
-  return { ok: true as const }
+export type MergeResult = { ok: true } | { ok: false; code: 'self' | 'missing' | 'merged' | 'full' }
+
+// A duplicate joins the record it repeats. Its sightings move there and its claims are joined to that
+// record's; the duplicate keeps its own claims as they were, so parting the two gives each back its own.
+export async function mergeEntry(db: D1Database, from: number, into: number, who: Who, summary: string | null): Promise<MergeResult> {
+  if (from === into) return { ok: false, code: 'self' }
+  for (let attempt = 0; ; attempt++) {
+    const marks = [await revisionMark(db, from), await revisionMark(db, into)]
+    const source = await getEntryRow(db, from), target = await getEntryRow(db, into)
+    if (!source || source.hidden_at || !target || target.merged_into || target.hidden_at) return { ok: false, code: 'missing' }
+    if (source.merged_into) return { ok: false, code: 'merged' }
+    const [moving, staying] = [await sightingRows(db, from), await sightingRows(db, into)]
+    if (moving.length + staying.length > SIGHTINGS_MAX) return { ok: false, code: 'full' }
+    const joined = joinClaims(await claimRows(db, into), await claimRows(db, from))
+    // What the record that stays leaves unsaid, the duplicate may say.
+    const filled = FILLED_FIELDS.filter(field => target[field] === null && source[field] !== null)
+    const fields = { ...snapshotOf(target, ENTRY_FIELDS), ...snapshotOf(source, filled), claims: joined.claims } as EntryFields
+    const rev = target.rev + 1, at = now()
+    try {
+      await db.batch([
+        checkMark(db, from, marks[0], who),
+        checkMark(db, into, marks[1], who),
+        db.prepare(`UPDATE entries SET ${ENTRY_FIELDS.map(field => `${field} = ?`).join(', ')}, rev = ?, updated_at = ? WHERE id = ? AND rev = ? AND merged_into IS NULL AND hidden_at IS NULL`)
+          .bind(...ENTRY_FIELDS.map(field => fields[field]), rev, at, into, target.rev),
+        checkChanged(db, into, who),
+        db.prepare('UPDATE entries SET merged_into = ?, updated_at = ? WHERE id = ? AND merged_into IS NULL AND hidden_at IS NULL').bind(into, at, from),
+        checkChanged(db, from, who),
+        db.prepare('UPDATE sightings SET entry_id = ? WHERE entry_id = ?').bind(into, from),
+        db.prepare('DELETE FROM claims WHERE entry_id = ?').bind(into),
+        insertClaims(db, into, joined.claims),
+        revision(db, who, { entry: from, kind: 'merge', rev: source.rev, snapshot: JSON.stringify({ into }), summary }),
+        revision(db, who, { entry: into, kind: 'merge', rev, snapshot: JSON.stringify({ ...JSON.parse(entrySnapshot(fields)), from, added: joined.added, scoped: joined.scoped, filled }), summary }),
+      ])
+    } catch (error) {
+      if (attempt < 4 && ((await revisionMark(db, from)) !== marks[0] || (await revisionMark(db, into)) !== marks[1])) continue
+      throw error
+    }
+    await refresh(db, from)
+    await refresh(db, into)
+    return { ok: true }
+  }
 }
 
+/** The duplicates that joined this record and can part from it. */
+export async function mergedInto(db: D1Database, id: number) {
+  const { results } = await db.prepare('SELECT id FROM entries WHERE merged_into = ? AND hidden_at IS NULL ORDER BY id LIMIT 200').bind(id).all<{ id: number }>()
+  return results.map(row => row.id)
+}
+
+// Every record that was merged into this one, however far back, and the record itself.
+const PARTS = 'WITH RECURSIVE part(id) AS (SELECT ?1 UNION SELECT e.id FROM entries e JOIN part ON e.merged_into = part.id)'
+
+// Parting a duplicate from the record it joined: the sightings it brought go back with it, and the record
+// that stayed loses what it held only by them.
 export async function unmergeEntry(db: D1Database, id: number, who: Who) {
-  const entry = await getEntryRow(db, id)
-  if (!entry?.merged_into) return false
-  const into = entry.merged_into
-  await db.batch([
-    // What was merged into this record before it was merged comes back with it.
-    db.prepare('UPDATE sightings SET entry_id = ? WHERE entry_id = ? AND (first_entry = ? OR first_entry IN (SELECT id FROM entries WHERE merged_into = ?))').bind(id, into, id, id),
-    db.prepare('UPDATE entries SET merged_into = NULL, updated_at = ? WHERE id IN (?, ?)').bind(now(), id, into),
-    revision(db, who, { entry: id, kind: 'unmerge', rev: entry.rev, snapshot: JSON.stringify({ from: into }) }),
-    revision(db, who, { entry: into, kind: 'unmerge', rev: 0, snapshot: JSON.stringify({ from: id }) }),
-  ])
-  await refresh(db, id)
-  await refresh(db, into)
-  return true
+  for (let attempt = 0; ; attempt++) {
+    const entry = await getEntryRow(db, id)
+    if (!entry?.merged_into) return false
+    const into = entry.merged_into
+    const marks = [await revisionMark(db, id), await revisionMark(db, into)]
+    const target = await getEntryRow(db, into)
+    // A hidden record keeps what it holds out of sight, the duplicates that joined it too.
+    if (!target || target.merged_into || target.hidden_at || entry.hidden_at) return false
+    const { results: back } = await db.prepare(`${PARTS} SELECT id FROM sightings WHERE entry_id = ?2 AND first_entry IN (SELECT id FROM part)`).bind(id, into).all<{ id: number }>()
+    // Every merge into the record says what it gave; a claim two duplicates gave leaves with the last of them.
+    const { results: merges } = await db.prepare(`SELECT json_extract(snapshot, '$.from') AS source, json_extract(snapshot, '$.added') AS added, json_extract(snapshot, '$.scoped') AS scoped, json_extract(snapshot, '$.filled') AS filled FROM revisions WHERE entry_id = ? AND kind = 'merge' ORDER BY id DESC LIMIT ${SIGHTINGS_MAX}`).bind(into).all<{ source: number | null; added: string | null; scoped: string | null; filled: string | null }>()
+    const listed = (text: string | null): string[] => { try { const value: unknown = JSON.parse(text ?? '[]'); return Array.isArray(value) ? value.filter(item => typeof item === 'string') : [] } catch { return [] } }
+    const { results: others } = await db.prepare(`SELECT k.entry_id, ${CLAIM_COLUMNS.map(column => `k.${column}`).join(', ')} FROM entries e JOIN claims k ON k.entry_id = e.id WHERE e.merged_into = ?1 AND e.id != ?2 ORDER BY k.entry_id, k.position LIMIT 5000`).bind(into, id).all<ClaimRow & { entry_id: number }>()
+    const still = Object.values(Object.groupBy(others, row => row.entry_id)).map(rows => rows!.map(toClaim))
+    const claims = partClaims(await claimRows(db, into), new Set(back.map(row => row.id)), { added: merges.flatMap(row => listed(row.added)), scoped: merges.flatMap(row => listed(row.scoped)) }, still)
+    // A field the duplicate filled is emptied again unless it has been rewritten since.
+    const filled = listed(merges.find(row => row.source === id)?.filled ?? null)
+    const emptied = Object.fromEntries(FILLED_FIELDS.flatMap(field => filled.includes(field) && entry[field] === target[field] ? [[field, null]] : []))
+    const fields = { ...snapshotOf(target, ENTRY_FIELDS), ...emptied, claims } as EntryFields
+    const rev = target.rev + 1, at = now()
+    try {
+      await db.batch([
+        checkMark(db, id, marks[0], who),
+        checkMark(db, into, marks[1], who),
+        db.prepare(`UPDATE entries SET ${ENTRY_FIELDS.map(field => `${field} = ?`).join(', ')}, rev = ?, updated_at = ? WHERE id = ? AND rev = ? AND merged_into IS NULL`)
+          .bind(...ENTRY_FIELDS.map(field => fields[field]), rev, at, into, target.rev),
+        checkChanged(db, into, who),
+        db.prepare('UPDATE entries SET merged_into = NULL, updated_at = ? WHERE id = ? AND merged_into = ?').bind(at, id, into),
+        checkChanged(db, id, who),
+        db.prepare(`${PARTS} UPDATE sightings SET entry_id = ?1 WHERE entry_id = ?2 AND first_entry IN (SELECT id FROM part)`).bind(id, into),
+        db.prepare('DELETE FROM claims WHERE entry_id = ?').bind(into),
+        insertClaims(db, into, claims),
+        revision(db, who, { entry: id, kind: 'unmerge', rev: entry.rev, snapshot: JSON.stringify({ into }) }),
+        revision(db, who, { entry: into, kind: 'unmerge', rev, snapshot: JSON.stringify({ ...JSON.parse(entrySnapshot(fields)), from: id }) }),
+      ])
+    } catch (error) {
+      if (attempt < 4 && ((await revisionMark(db, id)) !== marks[0] || (await revisionMark(db, into)) !== marks[1])) continue
+      throw error
+    }
+    await refresh(db, id)
+    await refresh(db, into)
+    return true
+  }
 }
 
 export async function setHidden(db: D1Database, target: { entry: number; sighting?: number | null }, hidden: boolean, who: Who, summary: string | null) {
@@ -1288,12 +1358,17 @@ export async function sourceList(db: D1Database, sort: SourceSort = 'new', curso
     return { ...source, cover: rows.find(([, thumb]) => thumb)?.[1] ?? null, ids: [...new Set(rows.map(([id]) => id))].slice(0, SOURCE_CARD_RECORDS) }
   })
   const drawn = [...new Set(cards.flatMap(card => card.ids))]
-  const tiles = new Map<number, Tile>()
-  if (drawn.length) {
-    const { results } = await db.prepare(`SELECT ${TILE_COLUMNS} FROM json_each(?) j CROSS JOIN entries e ON e.id = j.value WHERE e.hidden_at IS NULL AND e.merged_into IS NULL`).bind(JSON.stringify(drawn)).all<TileRow>()
-    for (const row of results) tiles.set(row.id, toTile(row))
-  }
+  const tiles = await tilesOf(db, drawn)
   return { sources: cards.map(({ ids, ...card }): SourceCard => ({ ...card, tiles: ids.flatMap(id => tiles.get(id) ?? []) })), next }
+}
+
+// The tiles of the live records among `ids`, by record.
+export async function tilesOf(db: D1Database, ids: readonly number[]) {
+  const tiles = new Map<number, Tile>()
+  if (!ids.length) return tiles
+  const { results } = await db.prepare(`SELECT ${TILE_COLUMNS} FROM json_each(?) j CROSS JOIN entries e ON e.id = j.value WHERE e.hidden_at IS NULL AND e.merged_into IS NULL`).bind(JSON.stringify(ids)).all<TileRow>()
+  for (const row of results) tiles.set(row.id, toTile(row))
+  return tiles
 }
 
 // The records that state this value: the ones described by a sequence, given a code, or related to a character.
