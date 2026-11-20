@@ -3,6 +3,7 @@
 // ⿺⿱𡗗夂面 and ⿺𡕤面 are one form. A part may also be swapped for one IWDS counts as the same component
 // (夂 and 夊), since BabelStone and contributors spell such parts either way. Radical code points stay as typed.
 import { groupKey, groupMates, hasOverlay, hasStroke, plain, typedTree, write, type Tree } from './similar'
+import { radicalEquivalent } from './radicals'
 
 export type Table = { encoded: ReadonlyMap<string, string>; described: ReadonlyMap<string, string> }
 /** Spellings at most, the one typed included. */
@@ -66,6 +67,54 @@ export function equivalentSpellings(ids: string, table: Table, limit = SPELLINGS
     }
   }
   return found
+}
+
+const leavesOf = (tree: Tree): string[] => typeof tree === 'string' ? [tree] : tree.parts.flatMap(leavesOf)
+const JOINS: Record<number, string[]> = { 2: [...'⿰⿱⿴⿵⿶⿷⿸⿹⿺⿼⿽'], 3: [...'⿲⿳'] }
+/** Runs of parts at most, the one typed included, and parts at most in a run: the search reads a row for each. */
+export const PART_SPELLINGS_MAX = 4
+export const PART_RUN_MAX = 6
+
+/** Whether a text is parts alone: ideographs with no operator, space or other writing among them. */
+export const isParts = (text: string) => /^[\p{Script=Han}\p{Co}\u31C0-\u31EF]+$/u.test(text)
+
+// The runs one step from a run: one part written out as the parts of its description, or two or three
+// neighbouring parts folded into the character they describe, in either order.
+function partSteps(run: readonly string[], table: Table): string[][] {
+  const found: string[][] = []
+  run.forEach((part, at) => {
+    const inner = wholeOf(part, table)
+    if (inner) found.push([...run.slice(0, at), ...leavesOf(inner), ...run.slice(at + 1)])
+  })
+  for (const size of [2, 3]) for (let at = 0; at + size <= run.length; at++) {
+    const parts = run.slice(at, at + size)
+    for (const order of size === 2 ? [parts, [...parts].reverse()] : [parts]) for (const op of JOINS[size]) {
+      const tree: Tree = { op, parts: order }
+      const character = table.encoded.get(write(tree)) ?? looseEncoded(table).get(write(tree, groupKey))
+      if (character !== undefined) found.push([...run.slice(0, at), character, ...run.slice(at + size)])
+    }
+  }
+  return found
+}
+
+/**
+ * The runs of parts that may spell what a run of parts does, the typed one first: 艹時 is also 艹日寺 and 蒔.
+ * Radical code points count as the ideographs they stand for, and a run with the same parts in another order is the same run.
+ */
+export function partSpellings(text: string, table: Table, limit = PART_SPELLINGS_MAX): string[] {
+  const start = [...new Set([...plain(text)].map(radicalEquivalent))]
+  const key = (run: readonly string[]) => [...run].sort().join('')
+  const found = [start], seen = new Set([key(start)])
+  for (let at = 0; at < found.length && found.length < limit; at++) {
+    for (const stepped of partSteps(found[at], table)) {
+      const next = [...new Set(stepped)]
+      if (next.length > PART_RUN_MAX || seen.has(key(next))) continue
+      seen.add(key(next))
+      found.push(next)
+      if (found.length === limit) break
+    }
+  }
+  return found.map(run => run.join(''))
 }
 
 /**

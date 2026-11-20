@@ -11,7 +11,7 @@
   import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
   import { describedTable } from '$lib/encoded'
   import { cleanIds } from '$lib/ids'
-  import { equivalentSpellings } from '$lib/ids-variants'
+  import { equivalentSpellings, isParts, partSpellings } from '$lib/ids-variants'
   import { isDescription } from 'ids-input'
   import ChatLinks from '$lib/components/ChatLinks.svelte'
   import GlyphStyleTabs from '$lib/components/GlyphStyleTabs.svelte'
@@ -137,17 +137,18 @@
     document.cookie = `${TILE_SIZE_COOKIE}=${tileSize};path=/;max-age=31536000;samesite=lax`
     document.documentElement.dataset.tileSize = String(tileSize)
   }
-  // A whole description is also searched under its other spellings, which the table in the browser knows. Without
-  // the table, or without scripts, it is searched as typed.
+  // A whole description, or parts typed with no structure (艹時), is also searched under its other spellings,
+  // which the table in the browser knows. Without the table, or without scripts, it is searched as typed.
   async function search(event: SubmitEvent) {
     const form = event.currentTarget as HTMLFormElement
     const values = new FormData(form)
     const query = cleanIds(String(values.get('q') ?? ''))
-    if (!isDescription(query)) return
+    const whole = isDescription(query)
+    if (!whole && !isParts(query)) return
     event.preventDefault()
     const params = new URLSearchParams(values as unknown as Record<string, string>)
     let spellings: string[] = []
-    try { spellings = equivalentSpellings(query, await describedTable()).slice(1) } catch { /* searched as typed */ }
+    try { spellings = whole ? equivalentSpellings(query, await describedTable()).slice(1) : partSpellings(query, await describedTable()).slice(1) } catch { /* searched as typed */ }
     for (const spelling of spellings) params.append('also', spelling)
     await goto(`?${params}`)
   }

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { equivalentSpellings, spellingGroups } from './ids-variants'
+import { equivalentSpellings, isParts, partSpellings, spellingGroups } from './ids-variants'
 
 const described = new Map([['𡕤', '⿱𡗗夂'], ['𡗗', '⿱丷⿻二人'], ['夂', '⿱𠂊㇏'], ['好', '⿰女子'], ['看', '⿱手目'], ['手', '⿱㇒⿻二亅'], ['明', '⿰日月']])
 const table = { described, encoded: new Map([...described].map(([char, ids]) => [ids, char])) }
@@ -68,4 +68,17 @@ test('descriptions of one form group, and the first in the group draws', () => {
   const groups = spellingGroups([{ ids: '⿺⿱𡗗夂面', place: 1 }, { ids: '⿰木木', place: 2 }, { ids: '⿺𡕤面', place: 3 }], table)
   expect(groups.map(group => group.map(form => form.place))).toEqual([[1, 3], [2]])
   expect(spellingGroups([{ ids: '⿰木木' }], table)).toEqual([[{ ids: '⿰木木' }]])
+})
+
+test('parts typed with no structure are also the parts written out and the character they make', () => {
+  const parts = new Map([['蒔', '⿱艹時'], ['時', '⿰日寺'], ['寺', '⿱土寸']])
+  const known = { described: parts, encoded: new Map([...parts].map(([char, ids]) => [ids, char])) }
+  expect(partSpellings('艹時', known)).toEqual(['艹時', '艹日寺', '蒔', '艹日土寸'])
+  // Either order of two parts makes the character, and a radical code point is the ideograph it stands for.
+  expect(partSpellings('寺日', known)).toContain('時')
+  expect(partSpellings('⺾時', known)[0]).toBe('艹時')
+  expect(partSpellings('艹時', known, 2)).toHaveLength(2)
+  expect(partSpellings('木', known)).toEqual(['木'])
+  expect(isParts('艹時')).toBe(true)
+  for (const text of ['⿱艹時', '艹 時', 'word', '']) expect(isParts(text)).toBe(false)
 })
