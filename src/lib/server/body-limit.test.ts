@@ -131,6 +131,15 @@ describe('write body limit', () => {
     expect(writeLimitFor({ request, url: new URL(request.url), route: { id: '/[locale]/entry/[id]' } } as any)).toBeNull()
   })
 
+  test('a moderator hides a comment while writes are paused, and nobody comments', async () => {
+    const db = (role: string) => ({ prepare: () => ({ bind: () => ({ first: async () => ({ id: '1', name: 'x', atlas_sub: null, role, banned_at: null, created_at: new Date().toISOString() }) }) }) })
+    const options = (role: string) => ({ route: { id: '/[locale]/entry/[id]' }, cookies: { get: () => 'token' }, platform: { env: { DB: db(role), WRITES_PAUSED: '1' } } })
+    const request = (path: string) => new Request(`https://example.test/en/${path}`, { method: 'POST', body: 'x' })
+    expect((await runHook(request('entry/1?/hideComment'), async () => new Response('ok'), options('moderator'))).status).toBe(200)
+    await expect(runHook(request('entry/1?/hideComment'), async () => new Response('ok'), options('member'))).rejects.toMatchObject({ status: 403 })
+    await expect(runHook(request('entry/1?/comment'), async () => new Response('ok'), options('moderator'))).rejects.toMatchObject({ status: 503 })
+  })
+
   test('pause allows only authorized, rate-limited moderation actions through the hook', async () => {
     const db = (role: string, banned = false) => ({ prepare: () => ({ bind: () => ({ first: async () => ({ id: '1', name: 'x', atlas_sub: null, role, banned_at: banned ? 'now' : null, created_at: new Date().toISOString() }) }) }) })
     const request = (path: string) => new Request(`https://example.test/en/${path}`, { method: 'POST', body: 'x' })

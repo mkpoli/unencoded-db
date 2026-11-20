@@ -42,6 +42,14 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
   }
 }
 
+// The actions only a moderator takes. Keep this in step with the actions that guard themselves as moderation.
+export function moderationAction(event: RequestEvent) {
+  if (event.route?.id === '/[locale]/moderate') return true
+  if (event.route?.id !== '/[locale]/entry/[id]') return false
+  for (const [key] of event.url.searchParams) if (key.startsWith('/')) return key === '/hideComment' || key === '/unhideComment'
+  return false
+}
+
 // Moderation writes remain available during a freeze, subject to authorization and limits.
 export async function guardWrite(event: RequestEvent, limit: WriteLimit, moderation = false) {
   const bindings = env(event)
