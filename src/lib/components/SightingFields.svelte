@@ -5,7 +5,7 @@
   import { quotations, QUOTATIONS_MAX, type Quotation } from '$lib/quotations'
   import SourceTitleField from './SourceTitleField.svelte'
   import PublisherField from './PublisherField.svelte'
-  import { untrack } from 'svelte'
+  import { tick, untrack } from 'svelte'
   import { CONTEXTS, SIGHTING_TYPES, STYLES, parseSightingTypes } from '$lib/scripts'
   import { cleanLinkInput } from '$lib/link-input'
   import { fetchPost, postId, type PostInfo } from '$lib/source-url'
@@ -45,6 +45,15 @@
   function removeVia(key: number) {
     vias = vias.filter(row => row.key !== key)
     if (!vias.length) vias = [via()]
+  }
+  async function moveVia(key: number, by: -1 | 1, button: 'earlier' | 'later') {
+    const from = vias.findIndex(row => row.key === key)
+    const to = from + by
+    if (from < 0 || to < 0 || to >= vias.length) return
+    ;[vias[from], vias[to]] = [vias[to], vias[from]]
+    await tick()
+    const buttons = [button, button === 'earlier' ? 'later' : 'earlier'].map(name => document.getElementById(`${uid}-via-${name}-${key}`) as HTMLButtonElement | null)
+    buttons.find(item => item && !item.disabled)?.focus()
   }
   // The row a post filled, so the next post replaces it.
   let postedKey: number | null = null
@@ -205,7 +214,7 @@
 <details class="more" bind:open={viaOpen}>
   <summary>{t('field.via')}</summary>
   <p class="hint">{t('field.viaHint')}</p>
-  {#each vias as row (row.key)}
+  {#each vias as row, index (row.key)}
     <fieldset class="via">
       <div class="field"><label for="{uid}-via_url-{row.key}">{t('field.url')}</label><input id="{uid}-via_url-{row.key}" class="input" type="url" name="via_url" bind:value={row.url} use:cleanLinkInput placeholder="https://" maxlength="1000" autocorrect="off" autocapitalize="none" spellcheck="false" /></div>
       <div class="grid-2">
@@ -215,7 +224,13 @@
         <div class="field"><label for="{uid}-via_report_date-{row.key}">{t('field.reportDate')}</label><input id="{uid}-via_report_date-{row.key}" class="input" name="via_report_date" bind:value={row.date} /></div>
       </div>
       <div class="field"><label for="{uid}-via_quote-{row.key}">{t('field.quote')}</label><textarea id="{uid}-via_quote-{row.key}" class="input" name="via_quote" rows="2" maxlength="5000" bind:value={row.quote}></textarea></div>
-      <div><button type="button" class="text-button" onclick={() => removeVia(row.key)}>{t('field.viaRemove')}</button></div>
+      <div class="via-actions">
+        {#if vias.length > 1}
+          <button type="button" id="{uid}-via-earlier-{row.key}" class="text-button" disabled={index === 0} onclick={() => moveVia(row.key, -1, 'earlier')}><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6" /></svg>{t('field.viaEarlier')}</button>
+          <button type="button" id="{uid}-via-later-{row.key}" class="text-button" disabled={index === vias.length - 1} onclick={() => moveVia(row.key, 1, 'later')}><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>{t('field.viaLater')}</button>
+        {/if}
+        <button type="button" class="text-button" onclick={() => removeVia(row.key)}>{t('field.viaRemove')}</button>
+      </div>
     </fieldset>
   {/each}
   {#if vias.length < VIAS_MAX && !blankVia(vias.at(-1)!)}
@@ -246,6 +261,8 @@
   .type-name { font-size: 13.5px; font-weight: 500 }
   .type .hint { font-size: 12px }
   .via { display: flex; flex-direction: column; gap: 12px; min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 7px }
+  .via-actions { display: flex; flex-wrap: wrap; gap: 4px 16px }
+  .text-button:disabled { color: var(--muted); cursor: default; text-decoration: none }
   .more { display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 12px }
   .more[open] > :global(* + *) { margin-top: 12px }
   summary { font-weight: 500; cursor: pointer }

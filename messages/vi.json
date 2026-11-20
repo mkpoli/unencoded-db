@@ -166,6 +166,8 @@
   "field.viaHint": "Nơi bạn gặp nó, ví dụ bài đăng chụp một trang sách.",
   "field.viaAdd": "Thêm chặng",
   "field.viaRemove": "Xóa",
+  "field.viaEarlier": "Đưa lên trước",
+  "field.viaLater": "Đưa ra sau",
   "field.quoteLocator": "Vị trí hoặc xuất xứ",
   "field.addQuote": "Thêm trích dẫn",
   "field.quote": "Trích dẫn",

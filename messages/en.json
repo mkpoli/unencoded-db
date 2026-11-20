@@ -166,6 +166,8 @@
   "field.viaHint": "Where you came across it, such as a post showing a page of the book.",
   "field.viaAdd": "Add via",
   "field.viaRemove": "Remove",
+  "field.viaEarlier": "Move earlier",
+  "field.viaLater": "Move later",
   "field.quoteLocator": "Location or attribution",
   "field.addQuote": "Add quotation",
   "field.quote": "Quote",

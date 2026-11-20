@@ -166,6 +166,8 @@
   "field.viaHint": "책의 한 면을 실은 게시물 등, 찾게 된 경로.",
   "field.viaAdd": "경로 추가",
   "field.viaRemove": "삭제",
+  "field.viaEarlier": "앞으로",
+  "field.viaLater": "뒤로",
   "field.quoteLocator": "위치 또는 출처",
   "field.addQuote": "인용문 추가",
   "field.quote": "인용",
