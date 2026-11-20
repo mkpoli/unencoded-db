@@ -148,6 +148,7 @@
   const sourceFields = [
     { key: 'author', label: 'field.author' },
     { key: 'title', label: 'field.title' },
+    { key: 'container', label: 'field.container' },
     { key: 'publisher', label: 'field.publisher' },
     { key: 'report_date', label: 'field.reportDate' },
     { key: 'original_date', label: 'field.originalDate' },

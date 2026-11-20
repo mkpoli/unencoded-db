@@ -16,7 +16,7 @@
   let page = $state<{ cursor: Cursor | null }>({ cursor: null }), next = $state<Cursor | null>(null)
   const options = $derived<ComboOption[]>([...matches.map(source => ({
     key: String(source.id),
-    label: source.title || source.url || source.author || source.publisher || source.report_date || `#${source.id}`,
+    label: source.title || source.url || source.container || source.author || source.publisher || source.report_date || `#${source.id}`,
   })), ...(next !== null ? [{ key: 'more', more: true, label: t('browse.more') }] : [])])
 
   function search(text: string) {
@@ -68,6 +68,7 @@
             <strong>{option.label}</strong>
             {#if source.alias && source.alias !== option.label}<span>{t('source.alias')} · {source.alias}</span>{/if}
             {#if source.author}<span>{t('field.author')} · {source.author}</span>{/if}
+            {#if source.container && source.container !== option.label}<span>{t('field.container')} · {source.container}</span>{/if}
             {#if source.publisher}<span>{t('field.publisher')} · {source.publisher}</span>{/if}
             {#if source.report_date}<span>{t('field.reportDate')} · {source.report_date}</span>{/if}
             {#if source.url && source.title}<span>{source.url}</span>{/if}

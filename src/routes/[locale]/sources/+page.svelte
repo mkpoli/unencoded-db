@@ -45,8 +45,8 @@
   {#if data.sources.length}
     <div class="cards">
       {#each data.sources as source (source.id)}
-        {@const name = source.title || host(source.url) || source.url || t('source.title')}
-        {@const byline = [source.author, source.publisher].filter(Boolean).join(' · ')}
+        {@const name = source.title || host(source.url) || source.url || source.container || t('source.title')}
+        {@const byline = [source.author, source.title ? source.container : null, source.publisher].filter(Boolean).join(' · ')}
         <article class="card">
           <a class="cover" href={href(`/source/${source.id}`)} tabindex="-1" aria-hidden="true">
             {#if source.cover}<img src={media(source.cover)} alt="" loading="lazy" decoding="async" />{:else}<span class="blank">{t('browse.noImage')}</span>{/if}

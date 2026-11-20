@@ -6,7 +6,7 @@ import { newClaim } from '$lib/claims'
 import { load } from './+page.server'
 
 const fields: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', '⿺𡕤面')] }
-const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null }
+const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null }
 
 test('a description in ids_add is passed to the page when it is a whole one, and only one', async () => {
   const { db } = openTestDb()

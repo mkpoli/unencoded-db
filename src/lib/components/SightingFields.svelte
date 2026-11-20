@@ -5,6 +5,7 @@
   import { quotations, QUOTATIONS_MAX, type Quotation } from '$lib/quotations'
   import SourceTitleField from './SourceTitleField.svelte'
   import PublisherField from './PublisherField.svelte'
+  import ContainerField from './ContainerField.svelte'
   import { untrack } from 'svelte'
   import { CONTEXTS, SIGHTING_TYPES, STYLES, parseSightingTypes } from '$lib/scripts'
   import { cleanLinkInput } from '$lib/link-input'
@@ -16,7 +17,7 @@
   let { values = {}, onphotos }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void } = $props()
   const uid = $props.id()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
-  const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.original_date || values.page || values.context || values.style || values.types || values.quotes || values.note))
+  const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.container || values.original_date || values.page || values.context || values.style || values.types || values.quotes || values.note))
 
   let place = $state(untrack(() => values.place ?? ''))
   let url = $state(untrack(() => values.url ?? ''))
@@ -28,11 +29,12 @@
 
   let page = $state(untrack(() => values.page ?? ''))
   let publisher = $state(untrack(() => values.publisher ?? ''))
+  let container = $state(untrack(() => values.container ?? ''))
 
   // The chain, nearest the cited work first. One empty row is always there to fill.
-  type Row = { key: number; url: string; title: string; author: string; publisher: string; date: string; quote: string }
+  type Row = { key: number; url: string; title: string; author: string; publisher: string; date: string; container: string; quote: string }
   let nextKey = 0
-  const via = (from?: Partial<Via>): Row => ({ key: nextKey++, url: from?.url ?? '', title: from?.title ?? '', author: from?.author ?? '', publisher: from?.publisher ?? '', date: from?.report_date ?? '', quote: from?.quote ?? '' })
+  const via = (from?: Partial<Via>): Row => ({ key: nextKey++, url: from?.url ?? '', title: from?.title ?? '', author: from?.author ?? '', publisher: from?.publisher ?? '', date: from?.report_date ?? '', container: from?.container ?? '', quote: from?.quote ?? '' })
   const passage = (from?: Quotation) => ({ key: nextKey++, text: from?.text ?? '', locator: from?.locator ?? '' })
   let passages = $state(untrack(() => {
     const saved = quotations(values.quotes)
@@ -41,7 +43,7 @@
   let postedPassage: number | null = null
   let vias = $state<Row[]>(untrack(() => values.vias?.length ? values.vias.map(via) : [via()]))
   let viaOpen = $state(untrack(() => Boolean(values.vias?.length)))
-  const blankVia = (row: Row) => !(row.url || row.title || row.author || row.publisher || row.date)
+  const blankVia = (row: Row) => !(row.url || row.title || row.author || row.publisher || row.date || row.container)
   function removeVia(key: number) {
     vias = vias.filter(row => row.key !== key)
     if (!vias.length) vias = [via()]
@@ -82,7 +84,7 @@
     }
     if (row) {
       const before = [row.url, row.title, row.author, row.publisher, row.date].join('\u0000')
-      const hadSource = Boolean(row.url || row.title || row.author || row.publisher || row.date)
+      const hadSource = !blankVia(row)
       row.url = keep(row.url, 'viaUrl'); row.title = keep(row.title, 'viaTitle'); row.author = keep(row.author, 'viaAuthor')
       row.publisher = keep(row.publisher, 'viaPublisher'); row.date = keep(row.date, 'viaDate')
       // Words written for the source this row held no longer belong to it once a post replaces it. A row
@@ -107,6 +109,7 @@
     author = source.author ?? ''
     publisher = source.publisher ?? ''
     reportDate = source.report_date ?? ''
+    container = source.container ?? ''
     lookedUp = url = source.url ?? ''
     if (!samePost && postedPassage !== null) {
       const row = passages.find(item => item.key === postedPassage)
@@ -121,7 +124,7 @@
   function chooseVia(row: Row, source: Citation) {
     const sameSource = row.url && row.url === source.url || (
       row.url === (source.url ?? '') && row.title === (source.title ?? '') && row.author === (source.author ?? '')
-      && row.publisher === (source.publisher ?? '') && row.date === (source.report_date ?? '')
+      && row.publisher === (source.publisher ?? '') && row.date === (source.report_date ?? '') && row.container === (source.container ?? '')
     )
     if (!blankVia(row) && !sameSource) row.quote = ''
     if (row.key === postedKey) postedKey = null
@@ -130,6 +133,7 @@
     row.author = source.author ?? ''
     row.publisher = source.publisher ?? ''
     row.date = source.report_date ?? ''
+    row.container = source.container ?? ''
   }
 
   $effect(() => {
@@ -186,6 +190,7 @@
   <div class="grid-2">
     <SourceTitleField id="{uid}-title" name="title" bind:value={title} onselect={chooseSource} />
     <div class="field"><label for="{uid}-author">{t('field.author')}</label><input id="{uid}-author" class="input" name="author" bind:value={author} maxlength="300" /></div>
+    <ContainerField id="{uid}-container" name="container" bind:value={container} onpublisher={name => publisher = name} />
     <PublisherField id="{uid}-publisher" name="publisher" bind:value={publisher} />
     <div class="field"><label for="{uid}-page">{t('field.page')}</label><input id="{uid}-page" class="input" name="page" bind:value={page} maxlength="80" /></div>
     <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" bind:value={reportDate} aria-describedby="{uid}-report_date-hint" /><p class="hint" id="{uid}-report_date-hint">{t('field.reportDateHint')}</p></div>
@@ -211,6 +216,7 @@
       <div class="grid-2">
         <SourceTitleField id="{uid}-via_title-{row.key}" name="via_title" bind:value={row.title} onselect={source => chooseVia(row, source)} />
         <div class="field"><label for="{uid}-via_author-{row.key}">{t('field.author')}</label><input id="{uid}-via_author-{row.key}" class="input" name="via_author" bind:value={row.author} maxlength="300" /></div>
+        <ContainerField id="{uid}-via_container-{row.key}" name="via_container" bind:value={row.container} onpublisher={name => row.publisher = name} />
         <PublisherField id="{uid}-via_publisher-{row.key}" name="via_publisher" bind:value={row.publisher} />
         <div class="field"><label for="{uid}-via_report_date-{row.key}">{t('field.reportDate')}</label><input id="{uid}-via_report_date-{row.key}" class="input" name="via_report_date" bind:value={row.date} /></div>
       </div>
@@ -225,6 +231,7 @@
       <div class="grid-2">
         <div class="field"><label for="{uid}-via_title-next">{t('field.title')}</label><input id="{uid}-via_title-next" class="input" name="via_title" maxlength="300" /></div>
         <div class="field"><label for="{uid}-via_author-next">{t('field.author')}</label><input id="{uid}-via_author-next" class="input" name="via_author" maxlength="300" /></div>
+        <div class="field"><label for="{uid}-via_container-next">{t('field.container')}</label><input id="{uid}-via_container-next" class="input" name="via_container" maxlength="300" /></div>
         <div class="field"><label for="{uid}-via_publisher-next">{t('field.publisher')}</label><input id="{uid}-via_publisher-next" class="input" name="via_publisher" maxlength="300" /></div>
         <div class="field"><label for="{uid}-via_report_date-next">{t('field.reportDate')}</label><input id="{uid}-via_report_date-next" class="input" name="via_report_date" /></div>
       </div>

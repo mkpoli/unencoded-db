@@ -1,3 +1,5 @@
+import { containerSuggestions } from './containers'
+import { hashHex } from './image'
 import { copyOfSource, copyPage, matchingCopies } from './digitized-copies'
 import { editSourceAlias, sourceAliases, suggestSources } from './source-aliases'
 import { publicPublisher, publisherDirectory, publisherSuggestions } from './publishers'
@@ -20,8 +22,8 @@ const described = (...sequences: string[]) => fields({ claims: sequences.map(seq
 const relation = (character: string, relationship: string, difference = '', evidence = ''): Claim => claim('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) })
 // A source is found among the sightings that passed through it by the index of the chain, never by a scan.
 const VIA_SEARCH = /SEARCH v USING (COVERING )?INDEX sighting_vias_by_source \(source_id=\?\)/
-const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, quote: null, ...over })
-const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null, ...over })
+const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, container: null, quote: null, ...over })
+const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null, ...over })
 const image: StoredImage = { image_key: 'a.webp', image_type: 'image/webp', image_w: 100, image_h: 100, thumb_key: 't.webp', box: null }
 
 let db: D1Database, raw: ReturnType<typeof openTestDb>['raw'], who: { actor: string; ip: null }
@@ -1819,5 +1821,34 @@ describe('digitized copy filter', () => {
     expect(await copyPage(db, slug, next.sightings[0].sighting)).toBeNull()
     await setHidden(db, { entry }, true, who, null)
     expect(await copyPage(db, slug, 0)).toBeNull()
+  })
+})
+
+describe('containers', () => {
+  const message = (author: string, report_date: string, quote: string) => via({ author, report_date, container: 'zi.tools討論羣', publisher: 'QQ', quote })
+
+  test('each message in a group is its own source and the group is suggested once', async () => {
+    const first = await createEntry(db, fields(), seen({ title: 'A book', vias: [message('玄晖allen', '2026-11-18', 'one')] }), [], who)
+    await createEntry(db, fields(), seen({ title: 'Another book', vias: [message('雲九', '2026-11-17', 'two')] }), [], who)
+    await createEntry(db, fields(), seen({ title: 'An article', container: '中國語文 1955年第3期' }), [], who)
+    const [link] = (await getEntry(db, first))!.sightings[0].vias
+    expect(link).toMatchObject({ title: null, author: '玄晖allen', report_date: '2026-11-18', container: 'zi.tools討論羣', publisher: 'QQ', quote: 'one' })
+    const messages = raw.query("SELECT author, report_date FROM sources WHERE container_lookup = 'zi.tools討論羣' ORDER BY id").all()
+    expect(messages).toEqual([{ author: '玄晖allen', report_date: '2026-11-18' }, { author: '雲九', report_date: '2026-11-17' }])
+    expect(await containerSuggestions(db, '')).toEqual([{ label: 'zi.tools討論羣', publisher: 'QQ' }, { label: '中國語文 1955年第3期', publisher: null }])
+    expect(await containerSuggestions(db, 'ZI.')).toEqual([{ label: 'zi.tools討論羣', publisher: 'QQ' }])
+    expect(await containerSuggestions(db, '羣')).toEqual([])
+  })
+
+  test('a citation without a container keeps the key it had before sources had one', async () => {
+    await createEntry(db, fields(), seen({ title: 'A book', author: 'Someone' }), [], who)
+    const { hash } = raw.query("SELECT hash FROM sources WHERE title = 'A book'").get() as { hash: string }
+    expect(hash).toBe(await hashHex(JSON.stringify([null, 'A book', 'Someone', null, null])))
+  })
+
+  test('the form sends a container for the source and for each via', () => {
+    const form = new FormData()
+    for (const [name, value] of [['place', 'A scan'], ['container', '集刊 第六本'], ['via_author', '貓村'], ['via_container', 'zi.tools討論羣'], ['via_publisher', 'QQ']]) form.append(name, value)
+    expect(readSightingFields(form)).toMatchObject({ container: '集刊 第六本', vias: [{ author: '貓村', container: 'zi.tools討論羣', publisher: 'QQ', title: null }] })
   })
 })

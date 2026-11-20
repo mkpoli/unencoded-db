@@ -40,7 +40,9 @@ that relayed the evidence keeps its credit without standing in for the source.
 ## Credit every source
 
 Posts on social media, blogs, chat messages and personal communications are cited like books: the
-author as they sign, the date and a link. A partner's material is added once the partner agrees, and
+author as they sign, the date and a link. A message in a group chat is one source: its own author
+and date, the words quoted, the group it was sent in and the service the group is on. A private
+message is cited the same way without a group. A partner's material is added once the partner agrees, and
 shown with the name they ask for.
 
 ## Open

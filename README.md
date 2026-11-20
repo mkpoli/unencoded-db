@@ -43,6 +43,8 @@ On a source page, open **Alternate names** to add a spelling or abbreviation for
 
 ## Publishers
 
+A citation can name what the source appeared in: the journal and issue of an article, the site of a page, or the group of a chat message. A chat message, a forum post or a personal communication is cited as itself, with its author as they sign, its own date and the words quoted; the group or channel is its container, the service its publisher, and it has no title. A private message has no container. Choosing a suggested container fills the publisher and leaves the author and date to the message.
+
 The Sources page filters direct and intermediate citations by publisher. A contributor can choose a suggested publisher or enter a new name. The directory groups verified spellings such as 江蘇教育出版社 and 江苏教育出版社. Citations, exports and revision history retain the submitted name. Only publishers cited by a visible record appear in suggestions. The release runs `scripts/sweep-publishers.ts` to reconcile legacy lookup keys. The local setup runs the same sweep.
 
 ## Agents
