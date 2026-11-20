@@ -1,14 +1,15 @@
 import { compatibilitySequences } from 'ids-input'
 // The parts an editor tags for a record's first description, the role each part plays, and the
 // formation those roles imply. The parsed parts are a starting point: an editor may replace them,
-// type a role outside the standard three, and name a formation the roles cannot express.
+// type a role outside the standard ones, and name a formation the roles cannot express.
 import { isNode, parse, write, type IdsPart } from 'ids-input'
 import { IDS_LENGTH_MAX, splitIds } from './ids'
 
-export const ROLES = ['semantic', 'phonetic', 'symbol'] as const
+// `initial` and `final` are the two spellers of a 切身字: the part read for its initial and the part read for its final.
+export const ROLES = ['semantic', 'phonetic', 'symbol', 'initial', 'final'] as const
 export type Role = (typeof ROLES)[number]
 
-export const FORMATIONS = ['phonoSemantic', 'ideographic', 'indicative', 'sign', 'single', 'unknown'] as const
+export const FORMATIONS = ['phonoSemantic', 'ideographic', 'indicative', 'sign', 'fanqie', 'single', 'unknown'] as const
 export type Formation = (typeof FORMATIONS)[number]
 
 export const PARTS_MAX = 8
@@ -85,11 +86,14 @@ export function composeValue(ids: string, parts: readonly string[], roles: reado
 /**
  * The standard formation the roles imply, or null while a role is custom, missing, or the only part.
  * A symbol beside a semantic part marks a 指事; symbols on their own make a 記號. A part that is
- * both semantic and phonetic (亦聲) is outside the three roles.
+ * both semantic and phonetic (亦聲) is outside the standard roles. An initial speller with a final speller
+ * and nothing else makes a 切身.
  */
 export function formationOf(roles: readonly string[]): Formation | null {
   const has = (role: Role) => roles.includes(role)
   if (roles.length < 2 || roles.some(role => !isRole(role))) return null
+  // A 切身字 is spelled by its parts alone: one gives the initial, another the final.
+  if (has('initial') || has('final')) return has('initial') && has('final') && roles.every(role => role === 'initial' || role === 'final') ? 'fanqie' : null
   if (has('semantic') && has('phonetic')) return 'phonoSemantic'
   if (has('semantic')) return has('symbol') ? 'indicative' : 'ideographic'
   if (has('symbol') && !has('phonetic')) return 'sign'
