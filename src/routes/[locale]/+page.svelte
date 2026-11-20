@@ -231,6 +231,9 @@
   })
 </script>
 
+{#snippet sizes()}
+  <nav class="sizes" aria-label={t('browse.perPage')} data-sveltekit-preload-data="tap"><span aria-hidden="true">{t('browse.perPage')}</span>{#each PAGE_SIZES as size}<a class="chip" class:on={data.per === size} aria-current={data.per === size ? 'true' : undefined} href={sized(size)}>{size}</a>{/each}</nav>
+{/snippet}
 {#snippet turner(id: string)}
   {@const last = data.pages ?? 1}
   <nav class="pages" aria-label={t('browse.page')} data-sveltekit-preload-data="tap">
@@ -311,9 +314,11 @@
     {#if data.pages && data.records && shown.tiles.length}
       <div class="pager">
         <p class="range">{t('browse.shown', { from: firstShown, to: firstShown + shown.tiles.length - 1, n: `${data.records}${data.recordsFloor ? '+' : ''}` })}</p>
-        {#if data.records > PAGE_SIZES[0]}<nav class="sizes" aria-label={t('browse.perPage')} data-sveltekit-preload-data="tap"><span aria-hidden="true">{t('browse.perPage')}</span>{#each PAGE_SIZES as size}<a class="chip" class:on={data.per === size} aria-current={data.per === size ? 'true' : undefined} href={sized(size)}>{size}</a>{/each}</nav>{/if}
+        {#if data.records > PAGE_SIZES[0]}{@render sizes()}{/if}
         {#if data.pages > 1}{@render turner('page')}{/if}
       </div>
+    {:else if data.per !== PAGE}
+      <div class="pager">{@render sizes()}</div>
     {/if}
     {#if data.also.length}<details class="found also"><summary>{t('browse.alsoSearched', { n: data.also.length })}</summary><ul>{#each data.also as spelling}<li class="ids">{spelling}</li>{/each}</ul></details>{/if}
     {#if shown.tiles.length}

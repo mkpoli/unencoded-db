@@ -1975,6 +1975,8 @@ test('a numbered page starts where the pages before it end', async () => {
   expect(pageOf('0')).toBeNull()
   expect(pageOf('2')).toBe(2)
   expect(pageOf(String(PAGES_MAX + 1))).toBeNull()
-  expect(await pageCursor(db, { limit: 96 }, PAGED_MAX / 96 + 1)).toBeUndefined()
+  // A page past the bound is refused without a read.
+  const unread = { prepare() { throw new Error('read') } } as unknown as D1Database
+  for (const limit of [24, 48, 96]) expect(await pageCursor(unread, { limit }, PAGED_MAX / limit + 1)).toBeUndefined()
   expect([null, '24', '96', '48', '25', '024'].map(pageSizeOf)).toEqual([PAGE, 24, 96, null, null, null])
 })
