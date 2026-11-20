@@ -1,6 +1,7 @@
 <script lang="ts">
-  // One glyph style's drawing on its plate, over the style's name. Given `onpick`, the name is a toggle
-  // button among the faces, and a face that is not the current one takes a click anywhere on it.
+  // One glyph style's drawing on its plate, over the style's name. Given `onpick`, the name is a radio
+  // in its group's one choice of style, with the tab stop on the current one; a face that is not the
+  // current one takes a click anywhere on it. The group moves between the radios with the arrow keys.
   import type { Snippet } from 'svelte'
   import type { GlyphStyle } from '$lib/composer'
   import { t } from '$lib/t'
@@ -10,7 +11,7 @@
 
 <div class="face" class:current class:pick={Boolean(onpick) && !current} data-style={style}>
   <div class="plate">{@render children()}</div>
-  {#if onpick}<button type="button" class="name" aria-pressed={current} onclick={() => onpick(style)}>{t(`glyphStyle.${style}`)}</button>
+  {#if onpick}<button type="button" class="name" role="radio" aria-checked={current} tabindex={current ? 0 : -1} onclick={() => onpick(style)}>{t(`glyphStyle.${style}`)}</button>
   {:else}<span class="name">{t(`glyphStyle.${style}`)}</span>{/if}
 </div>
 

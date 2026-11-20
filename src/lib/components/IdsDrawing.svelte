@@ -86,7 +86,9 @@
   let undoable = $state(false)
   const activeLayout = $derived(layoutForStyle(stated, style))
   const separate = $derived(adjusting || Boolean(activeLayout))
-  const others = $derived(GLYPH_STYLES.filter(face => face !== style))
+  // The small faces keep their places: a picked face's place goes to the face it replaces.
+  let places = $state.raw<GlyphStyle[] | null>(null)
+  const others = $derived(places && !places.includes(style) ? places : GLYPH_STYLES.filter(face => face !== style))
   const separateFor = (face: GlyphStyle) => face === style ? separate : Boolean(layoutForStyle(stated, face))
   // The composer a face wants, or its other one until that has loaded, so a plate is not left blank.
   function drawerFor(face: GlyphStyle) {
@@ -193,9 +195,21 @@
   // The picked face becomes the large one, and the focus follows it there.
   let faces = $state<HTMLElement>()
   async function pick(face: GlyphStyle) {
+    if (face === style) return
+    places = others.map(other => other === face ? style : other)
     selectedStyle = face
     await tick()
-    faces?.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus()
+    faces?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus()
+  }
+  // The arrow keys go through the styles in their usual order, as in the reader's style choice.
+  const KEYS: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }
+  function move(event: KeyboardEvent) {
+    if (!(event.target instanceof Element) || !event.target.matches('[role="radio"]')) return
+    const count = GLYPH_STYLES.length, at = GLYPH_STYLES.indexOf(style)
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? count - 1 : event.key in KEYS ? (at + KEYS[event.key] + count) % count : -1
+    if (next < 0) return
+    event.preventDefault()
+    pick(GLYPH_STYLES[next])
   }
 
   // The document follows the description. A move stays with its part: a description that keeps the
@@ -250,7 +264,7 @@
 
 <div class="drawing" class:adjusting bind:this={host}>
   {#if tree !== undefined}
-    <div class="faces" role="group" aria-label={t('nav.glyphStyle')} bind:this={faces}>
+    <div class="faces" role="radiogroup" aria-label={t('nav.glyphStyle')} tabindex="-1" bind:this={faces} onkeydown={move}>
       <div class="main">
         <GlyphFace {style} current onpick={pick}>
           {@const ready = servedFor(style)}
