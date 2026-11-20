@@ -356,6 +356,7 @@
   "report.sent": "ありがとうございます。管理者が確認します。",
   "browse.searchSegmentEmpty": "この範囲に該当する記録はありません。",
   "browse.searched": "{of}件中{n}件を検索済み",
+  "browse.page": "ページ",
   "browse.found": "該当{n}件",
   "browse.alsoSearched": "ほかの表記{n}件も検索",
   "browse.pageLeft": "残り{n}ページ",

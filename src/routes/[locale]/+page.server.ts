@@ -1,6 +1,6 @@
 import { tagList } from '$lib/server/tags'
 import { error, redirect } from '@sveltejs/kit'
-import { alsoSearch, counts, cursorOf, decadeTag, exactSearchIds, facetTag, list, listTag, markTags, radicalTag, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, searchTotal, terms } from '$lib/server/entries'
+import { alsoSearch, counts, cursorOf, decadeTag, exactSearchIds, facetTag, list, listTag, markTags, pageCount, pageCursor, pageOf, radicalTag, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, searchTotal, terms } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
 import { tileGlyphs } from '$lib/server/glyphs'
 import { parseRecordCode } from '$lib/code'
@@ -25,12 +25,14 @@ export const load: PageServerLoad = async (event) => {
   const query = (searchParams.get('q') ?? '').trim()
   // ?sort= names an order other than most evidence first; ?after= is the place a further page starts from.
   const order = orderOf(searchParams.get('sort'))
-  const after = searchParams.get('after')
-  if (!order || !cursorOf(order, after)) error(404)
+  const placed = searchParams.get('after')
+  // ?page= opens a list at a numbered page, in place of ?after=.
+  const number = searchParams.get('page') ? pageOf(searchParams.get('page')) : 1
+  if (!order || !cursorOf(order, placed) || number === null || (number > 1 && placed !== null)) error(404)
   // A shuffled list is dealt a random start once, and the address keeps it for its further pages.
   const seed = order === 'random' ? seedOf(searchParams.get('seed')) : null
   if (order === 'random' && seed === null) {
-    if (searchParams.has('seed') || after !== null) error(404)
+    if (searchParams.has('seed') || placed !== null) error(404)
     const dealt = new URL(event.url)
     dealt.searchParams.set('seed', String(crypto.getRandomValues(new Uint32Array(1))[0]))
     redirect(302, `${dealt.pathname}${dealt.search}`)
@@ -41,7 +43,7 @@ export const load: PageServerLoad = async (event) => {
   const searchError = query.length > SEARCH_LENGTH_MAX ? 'queryTooLong' : !exact && query && words.size === 0 ? 'noSearchTerms' : words.size > SEARCH_TERMS_MAX ? 'tooManyTerms' : null
   const db = env(event).DB
   // A record's code typed whole, R+0022 or 天天玄玄, opens the record it names.
-  const coded = after === null ? parseRecordCode(query) : null
+  const coded = placed === null && number === 1 ? parseRecordCode(query) : null
   // A merged record opens the one it was merged into, and neither may be hidden.
   const [tags, named] = await Promise.all([
     tagList(db),
@@ -52,10 +54,21 @@ export const load: PageServerLoad = async (event) => {
   if (named) redirect(303, `/${event.params.locale}/entry/${named.id}`)
   // A whole description, or a query of parts alone, is also searched under the other spellings the browser found for it: ?also=, at most a few.
   const also = searchError ? [] : alsoSearch(query, searchParams.getAll('also'))
-  const listing = { script, filter, facet, radical, decade, within, without, query, also, order, seed, after }
+  const unplaced = { script, filter, facet, radical, decade, within, without, query, also, order, seed }
+  // The pages are counted where the list is opened, not on the reads that add to it.
+  const [start, pages] = searchError || placed !== null ? [null, null] : await Promise.all([pageCursor(db, unplaced, number), pageCount(db, unplaced)])
+  if (start === undefined) {
+    // A page past the last opens the last.
+    if (!pages || number <= pages) error(404)
+    const last = new URL(event.url)
+    if (pages > 1) last.searchParams.set('page', String(pages)); else last.searchParams.delete('page')
+    redirect(302, `${last.pathname}${last.search}`)
+  }
+  const after = start ?? placed
+  const listing = { ...unplaced, after }
   // A search is counted on its first page; further pages are added to that one and keep its count.
   const [page, totals, total] = await Promise.all([searchError ? null : list(db, listing), counts(db), searchError || after !== null ? null : searchTotal(db, listing)])
   if (!page && !searchError) error(404)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, page?.tiles ?? [], event.locals.glyphStyle)
-  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, tags, total, glyphs, script, filter, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
+  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, tags, total, pages, number, glyphs, script, filter, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
 }

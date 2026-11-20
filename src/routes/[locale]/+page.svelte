@@ -37,6 +37,7 @@
   let failedFor = $state.raw<typeof data | null>(null)
   const more = $derived.by(() => {
     const params = new URLSearchParams(page.url.searchParams)
+    params.delete('page')
     params.set('after', shown.next ?? '')
     return `?${params}`
   })
@@ -104,7 +105,7 @@
   // A new order drops the place and the shuffle's start; shuffling again deals a new start.
   const sorted = (order: string) => {
     const params = new URLSearchParams(page.url.searchParams)
-    for (const name of ['after', 'seed']) params.delete(name)
+    for (const name of ['after', 'page', 'seed']) params.delete(name)
     if (order === ORDER) params.delete('sort'); else params.set('sort', order)
     return params.size ? `?${params}` : href()
   }
@@ -153,6 +154,15 @@
     await goto(`?${params}`)
   }
   const count = (key: string) => data.counts?.[key] ?? 0
+  // The list's address without its place, which the page form keeps and adds a page to.
+  const unplaced = $derived([...page.url.searchParams].filter(([name]) => name !== 'after' && name !== 'page'))
+  function turn(event: SubmitEvent) {
+    event.preventDefault()
+    const typed = Number(new FormData(event.currentTarget as HTMLFormElement).get('page'))
+    const params = new URLSearchParams(unplaced)
+    if (Number.isInteger(typed) && typed > 1) params.set('page', String(Math.min(typed, data.pages ?? typed)))
+    goto(params.size ? `?${params}` : href())
+  }
   // The decades records were first seen in, by century, oldest first.
   const centuries = $derived.by(() => {
     // The chosen decade stays an option when it holds no record now, so the form keeps it.
@@ -170,7 +180,7 @@
   const pinned = $derived(data.collection ? { name: 'collection', value: data.collection, label: COLLECTIONS.find(item => item.slug === data.collection)?.label ?? data.collection } : data.tag && !knownTag ? { name: 'tag', value: data.tag, label: `#${data.tag}` } : null)
   const withFilter = (filter: string) => {
     const params = new URLSearchParams(page.url.searchParams)
-    params.delete('after')
+    for (const name of ['after', 'page']) params.delete(name)
     if (filter) params.set('filter', filter); else params.delete('filter')
     return params.size ? `?${params}` : href()
   }
@@ -181,18 +191,18 @@
     const on = params.getAll(name).includes(id)
     const kept = { in: params.getAll('in').filter(item => item !== id), out: params.getAll('out').filter(item => item !== id) }
     if (!on) kept[name].push(id)
-    for (const key of ['in', 'out', 'after'] as const) params.delete(key)
+    for (const key of ['in', 'out', 'after', 'page'] as const) params.delete(key)
     for (const key of ['in', 'out'] as const) for (const item of kept[key]) params.append(key, item)
     return params.size ? `?${params}` : href()
   }
   const unpinned = $derived.by(() => {
     const params = new URLSearchParams(page.url.searchParams)
-    for (const name of ['collection', 'tag', 'genre', 'after']) params.delete(name)
+    for (const name of ['collection', 'tag', 'genre', 'after', 'page']) params.delete(name)
     return params.size ? `?${params}` : href()
   })
   const unfiled = $derived.by(() => {
     const params = new URLSearchParams(page.url.searchParams)
-    for (const name of ['radical', 'after']) params.delete(name)
+    for (const name of ['radical', 'after', 'page']) params.delete(name)
     return params.size ? `?${params}` : href()
   })
 </script>
@@ -256,6 +266,14 @@
     <p class="muted" role="alert">{t(`browse.${data.searchError}`)}</p>
   {:else}
     {#if shown.total}<p class="found">{t('browse.found', { n: `${shown.total.n}${shown.total.floor ? '+' : ''}` })}</p>{/if}
+    {#if data.pages && data.pages > 1}
+      <form class="pager" method="GET" onsubmit={turn}>
+        {#each unplaced as [name, value]}<input type="hidden" {name} {value} />{/each}
+        <label for="page">{t('browse.page')}</label>
+        {#key data.number}<input class="input" id="page" name="page" inputmode="numeric" pattern="[1-9][0-9]*" autocomplete="off" value={data.number} />{/key}
+        <span aria-hidden="true">/</span><span>{data.pages}</span>
+      </form>
+    {/if}
     {#if data.also.length}<details class="found also"><summary>{t('browse.alsoSearched', { n: data.also.length })}</summary><ul>{#each data.also as spelling}<li class="ids">{spelling}</li>{/each}</ul></details>{/if}
     {#if shown.tiles.length}
       <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
@@ -303,6 +321,8 @@
   .size input { width:96px; padding:0; border:0; background:none; accent-color:var(--accent) }
   .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(var(--tile-size),100%),1fr)); gap:22px 16px }
   :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .tiles { gap:8px }
+  .pager { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
+  .pager .input { width:6ch; min-height:0; height:28px; padding:0 4px; font-size:13px; text-align:center }
   .found { margin-bottom:-8px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
   .also { margin-top:0 }
   .also summary { cursor:pointer; color:var(--muted) }
