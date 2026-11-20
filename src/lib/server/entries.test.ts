@@ -1669,6 +1669,9 @@ test('parts typed with no structure find the records that spell them another way
   expect(alsoSearchParts('艹時', ['時艹', '艹日寺', '艹 日 寺', '⿱艹時', 'word', '日寺艹', '蒔', '一二三四五六'])).toEqual(['艹日寺', '蒔'])
   expect(alsoSearchParts('艹時', ['一', '二', '三', '四', '五'])).toHaveLength(PART_ALSO_MAX)
   expect(alsoSearchParts('word', ['艹日寺'])).toEqual([])
+  // The character the parts make finds the records that name it as a related character.
+  const variant = await createEntry(db, { ...described('⿱艹寺'), claims: [...described('⿱艹寺').claims, claim('relation', '蒔', { relationship: 'variant' })] }, seen(), [], who)
+  expect(await found({ query: '艹時', also: ['蒔'] })).toEqual([typed, radical, mate, inside, variant])
   // A radical code point typed is the part it stands for, and a mate is read under the row its records are kept in.
   expect(await found({ query: '⺾時' })).toEqual([typed, radical, mate])
   const flesh = await createEntry(db, described('⿰⺼木'), seen(), [], who)

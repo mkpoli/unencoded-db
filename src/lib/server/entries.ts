@@ -920,7 +920,9 @@ function listPlan({ script, filter, facet, radical, decade, within, without, que
   const words = exact ? [] : [...new Set(terms(query ?? ''))]
   if (!exact && (words.length > SEARCH_TERMS_MAX || (query?.trim() && !words.length))) return null
   const keys = [...(own ? [own] : []), ...(filed ? [filed] : []), ...(period ? [period] : []), ...marks, ...(base !== 'all' ? [base] : [])]
-  const spelt = exact ? [] : alsoSearchParts(query ?? '', also).map(run => [...run].map(partRows))
+  // A spelling that is one character, the one the parts make, is found wherever a record names it: as a
+  // part, a related character, a code, or a word of its notes and sources.
+  const spelt = exact ? [] : alsoSearchParts(query ?? '', also).map(run => [...run]).map(run => run.map(part => run.length === 1 ? [`w:${part}`, ...partRows(part)] : partRows(part)))
   return { keys, exact, words: words.map(word => [`w:${word}`, ...(isPart(word) ? partRows(word) : [])]), spelt }
 }
 type Plan = NonNullable<ReturnType<typeof listPlan>>
