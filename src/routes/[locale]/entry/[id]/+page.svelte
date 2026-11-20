@@ -247,7 +247,7 @@
       {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
     </dl>
     <div class="senses">
-      <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} />
+      <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} records={data.related} />
       {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
       {:else}<EditLink field="senses" name={t('entry.addSenses')} add />{/if}
     </div>
