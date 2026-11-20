@@ -1,7 +1,7 @@
 import { GLYPH_STYLE_COOKIE, glyphStyleOf } from '$lib/composer'
 import { redirect, type Handle, type RequestEvent } from '@sveltejs/kit'
 import { isLocale, LOCALE_COOKIE, negotiate } from '$lib/i18n'
-import { agentToken, personOf, sessionName } from '$lib/server/people'
+import { agentToken, loopback, personOf, sessionName } from '$lib/server/people'
 import { bearerOf, tokenPerson } from '$lib/server/agents'
 import { limitWriteBody, MAX_AGENT_BODY, MAX_PICTURES_BODY } from '$lib/server/body-limit'
 import { guardWrite, moderationAction, writeLimitFor } from '$lib/server/guard'
@@ -23,6 +23,13 @@ function foreignForm(event: Pick<RequestEvent, 'request' | 'url' | 'route'>) {
 
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname, search } = event.url
+  // A session cookie is only set over HTTPS, and every other origin than loopback is refused by `secureOrigin`,
+  // so a plain-http request would end in a 500. It goes to the same address over HTTPS first.
+  if (event.url.protocol === 'http:' && !loopback(event.url)) {
+    const secure = new URL(event.url)
+    secure.protocol = 'https:'
+    redirect(308, secure.href)
+  }
   if (foreignForm(event)) return new Response(`Cross-site ${event.request.method} form submissions are forbidden`, { status: 403 })
   const first = pathname.split('/')[1]
   if (!isLocale(first) && !UNPREFIXED.test(pathname) && event.route.id !== '/[short=shortRecord]') {

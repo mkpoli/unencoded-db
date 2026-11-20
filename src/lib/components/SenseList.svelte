@@ -5,12 +5,16 @@
   // listed by itself. Each claim is the target of `#claim-<key>`, and names the sightings it rests on.
   import { claimsOf, claimsUnder, scopesOf, type Claim } from '$lib/claims'
   import { claimLabel, doculectName } from '$lib/claim-label'
+  import { codedRecord } from '$lib/code'
+  import type { RelatedRecord } from '$lib/server/related-records'
   import { t } from '$lib/t'
   import CopyButton from './CopyButton.svelte'
   import RelationCharacter from './RelationCharacter.svelte'
 
   // `sightings` are the ids the page shows, so that a claim links only to evidence that is on it.
-  let { claims, sightings }: { claims: Claim[]; sightings: number[] } = $props()
+  // `records` are the related records the page read, which draw the ones a relation names by code.
+  let { claims, sightings, records = [] }: { claims: Claim[]; sightings: number[]; records?: RelatedRecord[] } = $props()
+  const tileOf = (value: string) => { const id = codedRecord(value); return id === null ? null : records.find(item => item.named.includes(id))?.tile ?? null }
 
   const meanings = $derived(claimsOf(claims, 'meaning'))
   const readings = $derived(claimsOf(claims, 'reading'))
@@ -65,7 +69,7 @@
       {#each relations as relation (relation.key)}
         {@const scopes = scopesOf(claims, relation)}
         <li class="relation claim" id="claim-{relation.key}">
-          <span class="character"><RelationCharacter value={relation.value} /></span><CopyButton text={relation.value} />
+          <span class="character"><RelationCharacter value={relation.value} tile={tileOf(relation.value)} /></span><CopyButton text={relation.value} />
           <span class="relation-body">
             <span class="stated"><span class="badge">{t(`relationship.${String(relation.data?.relationship)}`)}</span>{@render basis(relation)}</span>
             {#if scopes.length}

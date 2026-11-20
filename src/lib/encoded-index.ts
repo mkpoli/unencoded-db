@@ -3,7 +3,7 @@
 // description's text, its character and its postings are three arrays and a map, not an object each. Pure,
 // so tests and scripts run it on the real table.
 import type { Descriptions } from './character-tables'
-import { forgetExpansions, nearer, plain, prepare, tierOf, type Data, type Hit, type Tier } from './similar'
+import { forgetExpansions, looseTier, nearer, plain, prepare, prepareLoose, tierOf, type Data, type Hit, type Tier } from './similar'
 
 export const TIER_MAX = 8
 export const TIERS: readonly Tier[] = ['same', 'probable', 'similar']
@@ -72,20 +72,22 @@ export const keepBest = <T extends { tier: Tier; score: number }>(found: T[]) =>
  * The characters whose descriptions are the same, probable or similar, the best `TIER_MAX` of each tier. A
  * character with exactly the typed text is always found. Of the rest only descriptions under the query's
  * rarest part are scored, and when the query has two or more parts, only those sharing two of them.
+ * For a text that is no description, the characters that hold all its parts, those with the fewest others first.
  */
 export function lookup(index: Index, ids: string): EncodedHit[] {
   const { data, texts, owner, next, exact, byKey } = index
-  const query = prepare(ids, data)
-  if (!query) return []
+  const query = prepare(ids, data), loose = query ? null : prepareLoose(ids, data)
+  const read = query ?? loose
+  if (!read) return []
   const found = new Map<number, EncodedHit>()
   const consider = (number: number, prepared = prepare(texts[number], data)) => {
-    const hit = tierOf(query, prepared ?? texts[number], data)
+    const hit = query ? tierOf(query, prepared ?? texts[number], data) : prepared && looseTier(loose!, prepared, data)
     if (!hit) return
     const point = owner[number], held = found.get(point)
     if (!held || nearer(hit, held) !== held) found.set(point, { ...hit, char: String.fromCodePoint(point), ids: texts[number] })
   }
-  for (let number = exact.get(plain(ids)) ?? -1; number >= 0; number = next[number]) consider(number)
-  const keys = [...query.counts.keys()]
+  if (query) for (let number = exact.get(plain(ids)) ?? -1; number >= 0; number = next[number]) consider(number)
+  const keys = [...read.counts.keys()]
   const rarest = keys.reduce((best, key) => (byKey.get(key)?.length ?? 0) < (byKey.get(best)?.length ?? 0) ? key : best)
   let scored = 0
   for (const number of byKey.get(rarest) ?? []) {

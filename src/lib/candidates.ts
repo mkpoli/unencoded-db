@@ -5,7 +5,7 @@ import { buildIndex, keepBest, lookup, TIER_MAX, TIERS, type Index } from './enc
 import { splitIds } from './ids'
 import { retrying } from './retrying'
 import { tierRecords as tiered, type RecordCandidate } from './record-tiers'
-import { expandedLeaves, type Data, type Tier } from './similar'
+import { expandedLeaves, looseLeaves, type Data, type Tier } from './similar'
 
 export { TIER_MAX, TIERS, type RecordCandidate }
 export type Found =
@@ -27,7 +27,8 @@ export async function tierRecords(ids: string, records: readonly RecordCandidate
   return tiered(ids, records, await table())
 }
 
-/** The parts of a description once expanded, for the server to read the records that hold them; none without the table. */
+/** The parts of a description, or of a text that is not one yet, once expanded, for the server to read the records that hold them; none without the table. */
 export async function expandedParts(ids: string) {
-  return expandedLeaves(ids, await table())
+  const data = await table(), leaves = expandedLeaves(ids, data)
+  return leaves.length || data === without ? leaves : looseLeaves(ids, data)
 }

@@ -29,6 +29,17 @@ async function runHook(request: Request, resolve: (event: any) => Promise<Respon
   return handle({ event, resolve } as any)
 }
 
+describe('plain http', () => {
+  test('redirects to the same address over https instead of failing', async () => {
+    let resolved = false
+    const request = new Request('http://rare.glyphatlas.org/en?q=1')
+    const response = await runHook(request, async () => { resolved = true; return new Response() }, { platform: { env: { DB: {} } } }).catch(thrown => thrown)
+    expect(resolved).toBe(false)
+    expect(response.status).toBe(308)
+    expect(response.location).toBe('https://rare.glyphatlas.org/en?q=1')
+  })
+})
+
 describe('write body limit', () => {
   test('rejects an advertised oversized body before reading it', async () => {
     const body = streamed([new Uint8Array(1)], String(MAX_WRITE_BODY + 1))

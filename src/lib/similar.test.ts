@@ -30,10 +30,16 @@ test('parts IWDS lists as one make a description probable', () => {
   expect(tier('⿰王木', '⿰ 王木')).toEqual({ tier: 'same', score: 1 })
 })
 
-test('one part different, or the same parts reordered, is similar', () => {
+test('the same parts reordered are similar, and nearer than one part different', () => {
   expect(tier('⿰亻木', '⿰亻水')).toEqual({ tier: 'similar', score: 0.9 })
-  expect(tier('⿰亻木', '⿰木亻')).toEqual({ tier: 'similar', score: 0.9 })
-  expect(tier('⿰亻木', '⿱亻木')).toEqual({ tier: 'similar', score: 0.9 })
+  expect(tier('⿰亻木', '⿰木亻')).toEqual({ tier: 'similar', score: 0.95 })
+  expect(tier('⿰亻木', '⿱亻木')).toEqual({ tier: 'similar', score: 0.95 })
+})
+
+test('every typed part among others is similar by the share typed, and one part alone is not', () => {
+  expect(tier('⿰亻木', '⿱⿰亻木⿱水⿰火土')).toEqual({ tier: 'similar', score: 0.4 })
+  expect(tier('⿰亻木', '⿱⿰亻金⿱水⿰火土')).toBeNull()
+  expect(tier('⿰亻亻', '⿱⿰亻金⿱水⿰火土')).toBeNull()
 })
 
 test('mostly the same parts is similar by overlap, with the overlap as its score', () => {

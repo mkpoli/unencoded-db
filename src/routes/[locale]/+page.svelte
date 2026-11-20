@@ -7,11 +7,11 @@
   import Tile from '$lib/components/Tile.svelte'
   import { COLLECTIONS, arrangeTagsByType } from '$lib/tags'
   import { MARKED } from '$lib/registries'
-  import { ORDER, PAGE, SORTS } from '$lib/order'
+  import { ORDER, PAGE, SORTS, pageSteps } from '$lib/order'
   import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
   import { describedTable } from '$lib/encoded'
   import { cleanIds } from '$lib/ids'
-  import { equivalentSpellings } from '$lib/ids-variants'
+  import { equivalentSpellings, isParts, partSpellings } from '$lib/ids-variants'
   import { isDescription } from 'ids-input'
   import ChatLinks from '$lib/components/ChatLinks.svelte'
   import GlyphStyleTabs from '$lib/components/GlyphStyleTabs.svelte'
@@ -37,6 +37,7 @@
   let failedFor = $state.raw<typeof data | null>(null)
   const more = $derived.by(() => {
     const params = new URLSearchParams(page.url.searchParams)
+    params.delete('page')
     params.set('after', shown.next ?? '')
     return `?${params}`
   })
@@ -104,7 +105,7 @@
   // A new order drops the place and the shuffle's start; shuffling again deals a new start.
   const sorted = (order: string) => {
     const params = new URLSearchParams(page.url.searchParams)
-    for (const name of ['after', 'seed']) params.delete(name)
+    for (const name of ['after', 'page', 'seed']) params.delete(name)
     if (order === ORDER) params.delete('sort'); else params.set('sort', order)
     return params.size ? `?${params}` : href()
   }
@@ -137,21 +138,38 @@
     document.cookie = `${TILE_SIZE_COOKIE}=${tileSize};path=/;max-age=31536000;samesite=lax`
     document.documentElement.dataset.tileSize = String(tileSize)
   }
-  // A whole description is also searched under its other spellings, which the table in the browser knows. Without
-  // the table, or without scripts, it is searched as typed.
+  // A whole description, or parts typed with no structure (艹時), is also searched under its other spellings,
+  // which the table in the browser knows. Without the table, or without scripts, it is searched as typed.
   async function search(event: SubmitEvent) {
     const form = event.currentTarget as HTMLFormElement
     const values = new FormData(form)
     const query = cleanIds(String(values.get('q') ?? ''))
-    if (!isDescription(query)) return
+    const whole = isDescription(query)
+    if (!whole && !isParts(query)) return
     event.preventDefault()
     const params = new URLSearchParams(values as unknown as Record<string, string>)
     let spellings: string[] = []
-    try { spellings = equivalentSpellings(query, await describedTable()).slice(1) } catch { /* searched as typed */ }
+    try { spellings = whole ? equivalentSpellings(query, await describedTable()).slice(1) : partSpellings(query, await describedTable()).slice(1) } catch { /* searched as typed */ }
     for (const spelling of spellings) params.append('also', spelling)
     await goto(`?${params}`)
   }
   const count = (key: string) => data.counts?.[key] ?? 0
+  // The list's address without its place, which the page form keeps and adds a page to.
+  const unplaced = $derived([...page.url.searchParams].filter(([name]) => name !== 'after' && name !== 'page'))
+  const paged = (number: number) => {
+    const params = new URLSearchParams(unplaced)
+    if (number > 1) params.set('page', String(number))
+    return params.size ? `?${params}` : href()
+  }
+  function turn(event: SubmitEvent) {
+    event.preventDefault()
+    const typed = Number(new FormData(event.currentTarget as HTMLFormElement).get('page'))
+    goto(paged(Number.isInteger(typed) && typed > 1 ? Math.min(typed, data.pages ?? typed) : 1))
+  }
+  // The pages on screen: the one opened and those the list has grown by since.
+  const lastOpen = $derived(Math.min(data.pages ?? data.number, data.number + Math.max(1, Math.ceil(shown.tiles.length / PAGE)) - 1))
+  const steps = $derived(pageSteps(data.number, lastOpen, data.pages ?? 1))
+  const firstShown = $derived((data.number - 1) * PAGE + 1)
   // The decades records were first seen in, by century, oldest first.
   const centuries = $derived.by(() => {
     // The chosen decade stays an option when it holds no record now, so the form keeps it.
@@ -169,7 +187,7 @@
   const pinned = $derived(data.collection ? { name: 'collection', value: data.collection, label: COLLECTIONS.find(item => item.slug === data.collection)?.label ?? data.collection } : data.tag && !knownTag ? { name: 'tag', value: data.tag, label: `#${data.tag}` } : null)
   const withFilter = (filter: string) => {
     const params = new URLSearchParams(page.url.searchParams)
-    params.delete('after')
+    for (const name of ['after', 'page']) params.delete(name)
     if (filter) params.set('filter', filter); else params.delete('filter')
     return params.size ? `?${params}` : href()
   }
@@ -180,18 +198,18 @@
     const on = params.getAll(name).includes(id)
     const kept = { in: params.getAll('in').filter(item => item !== id), out: params.getAll('out').filter(item => item !== id) }
     if (!on) kept[name].push(id)
-    for (const key of ['in', 'out', 'after'] as const) params.delete(key)
+    for (const key of ['in', 'out', 'after', 'page'] as const) params.delete(key)
     for (const key of ['in', 'out'] as const) for (const item of kept[key]) params.append(key, item)
     return params.size ? `?${params}` : href()
   }
   const unpinned = $derived.by(() => {
     const params = new URLSearchParams(page.url.searchParams)
-    for (const name of ['collection', 'tag', 'genre', 'after']) params.delete(name)
+    for (const name of ['collection', 'tag', 'genre', 'after', 'page']) params.delete(name)
     return params.size ? `?${params}` : href()
   })
   const unfiled = $derived.by(() => {
     const params = new URLSearchParams(page.url.searchParams)
-    for (const name of ['radical', 'after']) params.delete(name)
+    for (const name of ['radical', 'after', 'page']) params.delete(name)
     return params.size ? `?${params}` : href()
   })
 </script>
@@ -255,6 +273,27 @@
     <p class="muted" role="alert">{t(`browse.${data.searchError}`)}</p>
   {:else}
     {#if shown.total}<p class="found">{t('browse.found', { n: `${shown.total.n}${shown.total.floor ? '+' : ''}` })}</p>{/if}
+    {#if data.pages && data.records && shown.tiles.length}
+      <div class="pager">
+        <p class="range">{t('browse.shown', { from: firstShown, to: firstShown + shown.tiles.length - 1, n: `${data.records}${data.recordsFloor ? '+' : ''}` })}</p>
+        {#if data.pages > 1}
+          <nav class="pages" aria-label={t('browse.page')} data-sveltekit-preload-data="tap">
+            {#if data.number > 1}<a class="chip" rel="prev" href={paged(data.number - 1)} aria-label={t('browse.previousPage')} title={t('browse.previousPage')}><span aria-hidden="true">‹</span></a>{:else}<span class="chip off" aria-hidden="true">‹</span>{/if}
+            {#each steps as step, index (step ?? `gap${index}`)}
+              {#if step === null}<span class="gap" aria-hidden="true">…</span>{:else}<a class="chip" class:on={step >= data.number && step <= lastOpen} class:far={(step === data.number - 2 && steps[index - 1] === null) || (step === lastOpen + 2 && steps[index + 1] === null)} aria-current={step === data.number ? 'page' : undefined} href={paged(step)}>{step}</a>{/if}
+            {/each}
+            {#if lastOpen < data.pages}<a class="chip" rel="next" href={paged(lastOpen + 1)} aria-label={t('browse.nextPage')} title={t('browse.nextPage')}><span aria-hidden="true">›</span></a>{:else}<span class="chip off" aria-hidden="true">›</span>{/if}
+          </nav>
+          <form class="jump" method="GET" onsubmit={turn}>
+            {#each unplaced as [name, value]}<input type="hidden" {name} {value} />{/each}
+            <label for="page">{t('browse.page')}</label>
+            {#key data.number}<input class="input" id="page" name="page" inputmode="numeric" pattern="[1-9][0-9]*" autocomplete="off" value={data.number} />{/key}
+            <span aria-hidden="true">/</span><span>{data.pages}</span>
+            <button class="button" type="submit">{t('browse.go')}</button>
+          </form>
+        {/if}
+      </div>
+    {/if}
     {#if data.also.length}<details class="found also"><summary>{t('browse.alsoSearched', { n: data.also.length })}</summary><ul>{#each data.also as spelling}<li class="ids">{spelling}</li>{/each}</ul></details>{/if}
     {#if shown.tiles.length}
       <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
@@ -302,12 +341,20 @@
   .size input { width:96px; padding:0; border:0; background:none; accent-color:var(--accent) }
   .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(var(--tile-size),100%),1fr)); gap:22px 16px }
   :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .tiles { gap:8px }
+  .pager { display:flex; flex-wrap:wrap; align-items:center; gap:8px 20px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
+  .range { margin:0; margin-inline-end:auto }
+  .pages { display:flex; flex-wrap:wrap; align-items:center; gap:2px }
+  .pages .chip { justify-content:center; min-inline-size:34px; padding-inline:8px } .pages .off { opacity:.35; cursor:default } .pages .off:hover { color:var(--muted) } .gap { padding-inline:4px }
+  .jump { display:flex; align-items:center; gap:6px }
+  .jump .input { width:6ch; min-height:0; height:30px; padding:0 4px; font-size:13px; text-align:center }
+  .jump .button { min-block-size:0; height:30px; padding:0 12px; font-size:13px }
   .found { margin-bottom:-8px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
   .also { margin-top:0 }
   .also summary { cursor:pointer; color:var(--muted) }
   .also ul { display:flex; flex-wrap:wrap; gap:4px 12px; margin:6px 0 0; padding:0; list-style:none; overflow-wrap:anywhere }
   .ahead { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px }
   @media (max-width: 38rem) {
+    .pages .far { display:none }
     .filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,7rem),1fr)) }
     .filters .search { grid-column:1 / -1 }
   }
