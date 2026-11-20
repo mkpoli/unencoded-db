@@ -21,6 +21,15 @@ test('match normalizes IDS and excludes hidden records', async () => {
   expect(await (await match(event('/api/match'))).json()).toEqual([])
 })
 
+test('match finds the visible records that carry a Unicode code', async () => {
+  const { raw, event } = fixture()
+  raw.exec(`INSERT INTO claims(entry_id,position,key,kind,value,data) VALUES(1,1,'enc00001','encoding','U+4F11','{"charset":"unicode"}'),(2,1,'enc00002','encoding','U+4F11','{"charset":"unicode"}');
+    UPDATE entries SET hidden_at = '2026' WHERE id = 2`)
+  expect(((await (await match(event('/api/match?code=U%2B4F11'))).json()) as { id: number }[]).map(r => r.id)).toEqual([1])
+  expect(await (await match(event('/api/match?code=U%2B6797'))).json()).toEqual([])
+  expect((await match(event('/api/match?code=4F11'))).status).toBe(400)
+})
+
 test('export pages JSON and escapes CSV cells', async () => {
   const { event, raw } = fixture()
   const data = { relationship: 'variant', difference: 'extra stroke', evidence: 'source' }

@@ -15,11 +15,11 @@
   import { ADD_SIGHTINGS_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
   import { SIGHTING_START } from '$lib/scripts'
   import { href, media, t } from '$lib/t'
-  import type { CharacterFacts } from '$lib/encoded'
+  import type { Fill } from '$lib/encoded'
   import type { SightingFields as SightingValues } from '$lib/server/entries'
   import { onMount, tick, untrack } from 'svelte'
   let { form, data } = $props()
-  let filled = $state<CharacterFacts | null>(null)
+  let filled = $state<Fill | null>(null)
   const values = $derived(form?.values)
 
   // The sightings of the form, the first of which stays. A rejected form brings back what was typed in

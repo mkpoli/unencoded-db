@@ -4,15 +4,15 @@
   // equivalent to, IVD membership). A line opens by itself when the record states something on it.
   import { untrack } from 'svelte'
   import { CLAIM_LIMITS, encodingsOf, valuesOf, type Claim } from '$lib/claims'
-  import { descriptionStrokes, type CharacterFacts } from '$lib/encoded'
+  import { descriptionStrokes, type Fill } from '$lib/encoded'
   import { t } from '$lib/t'
   import EncodingFields from './EncodingFields.svelte'
   import FactLine from './FactLine.svelte'
 
-  // `fill` is what is known of an encoded character typed as the description; it fills the fields left
-  // empty and opens their lines.
+  // `fill` is what the form takes from an encoded character typed as the description; it fills the fields
+  // left empty and opens their lines.
   // `ids` is the description being typed; the sum of its parts' strokes is offered as the count's placeholder.
-  let { claims = [], radical = null, strokes = null, fill = null, ids = '', anchor }: { anchor?: string; claims?: Claim[]; radical?: string | null; strokes?: number | null; fill?: CharacterFacts | null; ids?: string } = $props()
+  let { claims = [], radical = null, strokes = null, fill = null, ids = '', anchor }: { anchor?: string; claims?: Claim[]; radical?: string | null; strokes?: number | null; fill?: Fill | null; ids?: string } = $props()
 
   const uid = $props.id()
   const ivd = untrack(() => valuesOf(claims, 'ivd')[0] ?? '')

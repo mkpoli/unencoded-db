@@ -149,6 +149,8 @@
   "field.idsBuild": "IDSエディター",
   "field.idsLoading": "エディターを読み込んでいます…",
   "field.idsFill": "この字の情報を入力",
+  "field.encodedSame": "この字に証拠を追加",
+  "field.encodedHomograph": "同形異字として登録",
   "field.candidate.same": "登録済み",
   "field.candidate.probable": "おそらく同じ",
   "field.candidate.similar": "類似",

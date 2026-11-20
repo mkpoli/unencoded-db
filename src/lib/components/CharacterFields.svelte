@@ -3,13 +3,13 @@
   // the descriptions and whatever the form states next to them. The plate marks the part the description's
   // tools are working on. While the drawing's layout is adjusted the plate takes the width of the form.
   import type { Snippet } from 'svelte'
-  import type { CharacterFacts } from '$lib/encoded'
+  import type { Fill } from '$lib/encoded'
   import type { Layout } from '$lib/layout'
   import IdsDrawing from './IdsDrawing.svelte'
   import IdsField from './IdsField.svelte'
 
   let { values = [], layout = null, primary = $bindable(''), exclude = null, anchor, onfill, children }: {
-    values?: string[]; layout?: Layout | null; primary?: string; exclude?: number | null; anchor?: string; onfill?: (facts: CharacterFacts) => void; children?: Snippet
+    values?: string[]; layout?: Layout | null; primary?: string; exclude?: number | null; anchor?: string; onfill?: (fill: Fill) => void; children?: Snippet
   } = $props()
   let field = $state<IdsField>()
   export const focus = () => field?.focus()

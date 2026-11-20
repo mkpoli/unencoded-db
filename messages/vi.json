@@ -149,6 +149,8 @@
   "field.idsBuild": "Trình soạn IDS",
   "field.idsLoading": "Đang tải trình soạn…",
   "field.idsFill": "Điền thông tin của chữ này",
+  "field.encodedSame": "Thêm bằng chứng cho chữ này",
+  "field.encodedHomograph": "Ghi là đồng hình dị tự",
   "field.candidate.same": "Đã có mục từ",
   "field.candidate.probable": "Có lẽ giống nhau",
   "field.candidate.similar": "Tương tự",
