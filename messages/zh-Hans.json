@@ -166,6 +166,7 @@
   "field.viaHint": "发现它的途径，例如拍下书页的帖子。",
   "field.viaAdd": "添加经由",
   "field.viaRemove": "移除",
+  "field.viaDrag": "拖动排序",
   "field.viaEarlier": "前移",
   "field.viaLater": "后移",
   "field.quoteLocator": "位置或引文出处",

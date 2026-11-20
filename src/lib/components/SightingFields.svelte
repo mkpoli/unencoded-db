@@ -7,6 +7,7 @@
   import PublisherField from './PublisherField.svelte'
   import ContainerField from './ContainerField.svelte'
   import { tick, untrack } from 'svelte'
+  import { flip } from 'svelte/animate'
   import { CONTEXTS, SIGHTING_TYPES, STYLES, parseSightingTypes } from '$lib/scripts'
   import { cleanLinkInput } from '$lib/link-input'
   import { fetchPost, postId, type PostInfo } from '$lib/source-url'
@@ -48,14 +49,60 @@
     vias = vias.filter(row => row.key !== key)
     if (!vias.length) vias = [via()]
   }
-  async function moveVia(key: number, by: -1 | 1, button: 'earlier' | 'later') {
+  async function moveVia(key: number, by: -1 | 1, button: 'earlier' | 'later' | 'grip') {
     const from = vias.findIndex(row => row.key === key)
     const to = from + by
     if (from < 0 || to < 0 || to >= vias.length) return
     ;[vias[from], vias[to]] = [vias[to], vias[from]]
     await tick()
-    const buttons = [button, button === 'earlier' ? 'later' : 'earlier'].map(name => document.getElementById(`${uid}-via-${name}-${key}`) as HTMLButtonElement | null)
+    const names = button === 'grip' ? ['grip'] : [button, button === 'earlier' ? 'later' : 'earlier']
+    const buttons = names.map(name => document.getElementById(`${uid}-via-${name}-${key}`) as HTMLButtonElement | null)
     buttons.find(item => item && !item.disabled)?.focus()
+  }
+  // A row follows the pointer: it takes the place of a neighbour once the pointer passes that neighbour's middle.
+  let viaList = $state<HTMLElement>()
+  let dragged = $state<number | null>(null)
+  const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  function dragVia(event: PointerEvent, key: number) {
+    if (event.button !== 0 || dragged !== null) return
+    event.preventDefault()
+    const before = [...vias]
+    let y = event.clientY, frame = 0
+    dragged = key
+    const place = () => {
+      const rows = [...viaList!.children] as HTMLElement[]
+      const from = vias.findIndex(row => row.key === key)
+      const at = y - viaList!.getBoundingClientRect().top
+      const middle = (row: HTMLElement) => row.offsetTop + row.offsetHeight / 2
+      let to = from
+      while (to > 0 && at < middle(rows[to - 1])) to--
+      while (to < rows.length - 1 && at > middle(rows[to + 1])) to++
+      if (to !== from) vias.splice(to, 0, ...vias.splice(from, 1))
+    }
+    // Near the top or bottom of the window the page scrolls under the pointer.
+    const scroll = () => {
+      // Only while the list runs past that edge.
+      const edge = 72, box = viaList!.getBoundingClientRect()
+      const past = y < edge && box.top < edge ? y - edge : y > innerHeight - edge && box.bottom > innerHeight - edge ? y - (innerHeight - edge) : 0
+      if (past) { scrollBy({ top: past / 4, behavior: 'instant' }); place() }
+      frame = requestAnimationFrame(scroll)
+    }
+    const move = (now: PointerEvent) => { if (now.pointerId === event.pointerId) { y = now.clientY; place() } }
+    const end = (now: PointerEvent | KeyboardEvent) => {
+      if (now instanceof KeyboardEvent ? now.key !== 'Escape' : now.pointerId !== event.pointerId) return
+      if (now.type !== 'pointerup') vias = before
+      cancelAnimationFrame(frame)
+      for (const [name, listener] of listeners) removeEventListener(name, listener as EventListener)
+      dragged = null
+    }
+    const listeners = [['pointermove', move], ['pointerup', end], ['pointercancel', end], ['keydown', end]] as const
+    for (const [name, listener] of listeners) addEventListener(name, listener as EventListener)
+    frame = requestAnimationFrame(scroll)
+  }
+  function gripKey(event: KeyboardEvent, key: number) {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+    event.preventDefault()
+    moveVia(key, event.key === 'ArrowUp' ? -1 : 1, 'grip')
   }
   // The row a post filled, so the next post replaces it.
   let postedKey: number | null = null
@@ -219,8 +266,12 @@
 <details class="more" bind:open={viaOpen}>
   <summary>{t('field.via')}</summary>
   <p class="hint">{t('field.viaHint')}</p>
+  <div class="via-list" class:sorting={dragged !== null} bind:this={viaList}>
   {#each vias as row, index (row.key)}
-    <fieldset class="via">
+    <fieldset class="via" class:dragged={dragged === row.key} animate:flip={{ duration: still ? 0 : 160 }}>
+      {#if vias.length > 1}
+        <button type="button" id="{uid}-via-grip-{row.key}" class="grip" aria-label={t('field.viaDrag')} title={t('field.viaDrag')} onpointerdown={event => dragVia(event, row.key)} onkeydown={event => gripKey(event, row.key)}><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg><span class="order">{index + 1}</span></button>
+      {/if}
       <div class="field"><label for="{uid}-via_url-{row.key}">{t('field.url')}</label><input id="{uid}-via_url-{row.key}" class="input" type="url" name="via_url" bind:value={row.url} use:cleanLinkInput placeholder="https://" maxlength="1000" autocorrect="off" autocapitalize="none" spellcheck="false" /></div>
       <div class="grid-2">
         <SourceTitleField id="{uid}-via_title-{row.key}" name="via_title" bind:value={row.title} onselect={source => chooseVia(row, source)} />
@@ -239,6 +290,7 @@
       </div>
     </fieldset>
   {/each}
+  </div>
   {#if vias.length < VIAS_MAX && !blankVia(vias.at(-1)!)}
     <!-- Without scripts the add button does nothing, so an empty row is there to fill. -->
     <noscript><fieldset class="via">
@@ -268,6 +320,12 @@
   .type-name { font-size: 13.5px; font-weight: 500 }
   .type .hint { font-size: 12px }
   .via { display: flex; flex-direction: column; gap: 12px; min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 7px }
+  .via-list { position: relative; display: flex; flex-direction: column; gap: 12px; overflow-anchor: none }
+  .via-list.sorting { user-select: none; cursor: grabbing }
+  .via.dragged { border-color: var(--accent); background: var(--accent-light) }
+  .grip { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; min-block-size: max(28px, var(--target-size)); margin: -4px 0 -4px -6px; padding: 0 8px 0 4px; border: 0; border-radius: 6px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; cursor: grab; touch-action: none }
+  .grip:hover, .via.dragged .grip { color: var(--ink) }
+  .via-list.sorting .grip { cursor: grabbing }
   .via-actions { display: flex; flex-wrap: wrap; gap: 4px 16px }
   .text-button:disabled { color: var(--muted); cursor: default; text-decoration: none }
   .more { display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 12px }

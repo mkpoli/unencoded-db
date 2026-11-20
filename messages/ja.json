@@ -166,6 +166,7 @@
   "field.viaHint": "書物の頁を写した投稿など、見つけた経路。",
   "field.viaAdd": "経由を追加",
   "field.viaRemove": "削除",
+  "field.viaDrag": "ドラッグして並べ替え",
   "field.viaEarlier": "前に移動",
   "field.viaLater": "後ろに移動",
   "field.quoteLocator": "箇所・発言者",
