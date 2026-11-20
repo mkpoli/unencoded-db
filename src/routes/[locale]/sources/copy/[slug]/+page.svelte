@@ -4,9 +4,11 @@
   import { href, media, t } from '$lib/t'
   import { recordCode } from '$lib/code'
   let { data } = $props()
+  const heading = $derived(`${data.copy.title} · ${data.copy.collection}`)
 </script>
 
-<Seo title={`${data.copy.title} · ${data.copy.collection}`} />
+<Seo title={heading} description={`${t('sources.digitizedCopy')} · ${heading} · ${t(data.totals.records === 1 ? 'source.record' : 'source.records', { n: data.totals.records })}`}
+  image={href(`/sources/copy/${data.copy.slug}/card.png?v=${data.cardVersion}`)} imageAlt={heading} />
 <div class="page narrow stack">
   <a class="text-link" href={href('/sources')}>← {t('nav.sources')}</a>
   <header class="stack">
