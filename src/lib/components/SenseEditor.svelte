@@ -4,13 +4,13 @@
   // related characters elsewhere keeps its own draft and draws SenseFields and RelationFields itself.
   import { onMount, untrack } from 'svelte'
   import type { Claim } from '$lib/claims'
-  import type { CharacterFacts } from '$lib/character-tables'
+  import type { Fill } from '$lib/character-tables'
   import { createSenseDraft } from '$lib/sense-draft.svelte'
   import type { Choice } from './ChoiceGroup.svelte'
   import RelationFields from './RelationFields.svelte'
   import SenseFields from './SenseFields.svelte'
 
-  let { claims = [], evidence = [], fill = null }: { claims?: Claim[]; evidence?: Choice[]; fill?: CharacterFacts | null } = $props()
+  let { claims = [], evidence = [], fill = null }: { claims?: Claim[]; evidence?: Choice[]; fill?: Fill | null } = $props()
   const senses = createSenseDraft({ claims: untrack(() => claims), evidence: untrack(() => evidence) })
   onMount(() => senses.start())
   $effect(() => {

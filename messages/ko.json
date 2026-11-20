@@ -149,6 +149,8 @@
   "field.idsBuild": "IDS 편집기",
   "field.idsLoading": "편집기를 불러오는 중…",
   "field.idsFill": "이 글자의 정보 입력",
+  "field.encodedSame": "이 글자에 증거 추가",
+  "field.encodedHomograph": "동형이자로 등록",
   "field.candidate.same": "이미 기록됨",
   "field.candidate.probable": "아마 같은 글자",
   "field.candidate.similar": "비슷한 글자",

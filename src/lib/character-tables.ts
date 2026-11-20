@@ -14,6 +14,12 @@ export type CharacterFacts = {
   variants: { character: string; field: string }[]
 }
 
+/** What a form takes from an encoded character. For a different character of the same form (`homograph`)
+ * that is only what belongs to the form: its description, radical and strokes. */
+export type Fill = CharacterFacts & { homograph: boolean }
+export const fillOf = (facts: CharacterFacts, homograph: boolean): Fill =>
+  homograph ? { ...facts, code: '', meaning: null, readings: [], variants: [], homograph } : { ...facts, homograph }
+
 /** Each description to the first character it describes, each character to its first description, and to all of them. */
 export function parseDescriptions(text: string): Descriptions {
   const encoded = new Map<string, string>()

@@ -7,7 +7,7 @@
 // The `…_present` markers save an emptied list.
 import { untrack } from 'svelte'
 import { CLAIM_LIMITS, claimsOf, newClaimKey, type Claim } from './claims'
-import type { CharacterFacts } from './character-tables'
+import type { Fill } from './character-tables'
 import { doculectName } from './claim-label'
 import { OTHER_DOCULECT, isDoculect } from './doculects'
 import type { Choice } from './components/ChoiceGroup.svelte'
@@ -53,14 +53,29 @@ export function createSenseDraft({ claims = [], evidence = [] }: { claims?: Clai
   function addReading(under: string[] = []) { const row = { ...fresh(under), value: '', doculect: '', other: '' }; readings.push(row); return row }
   function addRelation(under: string[] = []) { const row = { ...fresh(under), character: '', relationship: 'uncertain', difference: '', note: '' }; relations.push(row); return row }
 
-  function applyFill(facts: CharacterFacts) {
+  // The rows a fill wrote, as it wrote them. The next fill takes back the ones nobody changed and no other
+  // row is placed under, so the form never keeps what was known of a character it no longer describes.
+  const written = new Map<string, string>()
+  const kept = <Row extends Links>(rows: Row[]) => {
+    const named = new Set([...readings, ...relations].filter(row => written.get(row.key) !== JSON.stringify(row)).flatMap(row => row.under))
+    return rows.filter(row => named.has(row.key) || written.get(row.key) !== JSON.stringify(row))
+  }
+  const wrote = <Row extends Links>(row: Row) => { written.set(row.key, JSON.stringify(row)); return row }
+
+  function applyFill(fill: Fill) {
     untrack(() => {
-      if (facts.readings.length && !readings.some(row => row.value.trim())) readings = facts.readings.slice(0, CLAIM_LIMITS.reading.max).map(item => ({ ...fresh(), value: item.value.slice(0, CLAIM_LIMITS.reading.length), ...stated(item.doculect) }))
-      if (facts.meaning && !meanings.some(row => row.value.trim())) meanings = [{ ...fresh(), value: facts.meaning.slice(0, CLAIM_LIMITS.meaning.length) }]
-      for (const { character, field } of facts.variants) {
-        if (relations.length >= CLAIM_LIMITS.relation.max || relations.some(row => row.character === character)) continue
-        relations.push({ ...fresh(), character, relationship: 'variant', difference: '', note: `Unihan ${field}` })
+      const [m, r, c] = [kept(meanings), kept(readings), kept(relations)]
+      meanings = m; readings = r; relations = c
+      written.clear()
+      if (!meanings.length) meanings = [{ ...fresh(), value: '' }]
+      if (!readings.length) readings = [{ ...fresh(), value: '', doculect: '', other: '' }]
+      if (fill.readings.length && !readings.some(row => row.value.trim())) readings = fill.readings.slice(0, CLAIM_LIMITS.reading.max).map(item => wrote({ ...fresh(), value: item.value.slice(0, CLAIM_LIMITS.reading.length), ...stated(item.doculect) }))
+      if (fill.meaning && !meanings.some(row => row.value.trim())) meanings = [wrote({ ...fresh(), value: fill.meaning.slice(0, CLAIM_LIMITS.meaning.length) })]
+      const relate = (character: string, relationship: string, note: string) => {
+        if (relations.length < CLAIM_LIMITS.relation.max && !relations.some(row => row.character === character)) relations.push(wrote({ ...fresh(), character, relationship, difference: '', note }))
       }
+      if (fill.homograph) relate(fill.char, 'homograph', '')
+      for (const { character, field } of fill.variants) relate(character, 'variant', `Unihan ${field}`)
     })
   }
 

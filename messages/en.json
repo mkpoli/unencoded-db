@@ -149,6 +149,8 @@
   "field.idsBuild": "IDS editor",
   "field.idsLoading": "Loading the editor…",
   "field.idsFill": "Fill in its details",
+  "field.encodedSame": "Add evidence to this character",
+  "field.encodedHomograph": "Same form, different character",
   "field.candidate.same": "Already recorded",
   "field.candidate.probable": "Probably the same",
   "field.candidate.similar": "Similar",

@@ -8,7 +8,7 @@ import { nameKey, nameLabel, sourceNameKey } from '../name-key'
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
 import { CONTEXTS, isScript, NEEDS, resolveScript, parseSightingTypes, SIGHTING_TYPES, STATUSES, STYLES, VIAS_MAX, type Need, type SightingType, type Status } from '$lib/scripts'
-import { cleanIds, encodedCharacter } from '$lib/ids'
+import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
@@ -1265,6 +1265,16 @@ export async function sourceList(db: D1Database, sort: SourceSort = 'new', curso
 export async function claimedBy(db: D1Database, kind: Claim['kind'], value: string, limit = 6) {
   const { results } = await db.prepare('SELECT e.id, e.ids, e.layout, e.cover_key FROM claims k CROSS JOIN entries e ON e.id = k.entry_id WHERE k.kind = ? AND k.value = ? AND e.merged_into IS NULL AND e.hidden_at IS NULL ORDER BY k.entry_id LIMIT ?').bind(kind, value, limit).all<{ id: number; ids: string | null; layout: string | null; cover_key: string | null }>()
   return results
+}
+
+// The records that carry this character's Unicode code, however the code was typed: in either case, with or
+// without text after it. Each spelling is one range of the index, and the code is then read from what was stored.
+export async function encodedAs(db: D1Database, char: string, limit = 6) {
+  const code = codePoints(char)
+  const read = (prefix: string) => db.prepare("SELECT e.id, e.ids, e.layout, e.cover_key, k.value FROM claims k CROSS JOIN entries e ON e.id = k.entry_id WHERE k.kind = 'encoding' AND k.value >= ? AND k.value < ? AND json_extract(k.data, '$.charset') = 'unicode' AND e.merged_into IS NULL AND e.hidden_at IS NULL ORDER BY k.entry_id LIMIT 50").bind(prefix, `${prefix}\uffff`)
+  const found = await db.batch<{ id: number; ids: string | null; layout: string | null; cover_key: string | null; value: string }>([code, code.toLowerCase()].map(read))
+  const records = new Map(found.flatMap(({ results }) => results).filter(row => encodedCharacter(row.value) === char).map(({ value: _, ...record }) => [record.id, record]))
+  return [...records.values()].sort((a, b) => a.id - b.id).slice(0, limit)
 }
 
 // Records already described by exactly this sequence, offered while someone is adding one.

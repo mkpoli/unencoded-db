@@ -149,6 +149,8 @@
   "field.idsBuild": "IDS編輯器",
   "field.idsLoading": "正在載入編輯器…",
   "field.idsFill": "填入該字的資訊",
+  "field.encodedSame": "為此字新增證據",
+  "field.encodedHomograph": "記為同形異字",
   "field.candidate.same": "已有記錄",
   "field.candidate.probable": "很可能相同",
   "field.candidate.similar": "相似",

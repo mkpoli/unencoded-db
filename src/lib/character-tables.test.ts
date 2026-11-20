@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { gunzipSync } from 'node:zlib'
 import { readFileSync } from 'node:fs'
-import { descriptionParts, factsOf, parseDescriptions, parseUnihan, radicalCharacter, totalStrokes, unihanBlock } from './character-tables'
+import { descriptionParts, factsOf, fillOf, parseDescriptions, parseUnihan, radicalCharacter, totalStrokes, unihanBlock } from './character-tables'
 
 const text = (path: string) => new TextDecoder().decode(gunzipSync(readFileSync(path)))
 const descriptions = parseDescriptions(text('node_modules/ids-input/data/babelstone-ids.tsv.gz'))
@@ -58,4 +58,10 @@ test('the total is the sum of the parts, and unknown when one part is', () => {
   expect(totalStrokes([4, 5])).toBe(9)
   expect(totalStrokes([3, null])).toBeNull()
   expect(totalStrokes([])).toBeNull()
+})
+
+test('a different character of the same form takes the form alone', () => {
+  const facts = factsOf('噐', descriptions, unihan)!
+  expect(fillOf(facts, false)).toEqual({ ...facts, homograph: false })
+  expect(fillOf(facts, true)).toEqual({ char: '噐', code: '', ids: '⿳吅工吅', radical: '口', strokes: 15, meaning: null, readings: [], variants: [], homograph: true })
 })

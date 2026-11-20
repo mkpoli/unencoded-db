@@ -7,8 +7,8 @@
   import { t } from '$lib/t'
 
   type Row = { charset: string; code: string; other: string }
-  // `code` is a Unicode code to state when no row states it yet. `stated` follows the codes the rows hold,
-  // each with the name of its set, for a summary outside.
+  // `code` is a Unicode code to state when no row states it yet; the code it stated before goes when it
+  // changes. `stated` follows the codes the rows hold, each with the name of its set, for a summary outside.
   let { values = [], code = '', stated = $bindable([]) }: { values?: Encoding[]; code?: string; stated?: string[] } = $props()
 
   const uid = $props.id()
@@ -17,13 +17,22 @@
     : { charset: OTHER_REGISTRY, code: encoding.code, other: encoding.charset }
   let rows = $state<Row[]>(untrack(() => values.length ? values.map(row) : [{ charset: 'unicode', code: '', other: '' }]))
 
+  let given: { row: Row; code: string } | null = null
   $effect(() => {
-    if (!code) return
+    const next = code
     untrack(() => {
-      if (rows.some(item => item.charset === 'unicode' && item.code.trim().toUpperCase().startsWith(code))) return
-      const empty = rows.find(item => item.charset === 'unicode' && !item.code.trim())
-      if (empty) empty.code = code
-      else if (rows.length < CLAIM_LIMITS.encoding.max) rows.push({ charset: 'unicode', code, other: '' })
+      const held = given
+      given = null
+      if (held && held.code !== next && held.row.charset === 'unicode' && held.row.code === held.code) {
+        const at = rows.indexOf(held.row)
+        if (at >= 0) rows.splice(at, 1)
+        if (!rows.length) rows.push({ charset: 'unicode', code: '', other: '' })
+      }
+      if (!next || rows.some(item => item.charset === 'unicode' && item.code.trim().toUpperCase().startsWith(next))) return
+      let row = rows.find(item => item.charset === 'unicode' && !item.code.trim())
+      if (row) row.code = next
+      else if (rows.length < CLAIM_LIMITS.encoding.max) { rows.push({ charset: 'unicode', code: next, other: '' }); row = rows.at(-1) }
+      if (row) given = { row, code: next }
     })
   })
   $effect.pre(() => {

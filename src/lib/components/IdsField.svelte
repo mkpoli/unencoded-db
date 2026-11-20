@@ -5,13 +5,14 @@
   // under it, offered once the first is whole. Each is sent as an `ids` value of its own.
   //
   // While the first is whole, the field lists the records and encoded characters it may duplicate, in three
-  // tiers (see $lib/similar). A lone encoded character is replaced by its description, and `onfill` receives
-  // what is known of it; for a description that matches a character, the person decides.
+  // tiers (see $lib/similar). A lone encoded character, or one the description matches, is the person's to
+  // place: the form describes that character and `onfill` receives what is known of it, or it describes a
+  // different character of the same form and `onfill` receives the form alone.
   import { onMount, tick, untrack } from 'svelte'
   import { isDescription } from 'ids-input'
   import { cleanIds, codePoints, IDS_MAX, splitIds } from '$lib/ids'
   import { idsMessages } from '$lib/ids-messages'
-  import { characterFacts, type CharacterFacts } from '$lib/encoded'
+  import { characterFacts, fillOf, type CharacterFacts, type Fill } from '$lib/encoded'
   import { encodedCandidates, expandedParts, TIER_MAX, TIERS, tierRecords, type Found, type RecordCandidate } from '$lib/candidates'
   import { href, locale, media, t } from '$lib/t'
   import { recordCode } from '$lib/code'
@@ -21,13 +22,15 @@
   import IdsLine from './IdsLine.svelte'
 
   let { values = [], primary = $bindable(''), chosen = $bindable(null), exclude = null, anchor, onfill }: {
-    values?: string[]; primary?: string; chosen?: number[] | null; exclude?: number | null; anchor?: string; onfill?: (facts: CharacterFacts) => void
+    values?: string[]; primary?: string; chosen?: number[] | null; exclude?: number | null; anchor?: string; onfill?: (fill: Fill) => void
   } = $props()
 
   const uid = $props.id()
   let next = 0
   const row = (value = '') => ({ key: next++, value })
   let first = $state(untrack(() => values[0] ?? ''))
+  // A lone character the form opened with was already placed.
+  const opened = untrack(() => cleanIds(values[0] ?? ''))
   let rest = $state(untrack(() => values.slice(1).map(row)))
   const sequence = $derived(cleanIds(first))
   const whole = $derived(isDescription(sequence))
@@ -96,26 +99,36 @@
   const tiers = $derived(TIERS.map(tier => ({ tier, items: [...recordHits, ...encodedHits].filter(item => item.tier === tier).slice(0, TIER_MAX) })).filter(group => group.items.length))
 
   // The details of a character the description matches are filled only when asked for.
-  async function fill(char: string) {
+  async function fill(char: string, homograph: boolean) {
     const facts = await characterFacts(char).catch(() => null)
-    if (facts) onfill?.(facts)
+    if (facts) onfill?.(fillOf(facts, homograph))
+  }
+
+  // A lone encoded character waiting for its choice, with the records that already carry its code.
+  let lone = $state.raw<{ facts: CharacterFacts; records: { id: number }[] } | null>(null)
+  function take(facts: CharacterFacts, homograph: boolean) {
+    if (facts.ids) first = facts.ids
+    onfill?.(fillOf(facts, homograph))
   }
 
   $effect(() => {
     const ids = sequence
-    recordHits = []; encodedHits = []
+    recordHits = []; encodedHits = []; lone = null
     if (!browser || !ids) return
     let live = true
     // A lone character is an encoded one to describe, unless it is the first part put down with the tools.
     if ([...ids].length === 1) {
-      if (building) return
+      if (building || ids === opened) return
+      const controller = new AbortController()
       const timer = setTimeout(async () => {
         const facts = await characterFacts(ids).catch(() => null)
         if (!live || !facts) return
-        if (facts.ids) first = facts.ids
-        onfill?.(facts)
+        if (!onfill) { if (facts.ids) first = facts.ids; return }
+        const answer = await fetch(`/api/match?code=${encodeURIComponent(facts.code)}`, { signal: controller.signal }).then(r => r.ok ? r.json() : []).catch(() => [])
+        const records = (Array.isArray(answer) ? answer : []).filter((item): item is { id: number } => typeof item?.id === 'number' && item.id !== exclude)
+        if (live) lone = { facts, records }
       }, 500)
-      return () => { live = false; clearTimeout(timer) }
+      return () => { live = false; clearTimeout(timer); controller.abort() }
     }
     if (!whole) return
     const controller = new AbortController()
@@ -143,6 +156,25 @@
       {#if tools && editor}<tools.Builder {editor} scope={root} messages={tools.messages} locale={locale()} />{:else}<p class="muted">{t('field.idsLoading')}</p>{/if}
     {/if}
   </div>
+  {#if lone}
+    <div class="candidates" data-testid="encoded-choice">
+      <section class="tier same">
+        <h3>{t('status.encoded')}</h3>
+        <div class="lone">
+          <span class="plate char" lang="zh">{lone.facts.char}</span>
+          <span class="body"><span class="line">{lone.facts.code}</span><span class="ids">{lone.facts.ids ?? ''}</span></span>
+          <span class="choices">
+            {#each lone.records as record (record.id)}
+              <a class="button" href={href(`/entry/${record.id}/sighting/new`)} target="_blank">{t('field.encodedSame')} · {recordCode(record.id)}</a>
+            {:else}
+              <button type="button" class="button" onclick={() => take(lone!.facts, false)}>{t('field.encodedSame')}</button>
+            {/each}
+            <button type="button" class="button" onclick={() => take(lone!.facts, true)}>{t('field.encodedHomograph')}</button>
+          </span>
+        </div>
+      </section>
+    </div>
+  {/if}
   {#if whole && tiers.length}
     <div class="candidates" data-testid="candidates">
       {#each tiers as group (group.tier)}
@@ -163,7 +195,7 @@
                 {:else}
                   <span class="plate char" lang="zh">{item.char}</span>
                   <span class="body">
-                    <span class="line">{codePoints(item.char)}{#if onfill} <button type="button" class="text-button" onclick={() => fill(item.char)}>{t('field.idsFill')}</button>{/if}</span>
+                    <span class="line">{codePoints(item.char)}{#if onfill} <button type="button" class="text-button" onclick={() => fill(item.char, false)}>{t('field.idsFill')}</button> <button type="button" class="text-button" onclick={() => fill(item.char, true)}>{t('field.encodedHomograph')}</button>{/if}</span>
                     <span class="ids">{item.ids}</span>
                   </span>
                 {/if}
@@ -209,6 +241,8 @@
   .line { display: flex; flex-wrap: wrap; gap: 0 8px; align-items: center }
   .line .text-button { min-height: 24px; font-size: inherit }
   .ids { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+  .lone { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0 }
+  .choices { display: flex; flex-wrap: wrap; gap: 8px; margin-inline-start: auto }
   .more { margin-top: 4px }
   .remove { justify-self: start; width: 36px; height: 41px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer }
   .remove:hover { color: var(--wrong) }

@@ -27,7 +27,7 @@
   import TagFields from '$lib/components/TagFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
-  import type { CharacterFacts } from '$lib/encoded'
+  import type { Fill } from '$lib/encoded'
   import { compositionOf, encodingsOf, idsForms, primaryLayoutOf, supportedBy, valuesOf } from '$lib/claims'
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
@@ -46,7 +46,7 @@
   const claims = $derived(data.claims)
   const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
   const editValues = $derived(editing && form?.values && 'script' in form.values ? form.values : { ...entry, claims })
-  let filled = $state<CharacterFacts | null>(null)
+  let filled = $state<Fill | null>(null)
   let editOpen = $state(untrack(() => editing || data.idsAdd !== null))
   $effect(() => { if (editing) editOpen = true })
   let fields = $state<CharacterFields>()

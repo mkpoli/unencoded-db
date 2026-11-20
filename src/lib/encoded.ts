@@ -5,7 +5,7 @@ import url from 'ids-input/data/babelstone-ids.tsv.gz?url'
 import { retrying } from './retrying'
 import { descriptionParts, factsOf, parseDescriptions, totalStrokes, parseUnihan, unihanBlock, type Descriptions, type UnihanRow } from './character-tables'
 
-export type { CharacterFacts } from './character-tables'
+export { fillOf, type CharacterFacts, type Fill } from './character-tables'
 
 const unihan = new Map<string, Promise<Map<string, UnihanRow>>>()
 
