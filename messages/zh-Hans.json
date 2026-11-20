@@ -514,6 +514,7 @@
   "source.aliasAdded": "添加“{alias}”",
   "source.aliasRemoved": "移除“{alias}”",
   "source.aliases": "别名",
+  "source.titleVariant": "书名异写",
   "source.alias": "别名",
   "source.addAlias": "添加别名",
   "source.remove": "移除",

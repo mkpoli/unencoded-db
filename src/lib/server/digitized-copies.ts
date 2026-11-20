@@ -1,16 +1,14 @@
-import { sourceNameKey } from '../name-key'
-import { sourceMatches } from './source-aliases'
+import { sourceMatches, sourceMatchParams } from './source-aliases'
 import { hashHex } from './image'
 import type { CardPicture } from './entries'
 
 type Copy = { slug: string; title: string; collection: string }
 
 export async function matchingCopies(db: D1Database, query: string) {
-  const key = sourceNameKey(query)
-  if (!key) return []
+  if (!query.trim()) return []
   const { results } = await db.prepare(`SELECT d.* FROM digitized_copies d
     WHERE EXISTS (SELECT 1 FROM digitized_copy_pages p WHERE p.copy_slug = d.slug
-      AND p.source_id IN (${sourceMatches})) ORDER BY d.title, d.slug`).bind(key, key).all<Copy>()
+      AND p.source_id IN (${sourceMatches})) ORDER BY d.title, d.slug`).bind(...sourceMatchParams(query)).all<Copy>()
   return results
 }
 
