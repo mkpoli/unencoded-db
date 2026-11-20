@@ -92,3 +92,11 @@ test('a merged person\'s contributions join the account they signed in to', asyn
   expect(result.rows).toHaveLength(2)
   expect(result.rows.every((row: any) => row.entry_id === id && row.by_id === account.id && row.by_name === account.name)).toBe(true)
 })
+
+test('a person recorded under a UUID has a page', async () => {
+  const { db, raw } = openTestDb()
+  const id = '0a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d'
+  raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('${id}', 'Early', '2026-11-08T15:00:16.227Z')`)
+  expect((await load(event(db, id)) as any).person).toMatchObject({ id, name: 'Early' })
+  await expect(load(event(db, '0a1b2c3d-4e5f-4a6b-8c7d'))).rejects.toMatchObject({ status: 404 })
+})
