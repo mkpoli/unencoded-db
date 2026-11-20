@@ -7,13 +7,32 @@
 
   let { busy = false, label, cancel, sticky = false }: { busy?: boolean; label?: string; cancel?: string; sticky?: boolean } = $props()
   const name = $derived((page.data as { person?: { name: string } | null }).person?.name)
+
+  // A form is sent once: a second press while the first is on its way would save the same thing twice.
+  let button = $state<HTMLButtonElement>()
+  let sent = $state(false)
+  $effect(() => {
+    const form = button?.form
+    if (!form) return
+    // Added after the form's own handlers, so one of them may already have held the form back.
+    const once = (event: SubmitEvent) => {
+      if (event.defaultPrevented) return
+      if (sent) event.preventDefault()
+      else sent = true
+    }
+    // A page brought back by the browser's back button is a form to fill in again.
+    const again = () => { sent = false }
+    form.addEventListener('submit', once)
+    window.addEventListener('pageshow', again)
+    return () => { form.removeEventListener('submit', once); window.removeEventListener('pageshow', again) }
+  })
 </script>
 
 {#snippet terms()}<p class="hint">{#if name}{t('form.as', { name })}{' '}{/if}{t('form.terms')}</p>{/snippet}
 
 {#if sticky}{@render terms()}{/if}
 <div class="bar" class:sticky>
-  <button type="submit" class="button primary" aria-disabled={busy} onclick={event => { if (busy) event.preventDefault() }}>{busy ? t('field.imageWorking') : label ?? t('form.save')}</button>
+  <button type="submit" class="button primary" bind:this={button} aria-disabled={busy || sent} onclick={event => { if (busy || sent) event.preventDefault() }}>{busy ? t('field.imageWorking') : label ?? t('form.save')}</button>
   {#if cancel}<a class="button" href={cancel}>{t('form.cancel')}</a>{/if}
   {#if !sticky}{@render terms()}{/if}
 </div>
