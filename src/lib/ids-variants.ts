@@ -73,13 +73,15 @@ const leavesOf = (tree: Tree): string[] => typeof tree === 'string' ? [tree] : t
 const JOINS: Record<number, string[]> = { 2: [...'⿰⿱⿴⿵⿶⿷⿸⿹⿺⿼⿽'], 3: [...'⿲⿳'] }
 /** Runs of parts at most, the one typed included, and parts at most in a run: the search reads a row for each. */
 export const PART_SPELLINGS_MAX = 4
-export const PART_RUN_MAX = 6
+export const PART_RUN_MAX = 5
 
 /** Whether a text is parts alone: ideographs with no operator, space or other writing among them. */
 export const isParts = (text: string) => /^[\p{Script=Han}\p{Co}\u31C0-\u31EF]+$/u.test(text)
 
+const orders = (parts: string[]): string[][] => parts.length < 2 ? [parts] : parts.flatMap((part, at) => orders([...parts.slice(0, at), ...parts.slice(at + 1)]).map(rest => [part, ...rest]))
+
 // The runs one step from a run: one part written out as the parts of its description, or two or three
-// neighbouring parts folded into the character they describe, in either order.
+// neighbouring parts folded into the character they describe, in any order.
 function partSteps(run: readonly string[], table: Table): string[][] {
   const found: string[][] = []
   run.forEach((part, at) => {
@@ -88,7 +90,7 @@ function partSteps(run: readonly string[], table: Table): string[][] {
   })
   for (const size of [2, 3]) for (let at = 0; at + size <= run.length; at++) {
     const parts = run.slice(at, at + size)
-    for (const order of size === 2 ? [parts, [...parts].reverse()] : [parts]) for (const op of JOINS[size]) {
+    for (const order of orders(parts)) for (const op of JOINS[size]) {
       const tree: Tree = { op, parts: order }
       const character = table.encoded.get(write(tree)) ?? looseEncoded(table).get(write(tree, groupKey))
       if (character !== undefined) found.push([...run.slice(0, at), character, ...run.slice(at + size)])
@@ -100,21 +102,21 @@ function partSteps(run: readonly string[], table: Table): string[][] {
 /**
  * The runs of parts that may spell what a run of parts does, the typed one first: 艹時 is also 艹日寺 and 蒔.
  * Radical code points count as the ideographs they stand for, and a run with the same parts in another order is the same run.
+ * A part typed twice is folded as two (木木 into 林) and written once, since a record is found by each part it holds.
  */
 export function partSpellings(text: string, table: Table, limit = PART_SPELLINGS_MAX): string[] {
-  const start = [...new Set([...plain(text)].map(radicalEquivalent))]
-  const key = (run: readonly string[]) => [...run].sort().join('')
+  const start = [...plain(text)].map(radicalEquivalent)
+  const key = (run: readonly string[]) => [...new Set(run)].sort().join('')
   const found = [start], seen = new Set([key(start)])
   for (let at = 0; at < found.length && found.length < limit; at++) {
     for (const stepped of partSteps(found[at], table)) {
-      const next = [...new Set(stepped)]
-      if (next.length > PART_RUN_MAX || seen.has(key(next))) continue
-      seen.add(key(next))
-      found.push(next)
+      if (new Set(stepped).size > PART_RUN_MAX || stepped.length > PART_RUN_MAX * 2 || seen.has(key(stepped))) continue
+      seen.add(key(stepped))
+      found.push(stepped)
       if (found.length === limit) break
     }
   }
-  return found.map(run => run.join(''))
+  return found.map(run => [...new Set(run)].join(''))
 }
 
 /**

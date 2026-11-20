@@ -1666,9 +1666,18 @@ test('parts typed with no structure find the records that spell them another way
   expect(searchParts('⿱艹時')).toBeNull()
   expect(searchParts('艹 word')).toBeNull()
   // Another spelling is parts alone, is not the query in another order, and is one of a few.
-  expect(alsoSearchParts('艹時', ['時艹', '艹日寺', '艹 日 寺', '⿱艹時', 'word', '日寺艹', '蒔', '一二三四五六七'])).toEqual(['艹日寺', '蒔'])
+  expect(alsoSearchParts('艹時', ['時艹', '艹日寺', '艹 日 寺', '⿱艹時', 'word', '日寺艹', '蒔', '一二三四五六'])).toEqual(['艹日寺', '蒔'])
   expect(alsoSearchParts('艹時', ['一', '二', '三', '四', '五'])).toHaveLength(PART_ALSO_MAX)
   expect(alsoSearchParts('word', ['艹日寺'])).toEqual([])
+  // A radical code point typed is the part it stands for, and a mate is read under the row its records are kept in.
+  expect(await found({ query: '⺾時' })).toEqual([typed, radical, mate])
+  const flesh = await createEntry(db, described('⿰⺼木'), seen(), [], who)
+  expect(await found({ query: '月木' })).toEqual([flesh])
+  // The widest search stays under the number of values one statement may bind.
+  const widest = { script: 'han', filter: 'variant', facet: 't:hakka', radical: '口', decade: '1930', within: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], without: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], query: '㔾七丸儿兔', also: ['兹冃冊凷刀', '叉友另囘堇', '夂奂尒彐擧'] }
+  const bound = (statement: unknown) => (statement as { values: unknown[] }).values.length
+  expect(bound(listStatement(db, widest))).toBeLessThanOrEqual(100)
+  expect(bound(totalStatement(db, widest, { words: Array(16).fill('p:一') }))).toBeLessThanOrEqual(100)
 })
 
 describe('search total', () => {

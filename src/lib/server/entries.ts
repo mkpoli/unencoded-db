@@ -166,7 +166,8 @@ export const SEARCH_LENGTH_MAX = 200
 // Letters are words and every other character is a term of its own, which finds a part inside a description
 // sequence and needs no word breaking for CJK text.
 export function terms(value: string) {
-  return (value.normalize('NFKC').toLowerCase().match(WORD) ?? []).filter(term => !/^[⿰-⿿]$/.test(term))
+  // A radical code point is a symbol to Unicode and a part here: it is read as the ideograph it stands for.
+  return ([...value.normalize('NFKC').toLowerCase()].map(radicalEquivalent).join('').match(WORD) ?? []).filter(term => !/^[⿰-⿿]$/.test(term))
 }
 
 /** The marked works a record is in, in the order of the list. */
@@ -880,7 +881,7 @@ const isPart = (term: string) => [...term].length === 1 && !/[\p{Script=Latin}\p
 /** Parts IWDS counts as one with a part that are searched with it, at most. */
 export const MATES_MAX = 2
 // The part rows a part is found under: the ideograph its radical code point stands for, then the parts IWDS counts as one with it.
-const partRows = (part: string) => { const own = radicalEquivalent(part); return [...new Set([own, ...groupMates(own).slice(0, MATES_MAX)])].map(spelling => `p:${spelling}`) }
+const partRows = (part: string) => { const own = radicalEquivalent(part); return [...new Set([own, ...groupMates(own).slice(0, MATES_MAX).map(radicalEquivalent)])].map(spelling => `p:${spelling}`) }
 
 /** The parts of a query that is parts alone, such as 艹時, or null for a description or a query with a longer word. */
 export function searchParts(query: string) {
@@ -898,7 +899,7 @@ export function alsoSearchParts(query: string, values: readonly string[] = []) {
   const seen = new Set([[...typed].sort().join('')]), runs: string[] = []
   for (const value of values) {
     const parts = [...new Set(terms(value))], key = [...parts].sort().join('')
-    if (!parts.length || parts.length > PART_RUN_MAX || !parts.every(isPart) || parts.join('') !== [...new Set(value.normalize('NFKC'))].join('') || seen.has(key)) continue
+    if (!parts.length || parts.length > PART_RUN_MAX || !parts.every(isPart) || parts.join('') !== [...new Set([...value.normalize('NFKC')].map(radicalEquivalent))].join('') || seen.has(key)) continue
     seen.add(key)
     runs.push(parts.join(''))
   }

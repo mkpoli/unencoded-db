@@ -79,6 +79,10 @@ test('parts typed with no structure are also the parts written out and the chara
   expect(partSpellings('⺾時', known)[0]).toBe('艹時')
   expect(partSpellings('艹時', known, 2)).toHaveLength(2)
   expect(partSpellings('木', known)).toEqual(['木'])
+  // A part typed twice folds as two, and three parts fold in any order.
+  const more = { described: new Map([['林', '⿰木木'], ['产', '⿱亠⿸丷厂'], ['𠂉', '⿱丷厂']]), encoded: new Map([['⿰木木', '林'], ['⿳亠丷厂', '产']]) }
+  expect(partSpellings('木木', more)).toEqual(['木', '林'])
+  expect(partSpellings('厂丷亠', more)).toContain('产')
   expect(isParts('艹時')).toBe(true)
   for (const text of ['⿱艹時', '艹 時', 'word', '']) expect(isParts(text)).toBe(false)
 })
