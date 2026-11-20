@@ -41,11 +41,16 @@
     return () => { live = false }
   })
 
+  // What the last fill wrote; a field still holding it follows the next fill.
+  let given: { radical: string | null; strokes: number | null } = { radical: null, strokes: null }
   $effect(() => {
     if (!fill) return
     untrack(() => {
-      if (!radicalValue && fill.radical) { radicalValue = fill.radical; indexOpen = true }
-      if (strokesValue === '' && fill.strokes != null) { strokesValue = fill.strokes; indexOpen = true }
+      if (given.radical !== null && radicalValue === given.radical) radicalValue = ''
+      if (given.strokes !== null && strokesValue === given.strokes) strokesValue = ''
+      given = { radical: null, strokes: null }
+      if (!radicalValue && fill.radical) { radicalValue = given.radical = fill.radical; indexOpen = true }
+      if (strokesValue === '' && fill.strokes != null) { strokesValue = given.strokes = fill.strokes; indexOpen = true }
       if (fill.code) encodedOpen = true
     })
   })

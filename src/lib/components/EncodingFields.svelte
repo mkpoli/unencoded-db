@@ -17,21 +17,22 @@
     : { charset: OTHER_REGISTRY, code: encoding.code, other: encoding.charset }
   let rows = $state<Row[]>(untrack(() => values.length ? values.map(row) : [{ charset: 'unicode', code: '', other: '' }]))
 
-  let given = ''
+  let given: { row: Row; code: string } | null = null
   $effect(() => {
     const next = code
     untrack(() => {
-      if (given && given !== next) {
-        rows = rows.filter(item => !(item.charset === 'unicode' && item.code === given))
+      const held = given
+      given = null
+      if (held && held.code !== next && held.row.charset === 'unicode' && held.row.code === held.code) {
+        const at = rows.indexOf(held.row)
+        if (at >= 0) rows.splice(at, 1)
         if (!rows.length) rows.push({ charset: 'unicode', code: '', other: '' })
       }
-      given = ''
       if (!next || rows.some(item => item.charset === 'unicode' && item.code.trim().toUpperCase().startsWith(next))) return
-      const empty = rows.find(item => item.charset === 'unicode' && !item.code.trim())
-      if (empty) empty.code = next
-      else if (rows.length < CLAIM_LIMITS.encoding.max) rows.push({ charset: 'unicode', code: next, other: '' })
-      else return
-      given = next
+      let row = rows.find(item => item.charset === 'unicode' && !item.code.trim())
+      if (row) row.code = next
+      else if (rows.length < CLAIM_LIMITS.encoding.max) { rows.push({ charset: 'unicode', code: next, other: '' }); row = rows.at(-1) }
+      if (row) given = { row, code: next }
     })
   })
   $effect.pre(() => {

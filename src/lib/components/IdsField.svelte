@@ -29,6 +29,8 @@
   let next = 0
   const row = (value = '') => ({ key: next++, value })
   let first = $state(untrack(() => values[0] ?? ''))
+  // A lone character the form opened with was already placed.
+  const opened = untrack(() => cleanIds(values[0] ?? ''))
   let rest = $state(untrack(() => values.slice(1).map(row)))
   const sequence = $derived(cleanIds(first))
   const whole = $derived(isDescription(sequence))
@@ -116,7 +118,7 @@
     let live = true
     // A lone character is an encoded one to describe, unless it is the first part put down with the tools.
     if ([...ids].length === 1) {
-      if (building) return
+      if (building || ids === opened) return
       const controller = new AbortController()
       const timer = setTimeout(async () => {
         const facts = await characterFacts(ids).catch(() => null)

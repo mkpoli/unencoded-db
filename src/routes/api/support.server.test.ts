@@ -23,9 +23,11 @@ test('match normalizes IDS and excludes hidden records', async () => {
 
 test('match finds the visible records that carry a Unicode code', async () => {
   const { raw, event } = fixture()
-  raw.exec(`INSERT INTO claims(entry_id,position,key,kind,value,data) VALUES(1,1,'enc00001','encoding','U+4F11','{"charset":"unicode"}'),(2,1,'enc00002','encoding','U+4F11','{"charset":"unicode"}');
+  raw.exec(`INSERT INTO claims(entry_id,position,key,kind,value,data) VALUES(1,1,'enc00001','encoding','U+4F11','{"charset":"unicode"}'),(2,1,'enc00002','encoding','U+4F11','{"charset":"unicode"}'),(1,2,'enc00003','encoding','U+4F11','{"charset":"other"}');
+    INSERT INTO entries(id,script,ids,created_by,created_at,updated_at) VALUES(3,'han','⿰亻木','a','2026','2026'),(4,'han','⿰亻木','a','2026','2026'),(5,'han','⿰亻木','a','2026','2026');
+    INSERT INTO claims(entry_id,position,key,kind,value,data) VALUES(3,0,'enc00004','encoding','u+4f11 休','{"charset":"unicode"}'),(4,0,'enc00005','encoding','U+4F11A','{"charset":"unicode"}'),(5,0,'enc00006','encoding','U+4F11','{"charset":"gb"}');
     UPDATE entries SET hidden_at = '2026' WHERE id = 2`)
-  expect(((await (await match(event('/api/match?code=U%2B4F11'))).json()) as { id: number }[]).map(r => r.id)).toEqual([1])
+  expect(((await (await match(event('/api/match?code=U%2B4F11'))).json()) as { id: number }[]).map(r => r.id)).toEqual([1, 3])
   expect(await (await match(event('/api/match?code=U%2B6797'))).json()).toEqual([])
   expect((await match(event('/api/match?code=4F11'))).status).toBe(400)
 })

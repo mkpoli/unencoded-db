@@ -53,15 +53,19 @@ export function createSenseDraft({ claims = [], evidence = [] }: { claims?: Clai
   function addReading(under: string[] = []) { const row = { ...fresh(under), value: '', doculect: '', other: '' }; readings.push(row); return row }
   function addRelation(under: string[] = []) { const row = { ...fresh(under), character: '', relationship: 'uncertain', difference: '', note: '' }; relations.push(row); return row }
 
-  // The rows a fill wrote, as it wrote them. The next fill takes back the ones nobody changed, so the form
-  // never keeps what was known of a character it no longer describes.
+  // The rows a fill wrote, as it wrote them. The next fill takes back the ones nobody changed and no other
+  // row is placed under, so the form never keeps what was known of a character it no longer describes.
   const written = new Map<string, string>()
-  const kept = <Row extends Links>(rows: Row[]) => rows.filter(row => written.get(row.key) !== JSON.stringify(row))
+  const kept = <Row extends Links>(rows: Row[]) => {
+    const named = new Set([...readings, ...relations].filter(row => written.get(row.key) !== JSON.stringify(row)).flatMap(row => row.under))
+    return rows.filter(row => named.has(row.key) || written.get(row.key) !== JSON.stringify(row))
+  }
   const wrote = <Row extends Links>(row: Row) => { written.set(row.key, JSON.stringify(row)); return row }
 
   function applyFill(fill: Fill) {
     untrack(() => {
-      meanings = kept(meanings); readings = kept(readings); relations = kept(relations)
+      const [m, r, c] = [kept(meanings), kept(readings), kept(relations)]
+      meanings = m; readings = r; relations = c
       written.clear()
       if (!meanings.length) meanings = [{ ...fresh(), value: '' }]
       if (!readings.length) readings = [{ ...fresh(), value: '', doculect: '', other: '' }]
