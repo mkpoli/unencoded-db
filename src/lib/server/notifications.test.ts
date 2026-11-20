@@ -174,3 +174,15 @@ test('thanks said before signing in join the account, except those for its own c
   expect((await notificationsOf(db, account.id)).notifications.map(notice => notice.kind)).toEqual([])
   expect((await notificationsOf(db, recorder.id)).notifications.map(notice => [notice.kind, notice.by_id])).toEqual([['thank', account.id], ['edit', account.id]])
 })
+
+test('a notice of a change carries the version it left, and a comment carries none', async () => {
+  const { load } = await import('../../routes/[locale]/notifications/+page.server')
+  const { db, recorder, second, who, entry } = await scene()
+  const found = (await getEntry(db, entry))!
+  expect((await editEntry(db, entry, found.entry.rev, { ...fields('⿰山東'), description: 'checked' }, who(second), 'gloss corrected')).ok).toBe(true)
+  await addSighting(db, entry, { ...sighting, place: 'Another book' }, [], who(second))
+  await addComment(db, { entry }, 'Is this 觀?', who(second))
+  const seen = await load({ url: new URL('http://localhost/en/notifications'), params: { locale: 'en' }, platform: { env: { DB: db } }, locals: { person: recorder } } as any) as any
+  expect(seen.notifications.map((notice: any) => [notice.kind, notice.fields?.description ?? null, notice.sightingFields?.place ?? null])).toEqual([['comment', null, null], ['sighting', null, 'Another book'], ['edit', 'checked', null]])
+  expect(seen.notifications[2]).not.toHaveProperty('snapshot')
+})
