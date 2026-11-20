@@ -139,6 +139,9 @@ export async function joinAtlas(db: D1Database, current: Person | null, sub: str
     await db.batch([
       db.prepare('INSERT OR IGNORE INTO favourites(person, entry_id, at) SELECT ?, entry_id, at FROM favourites WHERE person = ?').bind(id, current.id),
       db.prepare('DELETE FROM favourites WHERE person = ?').bind(current.id),
+      // A notice both people hold of one thing stays the account's own.
+      db.prepare('UPDATE OR IGNORE notifications SET person = ? WHERE person = ?').bind(id, current.id),
+      db.prepare('DELETE FROM notifications WHERE person = ?').bind(current.id),
     ])
   }
   return id

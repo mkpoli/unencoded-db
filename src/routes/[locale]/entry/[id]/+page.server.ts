@@ -1,6 +1,7 @@
 import { readDates, sightingDates } from '$lib/server/date-readings'
 import { createTag, tagList } from '$lib/server/tags'
-import { error, fail, redirect } from '@sveltejs/kit'
+import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
+import { addComment, cleanComment, commentsOf, setCommentHidden } from '$lib/server/comments'
 import { isDescription } from 'ids-input'
 import { cleanIds } from '$lib/ids'
 import { earliestSighting, editEntry, getEntry, radicalCounts, readEntryFields } from '$lib/server/entries'
@@ -31,11 +32,42 @@ export const load: PageServerLoad = async (event) => {
   // A description another page proposes to add, ?ids_add=: one, and only a whole one. It is added to the form, not saved.
   const proposed = cleanIds(event.url.searchParams.get('ids_add') ?? '')
   const idsAdd = isDescription(proposed) ? proposed : null
+  // The evidence a comment is to be about, ?about=: one of the record's own.
+  const asked = positiveId(event.url.searchParams.get('about') ?? '')
+  const about = asked && sightings.some(sighting => sighting.id === asked) ? asked : null
+  const comments = await commentsOf(env(event).DB, id, Boolean(event.locals.person?.moderator))
   const related = await relatedRecords(env(event).DB, id, found.claims)
-  return { dates, idsAdd, related, entry: found.entry, claims: found.claims, sightings, filed, tags: await tagList(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
+  return { dates, idsAdd, related, about, comments, entry: found.entry, claims: found.claims, sightings, filed, tags: await tagList(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
+}
+
+async function commentVisibility(event: RequestEvent, hidden: boolean) {
+  await guardWrite(event, 'EDITS', true)
+  const id = positiveId(event.params.id ?? '')
+  const comment = positiveId(String((await event.request.formData()).get('comment') ?? ''))
+  if (!id || !comment || !await setCommentHidden(env(event).DB, id, comment, hidden, event.locals.person!.id)) error(404)
+  redirect(303, `/${event.params.locale}/entry/${id}#comment-${comment}`)
 }
 
 export const actions: Actions = {
+  comment: async (event) => {
+    await guardWrite(event, 'EDITS')
+    const id = positiveId(event.params.id)
+    if (!id) error(404)
+    const { DB } = env(event)
+    const found = await getEntry(DB, id)
+    if (!found || found.entry.hidden_at || found.entry.merged_into) error(404)
+    const form = await event.request.formData()
+    const asked = String(form.get('about') ?? '')
+    const about = asked ? positiveId(asked) : null
+    if (asked && !found.sightings.some(sighting => sighting.id === about && !sighting.hidden_at)) error(404)
+    const body = cleanComment(form.get('body'))
+    if (!body) return fail(400, { error: 'comment', comment: String(form.get('body') ?? '').slice(0, 20000), about })
+    const person = await writer(event, DB)
+    const comment = await addComment(DB, { entry: id, sighting: about }, body, { actor: person.id, ip: await ipHash(event) })
+    redirect(303, `/${event.params.locale}/entry/${id}#comment-${comment}`)
+  },
+  hideComment: event => commentVisibility(event, true),
+  unhideComment: event => commentVisibility(event, false),
   edit: async (event) => {
     await guardWrite(event, 'EDITS')
     const id = positiveId(event.params.id)
