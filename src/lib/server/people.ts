@@ -142,7 +142,10 @@ export async function joinAtlas(db: D1Database, current: Person | null, sub: str
       // A notice both people hold of one thing stays the account's own.
       db.prepare('UPDATE OR IGNORE notifications SET person = ? WHERE person = ?').bind(id, current.id),
       db.prepare('DELETE FROM notifications WHERE person = ?').bind(current.id),
-      // Thanks said before signing in are the account's, so a change is not thanked for twice.
+      // Thanks said before signing in are the account's, so a change is not thanked for twice; those for
+      // the account's own changes go, with their notices.
+      db.prepare('DELETE FROM notifications WHERE thank_id IN (SELECT k.id FROM thanks k JOIN revisions r ON r.id = k.revision_id JOIN people p ON p.id = r.actor WHERE k.person = ?1 AND COALESCE(p.merged_into, p.id) = ?2)').bind(current.id, id),
+      db.prepare('DELETE FROM thanks WHERE person = ?1 AND revision_id IN (SELECT r.id FROM revisions r JOIN people p ON p.id = r.actor WHERE COALESCE(p.merged_into, p.id) = ?2)').bind(current.id, id),
       db.prepare('UPDATE OR IGNORE thanks SET person = ? WHERE person = ?').bind(id, current.id),
     ])
   }

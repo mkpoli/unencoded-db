@@ -1,4 +1,4 @@
--- A thank is one person's thanks for one change, said once. Its notice goes to whoever made the change,
+-- A thank is one person's thanks for one change, said once and once from an address. Its notice goes to whoever made the change,
 -- as the account they joined, so a notice is now of a comment, a revision or a thank.
 CREATE TABLE thanks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -8,7 +8,7 @@ CREATE TABLE thanks (
   ip_hash TEXT,
   UNIQUE (revision_id, person)
 );
-CREATE INDEX thanks_by_person ON thanks(person, revision_id);
+CREATE INDEX thanks_by_address ON thanks(revision_id, ip_hash);
 
 -- SQLite cannot change a CHECK in place, so the table is rebuilt and the triggers that write to it remade.
 DROP TRIGGER notify_comment;

@@ -32,17 +32,23 @@ export async function markRead(db: D1Database, person: string, upto: number) {
   await db.prepare('UPDATE notifications SET read_at = ? WHERE person = ? AND read_at IS NULL AND id <= ?').bind(new Date().toISOString(), person, upto).run()
 }
 
-/** Thanks whoever made a change of a record, once: false when there is no such change to thank for, or it is the person's own. */
+/** Whether a record holds a change that can be thanked for. */
+export async function thankable(db: D1Database, entry: number, revision: number) {
+  return Boolean(await db.prepare('SELECT 1 FROM revisions r LEFT JOIN sightings s ON s.id = r.sighting_id WHERE r.id = ? AND r.entry_id = ? AND s.hidden_at IS NULL').bind(revision, entry).first())
+}
+
+/** Thanks whoever made a change of a record, once for a person and once for an address: false when the change is the person's own. */
 export async function thank(db: D1Database, entry: number, revision: number, who: { actor: string; ip: string | null }) {
   const row = await db.prepare(`INSERT OR IGNORE INTO thanks(revision_id, person, at, ip_hash)
     SELECT r.id, ?3, ?4, ?5 FROM revisions r JOIN people p ON p.id = r.actor LEFT JOIN sightings s ON s.id = r.sighting_id
-    WHERE r.id = ?1 AND r.entry_id = ?2 AND s.hidden_at IS NULL AND COALESCE(p.merged_into, p.id) <> ?3 RETURNING id`)
+    WHERE r.id = ?1 AND r.entry_id = ?2 AND s.hidden_at IS NULL AND COALESCE(p.merged_into, p.id) <> ?3
+      AND NOT EXISTS (SELECT 1 FROM thanks WHERE revision_id = ?1 AND ip_hash = ?5) RETURNING id`)
     .bind(revision, entry, who.actor, new Date().toISOString(), who.ip).first<{ id: number }>()
-  return Boolean(row) || Boolean(await db.prepare('SELECT 1 FROM thanks WHERE revision_id = ? AND person = ?').bind(revision, who.actor).first())
+  return Boolean(row) || Boolean(await db.prepare('SELECT 1 FROM thanks WHERE revision_id = ?1 AND (person = ?2 OR ip_hash = ?3)').bind(revision, who.actor, who.ip).first())
 }
 
-/** Which of a record's changes a person has thanked for. */
-export async function thankedOf(db: D1Database, entry: number, person: string) {
-  const { results } = await db.prepare('SELECT k.revision_id AS id FROM thanks k JOIN revisions r ON r.id = k.revision_id WHERE k.person = ? AND r.entry_id = ?').bind(person, entry).all<{ id: number }>()
+/** Which of the changes on a page a person has thanked for. */
+export async function thankedOf(db: D1Database, person: string, revisions: number[]) {
+  const { results } = await db.prepare('SELECT revision_id AS id FROM thanks WHERE person = ? AND revision_id IN (SELECT value FROM json_each(?))').bind(person, JSON.stringify(revisions)).all<{ id: number }>()
   return results.map(row => row.id)
 }
