@@ -29,3 +29,7 @@ test('parts typed with no structure find the records that hold them all, never a
   expect(found.every(hit => hit.tier === 'similar')).toBe(true)
   expect(tierRecords('艹', records, data)).toEqual([])
 })
+
+test('a variation selector stays with the part typed before it', () => {
+  expect(tiers('木\u{E0100}火', [record(1, ['⿰木\u{E0100}火'])])).toEqual({ 1: 'similar' })
+})

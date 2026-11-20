@@ -136,7 +136,8 @@ export type Loose = { counts: Map<string, number>; size: number }
 /** Parts at least for a text that is no description to be compared. */
 export const LOOSE_MIN = 2
 
-const typedParts = (text: string) => [...mapRadicals(text)].filter(char => !/[\u2FF0-\u2FFF\u31EF]/u.test(char) && !isPlaceholder(char))
+// A variation selector stays with the part it follows.
+const typedParts = (text: string) => (mapRadicals(text).match(/[^\uFE00-\uFE0F\u{E0100}-\u{E01EF}][\uFE00-\uFE0F\u{E0100}-\u{E01EF}]*/gu) ?? []).filter(part => !/^[\u2FF0-\u2FFF\u31EF]/u.test(part) && !isPlaceholder(part))
 /** The parts of a text that is no description once expanded, in order, operators and placeholders aside. */
 export const looseLeaves = (text: string, data: Data) => typedParts(text).flatMap(part => leavesOf(expandTree(part, data, EXPAND_DEPTH)))
 

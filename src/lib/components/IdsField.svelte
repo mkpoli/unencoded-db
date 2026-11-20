@@ -104,10 +104,13 @@
   const tiers = $derived(TIERS.map(tier => ({ tier, items: [...recordHits, ...encodedHits].filter(item => item.tier === tier) })).filter(group => group.items.length))
 
   // The details of a character the description matches are filled only when asked for.
-  async function fill(char: string, homograph: boolean) {
+  // Before the description is whole, the one listed with the character is written into the field, unless
+  // the field has changed meanwhile.
+  async function fill(char: string, homograph: boolean, ids: string) {
+    const typed = sequence
     const facts = await characterFacts(char).catch(() => null)
-    if (!facts) return
-    if (!whole && facts.ids) first = facts.ids
+    if (!facts || sequence !== typed) return
+    if (!whole) first = ids
     onfill?.(fillOf(facts, homograph))
   }
 
@@ -141,11 +144,13 @@
     const controller = new AbortController()
     // The records are read by the parts of the description, and again by the characters those parts make
     // (蒔 for 艹 and 時) once the encoded characters are known, since a record may be written with one.
+    // What the second read finds is added to the first, and a read that fails leaves the list as it was.
+    const held = new Map<number, RecordCandidate>()
     const records = async (made: string[] = []) => {
       const leaves = [...new Set([...made, ...await expandedParts(ids)])].slice(0, 12).join('')
       const answer = await fetch(`/api/candidates?ids=${encodeURIComponent(ids)}${leaves ? `&leaves=${encodeURIComponent(leaves)}` : ''}${exclude ? `&exclude=${exclude}` : ''}`, { signal: controller.signal }).then(r => r.ok ? r.json() : [])
-      const found = Array.isArray(answer) ? answer.filter((item): item is RecordCandidate => typeof item?.id === 'number') : []
-      const tiered = await tierRecords(ids, found)
+      for (const item of Array.isArray(answer) ? answer : []) if (typeof item?.id === 'number' && !held.has(item.id)) held.set(item.id, item as RecordCandidate)
+      const tiered = await tierRecords(ids, [...held.values()])
       if (live) recordHits = tiered
     }
     const timer = setTimeout(() => {
@@ -210,7 +215,7 @@
                 {:else}
                   <span class="plate char" lang="zh">{item.char}</span>
                   <span class="body">
-                    <span class="line">{codePoints(item.char)}{#if onfill} <button type="button" class="text-button" onclick={() => fill(item.char, false)}>{t('field.idsFill')}</button> <button type="button" class="text-button" onclick={() => fill(item.char, true)}>{t('field.encodedHomograph')}</button>{/if}</span>
+                    <span class="line">{codePoints(item.char)}{#if onfill} <button type="button" class="text-button" onclick={() => fill(item.char, false, item.ids)}>{t('field.idsFill')}</button> <button type="button" class="text-button" onclick={() => fill(item.char, true, item.ids)}>{t('field.encodedHomograph')}</button>{/if}</span>
                     <span class="ids">{item.ids}</span>
                   </span>
                 {/if}
