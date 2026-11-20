@@ -1840,6 +1840,28 @@ describe('containers', () => {
     expect(await containerSuggestions(db, '羣')).toEqual([])
   })
 
+  test('a group named only by hidden records is not suggested', async () => {
+    const id = await createEntry(db, fields(), seen({ title: 'A book', vias: [message('貓村', '2026-11-14', 'one')] }), [], who)
+    expect(await containerSuggestions(db, 'zi')).toHaveLength(1)
+    raw.exec('UPDATE sources SET records = 0')
+    expect(await containerSuggestions(db, 'zi')).toEqual([])
+    expect(id).toBeGreaterThan(0)
+  })
+
+  test('two messages one person sent to a group on one day are two links', () => {
+    const form = new FormData()
+    for (const quote of ['first words', 'second words', 'second words']) for (const [name, value] of [['via_author', '貓村'], ['via_container', 'zi.tools討論羣'], ['via_report_date', '2026-11-14'], ['via_quote', quote]]) form.append(name, value)
+    form.append('place', 'A scan')
+    expect(readSightingFields(form).vias.map(via => via.quote)).toEqual(['first words', 'second words'])
+  })
+
+  test('both links are kept on the record and share one source', async () => {
+    const id = await createEntry(db, fields(), seen({ title: 'A book', vias: [message('貓村', '2026-11-14', 'first words'), message('貓村', '2026-11-14', 'second words')] }), [], who)
+    const { vias } = (await getEntry(db, id))!.sightings[0]
+    expect(vias.map(via => via.quote)).toEqual(['first words', 'second words'])
+    expect(vias[0].id).toBe(vias[1].id)
+  })
+
   test('a citation without a container keeps the key it had before sources had one', async () => {
     await createEntry(db, fields(), seen({ title: 'A book', author: 'Someone' }), [], who)
     const { hash } = raw.query("SELECT hash FROM sources WHERE title = 'A book'").get() as { hash: string }

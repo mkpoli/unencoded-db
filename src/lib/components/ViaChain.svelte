@@ -27,7 +27,7 @@
                 <a class="text-link" href={href(`/source/${via.id}`)}>{via.title || via.container || via.url || t('source.title')}</a>
                 {#if web(via.url)} <a class="text-link url" href={via.url} target="_blank" rel="noopener noreferrer" aria-label={t('field.url')}>↗</a>{/if}
               {:else if web(via.url)}
-                <a class="text-link" href={via.url} target="_blank" rel="noopener noreferrer">{via.title || via.url}</a>
+                <a class="text-link" href={via.url} target="_blank" rel="noopener noreferrer">{via.title || via.container || via.url}</a>
               {:else}
                 <span>{via.title || via.container || t('source.title')}</span>
               {/if}

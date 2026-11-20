@@ -122,7 +122,7 @@
   }
 
   function chooseVia(row: Row, source: Citation) {
-    const sameSource = row.url && row.url === source.url || (
+    const sameSource = row.url && row.url === source.url && row.container === (source.container ?? '') || (
       row.url === (source.url ?? '') && row.title === (source.title ?? '') && row.author === (source.author ?? '')
       && row.publisher === (source.publisher ?? '') && row.date === (source.report_date ?? '') && row.container === (source.container ?? '')
     )
@@ -190,7 +190,7 @@
   <div class="grid-2">
     <SourceTitleField id="{uid}-title" name="title" bind:value={title} onselect={chooseSource} />
     <div class="field"><label for="{uid}-author">{t('field.author')}</label><input id="{uid}-author" class="input" name="author" bind:value={author} maxlength="300" /></div>
-    <ContainerField id="{uid}-container" name="container" bind:value={container} onpublisher={name => publisher = name} />
+    <ContainerField id="{uid}-container" name="container" bind:value={container} bind:publisher />
     <PublisherField id="{uid}-publisher" name="publisher" bind:value={publisher} />
     <div class="field"><label for="{uid}-page">{t('field.page')}</label><input id="{uid}-page" class="input" name="page" bind:value={page} maxlength="80" /></div>
     <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" bind:value={reportDate} aria-describedby="{uid}-report_date-hint" /><p class="hint" id="{uid}-report_date-hint">{t('field.reportDateHint')}</p></div>
@@ -216,7 +216,7 @@
       <div class="grid-2">
         <SourceTitleField id="{uid}-via_title-{row.key}" name="via_title" bind:value={row.title} onselect={source => chooseVia(row, source)} />
         <div class="field"><label for="{uid}-via_author-{row.key}">{t('field.author')}</label><input id="{uid}-via_author-{row.key}" class="input" name="via_author" bind:value={row.author} maxlength="300" /></div>
-        <ContainerField id="{uid}-via_container-{row.key}" name="via_container" bind:value={row.container} onpublisher={name => row.publisher = name} />
+        <ContainerField id="{uid}-via_container-{row.key}" name="via_container" bind:value={row.container} bind:publisher={row.publisher} />
         <PublisherField id="{uid}-via_publisher-{row.key}" name="via_publisher" bind:value={row.publisher} />
         <div class="field"><label for="{uid}-via_report_date-{row.key}">{t('field.reportDate')}</label><input id="{uid}-via_report_date-{row.key}" class="input" name="via_report_date" bind:value={row.date} /></div>
       </div>

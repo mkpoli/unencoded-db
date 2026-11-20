@@ -63,11 +63,12 @@ const link = (form: FormData, name: string) => cleanLink(form.get(name))
 
 const citationKey = (citation: Citation) => JSON.stringify(CITATION_FIELDS.map(field => citation[field]))
 // The vias of a chain: rows with no field are dropped, a row that repeats an earlier one is dropped, and
-// at most VIAS_MAX are kept. The quote stays with the link that carries it.
+// at most VIAS_MAX are kept. The quote stays with the link that carries it, and two links to one source
+// that quote different words are two links: two messages one person sent to a group on one day.
 export const tidyVias = (vias: readonly Via[]): Via[] => {
   const seen = new Set<string>()
   return vias.filter(via => {
-    const key = citationKey(via)
+    const key = citationKey(via) + '\u0000' + (via.quote ?? '')
     if (CITATION_FIELDS.every(field => via[field] === null) || seen.has(key)) return false
     seen.add(key)
     return true
@@ -212,9 +213,9 @@ function wordTags(entry: TagInput, claims: readonly Claim[], sightings: Sighting
   for (const claim of claims) if (WORD_KINDS.includes(claim.kind)) { add(claim.value); add(claim.data?.difference); add(claim.data?.evidence) }
   // A Unicode code is found by the character it names, which is what another site links with.
   for (const claim of claims) if (claim.kind === 'encoding' && claim.data?.charset === 'unicode') add(encodedCharacter(claim.value))
-  for (const sighting of sightings) for (const field of ['place', 'title', 'author', 'publisher', 'note'] as const) add(sighting[field])
+  for (const sighting of sightings) for (const field of ['place', 'title', 'author', 'publisher', 'container', 'note'] as const) add(sighting[field])
   for (const sighting of sightings) for (const quote of quotations(sighting.quotes)) { add(quote.text); add(quote.locator) }
-  for (const sighting of sightings) for (const via of sighting.vias) for (const field of ['title', 'quote', 'author', 'publisher'] as const) add(via[field])
+  for (const sighting of sightings) for (const via of sighting.vias) for (const field of ['title', 'quote', 'author', 'publisher', 'container'] as const) add(via[field])
   return [...words].slice(0, WORDS_MAX).map(word => `w:${word}`)
 }
 

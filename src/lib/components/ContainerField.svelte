@@ -1,10 +1,16 @@
 <script lang="ts">
-  // What a source appeared in. Choosing a known one also names its publisher; the author and the date
-  // belong to each source, so they are never filled from here.
+  // What a source appeared in. Choosing a known one also names its publisher, and takes back a publisher
+  // the last choice gave; the author and the date belong to each source, so they are never filled from here.
   import Combobox, { type ComboOption } from './Combobox.svelte'
   import { t } from '$lib/t'
 
-  let { id, name, value = $bindable(''), onpublisher }: { id: string; name: string; value?: string; onpublisher?: (publisher: string) => void } = $props()
+  let { id, name, value = $bindable(''), publisher = $bindable('') }: { id: string; name: string; value?: string; publisher?: string } = $props()
+  let given = ''
+  function choose(option: ComboOption) {
+    if (option.hint) publisher = option.hint
+    else if (given && publisher === given) publisher = ''
+    given = option.hint ?? ''
+  }
   let options = $state<ComboOption[]>([])
   let query = $state<string | null>(null)
   $effect(() => {
@@ -26,5 +32,5 @@
 <div class="field">
   <label id="{id}-label" for={id}>{t('field.container')}</label>
   <Combobox {id} {name} bind:value {options} labelledby="{id}-label" maxlength={300} onopen={() => query = value} onquery={text => query = text} onchange={() => query = null}
-    onselect={option => { if (option.hint) onpublisher?.(option.hint) }} />
+    onselect={choose} />
 </div>
