@@ -1880,6 +1880,7 @@ describe('digitized copy filter', () => {
     expect(page.totals).toEqual({ sightings: 51, records: 1 })
     expect(page.sightings).toHaveLength(50)
     const next = (await copyPage(db, slug, page.next!))!
+    expect(next.cardVersion).toBe(page.cardVersion)
     expect(next.sightings).toHaveLength(1)
     expect(next.sightings[0].sighting).toBeGreaterThan(page.next!)
     expect(next.next).toBeNull()
