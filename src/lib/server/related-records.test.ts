@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { newClaim, type Claim } from '$lib/claims'
-import { addSighting, createEntry, getEntry, setHidden, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, createEntry, getEntry, mergeEntry, setHidden, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { createPerson } from './people'
 import { relatedClaimsStatements, relatedPicturesStatement, relatedRecords, relatedTilesStatement, RELATED_PICTURES } from './related-records'
 import { openTestDb } from './testdb'
@@ -35,6 +35,17 @@ test('a record shows the records its relations name and the ones that name it, w
   expect(fromBamboo.map(item => [item.tile.id, item.relationships, item.stated])).toEqual([[grass, [], ['variant']]])
   expect(fromBamboo[0].pictures).toEqual([{ sighting: 1, thumb_key: 'g-t.webp', place: 'grass', title: 'A rhyme book', date: '1550' }])
   expect((await related(encoded)).map(item => item.tile.id)).toEqual([grass])
+})
+
+test('a relation names a record by its code, from either side, and follows a merge', async () => {
+  const { db, who, related } = await fixture()
+  const a = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('a'), [picture('a')], who)
+  const b = await createEntry(db, record([newClaim('ids', '⿱𥫗雚'), relation('R+0001', 'variant'), relation('R+0002', 'similar'), relation('R+0009', 'similar')]), seen('b'), [picture('b')], who)
+  expect((await related(b)).map(item => [item.tile.id, item.relationships, item.stated])).toEqual([[a, ['variant'], []]])
+  expect((await related(a)).map(item => [item.tile.id, item.relationships, item.stated])).toEqual([[b, [], ['variant']]])
+  const kept = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('kept'), [], who)
+  await mergeEntry(db, a, kept, who, null)
+  expect((await related(b)).map(item => item.tile.id)).toEqual([kept])
 })
 
 test('hidden records and hidden sightings are left out, and a record without relations reads nothing', async () => {

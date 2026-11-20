@@ -1,10 +1,11 @@
 // The records a record is compared with, each with its first pictures, so that forms kept apart are seen
 // together. A record is related when a relation claim of this one names it, by a description it states or
-// by the encoded character it is, or when a relation claim of its own names this one the same way.
+// by the encoded character it is or by its own code, or when a relation claim of its own names this one the same way.
 //
 // Every read is bounded: the names are capped, each is one key of `claims_by_value`, and the records and
 // their sightings are then read by key.
 import { claimsOf, type Claim } from '$lib/claims'
+import { codedRecord, recordCode } from '$lib/code'
 import { cleanIds, codePointCharacters, codePoints, encodedCharacter } from '$lib/ids'
 import { isRelationKind, type RelationKind } from '$lib/related'
 import { TILE_COLUMNS, toTile, type Tile, type TileRow } from './entries'
@@ -19,8 +20,8 @@ export type RelatedPicture = { sighting: number; thumb_key: string; place: strin
 /** `relationships` are what this record states of the other, `stated` what the other states of this one. */
 export type RelatedRecord = { tile: Tile; relationships: RelationKind[]; stated: RelationKind[]; pictures: RelatedPicture[] }
 
-/** The spellings a relation's value is looked up by: as written, as a description, and as the characters its codes name. */
-const spellings = (value: string) => [...new Set([value, cleanIds(value), codePointCharacters(value)].filter(Boolean))]
+/** The spellings a relation's value is looked up by: as written, as a description, and as the characters its codes name; a record's code is that record alone. */
+const spellings = (value: string) => { const record = codedRecord(value); return record ? [recordCode(record)] : [...new Set([value, cleanIds(value), codePointCharacters(value)].filter(Boolean))] }
 const single = (text: string) => [...text].length === 1
 /** A character's code as it is usually stored, in either letter case. */
 const codes = (char: string) => [codePoints(char), codePoints(char).toLowerCase()]
@@ -42,9 +43,16 @@ export const relatedPicturesStatement = (db: D1Database, ids: readonly number[])
     LEFT JOIN sources c ON c.id = s.source_id
     WHERE e.id IN (${marks(ids.length)})`).bind(...ids)
 
-export const relatedClaimsStatements = (db: D1Database, theirs: readonly string[], own: readonly string[]) => {
+// The records named by their codes, each as the record it was merged into when it was.
+const byCode = (db: D1Database, ids: readonly number[]) =>
+  db.prepare(`SELECT COALESCE(e.merged_into, e.id) AS entry_id, e.id AS value, 'code' AS kind, NULL AS relationship FROM entries e WHERE e.id IN (${marks(ids.length)}) AND e.hidden_at IS NULL`).bind(...ids)
+
+export const relatedClaimsStatements = (db: D1Database, named: readonly string[], own: readonly string[]) => {
+  const records = named.flatMap(name => codedRecord(name) ?? []).slice(0, NAMES_MAX)
+  const theirs = named.filter(name => !codedRecord(name))
   const characters = theirs.filter(single).slice(0, NAMES_MAX / 2)
   return [
+    ...(records.length ? [byCode(db, records)] : []),
     ...(theirs.length ? [byValue(db, 'ids', theirs.slice(0, NAMES_MAX))] : []),
     ...(characters.length ? [byValue(db, 'encoding', characters.flatMap(codes))] : []),
     ...(own.length ? [byValue(db, 'relation', own.slice(0, NAMES_MAX))] : []),
@@ -59,9 +67,9 @@ export async function relatedRecords(db: D1Database, id: number, claims: readonl
     if (!isRelationKind(relationship)) continue
     for (const name of spellings(claim.value)) said.set(name, [...(said.get(name) ?? []), relationship])
   }
-  // What the others may call this record: its descriptions, and its encoded character with its code.
+  // What the others may call this record: its own code, its descriptions, and its encoded character with its code.
   const characters = claimsOf(claims, 'encoding').filter(claim => claim.data?.charset === 'unicode').map(claim => encodedCharacter(claim.value)).filter(Boolean)
-  const own = [...new Set([...claimsOf(claims, 'ids').map(claim => claim.value), ...characters, ...characters.flatMap(codes)])]
+  const own = [...new Set([recordCode(id), ...claimsOf(claims, 'ids').map(claim => claim.value), ...characters, ...characters.flatMap(codes)])]
 
   const statements = relatedClaimsStatements(db, [...said.keys()], own)
   if (!statements.length) return []
@@ -74,6 +82,7 @@ export async function relatedRecords(db: D1Database, id: number, claims: readonl
   }
   for (const { results } of await db.batch<{ entry_id: number; value: string; kind: string; relationship: unknown }>(statements)) {
     for (const row of results) {
+      if (row.kind === 'code') { note(row.entry_id, 'relationships', said.get(recordCode(Number(row.value))) ?? []); continue }
       if (row.kind === 'relation') { if (isRelationKind(row.relationship)) note(row.entry_id, 'stated', [row.relationship]) }
       // A code is every spelling of its character this record wrote.
       else note(row.entry_id, 'relationships', row.kind === 'encoding' ? [encodedCharacter(row.value), ...codes(encodedCharacter(row.value))].flatMap(name => said.get(name) ?? []) : said.get(row.value) ?? [])
