@@ -373,6 +373,7 @@
   "browse.searchSegmentEmpty": "この範囲に該当する記録はありません。",
   "browse.searched": "{of}件中{n}件を検索済み",
   "browse.page": "ページ",
+  "browse.perPage": "表示件数",
   "browse.shown": "{n}件中{from}–{to}件",
   "browse.previousPage": "前のページ",
   "browse.nextPage": "次のページ",

@@ -373,6 +373,7 @@
   "browse.searchSegmentEmpty": "No matches in this set.",
   "browse.searched": "Searched {n} of {of}",
   "browse.page": "Page",
+  "browse.perPage": "Per page",
   "browse.shown": "{from}–{to} of {n}",
   "browse.previousPage": "Previous page",
   "browse.nextPage": "Next page",

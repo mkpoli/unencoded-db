@@ -373,6 +373,7 @@
   "browse.searchSegmentEmpty": "Không có kết quả phù hợp trong phần này.",
   "browse.searched": "Đã tìm {n}/{of}",
   "browse.page": "Trang",
+  "browse.perPage": "Mỗi trang",
   "browse.shown": "{from}–{to} trong {n}",
   "browse.previousPage": "Trang trước",
   "browse.nextPage": "Trang sau",
