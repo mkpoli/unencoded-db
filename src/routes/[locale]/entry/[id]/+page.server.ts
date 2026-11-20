@@ -11,6 +11,7 @@ import { filedUnder, radicalPath } from '$lib/radicals'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
+import { relatedRecords } from '$lib/server/related-records'
 import { positiveId } from '../../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
@@ -35,7 +36,8 @@ export const load: PageServerLoad = async (event) => {
   const asked = positiveId(event.url.searchParams.get('about') ?? '')
   const about = asked && sightings.some(sighting => sighting.id === asked) ? asked : null
   const comments = await commentsOf(env(event).DB, id, Boolean(event.locals.person?.moderator))
-  return { dates, idsAdd, about, comments, entry: found.entry, claims: found.claims, sightings, filed, tags: await tagList(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
+  const related = await relatedRecords(env(event).DB, id, found.claims)
+  return { dates, idsAdd, related, about, comments, entry: found.entry, claims: found.claims, sightings, filed, tags: await tagList(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
 }
 
 async function commentVisibility(event: RequestEvent, hidden: boolean) {

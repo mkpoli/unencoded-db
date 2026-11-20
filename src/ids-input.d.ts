@@ -48,11 +48,11 @@ declare module 'ids-input/svelte' {
   export function grassForm(editor: IdsEditor): string | null | undefined
   export const IdsAlternatives: Component<{ editor: IdsEditor; variations?: boolean; onchoose?: () => void }>
   export const IdsCharacterInfo: Component<{ root: HTMLElement | null; adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; onpick?: (part: string, path?: number[]) => void; extra?: import('svelte').Snippet<[{ path: number[] | undefined; close: () => void }]> }>
-  /** A description drawn by the adapter's `preview`. With a `session` and `editable`, its parts are moved, scaled and turned on the drawing. */
+  /** A description drawn by the adapter's `preview`. A `document` draws its parts where it moves them; with a `session` and `editable`, its parts are moved, scaled and turned on the drawing. */
   export const IdsPreview: Component<{
     adapter: { preview?: import('han-compose').ComposerPreview }; tree: import('ids-input').IdsPart; chosen?: number[] | null
     messages?: Record<string, string>; locale?: string; small?: boolean; notes?: boolean; delay?: number
-    session?: import('ids-input/document').DocumentSession | null; version?: number; editable?: boolean; preserveStroke?: boolean
+    document?: import('ids-input/document').IdsDocument | null; session?: import('ids-input/document').DocumentSession | null; version?: number; editable?: boolean; preserveStroke?: boolean
     step?: 'idle' | 'loading' | 'composed' | 'final' | 'failed' | 'capped' | 'unavailable'
     scopes?: import('ids-input/document').ScopeTree | null; drawing?: import('han-compose').Drawing | null
     onchoose?: ((path: number[]) => void) | null; onedit?: (() => void) | null
