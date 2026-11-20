@@ -376,6 +376,7 @@
   "browse.searchSegmentEmpty": "这批记录中没有匹配项。",
   "browse.searched": "已搜索{n}／{of}条",
   "browse.page": "页码",
+  "browse.perPage": "每页",
   "browse.shown": "第{from}–{to}条，共{n}条",
   "browse.previousPage": "上一页",
   "browse.nextPage": "下一页",

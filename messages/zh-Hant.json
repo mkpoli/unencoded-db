@@ -376,6 +376,7 @@
   "browse.searchSegmentEmpty": "這批記錄中沒有相符項目。",
   "browse.searched": "已搜尋{n}／{of}筆",
   "browse.page": "頁次",
+  "browse.perPage": "每頁",
   "browse.shown": "第{from}–{to}筆，共{n}筆",
   "browse.previousPage": "上一頁",
   "browse.nextPage": "下一頁",

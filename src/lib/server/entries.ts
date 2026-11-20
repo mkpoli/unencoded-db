@@ -25,7 +25,7 @@ import { cleanSourceUrl } from '$lib/source-url'
 import { dateText } from '$lib/dates'
 import { datedYear, prepareDates, readDates, sightingDates, type DateBook } from './date-readings'
 import { hashHex } from './image'
-import { ORDER, PAGE, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
+import { ORDER, PAGE, PAGE_SIZES, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
 
 export type EntryFields = { script: string; script_other: string | null; description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
 // A source as its citation fields. A sighting's `vias` list them from the one nearest the cited work outward.
@@ -1043,10 +1043,11 @@ export async function list(db: D1Database, listing: Listing) {
   return { tiles, next, partial: read.searching && next !== null && tiles.length < limit, read: consumed }
 }
 
-// A list read whole from one range has numbered pages: page n starts after row (n − 1) × PAGE of that
-// range. A search and a shuffled list have none. Finding a page counts the rows before it in the index,
-// so the pages that can be asked for are bounded.
-export const PAGES_MAX = 400
+// A list read whole from one range has numbered pages: page n starts after row (n − 1) × the page size of
+// that range. A search and a shuffled list have none. Finding a page counts the rows before it in the index,
+// so the records that pages reach are bounded, and with them the pages of the smallest size.
+export const PAGED_MAX = 19200
+export const PAGES_MAX = PAGED_MAX / PAGE_SIZES[0]
 export const pageOf = (value: string | null | undefined) => value && /^[1-9]\d{0,3}$/.test(value) && Number(value) <= PAGES_MAX ? Number(value) : null
 function pagedRange(listing: Listing) {
   const plan = listPlan(listing), order = listing.order ?? ORDER
@@ -1058,24 +1059,25 @@ function pagedRange(listing: Listing) {
 export async function pageCursor(db: D1Database, listing: Listing, number: number): Promise<string | null | undefined> {
   if (number === 1) return null
   const range = pagedRange(listing)
-  if (!range || !Number.isInteger(number) || number < 1 || number > PAGES_MAX) return undefined
+  const size = listing.limit ?? PAGE
+  if (!range || !Number.isInteger(number) || number < 1 || (number - 1) * size >= PAGED_MAX) return undefined
   // The row before the page and the page's first row: a page without a first row is no page.
   const { results } = await db.prepare(`SELECT t.entry_id AS id, ${range.key} AS counted FROM entry_tags t WHERE t.tag = ? AND ${range.past} ORDER BY ${range.by} LIMIT 2 OFFSET ?`)
-    .bind(range.tag, ...cursorOf(range.order, null)!, (number - 1) * PAGE - 1).all<{ id: number; counted: number }>()
+    .bind(range.tag, ...cursorOf(range.order, null)!, (number - 1) * size - 1).all<{ id: number; counted: number }>()
   return results.length === 2 ? cursorAt(range.order, results[0]) : undefined
 }
-/** How many pages a listing has, at most PAGES_MAX; null for a listing without numbered pages. */
+/** How many pages a listing has, over at most PAGED_MAX records; null for a listing without numbered pages. */
 export async function pageCount(db: D1Database, listing: Listing): Promise<{ records: number; pages: number; floor: boolean } | null> {
   const range = pagedRange(listing)
   if (!range) return null
   // The orders by year list only the dated records, which no kept count names.
   const dated = range.order === 'earliest' || range.order === 'latest'
   const row = await (dated
-    ? db.prepare(`SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags t WHERE t.tag = ? AND t.year IS NOT NULL AND ${LISTED} LIMIT ${PAGES_MAX * PAGE})`)
+    ? db.prepare(`SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags t WHERE t.tag = ? AND t.year IS NOT NULL AND ${LISTED} LIMIT ${PAGED_MAX})`)
     : db.prepare('SELECT n FROM tag_counts WHERE tag = ?')).bind(range.tag).first<{ n: number }>()
-  const records = Math.min(PAGES_MAX * PAGE, row?.n ?? 0)
+  const records = Math.min(PAGED_MAX, row?.n ?? 0)
   // A list that reaches the last page offered may run on past it.
-  return { records, pages: Math.ceil(records / PAGE), floor: records === PAGES_MAX * PAGE }
+  return { records, pages: Math.ceil(records / (listing.limit ?? PAGE)), floor: records === PAGED_MAX }
 }
 
 // A search is counted once, from the shortest range it is tested against: a key, a word or the exact
