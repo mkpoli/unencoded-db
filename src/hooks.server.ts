@@ -1,10 +1,10 @@
 import { GLYPH_STYLE_COOKIE, glyphStyleOf } from '$lib/composer'
 import { redirect, type Handle, type RequestEvent } from '@sveltejs/kit'
 import { isLocale, LOCALE_COOKIE, negotiate } from '$lib/i18n'
-import { agentToken, personOf, sessionName } from '$lib/server/people'
+import { agentToken, loopback, personOf, sessionName } from '$lib/server/people'
 import { bearerOf, tokenPerson } from '$lib/server/agents'
 import { limitWriteBody, MAX_AGENT_BODY, MAX_PICTURES_BODY } from '$lib/server/body-limit'
-import { guardWrite, writeLimitFor } from '$lib/server/guard'
+import { guardWrite, moderationAction, writeLimitFor } from '$lib/server/guard'
 import { TILE_SIZE_COOKIE, tileSizeOf } from '$lib/tile-size'
 
 const UNPREFIXED = /^\/(media|api|auth|mcp|oauth\/(register|token|revoke)$|\.well-known\/|_app|robots\.txt|favicon|sitemap(?:-[\w-]+)?\.xml$)/
@@ -23,6 +23,13 @@ function foreignForm(event: Pick<RequestEvent, 'request' | 'url' | 'route'>) {
 
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname, search } = event.url
+  // A session cookie is only set over HTTPS, and every other origin than loopback is refused by `secureOrigin`,
+  // so a plain-http request would end in a 500. It goes to the same address over HTTPS first.
+  if (event.url.protocol === 'http:' && !loopback(event.url)) {
+    const secure = new URL(event.url)
+    secure.protocol = 'https:'
+    redirect(308, secure.href)
+  }
   if (foreignForm(event)) return new Response(`Cross-site ${event.request.method} form submissions are forbidden`, { status: 403 })
   const first = pathname.split('/')[1]
   if (!isLocale(first) && !UNPREFIXED.test(pathname) && event.route.id !== '/[short=shortRecord]') {
@@ -45,7 +52,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     if (!agent) {
       const limit = writeLimitFor(event)
       if (!limit) return new Response('Not Found', { status: 404 })
-      await guardWrite(event, limit, event.route.id === '/[locale]/moderate')
+      await guardWrite(event, limit, moderationAction(event))
     }
     const request = await limitWriteBody(event.request, agent || event.route.id?.startsWith('/oauth/') ? MAX_AGENT_BODY : event.route.id === '/[locale]/batch' || event.route.id === '/[locale]/new' ? MAX_PICTURES_BODY : undefined)
     if (!request) return new Response('Payload Too Large', { status: 413 })

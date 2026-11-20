@@ -1,7 +1,8 @@
 <script lang="ts">
   // A character as its form describes it: the drawing of the first description on a plate, and beside it
   // the descriptions and whatever the form states next to them. The plate marks the part the description's
-  // tools are working on. While the drawing's layout is adjusted the plate takes the width of the form.
+  // tools are working on, over the other glyph styles. While the drawing's layout is adjusted the plate
+  // takes the width of the form.
   import type { Snippet } from 'svelte'
   import type { Fill } from '$lib/encoded'
   import type { Layout } from '$lib/layout'
@@ -30,7 +31,7 @@
 
 <style>
   .character-container { container: character / inline-size }
-  .character { display: grid; grid-template-columns: 208px minmax(0, 1fr); align-items: start; gap: 24px; min-width: 0 }
+  .character { display: grid; grid-template-columns: 232px minmax(0, 1fr); align-items: start; gap: 24px; min-width: 0 }
   .described { display: flex; flex-direction: column; gap: 16px; min-width: 0 }
   /* The drawing stays in view while the facts beside it are filled in. */
   .plate { position: sticky; inset-block-start: 16px; min-width: 0 }
@@ -38,7 +39,7 @@
   .adjusting .plate { position: static; width: min(100%, 440px); justify-self: center }
   @container character (inline-size < 36rem) {
     .character { grid-template-columns: minmax(0, 1fr); gap: 16px }
-    .plate { position: static; inline-size: min(148px, 100%); justify-self: center }
+    .plate { position: static; inline-size: min(280px, 100%); justify-self: center }
     .adjusting .plate { width: min(100%, 440px) }
   }
 </style>

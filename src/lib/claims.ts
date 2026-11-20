@@ -3,6 +3,7 @@
 // the sightings that support it, and may hold only under other claims of the record: a reading under a
 // meaning, a related character under a meaning or a reading. The kinds live here, so a new one is an
 // entry in this file and its form fields, and the database stays as it is.
+import { codedRecord, recordCode } from './code'
 import { analyze, parseComposition, type Composition } from './composition'
 import { cleanCode, isRegistry, type Encoding } from './registries'
 import { cleanTag, isCollection, validTagName, type Tag } from './tags'
@@ -298,7 +299,7 @@ export function readClaims(form: FormData, tags: readonly Pick<Tag, 'name' | 'la
     const valid = found?.every(([character, relationship, difference, evidence]) => character && character.length <= CLAIM_LIMITS.relation.length && isRelationKind(relationship) && difference.length <= 5000 && evidence.length <= 5000)
     if (!valid) fail('relatedCharacters')
     next.set('relation', (valid ? found! : typed(form, names)).map(([character, relationship, difference, evidence, given]) =>
-      (valid ? made : draft)('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) }, given)))
+      (valid ? made : draft)('relation', valid && codedRecord(character) ? recordCode(codedRecord(character)!) : character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) }, given)))
   }
 
   if (form.has('ivd_status')) {

@@ -11,7 +11,7 @@ export const load: PageServerLoad = async (event) => {
   if (after === null) error(404)
   const found = await copyPage(env(event).DB, event.params.slug, after)
   if (!found) error(404)
-  const tiles = found.sightings.filter(row => !row.thumb).map(row => ({ ...row, id: row.entry_id }))
+  const tiles = found.sightings.map(({ entry_id, ids, layout }) => ({ id: entry_id, ids, layout }))
   const glyphs = await tileGlyphs(event.platform, event.url.origin, tiles, event.locals.glyphStyle)
   return { ...found, glyphs }
 }

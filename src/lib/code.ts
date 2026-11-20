@@ -24,3 +24,7 @@ export function parseRecordCode(text: string) {
   const id = parseInt(digits, 16)
   return id > 0 && hex(id) === digits.toUpperCase() ? id : null
 }
+
+/** The id a relation names when its value is a record's code written with R+, or null. A relation's value is
+ * otherwise a character or a description, which four 千字文 digits could also be. */
+export const codedRecord = (value: string) => /^\s*r\+/i.test(value.normalize('NFKC')) ? parseRecordCode(value) : null

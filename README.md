@@ -143,7 +143,7 @@ Each entry indexes at most 400 distinct terms, drawn from its fields, its claims
 ## Character drawings
 
 The gallery draws each record's IDS with [han-compose](https://github.com/mkpoli/han-compose), from the composer export at `https://ids-input-composer.mkpoli.workers.dev/`. The export's files and the drawn paths stay in the `MEDIA` bucket under `composer/` and `glyphs/`. A missing drawing is composed in the background, and `/api/glyph?ids=…&v=…` answers one the page did not have. Only descriptions on visible records are drawn. A record's page draws one set of styles for each form its descriptions name; descriptions that normalize or spell the same form share the drawing.
-In the character form, open **Adjust layout** and choose a glyph style before moving or resizing its parts. Each of the five styles saves its own placement.
+In the character form, the drawing shows one glyph style large and the other four small; click a small one to make it the large one. Open **Adjust layout** to move or resize the large style's parts. Each of the five styles saves its own placement.
 
 A description can carry a layout. The keys are component paths such as `1.0`, the first part of the second part, and the values are six-number SVG affine matrices. The character form adjusts the first description, and the gallery uses the saved layout for each drawing.
 

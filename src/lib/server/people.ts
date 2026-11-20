@@ -5,9 +5,10 @@ export type Person = { id: string; name: string; atlas: boolean; moderator: bool
 type Row = { id: string; name: string; atlas_sub: string | null; role: string; banned_at: string | null }
 
 export const SESSION_COOKIE = '__Host-ug.session'
+export const loopback = (url: URL) => ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
 export function secureOrigin(event: Pick<RequestEvent, 'url'>) {
   if (event.url.protocol === 'https:') return true
-  if (event.url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(event.url.hostname)) return false
+  if (event.url.protocol === 'http:' && loopback(event.url)) return false
   throw new Error('Insecure origin')
 }
 export const sessionName = (event: Pick<RequestEvent, 'url'>) => secureOrigin(event) ? SESSION_COOKIE : 'ug.session'
@@ -138,6 +139,9 @@ export async function joinAtlas(db: D1Database, current: Person | null, sub: str
     await db.batch([
       db.prepare('INSERT OR IGNORE INTO favourites(person, entry_id, at) SELECT ?, entry_id, at FROM favourites WHERE person = ?').bind(id, current.id),
       db.prepare('DELETE FROM favourites WHERE person = ?').bind(current.id),
+      // A notice both people hold of one thing stays the account's own.
+      db.prepare('UPDATE OR IGNORE notifications SET person = ? WHERE person = ?').bind(id, current.id),
+      db.prepare('DELETE FROM notifications WHERE person = ?').bind(current.id),
     ])
   }
   return id
