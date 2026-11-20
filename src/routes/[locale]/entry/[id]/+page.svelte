@@ -284,7 +284,6 @@
     <a class="text-link small" href="https://www.unicode.org/irg/pp/" target="_blank" rel="noopener">{t('ready.rules')} ↗</a>
   </section>
   {/if}
-  {#if data.related.length}<section class="stack" id="related"><h2>{t('entry.related')}</h2><RelatedRecords records={data.related} /></section>{/if}
   <section class="stack"><h2>{t('entry.sightings')}</h2>
     {#each data.sightings as sighting (sighting.id)}
       {@const types = parseSightingTypes(sighting.types)}
@@ -325,6 +324,7 @@
     {/each}
     <div class="row"><a class="button primary" href={href(`/entry/${entry.id}/sighting/new`)}>{t('entry.addSighting')}</a></div>
   </section>
+  {#if data.related.length}<section class="stack" id="related"><h2>{t('entry.related')}</h2><RelatedRecords records={data.related} /></section>{/if}
 </div>
 <style>
   .heading { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px 16px }
