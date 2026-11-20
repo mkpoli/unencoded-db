@@ -67,7 +67,7 @@
     if (event.button !== 0 || dragged !== null) return
     event.preventDefault()
     const before = [...vias]
-    let y = event.clientY, frame = 0
+    let y = event.clientY, frame = 0, moved = false
     dragged = key
     const place = () => {
       const rows = [...viaList!.children] as HTMLElement[]
@@ -84,16 +84,26 @@
       // Only while the list runs past that edge.
       const edge = 72, box = viaList!.getBoundingClientRect()
       const past = y < edge && box.top < edge ? y - edge : y > innerHeight - edge && box.bottom > innerHeight - edge ? y - (innerHeight - edge) : 0
-      if (past) { scrollBy({ top: past / 4, behavior: 'instant' }); place() }
+      if (past && moved) { scrollBy({ top: past / 4, behavior: 'instant' }); place() }
       frame = requestAnimationFrame(scroll)
     }
-    const move = (now: PointerEvent) => { if (now.pointerId === event.pointerId) { y = now.clientY; place() } }
-    const end = (now: PointerEvent | KeyboardEvent) => {
-      if (now instanceof KeyboardEvent ? now.key !== 'Escape' : now.pointerId !== event.pointerId) return
-      if (now.type !== 'pointerup') vias = before
+    const stop = () => {
       cancelAnimationFrame(frame)
       for (const [name, listener] of listeners) removeEventListener(name, listener as EventListener)
       dragged = null
+    }
+    const move = (now: PointerEvent) => {
+      if (now.pointerId !== event.pointerId) return
+      // The button was let go where the page could not see it.
+      if (now.pointerType === 'mouse' && !now.buttons) return stop()
+      if (Math.abs(now.clientY - event.clientY) > 4) moved = true
+      y = now.clientY
+      place()
+    }
+    const end = (now: PointerEvent | KeyboardEvent) => {
+      if (now instanceof KeyboardEvent ? now.key !== 'Escape' : now.pointerId !== event.pointerId) return
+      if (now.type !== 'pointerup') vias = before
+      stop()
     }
     const listeners = [['pointermove', move], ['pointerup', end], ['pointercancel', end], ['keydown', end]] as const
     for (const [name, listener] of listeners) addEventListener(name, listener as EventListener)
@@ -270,7 +280,7 @@
   {#each vias as row, index (row.key)}
     <fieldset class="via" class:dragged={dragged === row.key} animate:flip={{ duration: still ? 0 : 160 }}>
       {#if vias.length > 1}
-        <button type="button" id="{uid}-via-grip-{row.key}" class="grip" aria-label={t('field.viaDrag')} title={t('field.viaDrag')} onpointerdown={event => dragVia(event, row.key)} onkeydown={event => gripKey(event, row.key)}><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg><span class="order">{index + 1}</span></button>
+        <button type="button" id="{uid}-via-grip-{row.key}" class="grip" aria-label="{t('field.viaDrag')} {index + 1}" title={t('field.viaDrag')} onpointerdown={event => dragVia(event, row.key)} onkeydown={event => gripKey(event, row.key)}><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg><span class="order">{index + 1}</span></button>
       {/if}
       <div class="field"><label for="{uid}-via_url-{row.key}">{t('field.url')}</label><input id="{uid}-via_url-{row.key}" class="input" type="url" name="via_url" bind:value={row.url} use:cleanLinkInput placeholder="https://" maxlength="1000" autocorrect="off" autocapitalize="none" spellcheck="false" /></div>
       <div class="grid-2">
