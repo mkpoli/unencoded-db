@@ -39,7 +39,7 @@
   .adjusting .plate { position: static; width: min(100%, 440px); justify-self: center }
   @container character (inline-size < 36rem) {
     .character { grid-template-columns: minmax(0, 1fr); gap: 16px }
-    .plate { position: static; inline-size: min(232px, 100%); justify-self: center }
+    .plate { position: static; inline-size: min(280px, 100%); justify-self: center }
     .adjusting .plate { width: min(100%, 440px) }
   }
 </style>

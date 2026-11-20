@@ -324,7 +324,7 @@
 </div>
 
 <style>
-  .drawing { display: flex; flex-direction: column; gap: 8px; min-width: 0 }
+  .drawing { container: drawing / inline-size; display: flex; flex-direction: column; gap: 8px; min-width: 0 }
   .plate, .stage :global(.ids-preview-large) { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink) }
   .plate { display: grid; place-items: center; width: 100%; aspect-ratio: 1; padding: 7%; overflow: hidden }
   .plate.empty { background: var(--surface-sunken) }
@@ -350,6 +350,12 @@
   .others { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px }
   .others :global(.face) { --face-size: 100% }
   .others :global(.name) { font-size: 11px }
+  /* Where the drawing is wider than its column, as on a phone, the four sit two by two beside the large
+     face, so the description's field stays near. The face being adjusted keeps the whole width. */
+  @container drawing (inline-size > 260px) {
+    .drawing:not(.adjusting) .faces { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 8px }
+    .drawing:not(.adjusting) .others { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 4px }
+  }
   .stage, .mini { width: 100% }
   .mini { position: relative; aspect-ratio: 1; container-type: inline-size }
   .composed.hidden { visibility: hidden }
