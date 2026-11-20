@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit'
-import { editEntry, hasLink, ENTRY_HISTORY_PAGE, getEntry, history, redactRevision, restoreSighting } from '$lib/server/entries'
+import { editEntry, hasLink, ENTRY_HISTORY_PAGE, getEntry, getEntryRow, history, mergedInto, redactRevision, restoreSighting, unmergeEntry } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { tagList } from '$lib/server/tags'
@@ -18,7 +18,7 @@ export const load: PageServerLoad = async (event) => {
   const visibleSightings = new Map(found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => [sighting.id, sighting.rev]))
   const before = event.url?.searchParams.get('before')
   if (before !== null && before !== undefined && !positiveId(before)) error(404)
-  const [page, tags] = await Promise.all([history(db, id, before ? positiveId(before) : null), tagList(db)])
+  const [page, tags, duplicates] = await Promise.all([history(db, id, before ? positiveId(before) : null), tagList(db), mergedInto(db, id)])
   const next = page.length > ENTRY_HISTORY_PAGE ? page[ENTRY_HISTORY_PAGE - 1].id : null
   const rows = page.slice(0, ENTRY_HISTORY_PAGE)
     .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id))
@@ -27,7 +27,7 @@ export const load: PageServerLoad = async (event) => {
       ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
       sightingRev: sighting_id ? visibleSightings.get(sighting_id) : null,
     }))
-  return { id, rev: found.entry.rev, updated_at: found.entry.updated_at, rows, dates: await revisionDates(db, rows), next, tags: tags.map(({ name, label, type }) => ({ name, label, type })) }
+  return { id, rev: found.entry.rev, updated_at: found.entry.updated_at, rows, duplicates, dates: await revisionDates(db, rows), next, tags: tags.map(({ name, label, type }) => ({ name, label, type })) }
 }
 
 export const actions: Actions = {
@@ -60,7 +60,7 @@ export const actions: Actions = {
       redirect(303, `/${event.params.locale}/entry/${id}/history`)
     }
     if (!baseRev || baseRev !== found.entry.rev) return fail(409, { error: 'conflict' })
-    const old = await db.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id IS NULL AND redacted_at IS NULL AND kind IN ('create','edit','revert')")
+    const old = await db.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id IS NULL AND redacted_at IS NULL AND kind IN ('create','edit','revert','merge','unmerge')")
       .bind(revisionId, id).first<{ snapshot: string; rev: number }>()
     const fields = old && entrySnapshot(old.snapshot)
     if (!old || !fields) error(404)
@@ -68,6 +68,20 @@ export const actions: Actions = {
     const result = await editEntry(db, id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, `r${old.rev}`, 'revert', revisionId)
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })
     notifyIndexNow(event, { entries: [id] })
+    redirect(303, `/${event.params.locale}/entry/${id}/history`)
+  },
+  // A duplicate that joined this record parts from it again.
+  unmerge: async event => {
+    await guardWrite(event, 'EDITS')
+    const id = positiveId(event.params.id)
+    const form = await event.request.formData()
+    const from = positiveId(String(form.get('from') ?? ''))
+    if (!id || !from) error(404)
+    const db = env(event).DB
+    if ((await getEntryRow(db, from))?.merged_into !== id) return fail(409, { error: 'conflict' })
+    const person = await writer(event, db)
+    if (!await unmergeEntry(db, from, { actor: person.id, ip: await ipHash(event) })) return fail(409, { error: 'conflict' })
+    notifyIndexNow(event, { entries: [id, from] })
     redirect(303, `/${event.params.locale}/entry/${id}/history`)
   },
   // A moderator takes a past version's content out of the history.

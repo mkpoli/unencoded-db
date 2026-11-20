@@ -35,8 +35,9 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
     case '/api/favourites':
     case '/api/report':
     case '/[locale]/entry/[id]/report':
+    case '/[locale]/entry/[id]/duplicate':
     case '/[locale]/entry/[id]/sighting/[sighting]/edit': return action === 'default' ? 'EDITS' : null
-    case '/[locale]/entry/[id]/history': return action === 'restore' || action === 'redact' ? 'EDITS' : null
+    case '/[locale]/entry/[id]/history': return ['restore', 'redact', 'unmerge'].includes(action) ? 'EDITS' : null
     case '/[locale]/moderate': return ['restoreEntry', 'restoreSighting', 'hide', 'unhide', 'resolve'].includes(action) ? 'EDITS' : null
     default: return null
   }

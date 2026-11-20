@@ -11,10 +11,11 @@
     summary: string | null; at: string; by_id: string; by_name: string; ids?: string | null
     fields: EntryFields | null; sightingFields: SightingFields | null; sightingRev?: number | null
     redacted?: boolean; redacted_at?: string | null
+    merge?: { from: number } | { into: number } | null
   }
 
-  let { rows, tags, dates, currentRev = null, showEntry = false, showActor = true, restore = false, redact = false, empty, next = null }: {
-    dates: Map<string, DateReading | null>; rows: Row[]; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; empty: string; next?: number | null
+  let { rows, tags, dates, currentRev = null, duplicates = [], showEntry = false, showActor = true, restore = false, redact = false, empty, next = null }: {
+    dates: Map<string, DateReading | null>; rows: Row[]; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; duplicates?: number[]; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; empty: string; next?: number | null
   } = $props()
   const labels = $derived(tagLabels(tags))
   const tagTypes = $derived(new Map(tags.map(tag => [tag.name, tag.type])))
@@ -23,6 +24,12 @@
   const past = (row: Row) => row.fields ? row.rev !== currentRev : row.sightingRev != null && row.rev !== row.sightingRev
 
   const stop = (event: MouseEvent) => event.stopPropagation()
+
+  // The newest merge of each duplicate that is still joined to the record is the one that can be undone.
+  const undoable = $derived(new Map(duplicates.flatMap(id => {
+    const row = rows.find(row => row.kind === 'merge' && row.merge && 'from' in row.merge && row.merge.from === id)
+    return row ? [[row.id, id] as const] : []
+  })))
 </script>
 
 {#snippet line(row: Row)}
@@ -37,11 +44,19 @@
       <span class="revision-kind">{t(`history.kind.${row.kind}`)}</span>
       {#if showEntry}<a class="revision-entry text-link" href={href(`/entry/${row.entry_id}`)} onclick={stop}>{row.ids || t('entry.record', { id: recordCode(row.entry_id) })}</a>{/if}
       {#if row.sighting_id}<a class="revision-number" href={href(`/entry/${row.entry_id}#sighting-${row.sighting_id}`)} onclick={stop}>#{row.sighting_id}</a>{/if}
+      {#if row.merge}{@const other = 'from' in row.merge ? row.merge.from : row.merge.into}<a class="revision-number" href={href(`/entry/${other}`)} onclick={stop}>{t('from' in row.merge ? 'history.mergedFrom' : 'history.mergedTo', { id: recordCode(other) })}</a>{/if}
     </span>
     {#if row.redacted || row.redacted_at}<span class="revision-comment">{t('history.redacted')}</span>{:else if row.summary}<span class="revision-comment">{row.summary}</span>{/if}
   </span>
   <span class="revision-rev">{row.rev ? `r${row.rev}` : ''}</span>
   <span class="revision-toggle" aria-hidden="true"></span>
+{/snippet}
+
+{#snippet undo(from: number)}
+  <form class="revision-action" method="POST" action="?/unmerge">
+    <input type="hidden" name="from" value={from} />
+    <button class="button" type="submit">{t('history.unmerge')}</button>
+  </form>
 {/snippet}
 
 {#if !rows.length && !next}<p class="muted">{empty}</p>{/if}
@@ -75,6 +90,7 @@
                 </form>
               {/if}
             {/if}
+            {#if undoable.has(row.id)}{@render undo(undoable.get(row.id)!)}{/if}
             {#if redact && past(row)}
               <form class="revision-action redact" method="POST" action="?/redact">
                 <input type="hidden" name="revision" value={row.id} />
