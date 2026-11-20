@@ -1,8 +1,9 @@
 import { LOCALES } from '$lib/i18n'
 import { SITE_ORIGIN } from '$lib/seo'
 
-// An entry sitemap lists every locale, so cap its size well below 50,000 URLs.
-export const ENTRIES_PER_SITEMAP = 5000
+// An entry sitemap lists every locale and each listing names every alternate, so cap its size well below
+// 50,000 URLs and 50 MB.
+export const ENTRIES_PER_SITEMAP = 2500
 const NAMESPACE = 'http://www.sitemaps.org/schemas/sitemap/0.9'
 const XHTML_NAMESPACE = 'http://www.w3.org/1999/xhtml'
 const IMAGE_NAMESPACE = 'http://www.google.com/schemas/sitemap-image/1.1'
