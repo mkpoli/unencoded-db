@@ -137,7 +137,11 @@
   const servedFor = (face: GlyphStyle) => { const url = openedAddress(face); return url ? served.get(url) : null }
   // A small face loads a composer only for a description the server has not drawn for it.
   const composes = (face: GlyphStyle) => Boolean(settled) && servedFor(face) === null
-  let step = $state<'idle' | 'loading' | 'composed' | 'final' | 'failed' | 'capped' | 'unavailable'>('idle')
+  type Step = 'idle' | 'loading' | 'composed' | 'final' | 'failed' | 'capped' | 'unavailable'
+  let step = $state<Step>('idle')
+  // A small face its style cannot draw shows the description in text, as the record page does.
+  const faceSteps = $state(Object.fromEntries(GLYPH_STYLES.map(face => [face, 'idle'])) as Record<GlyphStyle, Step>)
+  const undrawable = (face: GlyphStyle) => ['failed', 'capped', 'unavailable'].includes(faceSteps[face])
   const pickedMoved = $derived(Boolean(picked && activeLayout?.[placeOf(picked)]))
 
   // A plate in a folded form asks for nothing until the form is opened.
@@ -278,8 +282,11 @@
               {#if typeof ready === 'string'}
                 <IdsGlyph ids={settled} path={ready} />
               {:else if kit && drawer && settledTree !== undefined && composes(face)}
-                <kit.IdsPreview adapter={{ preview: drawer.draw }} tree={settledTree} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
-                  document={drawer.separate ? faceDocument(face) : null} preserveStroke={face === 'sans'} />
+                <div class="composed" class:hidden={undrawable(face)}>
+                  <kit.IdsPreview adapter={{ preview: drawer.draw }} tree={settledTree} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
+                    document={drawer.separate ? faceDocument(face) : null} preserveStroke={face === 'sans'} bind:step={faceSteps[face]} />
+                </div>
+                {#if undrawable(face)}<span class="said">{settled}</span>{/if}
               {/if}
             </div>
           </GlyphFace>
@@ -330,7 +337,9 @@
   .others :global(.face) { --face-size: 100% }
   .others :global(.name) { font-size: 11px }
   .stage, .mini { width: 100% }
-  .mini { aspect-ratio: 1 }
+  .mini { position: relative; aspect-ratio: 1; container-type: inline-size }
+  .composed.hidden { visibility: hidden }
+  .said { position: absolute; inset: 0; display: grid; place-items: center; padding: 4px; font-size: 24cqi; line-height: 1.3; text-align: center; overflow-wrap: anywhere }
   .mini {
     --ids-preview-size: 100%; --ids-ink: var(--ink); --ids-muted: var(--muted); --ids-line: transparent; --ids-surface: transparent;
     --ids-accent: var(--accent); --ids-fault: var(--wrong);
