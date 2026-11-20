@@ -11,20 +11,26 @@
   // A form is sent once: a second press while the first is on its way would save the same thing twice.
   let button = $state<HTMLButtonElement>()
   let sent = $state(false)
+  const RESEND_AFTER = 10_000
   $effect(() => {
     const form = button?.form
     if (!form) return
     // Added after the form's own handlers, so one of them may already have held the form back.
+    let wait: ReturnType<typeof setTimeout> | undefined
+    // A page brought back by the browser's back button is a form to fill in again, and so is one that was
+    // changed, or whose sending the reader stopped: the page stays, and nothing else says it never arrived.
+    const again = () => { clearTimeout(wait); sent = false }
     const once = (event: SubmitEvent) => {
       if (event.defaultPrevented) return
-      if (sent) event.preventDefault()
-      else sent = true
+      if (sent) return event.preventDefault()
+      sent = true
+      wait = setTimeout(again, RESEND_AFTER)
     }
-    // A page brought back by the browser's back button is a form to fill in again.
-    const again = () => { sent = false }
     form.addEventListener('submit', once)
+    form.addEventListener('input', again)
+    form.addEventListener('change', again)
     window.addEventListener('pageshow', again)
-    return () => { form.removeEventListener('submit', once); window.removeEventListener('pageshow', again) }
+    return () => { clearTimeout(wait); form.removeEventListener('submit', once); form.removeEventListener('input', again); form.removeEventListener('change', again); window.removeEventListener('pageshow', again) }
   })
 </script>
 
