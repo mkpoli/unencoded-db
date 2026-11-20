@@ -56,7 +56,8 @@ export const load: PageServerLoad = async (event) => {
   const also = exact ? alsoSearchIds(query, searchParams.getAll('also')) : []
   const unplaced = { script, filter, facet, radical, decade, within, without, query, also, order, seed }
   // The pages are counted where the list is opened, not on the reads that add to it.
-  const [start, pages] = searchError || placed !== null ? [null, null] : await Promise.all([pageCursor(db, unplaced, number), pageCount(db, unplaced)])
+  const [start, counted] = searchError || placed !== null ? [null, null] : await Promise.all([pageCursor(db, unplaced, number), pageCount(db, unplaced)])
+  const pages = counted?.pages ?? null
   if (start === undefined) {
     // A page past the last opens the last.
     if (!pages || number <= pages) error(404)
@@ -70,5 +71,5 @@ export const load: PageServerLoad = async (event) => {
   const [page, totals, total] = await Promise.all([searchError ? null : list(db, listing), counts(db), searchError || after !== null ? null : searchTotal(db, listing)])
   if (!page && !searchError) error(404)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, page?.tiles ?? [], event.locals.glyphStyle)
-  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, tags, total, pages, number, glyphs, script, filter, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
+  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, tags, total, pages, records: counted?.records ?? null, recordsFloor: counted?.floor ?? false, number, glyphs, script, filter, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
 }

@@ -1859,7 +1859,7 @@ test('a numbered page starts where the pages before it end', async () => {
       const after = await pageCursor(db, { order }, number)
       expect((await list(db, { order, after }))!.tiles.map(tile => tile.id)).toEqual(whole.slice((number - 1) * PAGE, number * PAGE))
     }
-    expect(await pageCount(db, { order })).toBe(Math.ceil(whole.length / PAGE))
+    expect(await pageCount(db, { order })).toEqual({ records: whole.length, pages: Math.ceil(whole.length / PAGE), floor: false })
     expect(await pageCursor(db, { order }, Math.ceil(whole.length / PAGE) + 1)).toBeUndefined()
   }
   expect(await pageCursor(db, {}, 1)).toBeNull()
@@ -1873,7 +1873,7 @@ test('a numbered page starts where the pages before it end', async () => {
   expect(await pageCursor(db, { query: 'x' }, 2)).toBeUndefined()
   expect(await pageCursor(db, { order: 'random', seed: 1 }, 2)).toBeUndefined()
   expect(await pageCount(db, { query: 'x' })).toBeNull()
-  expect(await pageCount(db, { order: 'earliest' })).toBe(0)
+  expect(await pageCount(db, { order: 'earliest' })).toEqual({ records: 0, pages: 0, floor: false })
   expect(pageOf('0')).toBeNull()
   expect(pageOf('2')).toBe(2)
   expect(pageOf(String(PAGES_MAX + 1))).toBeNull()
