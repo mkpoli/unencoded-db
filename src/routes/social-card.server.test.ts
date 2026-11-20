@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { getSocialPage, socialPageFor } from '$lib/social-pages'
 import { encode } from 'fast-png'
 import { openTestDb } from '$lib/server/testdb'
 import { getSourceArtwork, getVisibleSource } from '$lib/server/entries'
@@ -6,6 +7,22 @@ import { lines, panelView, recordArtwork } from '$lib/server/social-card'
 import { GET } from './[locale]/[kind]/[id]/card.png/+server'
 import { copyCardSpecimen, copyPage } from '$lib/server/digitized-copies'
 import { GET as copyCard } from './[locale]/sources/copy/[slug]/card.png/+server'
+
+test('successful routes use their registered card or a generic site preview', () => {
+  expect(socialPageFor('/[locale]', null)).toBe('home')
+  const notifications = socialPageFor('/[locale]/notifications', null)
+  expect(getSocialPage(notifications)).toEqual({ path: '/notifications', title: 'notifications.title' })
+  for (const route of [null, '/[locale]/future/[id]']) {
+    const name = socialPageFor(route, null)
+    expect(name).toBe('fallback')
+    expect(getSocialPage(name)?.path).toBeNull()
+  }
+  // A failed form action renders the same page with a 4xx status and no page.error.
+  expect(socialPageFor('/[locale]/new', null)).toBe('new')
+  for (const status of [400, 403, 404, 500]) {
+    expect(socialPageFor('/[locale]/notifications', status)).toBe(status === 404 ? 'missing' : 'unavailable')
+  }
+})
 
 test('card requests reject hidden or merged records and sources without visible evidence', async () => {
   const { db, raw } = openTestDb()
