@@ -10,8 +10,8 @@
 <div class="page narrow stack">
   <a class="text-link back" href={href(`/entry/${data.id}`)}>← {t('history.back')}</a>
   <h1>{t('history.title', { id: recordCode(data.id) })}</h1>
-  {#if form?.error}<p class="notice bad" role="alert">{t(`error.${form.error}`)}</p>{/if}
-  <HistoryList dates={data.dates} rows={data.rows} tags={data.tags} currentRev={data.rev} restore redact={Boolean(data.person?.moderator)} empty={t('history.empty')} next={data.next} />
+  {#if form && 'error' in form}<p class="notice bad" role="alert">{t(`error.${form.error}`)}</p>{/if}
+  <HistoryList dates={data.dates} rows={data.rows} tags={data.tags} currentRev={data.rev} restore thanked={data.thanked} viewer={data.person?.id ?? null} thank redact={Boolean(data.person?.moderator)} empty={t('history.empty')} next={data.next} />
 </div>
 
 <style>

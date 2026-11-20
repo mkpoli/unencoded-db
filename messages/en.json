@@ -619,5 +619,8 @@
   "error.tagCycle": "That would create a circular implication.",
   "error.tagDepth": "That implication chain is too deep or wide.",
   "error.tagLimit": "A tag cannot carry that many direct tags.",
-  "error.tagTooLarge": "Too many records to update at once."
+  "error.tagTooLarge": "Too many records to update at once.",
+  "history.thank": "Thank",
+  "history.thanked": "Thanked",
+  "notifications.thank": "Thanked your change"
 }

@@ -142,6 +142,8 @@ export async function joinAtlas(db: D1Database, current: Person | null, sub: str
       // A notice both people hold of one thing stays the account's own.
       db.prepare('UPDATE OR IGNORE notifications SET person = ? WHERE person = ?').bind(id, current.id),
       db.prepare('DELETE FROM notifications WHERE person = ?').bind(current.id),
+      // Thanks said before signing in are the account's, so a change is not thanked for twice.
+      db.prepare('UPDATE OR IGNORE thanks SET person = ? WHERE person = ?').bind(id, current.id),
     ])
   }
   return id

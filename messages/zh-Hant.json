@@ -619,5 +619,8 @@
   "error.tagCycle": "這會形成循環關聯，無法新增。",
   "error.tagDepth": "自動攜帶的層級過深或範圍過大。",
   "error.tagLimit": "單一標籤直接攜帶的標籤數量已達上限。",
-  "error.tagTooLarge": "記錄太多，無法一次更新。"
+  "error.tagTooLarge": "記錄太多，無法一次更新。",
+  "history.thank": "感謝",
+  "history.thanked": "已感謝",
+  "notifications.thank": "感謝了你的更改"
 }
