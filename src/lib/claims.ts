@@ -122,52 +122,79 @@ export function parseClaims(raw: unknown): Claim[] | null {
 
 // Two claims state the same thing when their kind, value and data are equal, whatever they rest on.
 const stated = (claim: Claim) => JSON.stringify([claim.kind, claim.value, claim.data && Object.keys(claim.data).sort().map(name => [name, claim.data![name]])])
+// A kind is joined after the kinds it may hold under, so a claim knows whether its scopes came along.
+const depth = (kind: ClaimKind): number => SCOPES[kind].length ? 1 + Math.max(...SCOPES[kind].map(depth)) : 0
+const link = (claim: string, scope: string) => `${claim}>${scope}`
+
+/** What a merge gave the record that stays: the keys of the claims it did not hold before, and the scopes
+ * its own claims gained, each as `claim>scope`. */
+export type Joined = { added: string[]; scoped: string[] }
 
 /** The claims of a record that takes in a duplicate's. A claim both records state is kept once and rests on
  * the sightings of both; any other claim of the duplicate is added after the record's own, as far as the
- * limits of a record allow. `added` are the keys of the claims the record did not hold before. */
-export function joinClaims(kept: readonly Claim[], joining: readonly Claim[]): { claims: Claim[]; added: string[] } {
+ * limits of a record allow. A claim that holds under others comes only with at least one of them. */
+export function joinClaims(kept: readonly Claim[], joining: readonly Claim[]): Joined & { claims: Claim[] } {
   const claims = kept.map(claim => ({ ...claim, sightings: [...claim.sightings], under: [...claim.under] }))
   const held = new Map(claims.map(claim => [stated(claim), claim]))
-  const keys = new Set(claims.map(claim => claim.key))
+  const byKey = new Map(claims.map(claim => [claim.key, claim]))
   const count = new Map<ClaimKind, number>()
   for (const claim of claims) count.set(claim.kind, (count.get(claim.kind) ?? 0) + 1)
   let length = JSON.stringify(claims).length
+  // A list grows by what it writes, and stops where the record's claims would run too long.
+  const grown = <T>(own: T[], more: T[], max: number) => {
+    const next = [...new Set([...own, ...more])].slice(0, max)
+    const size = JSON.stringify(next).length - JSON.stringify(own).length
+    if (length + size > CLAIMS_LENGTH_MAX) return own
+    length += size
+    return next
+  }
   // The key each claim of the duplicate goes by in the record that stays.
   const renamed = new Map<string, string>()
-  const added: Claim[] = []
-  for (const claim of joining) {
-    const same = held.get(stated(claim))
-    if (same) { renamed.set(claim.key, same.key); continue }
-    const copy: Claim = { ...claim, key: keys.has(claim.key) ? newClaimKey() : claim.key, sightings: [], under: [] }
-    const size = JSON.stringify(claim).length + 1
-    if (claims.length + added.length >= CLAIMS_MAX || (count.get(claim.kind) ?? 0) >= CLAIM_LIMITS[claim.kind].max || length + size > CLAIMS_LENGTH_MAX) continue
-    length += size
-    count.set(claim.kind, (count.get(claim.kind) ?? 0) + 1)
-    keys.add(copy.key)
-    held.set(stated(copy), copy)
-    renamed.set(claim.key, copy.key)
-    added.push(copy)
+  const added: { claim: Claim; place: number }[] = []
+  const scoped: string[] = []
+  const ordered = joining.map((claim, place) => ({ claim, place })).sort((a, b) => depth(a.claim.kind) - depth(b.claim.kind) || a.place - b.place)
+  for (const { claim, place } of ordered) {
+    const under = claim.under.flatMap(scope => renamed.get(scope) ?? [])
+    let into = held.get(stated(claim))
+    if (!into) {
+      if (claim.under.length && !under.length) continue
+      const copy: Claim = { ...claim, key: byKey.has(claim.key) ? newClaimKey() : claim.key, sightings: [], under: [] }
+      const size = JSON.stringify(copy).length + 1
+      if (claims.length + added.length >= CLAIMS_MAX || (count.get(claim.kind) ?? 0) >= CLAIM_LIMITS[claim.kind].max || length + size > CLAIMS_LENGTH_MAX) continue
+      length += size
+      count.set(claim.kind, (count.get(claim.kind) ?? 0) + 1)
+      held.set(stated(copy), copy)
+      byKey.set(copy.key, copy)
+      added.push({ claim: copy, place })
+      into = copy
+    }
+    const target = into
+    renamed.set(claim.key, target.key)
+    target.sightings = grown(target.sightings, claim.sightings, CLAIM_SIGHTINGS_MAX)
+    const before = new Set(target.under)
+    target.under = grown(target.under, under.filter(scope => scope !== target.key && SCOPES[target.kind].includes(byKey.get(scope)!.kind)), CLAIM_SCOPES_MAX)
+    if (claims.includes(target)) scoped.push(...target.under.filter(scope => !before.has(scope)).map(scope => link(target.key, scope)))
   }
-  const kinds = new Map([...claims, ...added].map(claim => [claim.key, claim.kind]))
-  const union = <T>(own: T[], more: T[], max: number) => [...new Set([...own, ...more])].slice(0, max)
-  for (const claim of joining) {
-    const key = renamed.get(claim.key)
-    const into = key === undefined ? undefined : [...claims, ...added].find(item => item.key === key)
-    if (!into) continue
-    const under = claim.under.flatMap(scope => renamed.get(scope) ?? []).filter(scope => scope !== into.key && SCOPES[into.kind].includes(kinds.get(scope)!))
-    into.sightings = union(into.sightings, claim.sightings, CLAIM_SIGHTINGS_MAX)
-    into.under = union(into.under, under, CLAIM_SCOPES_MAX)
-  }
-  return { claims: [...claims, ...added], added: added.map(claim => claim.key) }
+  added.sort((a, b) => a.place - b.place)
+  return { claims: [...claims, ...added.map(item => item.claim)], added: added.map(item => item.claim.key), scoped }
 }
 
-/** A record's claims once sightings have left it: no claim rests on one of `gone`, and a claim of `added`
- * that rests on none that stays leaves with them. */
-export function partClaims(claims: readonly Claim[], gone: ReadonlySet<number>, added: ReadonlySet<string>): Claim[] {
-  const left = claims.map(claim => ({ ...claim, sightings: claim.sightings.filter(id => !gone.has(id)) })).filter(claim => !added.has(claim.key) || claim.sightings.length > 0)
-  const keys = new Set(left.map(claim => claim.key))
-  return left.map(claim => ({ ...claim, under: claim.under.filter(key => keys.has(key)) }))
+/** A record's claims once a duplicate has parted from it. No claim rests on a sighting of `gone`. What the
+ * merges gave the record (`merged`) leaves too, unless it rests on a sighting that stays or a duplicate
+ * that is still joined (`still`, the claims of each) states it. */
+export function partClaims(claims: readonly Claim[], gone: ReadonlySet<number>, merged: Joined, still: readonly (readonly Claim[])[] = []): Claim[] {
+  const says = new Set<string>()
+  for (const list of still) {
+    const byKey = new Map(list.map(claim => [claim.key, claim]))
+    for (const claim of list) {
+      says.add(stated(claim))
+      for (const scope of claim.under) if (byKey.has(scope)) says.add(link(stated(claim), stated(byKey.get(scope)!)))
+    }
+  }
+  const added = new Set(merged.added), scoped = new Set(merged.scoped)
+  const left = claims.map(claim => ({ ...claim, sightings: claim.sightings.filter(id => !gone.has(id)) })).filter(claim => !added.has(claim.key) || claim.sightings.length > 0 || says.has(stated(claim)))
+  const byKey = new Map(left.map(claim => [claim.key, claim]))
+  return left.map(claim => ({ ...claim, under: claim.under.filter(scope => byKey.has(scope) && (!scoped.has(link(claim.key, scope)) || says.has(link(stated(claim), stated(byKey.get(scope)!))))) }))
 }
 
 export const claimsOf = (claims: readonly Claim[], kind: ClaimKind) => claims.filter(claim => claim.kind === kind)

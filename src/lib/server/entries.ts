@@ -660,7 +660,8 @@ export async function redactRevision(db: D1Database, entry: number, revisionId: 
   const row = await db.prepare(`SELECT r.rev, r.sighting_id, CASE WHEN r.sighting_id IS NULL THEN e.rev ELSE s.rev END AS current FROM revisions r JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id WHERE r.id = ? AND r.entry_id = ? AND r.redacted_at IS NULL AND r.kind IN ('create','edit','revert','merge','unmerge','sighting','sighting_edit')`).bind(revisionId, entry).first<{ rev: number; sighting_id: number | null; current: number | null }>()
   if (!row || row.current === row.rev) return false
   await db.batch([
-    db.prepare(`UPDATE revisions SET snapshot = '{}', summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
+    // A redacted merge still says which record it joined and what it gave, by key, so it can be undone.
+    db.prepare(`UPDATE revisions SET snapshot = CASE WHEN kind IN ('merge','unmerge') THEN json_object('from', json_extract(snapshot, '$.from'), 'into', json_extract(snapshot, '$.into'), 'added', json(json_extract(snapshot, '$.added')), 'scoped', json(json_extract(snapshot, '$.scoped')), 'filled', json(json_extract(snapshot, '$.filled'))) ELSE '{}' END, summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
     db.prepare('DELETE FROM date_readings WHERE transcription NOT IN (SELECT value FROM evidence_dates WHERE value IS NOT NULL)'),
     revision(db, who, { entry, sighting: row.sighting_id, kind: 'redact', rev: row.rev, snapshot: JSON.stringify({ revision: revisionId }), summary }),
   ])
@@ -682,8 +683,8 @@ export async function mergeEntry(db: D1Database, from: number, into: number, who
     if (moving.length + staying.length > SIGHTINGS_MAX) return { ok: false, code: 'full' }
     const joined = joinClaims(await claimRows(db, into), await claimRows(db, from))
     // What the record that stays leaves unsaid, the duplicate may say.
-    const filled = Object.fromEntries(FILLED_FIELDS.flatMap(field => target[field] === null && source[field] !== null ? [[field, source[field]]] : []))
-    const fields = { ...snapshotOf(target, ENTRY_FIELDS), ...filled, claims: joined.claims } as EntryFields
+    const filled = FILLED_FIELDS.filter(field => target[field] === null && source[field] !== null)
+    const fields = { ...snapshotOf(target, ENTRY_FIELDS), ...snapshotOf(source, filled), claims: joined.claims } as EntryFields
     const rev = target.rev + 1, at = now()
     try {
       await db.batch([
@@ -698,7 +699,7 @@ export async function mergeEntry(db: D1Database, from: number, into: number, who
         db.prepare('DELETE FROM claims WHERE entry_id = ?').bind(into),
         insertClaims(db, into, joined.claims),
         revision(db, who, { entry: from, kind: 'merge', rev: source.rev, snapshot: JSON.stringify({ into }), summary }),
-        revision(db, who, { entry: into, kind: 'merge', rev, snapshot: JSON.stringify({ ...JSON.parse(entrySnapshot(fields)), from, added: joined.added, filled }), summary }),
+        revision(db, who, { entry: into, kind: 'merge', rev, snapshot: JSON.stringify({ ...JSON.parse(entrySnapshot(fields)), from, added: joined.added, scoped: joined.scoped, filled }), summary }),
       ])
     } catch (error) {
       if (attempt < 4 && ((await revisionMark(db, from)) !== marks[0] || (await revisionMark(db, into)) !== marks[1])) continue
@@ -728,13 +729,18 @@ export async function unmergeEntry(db: D1Database, id: number, who: Who) {
     const into = entry.merged_into
     const marks = [await revisionMark(db, id), await revisionMark(db, into)]
     const target = await getEntryRow(db, into)
-    if (!target || target.merged_into) return false
+    // A hidden record keeps what it holds out of sight, the duplicates that joined it too.
+    if (!target || target.merged_into || target.hidden_at || entry.hidden_at) return false
     const { results: back } = await db.prepare(`${PARTS} SELECT id FROM sightings WHERE entry_id = ?2 AND first_entry IN (SELECT id FROM part)`).bind(id, into).all<{ id: number }>()
-    const merge = await db.prepare("SELECT snapshot FROM revisions WHERE entry_id = ? AND kind = 'merge' AND json_extract(snapshot, '$.from') = ? ORDER BY id DESC LIMIT 1").bind(into, id).first<{ snapshot: string }>()
-    const made = merge ? JSON.parse(merge.snapshot) as { added?: string[]; filled?: Record<string, unknown> } : {}
-    const claims = partClaims(await claimRows(db, into), new Set(back.map(row => row.id)), new Set(made.added ?? []))
+    // Every merge into the record says what it gave; a claim two duplicates gave leaves with the last of them.
+    const { results: merges } = await db.prepare(`SELECT json_extract(snapshot, '$.from') AS source, json_extract(snapshot, '$.added') AS added, json_extract(snapshot, '$.scoped') AS scoped, json_extract(snapshot, '$.filled') AS filled FROM revisions WHERE entry_id = ? AND kind = 'merge' ORDER BY id DESC LIMIT ${SIGHTINGS_MAX}`).bind(into).all<{ source: number | null; added: string | null; scoped: string | null; filled: string | null }>()
+    const listed = (text: string | null): string[] => { try { const value: unknown = JSON.parse(text ?? '[]'); return Array.isArray(value) ? value.filter(item => typeof item === 'string') : [] } catch { return [] } }
+    const { results: others } = await db.prepare(`SELECT k.entry_id, ${CLAIM_COLUMNS.map(column => `k.${column}`).join(', ')} FROM entries e JOIN claims k ON k.entry_id = e.id WHERE e.merged_into = ?1 AND e.id != ?2 ORDER BY k.entry_id, k.position LIMIT 5000`).bind(into, id).all<ClaimRow & { entry_id: number }>()
+    const still = Object.values(Object.groupBy(others, row => row.entry_id)).map(rows => rows!.map(toClaim))
+    const claims = partClaims(await claimRows(db, into), new Set(back.map(row => row.id)), { added: merges.flatMap(row => listed(row.added)), scoped: merges.flatMap(row => listed(row.scoped)) }, still)
     // A field the duplicate filled is emptied again unless it has been rewritten since.
-    const emptied = Object.fromEntries(FILLED_FIELDS.flatMap(field => made.filled && field in made.filled && made.filled[field] === target[field] ? [[field, null]] : []))
+    const filled = listed(merges.find(row => row.source === id)?.filled ?? null)
+    const emptied = Object.fromEntries(FILLED_FIELDS.flatMap(field => filled.includes(field) && entry[field] === target[field] ? [[field, null]] : []))
     const fields = { ...snapshotOf(target, ENTRY_FIELDS), ...emptied, claims } as EntryFields
     const rev = target.rev + 1, at = now()
     try {

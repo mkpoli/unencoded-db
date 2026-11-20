@@ -54,7 +54,7 @@ export function revisionFields(row: SnapshotRow) {
   return {
     fields: !row.redacted_at && !row.sighting_id && ENTRY_KINDS.includes(row.kind) ? entrySnapshot(row.snapshot) : null,
     sightingFields: !row.redacted_at && row.sighting_id && SIGHTING_KINDS.includes(row.kind) ? sightingSnapshot(row.snapshot) : null,
-    merge: !row.redacted_at && MERGE_KINDS.includes(row.kind) ? mergeSnapshot(row.snapshot) : null,
+    merge: MERGE_KINDS.includes(row.kind) ? mergeSnapshot(row.snapshot) : null,
   }
 }
 

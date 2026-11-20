@@ -10,7 +10,7 @@ import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTa
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
-import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, WORD_SIZE, exactSize, alsoSearchIds, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, WORD_SIZE, exactSize, alsoSearchIds, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { PAGE } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
@@ -490,7 +490,7 @@ describe('the wiki', () => {
     ])
     const [row] = await history(db, a)
     expect(row).toMatchObject({ kind: 'merge', rev: 2, summary: 'saved twice' })
-    expect(JSON.parse(row.snapshot)).toMatchObject({ from: b, added: [], filled: {} })
+    expect(JSON.parse(row.snapshot)).toMatchObject({ from: b, added: [], scoped: [], filled: [] })
     expect(entryFieldsOf(row.snapshot)!.claims).toEqual(merged.claims)
     expect(await unmergeEntry(db, b, who)).toBe(true)
     const parted = (await getEntry(db, a))!
@@ -512,6 +512,40 @@ describe('the wiki', () => {
     expect(parted.entry).toMatchObject({ radical: null, strokes: 9 })
     expect(parted.claims.map(item => [item.kind, item.value])).toEqual([['ids', '⿰木木'], ['reading', 'rin'], ['meaning', 'grove']])
     expect((await getEntry(db, b))!.entry).toMatchObject({ radical: '木', strokes: 8, merged_into: null })
+  })
+
+  test('a hidden record keeps its duplicates, and a redacted merge can still be undone', async () => {
+    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰木木')] }), seen({ place: 'one' }), [], who)
+    const b = await createEntry(db, fields({ radical: '木', claims: [claim('ids', '⿰木木'), claim('reading', 'rin')] }), seen({ place: 'two' }), [image], who)
+    await mergeEntry(db, b, a, who, null)
+    await setHidden(db, { entry: a }, true, who, null)
+    expect(await unmergeEntry(db, b, who)).toBe(false)
+    expect(await mediaVisible(db, 'a.webp')).toBe(false)
+    await setHidden(db, { entry: a }, false, who, null)
+    const merged = (await getEntry(db, a))!
+    await editEntry(db, a, merged.entry.rev, { ...fields(), radical: '木', claims: merged.claims }, who, null)
+    const merge = (await history(db, a)).find(row => row.kind === 'merge')!
+    expect(await redactRevision(db, a, merge.id, who, null)).toBe(true)
+    const redacted = (await history(db, a)).find(row => row.id === merge.id)!
+    expect(JSON.parse(redacted.snapshot)).toMatchObject({ from: b, filled: ['radical'] })
+    expect(entryFieldsOf(redacted.snapshot)).toBeNull()
+    expect(await unmergeEntry(db, b, who)).toBe(true)
+    const parted = (await getEntry(db, a))!
+    expect(parted.entry.radical).toBeNull()
+    expect(parted.claims.map(item => item.kind)).toEqual(['ids'])
+  })
+
+  test('a claim two duplicates gave stays until the last of them parts', async () => {
+    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰木木')] }), seen({ place: 'a' }), [], who)
+    const b = await createEntry(db, fields({ claims: [claim('reading', 'rin')] }), seen({ place: 'b' }), [], who)
+    const c = await createEntry(db, fields({ claims: [claim('reading', 'rin')] }), seen({ place: 'c' }), [], who)
+    await mergeEntry(db, b, a, who, null)
+    await mergeEntry(db, c, a, who, null)
+    const kinds = async () => (await getEntry(db, a))!.claims.map(item => item.kind)
+    expect(await unmergeEntry(db, b, who)).toBe(true)
+    expect(await kinds()).toEqual(['ids', 'reading'])
+    expect(await unmergeEntry(db, c, who)).toBe(true)
+    expect(await kinds()).toEqual(['ids'])
   })
 
   test('a chain of merges parts one link at a time with everything that link brought', async () => {

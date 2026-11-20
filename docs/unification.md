@@ -49,9 +49,13 @@ Keep two records apart, and link them with a relation claim, when:
 ## Undoing a merge
 
 The history of the record that stayed has an Undo button on the merge. The duplicate comes back with
-its sightings and its own claims as they were. The record that stayed loses the claims the merge added,
-unless one has since been rested on a sighting that stays, and the fields the merge filled, unless one
-has since been rewritten.
+its sightings and its own claims as they were. The record that stayed loses what the merge gave it:
+
+- the claims and the scopes it added, unless one rests on a sighting that stays or another duplicate
+  that is still merged states it;
+- the fields it filled, unless one has been rewritten since.
+
+A merge into a hidden record cannot be undone until the record is shown again.
 
 ## Sources
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { CLAIM_LIMITS, CLAIM_SCOPES_MAX, CLAIM_SIGHTINGS_MAX, claimsUnder, idsForms, isClaimKey, joinClaims, mapSightings, partClaims, newClaimKey, parseClaims, readClaims, scopesOf, splitCharacters, supportedBy, validClaim, type Claim } from './claims'
+import { CLAIM_LIMITS, CLAIMS_LENGTH_MAX, CLAIM_SCOPES_MAX, CLAIM_SIGHTINGS_MAX, claimsUnder, idsForms, isClaimKey, joinClaims, mapSightings, partClaims, newClaimKey, parseClaims, readClaims, scopesOf, splitCharacters, supportedBy, validClaim, type Claim } from './claims'
 import { cleanTag } from './tags'
 import { cleanIds, IDS_LENGTH_MAX, IDS_MAX } from './ids'
 
@@ -438,8 +438,40 @@ describe('joining a duplicate', () => {
     expect(added).toEqual([])
   })
 
+  test('a claim comes only with a scope it holds under, and a full list of claims takes no longer links', () => {
+    const meanings = Array.from({ length: CLAIM_LIMITS.meaning.max }, (_, index) => make('meaning', `m${index}`, `m${String(index).padStart(7, '0')}`))
+    const joined = joinClaims(meanings, [make('meaning', 'one more', 'nnnnnnnn'), make('reading', 'rin', 'rrrrrrrr', { under: ['nnnnnnnn'] }), make('reading', 'free', 'ssssssss')])
+    expect(joined.added).toEqual(['ssssssss'])
+    const relations = (last: number) => [make('meaning', 'x'.repeat(480), 'mmmmmmmm'), ...Array.from({ length: 14 }, (_, index) => make('relation', '木', `r${String(index).padStart(7, '0')}`, { data: { relationship: 'variant', difference: 'y'.repeat(index === 13 ? last : 5000) } }))]
+    const long = relations(CLAIMS_LENGTH_MAX - 10 - JSON.stringify(relations(0)).length)
+    expect(JSON.stringify(long).length).toBe(CLAIMS_LENGTH_MAX - 10)
+    expect(parseClaims(long)).toEqual(long)
+    const full = joinClaims(long, [make('meaning', 'x'.repeat(480), 'bbbbbbbb', { sightings: Array.from({ length: 20 }, (_, index) => 1000 + index) })])
+    expect(JSON.stringify(full.claims).length).toBeLessThanOrEqual(CLAIMS_LENGTH_MAX)
+    expect(parseClaims(full.claims)).toEqual(full.claims)
+  })
+
   test('parting strips the sightings that leave and the added claims that rested only on them', () => {
     const claims = [make('meaning', 'grove', 'mmmmmmmm', { sightings: [1, 2] }), make('meaning', 'wood', 'nnnnnnnn', { sightings: [2] }), make('reading', 'rin', 'rrrrrrrr', { sightings: [1], under: ['nnnnnnnn'] }), make('ids', '⿰木林', 'bbbbbbbb')]
-    expect(partClaims(claims, new Set([2]), new Set(['nnnnnnnn', 'rrrrrrrr', 'bbbbbbbb']))).toEqual([make('meaning', 'grove', 'mmmmmmmm', { sightings: [1] }), make('reading', 'rin', 'rrrrrrrr', { sightings: [1] })])
+    expect(partClaims(claims, new Set([2]), { added: ['nnnnnnnn', 'rrrrrrrr', 'bbbbbbbb'], scoped: [] })).toEqual([make('meaning', 'grove', 'mmmmmmmm', { sightings: [1] }), make('reading', 'rin', 'rrrrrrrr', { sightings: [1] })])
+  })
+
+  test('what two duplicates gave stays until the last of them parts', () => {
+    const kept = [make('ids', '⿰木木', 'aaaaaaaa')]
+    const b = [make('reading', 'rin', 'bbbbbbbb')], c = [make('reading', 'rin', 'cccccccc')]
+    const first = joinClaims(kept, b), second = joinClaims(first.claims, c)
+    const merged = { added: [...first.added, ...second.added], scoped: [] }
+    expect(partClaims(second.claims, new Set(), merged, [c])).toEqual(second.claims)
+    expect(partClaims(second.claims, new Set(), merged)).toEqual(kept)
+  })
+
+  test('a scope a duplicate gave a claim leaves with it', () => {
+    const kept = [make('meaning', 'one', 'mmmmmmmm'), make('meaning', 'two', 'nnnnnnnn'), make('reading', 'rin', 'rrrrrrrr', { under: ['mmmmmmmm'] })]
+    const b = [make('meaning', 'two', 'xxxxxxxx'), make('reading', 'rin', 'yyyyyyyy', { under: ['xxxxxxxx'] })]
+    const joined = joinClaims(kept, b)
+    expect(joined.claims[2].under).toEqual(['mmmmmmmm', 'nnnnnnnn'])
+    expect(joined.scoped).toEqual(['rrrrrrrr>nnnnnnnn'])
+    expect(partClaims(joined.claims, new Set(), joined, [b])).toEqual(joined.claims)
+    expect(partClaims(joined.claims, new Set(), joined)).toEqual(kept)
   })
 })

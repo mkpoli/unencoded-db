@@ -46,6 +46,11 @@ test('the later record joins the earlier one from either page, and the history u
   expect(raw.query('SELECT merged_into FROM entries WHERE id = 2').get()).toEqual({ merged_into: null })
   expect((await historyActions.unmerge(event(undo, '', '1', 'history')) as any).status).toBe(409)
   await expect(actions.default(event(of('1'), '', '3'))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+  // A hidden record's history is closed, and so is its undo.
+  raw.exec("UPDATE entries SET hidden_at = 'now' WHERE id = 1")
+  const again = new FormData(); again.set('from', '3')
+  expect((await historyActions.unmerge(event(again, '', '1', 'history')) as any).status).toBe(409)
+  expect(raw.query('SELECT merged_into FROM entries WHERE id = 3').get()).toEqual({ merged_into: 1 })
 })
 
 test('a record is not a duplicate of itself, of nothing, or of a record that is gone', async () => {

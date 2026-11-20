@@ -102,7 +102,7 @@
         </details>
       </li>
     {:else}
-      <li class="revision"><div class="revision-row static">{@render line(row)}</div></li>
+      <li class="revision"><div class="revision-row static">{@render line(row)}</div>{#if undoable.has(row.id)}<div class="revision-body">{@render undo(undoable.get(row.id)!)}</div>{/if}</li>
     {/if}
   {/each}
 </ol>
