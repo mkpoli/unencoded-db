@@ -14,7 +14,7 @@ const sample = (via: boolean) => `SELECT x.thumb_key AS thumb, r.entry_id AS ent
 export async function suggestSources(db: D1Database, text: string, cursor: NameCursor | null = null) {
   const key = sourceNameKey(text)
   if (!key || (cursor && !cursor[0].startsWith(key))) return []
-  const { results } = await db.prepare(`SELECT c.id, c.title, c.url, c.author, c.publisher, c.report_date, c.records,
+  const { results } = await db.prepare(`SELECT c.id, c.title, c.url, c.author, c.publisher, c.report_date, c.container, c.records,
     (SELECT json_object('thumb', thumb, 'entry', entry, 'ids', ids, 'place', place, 'page', page, 'via', via)
       FROM (${sample(false)} UNION ALL ${sample(true)}) ORDER BY thumb IS NULL, via, sighting LIMIT 1) AS evidence,
     n.lookup, a.spelling AS alias FROM (

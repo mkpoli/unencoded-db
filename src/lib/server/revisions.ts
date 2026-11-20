@@ -6,13 +6,14 @@ import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, tidyVias, 
 // Only entry fields are public; a snapshot can also hold sighting or internal data.
 export const entrySnapshot = (raw: string): EntryFields | null => entryFieldsOf(raw)
 
-// The chain of a snapshot: at most VIAS_MAX objects of the five citation fields and an optional quote, each
-// link a web address or null. A snapshot written before quotes were kept reads as one that quotes nothing.
+// The chain of a snapshot: at most VIAS_MAX objects of the citation fields and an optional quote, each
+// link a web address or null. A snapshot written before quotes or containers were kept reads as one with neither.
 function parseVias(raw: unknown): Via[] | null {
   if (!Array.isArray(raw) || raw.length > VIAS_MAX) return null
   const vias: Via[] = []
   for (const item of raw) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+    if (item.container === undefined) item.container = null
     for (const field of CITATION_FIELDS) if (typeof item[field] !== 'string' && item[field] !== null) return null
     if (typeof item.quote !== 'string' && item.quote !== null && item.quote !== undefined) return null
     if (item.url !== null && !/^https?:\/\//i.test(item.url)) return null
@@ -27,6 +28,7 @@ export function sightingSnapshot(raw: string): SightingFields | null {
     const value = JSON.parse(raw)
     if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.place !== 'string') return null
     if (!('quotes' in value)) value.quotes = null
+    if (!('container' in value)) value.container = null
     for (const field of SIGHTING_FIELDS) {
       if (typeof value[field] !== 'string' && value[field] !== null) return null
     }

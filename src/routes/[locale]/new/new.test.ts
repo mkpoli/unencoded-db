@@ -44,7 +44,7 @@ test('the form starts from a visible sighting', async () => {
   await expect(actions.default(event(form))).rejects.toMatchObject({ status: 303 })
   const tags = await tagList(db)
   expect(tags).toHaveLength(35)
-  expect(await load(event(undefined, '?sighting=1'))).toEqual({ seed: { values: { url: 'https://example.test/book', title: 'Book', author: null, publisher: null, report_date: null, vias: [], place: 'A dictionary', original_date: '1617', page: '12' }, pictures: [] }, tags })
+  expect(await load(event(undefined, '?sighting=1'))).toEqual({ seed: { values: { url: 'https://example.test/book', title: 'Book', author: null, publisher: null, report_date: null, container: null, vias: [], place: 'A dictionary', original_date: '1617', page: '12' }, pictures: [] }, tags })
   expect(await load(event())).toEqual({ seed: null, tags })
   expect(await load(event(undefined, '?sighting=9'))).toEqual({ seed: null, tags })
   const moderator = (raw.query('SELECT id FROM people LIMIT 1').get() as { id: string }).id

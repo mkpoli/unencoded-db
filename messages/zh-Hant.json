@@ -185,6 +185,7 @@
   "field.title": "書名或標題",
   "field.author": "作者",
   "field.publisher": "出版者",
+  "field.container": "所載刊物或羣組",
   "field.reportDate": "發布日期",
   "field.reportDateHint": "貼文、書籍或頁面發布的日期。",
   "field.originalDate": "原始年代",

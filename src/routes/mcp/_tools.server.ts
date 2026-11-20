@@ -172,7 +172,7 @@ function sightingForm(input: Json) {
   const form = new FormData()
   const put = (name: string, value: string) => { if (value.trim()) form.set(name, value) }
   put('url', link(input.url, 'url'))
-  for (const name of ['place', 'title', 'author', 'publisher', 'report_date', 'original_date', 'page', 'note']) put(name, text(input[name]))
+  for (const name of ['place', 'title', 'author', 'publisher', 'report_date', 'container', 'original_date', 'page', 'note']) put(name, text(input[name]))
   put('context', choice(input.context, CONTEXTS, 'context'))
   put('style', choice(input.style, STYLES, 'style'))
   for (const type of items(input.types)) form.append('types', choice(type, SIGHTING_TYPES, 'types'))
@@ -351,6 +351,7 @@ To add a character:
 1. Read the form from the evidence picture and write it as an ideographic description sequence (IDS), such as ⿰山東. A code point or a description given by whoever reported the character is a claim to check against the picture.
 2. Call find_similar_records with the IDS and compare the pictures of what comes back. When a record shows the same form, call add_sighting on it. Otherwise call add_record.
 3. Cite the work the character appears in as the sighting's source, with author, title, publisher, date and page. Cite where you found it, such as a post or a chat message that shows the page, as a via, with its author, date, link and the words you quote.
+4. A chat message, a forum post or a personal communication is evidence and is cited as one: the author as they sign, the date of that message, the words quoted, the group or channel as container, the service as publisher, and no title. A private message has no container. Each message is its own citation; never reuse another message's author or date.
 
 Record every attested form, whether or not Unicode encodes it; an encoded character takes an encoding with charset "unicode". State only the readings, meanings and relations the evidence gives.`
 
@@ -358,8 +359,9 @@ const CITATION = {
   url: { type: 'string', description: 'Web address, http or https.' },
   title: { type: 'string' },
   author: { type: 'string', description: 'The author as they sign: a name or a handle.' },
-  publisher: { type: 'string', description: 'The publisher, or the service a post is on, such as X.' },
+  publisher: { type: 'string', description: 'The publisher, or the service a post or message is on, such as X or QQ.' },
   report_date: { type: 'string', description: 'Publication date as written in the source, e.g. 明萬曆34年, 1936 or 2026-11-14.' },
+  container: { type: 'string', description: 'What the source appeared in: the journal and issue of an article, the site of a page, the group or channel of a chat message.' },
 }
 
 const SIGHTING = {
