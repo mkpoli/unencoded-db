@@ -499,6 +499,8 @@
   "source.foundVia": "この資料を経由",
   "source.record": "記録{n}件",
   "source.records": "記録{n}件",
+  "sources.digitizedCopy": "デジタル化資料",
+  "sources.scan": "コマ {n}",
   "sources.filter": "絞り込む",
   "sources.clear": "解除",
   "sources.noPublisherMatches": "この出版者の出典はありません。",

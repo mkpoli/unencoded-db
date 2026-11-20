@@ -499,6 +499,8 @@
   "source.foundVia": "經由此資料發現",
   "source.record": "{n}筆記錄",
   "source.records": "{n}筆記錄",
+  "sources.digitizedCopy": "數位副本",
+  "sources.scan": "掃描影像 {n}",
   "sources.filter": "篩選",
   "sources.clear": "清除",
   "sources.noPublisherMatches": "找不到此出版者的出處。",

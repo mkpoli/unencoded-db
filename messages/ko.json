@@ -499,6 +499,8 @@
   "source.foundVia": "이 자료를 거쳐 찾음",
   "source.record": "기록 {n}건",
   "source.records": "기록 {n}건",
+  "sources.digitizedCopy": "디지털화 자료",
+  "sources.scan": "스캔 {n}",
   "sources.filter": "필터 적용",
   "sources.clear": "초기화",
   "sources.noPublisherMatches": "이 출판사의 출처가 없습니다.",

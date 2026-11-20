@@ -499,6 +499,8 @@
   "source.foundVia": "经由此资料发现",
   "source.record": "{n}条记录",
   "source.records": "{n}条记录",
+  "sources.digitizedCopy": "数字副本",
+  "sources.scan": "扫描图像 {n}",
   "sources.filter": "筛选",
   "sources.clear": "清除",
   "sources.noPublisherMatches": "没有找到该出版者的出处。",

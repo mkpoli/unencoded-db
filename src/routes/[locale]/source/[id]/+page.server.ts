@@ -1,3 +1,4 @@
+import { copyOfSource } from '$lib/server/digitized-copies'
 import { readDates } from '$lib/server/date-readings'
 import { error, fail, type RequestEvent } from '@sveltejs/kit'
 import { sourcePage } from '$lib/server/entries'
@@ -19,8 +20,8 @@ export const load: PageServerLoad = async (event) => {
   const param = event.url.searchParams.get('before')
   const before = param === null ? null : positiveId(param)
   if (param !== null && !before) error(404)
-  const [aliases, history] = await Promise.all([sourceAliases(env(event).DB, id), sourceAliasChanges(env(event).DB, id, before)])
-  return { ...found, glyphs, dates, aliases, ...history, before }
+  const [aliases, history, copy] = await Promise.all([sourceAliases(env(event).DB, id), sourceAliasChanges(env(event).DB, id, before), copyOfSource(env(event).DB, id)])
+  return { ...found, glyphs, dates, aliases, copy, ...history, before }
 }
 
 async function aliasAction(event: RequestEvent, remove: boolean) {
