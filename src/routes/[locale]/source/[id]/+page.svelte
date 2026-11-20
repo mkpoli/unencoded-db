@@ -11,7 +11,7 @@
   import { sourceData } from '$lib/structured-data'
   let { data, form } = $props()
   const source = $derived(data.source)
-  const heading = $derived(source.title || source.url || [source.author, source.container].filter(Boolean).join(' · ') || t('source.title'))
+  const heading = $derived(source.title || (source.container && [source.author, source.container].filter(Boolean).join(' · ')) || source.url || source.author || t('source.title'))
   const structured = $derived(sourceData({ locale: locale(), source, name: heading, siteName: t('app.name'), sourcesName: t('nav.sources') }))
   const facts = [
     { key: 'title', label: 'field.title' },
