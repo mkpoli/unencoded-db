@@ -33,3 +33,7 @@ test('parts typed with no structure find the records that hold them all, never a
 test('a variation selector stays with the part typed before it', () => {
   expect(tiers('木\u{E0100}火', [record(1, ['⿰木\u{E0100}火'])])).toEqual({ 1: 'similar' })
 })
+
+test('a record that names a made character is similar when its description is not', () => {
+  expect(tiers('⿰亻木', [{ ...record(1, ['⿱山水']), named: true }, record(2, ['⿱山水'])])).toEqual({ 1: 'similar' })
+})

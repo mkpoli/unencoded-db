@@ -148,8 +148,8 @@
     const held = new Map<number, RecordCandidate>()
     const records = async (made: string[] = []) => {
       const leaves = [...new Set([...made, ...await expandedParts(ids)])].slice(0, 12).join('')
-      const answer = await fetch(`/api/candidates?ids=${encodeURIComponent(ids)}${leaves ? `&leaves=${encodeURIComponent(leaves)}` : ''}${exclude ? `&exclude=${exclude}` : ''}`, { signal: controller.signal }).then(r => r.ok ? r.json() : [])
-      for (const item of Array.isArray(answer) ? answer : []) if (typeof item?.id === 'number' && !held.has(item.id)) held.set(item.id, item as RecordCandidate)
+      const answer = await fetch(`/api/candidates?ids=${encodeURIComponent(ids)}${leaves ? `&leaves=${encodeURIComponent(leaves)}` : ''}${made.length ? `&made=${encodeURIComponent(made.join(''))}` : ''}${exclude ? `&exclude=${exclude}` : ''}`, { signal: controller.signal }).then(r => r.ok ? r.json() : [])
+      for (const item of Array.isArray(answer) ? answer : []) if (typeof item?.id === 'number') held.set(item.id, { ...held.get(item.id), ...(item as RecordCandidate) })
       const tiered = await tierRecords(ids, [...held.values()])
       if (live) recordHits = tiered
     }
