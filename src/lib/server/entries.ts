@@ -999,9 +999,10 @@ export async function pageCursor(db: D1Database, listing: Listing, number: numbe
   if (number === 1) return null
   const range = pagedRange(listing)
   if (!range || !Number.isInteger(number) || number < 1 || number > PAGES_MAX) return undefined
-  const row = await db.prepare(`SELECT t.entry_id AS id, ${range.key} AS counted FROM entry_tags t WHERE t.tag = ? AND ${range.past} ORDER BY ${range.by} LIMIT 1 OFFSET ?`)
-    .bind(range.tag, ...cursorOf(range.order, null)!, (number - 1) * PAGE - 1).first<{ id: number; counted: number }>()
-  return row ? cursorAt(range.order, row) : undefined
+  // The row before the page and the page's first row: a page without a first row is no page.
+  const { results } = await db.prepare(`SELECT t.entry_id AS id, ${range.key} AS counted FROM entry_tags t WHERE t.tag = ? AND ${range.past} ORDER BY ${range.by} LIMIT 2 OFFSET ?`)
+    .bind(range.tag, ...cursorOf(range.order, null)!, (number - 1) * PAGE - 1).all<{ id: number; counted: number }>()
+  return results.length === 2 ? cursorAt(range.order, results[0]) : undefined
 }
 /** How many pages a listing has, at most PAGES_MAX; null for a listing without numbered pages. */
 export async function pageCount(db: D1Database, listing: Listing): Promise<number | null> {

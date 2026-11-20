@@ -1835,6 +1835,13 @@ test('a numbered page starts where the pages before it end', async () => {
     expect(await pageCursor(db, { order }, Math.ceil(whole.length / PAGE) + 1)).toBeUndefined()
   }
   expect(await pageCursor(db, {}, 1)).toBeNull()
+  // A list that ends on a page boundary has no page after it.
+  const full = (await list(db, { limit: 500 }))!.tiles.length
+  for (let i = full; i % PAGE; i++) await createEntry(db, fields({ claims: [newClaim('ids', `⿰水${String.fromCodePoint(0x5000 + i)}`)] }), seen(), [], who)
+  const even = (await list(db, { limit: 500 }))!.tiles.length
+  expect(even % PAGE).toBe(0)
+  expect(await pageCursor(db, {}, even / PAGE)).toBeString()
+  expect(await pageCursor(db, {}, even / PAGE + 1)).toBeUndefined()
   expect(await pageCursor(db, { query: 'x' }, 2)).toBeUndefined()
   expect(await pageCursor(db, { order: 'random', seed: 1 }, 2)).toBeUndefined()
   expect(await pageCount(db, { query: 'x' })).toBeNull()

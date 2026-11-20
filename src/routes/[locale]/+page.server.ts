@@ -27,7 +27,7 @@ export const load: PageServerLoad = async (event) => {
   const order = orderOf(searchParams.get('sort'))
   const placed = searchParams.get('after')
   // ?page= opens a list at a numbered page, in place of ?after=.
-  const number = searchParams.has('page') ? pageOf(searchParams.get('page')) : 1
+  const number = searchParams.get('page') ? pageOf(searchParams.get('page')) : 1
   if (!order || !cursorOf(order, placed) || number === null || (number > 1 && placed !== null)) error(404)
   // A shuffled list is dealt a random start once, and the address keeps it for its further pages.
   const seed = order === 'random' ? seedOf(searchParams.get('seed')) : null
@@ -55,13 +55,20 @@ export const load: PageServerLoad = async (event) => {
   // A whole description is also searched under the other spellings the browser found for it: ?also=, at most a few.
   const also = exact ? alsoSearchIds(query, searchParams.getAll('also')) : []
   const unplaced = { script, filter, facet, radical, decade, within, without, query, also, order, seed }
-  const start = searchError ? null : await pageCursor(db, unplaced, number)
-  if (start === undefined) error(404)
+  // The pages are counted where the list is opened, not on the reads that add to it.
+  const [start, pages] = searchError || placed !== null ? [null, null] : await Promise.all([pageCursor(db, unplaced, number), pageCount(db, unplaced)])
+  if (start === undefined) {
+    // A page past the last opens the last.
+    if (!pages || number <= pages) error(404)
+    const last = new URL(event.url)
+    if (pages > 1) last.searchParams.set('page', String(pages)); else last.searchParams.delete('page')
+    redirect(302, `${last.pathname}${last.search}`)
+  }
   const after = start ?? placed
   const listing = { ...unplaced, after }
   // A search is counted on its first page; further pages are added to that one and keep its count.
-  const [page, totals, total, pages] = await Promise.all([searchError ? null : list(db, listing), counts(db), searchError || after !== null ? null : searchTotal(db, listing), searchError ? null : pageCount(db, unplaced)])
+  const [page, totals, total] = await Promise.all([searchError ? null : list(db, listing), counts(db), searchError || after !== null ? null : searchTotal(db, listing)])
   if (!page && !searchError) error(404)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, page?.tiles ?? [], event.locals.glyphStyle)
-  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, tags, total, pages: placed === null ? pages : null, number, glyphs, script, filter, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
+  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, tags, total, pages, number, glyphs, script, filter, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
 }
