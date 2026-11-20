@@ -38,8 +38,9 @@ test('comments follow a merged record and return when it is taken apart', async 
   await addComment(db, { entry: b }, 'on b', who)
   await mergeEntry(db, a, b, who, null)
   expect((await commentsOf(db, b)).map(comment => comment.body)).toEqual(['on a', 'on b'])
+  await addComment(db, { entry: b, sighting: 1 }, 'on the evidence a brought', who)
   await unmergeEntry(db, a, who)
-  expect((await commentsOf(db, a)).map(comment => comment.body)).toEqual(['on a'])
+  expect((await commentsOf(db, a)).map(comment => comment.body)).toEqual(['on a', 'on the evidence a brought'])
   expect((await commentsOf(db, b)).map(comment => comment.body)).toEqual(['on b'])
 })
 
