@@ -23,7 +23,7 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
   switch (event.route?.id) {
     case '/[locale]/new':
     case '/[locale]/batch': return action === 'default' ? 'ADDS' : null
-    case '/[locale]/entry/[id]': return action === 'edit' ? 'EDITS' : null
+    case '/[locale]/entry/[id]': return ['edit', 'comment', 'hideComment', 'unhideComment'].includes(action) ? 'EDITS' : null
     case '/[locale]/entry/[id]/sighting/new': return action === 'default' ? 'ADDS' : null
     case '/[locale]/source/[id]': return action === 'addAlias' || action === 'removeAlias' ? 'EDITS' : null
     case '/api/tags': return action === 'default' ? 'ADDS' : null
