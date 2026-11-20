@@ -28,6 +28,8 @@
   import SenseList from '$lib/components/SenseList.svelte'
   import TagFields from '$lib/components/TagFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
+  import { COMMENTS_SHOWN } from '$lib/comments'
+  import Discussion from '$lib/components/Discussion.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
   import type { Fill } from '$lib/encoded'
   import { compositionOf, encodingsOf, idsForms, primaryLayoutOf, supportedBy, valuesOf } from '$lib/claims'
@@ -47,6 +49,8 @@
   const entry = $derived(data.entry)
   const claims = $derived(data.claims)
   const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
+  const commenting = $derived(Boolean(form?.error && page.url.searchParams.has('/comment')))
+  const shownComments = $derived.by(() => { const shown = data.comments.filter(comment => !comment.hidden_at).length; return shown && (data.comments.length >= COMMENTS_SHOWN ? `${shown}+` : String(shown)) })
   const editValues = $derived(editing && form?.values && 'script' in form.values ? form.values : { ...entry, claims })
   let filled = $state<Fill | null>(null)
   let editOpen = $state(untrack(() => editing || data.idsAdd !== null))
@@ -176,7 +180,7 @@
 <svelte:window onclick={edit} />
 <Seo data={structured} title={seoTitle} description={seoDescription} image={href(`/entry/${entry.id}/card.png?v=${encodeURIComponent(entry.updated_at)}`)} imageAlt={seoTitle} />
 <div class="page narrow stack">
-  <div class="row"><a class="text-link back" href={href()}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
+  <div class="row"><a class="text-link back" href={href()}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href="#discussion">{t('discussion.title')}{#if shownComments} <span class="count">{shownComments}</span>{/if}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
   <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: data.earliest.year })}</a>{/if}</div></div><div class="row"><ShareRecord id={entry.id} /><FavouriteButton id={entry.id} initial={data.favourites.includes(entry.id)} onerror={message => favError = message} /></div></div>
   {#if favError}<p class="notice bad" role="alert">{favError}</p>{/if}
   {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
@@ -319,6 +323,7 @@
           {#if sighting.source_id}<a class="text-link small" href={href(`/source/${sighting.source_id}`)}>{t('source.view')}</a>{/if}
           <a class="text-link small" href={href(`/entry/${entry.id}/sighting/${sighting.id}/edit`)}>{t('sighting.edit')}</a>
           <a class="text-link small" href={href(`/new?sighting=${sighting.id}`)}>{t('sighting.addAnother')}</a>
+          <a class="text-link small" href="{href(`/entry/${entry.id}?about=${sighting.id}`)}#discussion">{t('sighting.discuss')}</a>
           <a class="text-link small" href={href(`/entry/${entry.id}/report?sighting=${sighting.id}`)}>{t('entry.report')}</a>
         </div>
       </article>
@@ -326,6 +331,7 @@
     <div class="row"><a class="button primary" href={href(`/entry/${entry.id}/sighting/new`)}>{t('entry.addSighting')}</a></div>
   </section>
   {#if data.related.length}<section class="stack" id="related"><h2>{t('entry.related')}</h2><RelatedRecords records={data.related} /></section>{/if}
+  <Discussion entry={entry.id} comments={data.comments} sightings={data.sightings.map(sighting => sighting.id)} about={commenting && form && 'about' in form ? form.about : data.about} moderator={Boolean(data.person?.moderator)} error={commenting ? form?.error : null} draft={commenting && form && 'comment' in form ? form.comment : ''} />
 </div>
 <style>
   .heading { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px 16px }
@@ -335,6 +341,7 @@
   dt :global(.pencil) { margin-inline-start:4px; vertical-align:-6px }
   summary { cursor:pointer; font-weight:600 } .form { margin-top:18px }
   .sheet { display:flex; flex-direction:column; gap:10px; padding-top:10px; border-top:1px dashed var(--line) } .filed { margin-top:14px }
+  .count { font-variant-numeric:tabular-nums; color:var(--muted) }
   .back { align-self:start; color:var(--muted) } .title { gap:8px } .code { font-variant-numeric:tabular-nums } .code-name { margin-inline-start:6px; font-weight:400; color:var(--muted) } .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
   h3 { font-size:14px; font-weight:600 }
   .identity { display:flex; flex-wrap:wrap; align-items:center; gap:12px 18px; min-width:0 }

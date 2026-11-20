@@ -23,7 +23,7 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
   switch (event.route?.id) {
     case '/[locale]/new':
     case '/[locale]/batch': return action === 'default' ? 'ADDS' : null
-    case '/[locale]/entry/[id]': return action === 'edit' ? 'EDITS' : null
+    case '/[locale]/entry/[id]': return ['edit', 'comment', 'hideComment', 'unhideComment'].includes(action) ? 'EDITS' : null
     case '/[locale]/entry/[id]/sighting/new': return action === 'default' ? 'ADDS' : null
     case '/[locale]/source/[id]': return action === 'addAlias' || action === 'removeAlias' ? 'EDITS' : null
     case '/api/tags': return action === 'default' ? 'ADDS' : null
@@ -40,6 +40,14 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
     case '/[locale]/moderate': return ['restoreEntry', 'restoreSighting', 'hide', 'unhide', 'resolve'].includes(action) ? 'EDITS' : null
     default: return null
   }
+}
+
+// The actions only a moderator takes. Keep this in step with the actions that guard themselves as moderation.
+export function moderationAction(event: RequestEvent) {
+  if (event.route?.id === '/[locale]/moderate') return true
+  if (event.route?.id !== '/[locale]/entry/[id]') return false
+  for (const [key] of event.url.searchParams) if (key.startsWith('/')) return key === '/hideComment' || key === '/unhideComment'
+  return false
 }
 
 // Moderation writes remain available during a freeze, subject to authorization and limits.
