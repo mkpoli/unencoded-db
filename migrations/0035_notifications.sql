@@ -15,6 +15,22 @@ CREATE INDEX notifications_by_person ON notifications(person, id);
 CREATE INDEX notifications_unread ON notifications(person, id) WHERE read_at IS NULL;
 CREATE INDEX notifications_by_comment ON notifications(comment_id) WHERE comment_id IS NOT NULL;
 
+-- The changes made before notices existed are queued as unread, by the rule of `notify_revision` below.
+-- Evidence added later than a change is not told of it, and the catalogue's own maintenance tells nobody.
+INSERT INTO notifications(person, revision_id, at)
+SELECT DISTINCT COALESCE(p.merged_into, p.id), r.id, r.at
+FROM revisions r
+JOIN (
+  SELECT id AS entry_id, NULL AS sighting_id, created_by, created_at FROM entries
+  UNION ALL SELECT entry_id, id, created_by, created_at FROM sightings WHERE hidden_at IS NULL
+) o ON o.entry_id = r.entry_id AND o.created_at <= r.at AND (r.kind <> 'sighting_edit' OR o.sighting_id IS NULL OR o.sighting_id = r.sighting_id)
+JOIN people p ON p.id = o.created_by
+JOIN people a ON a.id = r.actor
+WHERE r.kind IN ('edit','revert','sighting','sighting_edit','merge','unmerge')
+  AND a.name <> 'Catalogue maintenance'
+  AND COALESCE(p.merged_into, p.id) <> COALESCE(a.merged_into, a.id)
+ORDER BY r.id;
+
 -- A comment: the record's recorder, the recorder of the evidence it is about (of all the evidence, for a
 -- comment on the whole record) and everyone already in the discussion.
 CREATE TRIGGER notify_comment AFTER INSERT ON comments

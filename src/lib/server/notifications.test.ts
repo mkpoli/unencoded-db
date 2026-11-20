@@ -5,6 +5,10 @@ import { addSighting, createEntry, editEntry, getEntry, type EntryFields, type S
 import { markRead, notificationsOf, unreadCount } from './notifications'
 import { createPerson } from './people'
 import { openTestDb } from './testdb'
+import { Database } from 'bun:sqlite'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { d1Over } from './testdb'
 
 const fields = (ids: string): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', ids)] })
 const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null }
@@ -75,4 +79,24 @@ test('the badge count and the list read through their indexes', async () => {
   expect(list).toContain('notifications_by_person')
   expect(list).not.toContain('TEMP B-TREE')
   expect(list).not.toMatch(/SCAN (c|r|e)\b/)
+})
+
+test('changes made before notices existed are queued for the recorder', async () => {
+  const raw = new Database(':memory:')
+  const migrations = join(import.meta.dir, '../../../migrations')
+  const names = readdirSync(migrations).sort()
+  for (const name of names.filter(name => name < '0035')) raw.exec(readFileSync(join(migrations, name), 'utf8'))
+  const db = d1Over(raw)
+  const recorder = await createPerson(db), second = await createPerson(db), maintenance = await createPerson(db, null, 'Catalogue maintenance')
+  const who = (person: { id: string }) => ({ actor: person.id, ip: null })
+  const entry = await createEntry(db, fields('⿰山東'), sighting, [], who(recorder))
+  await Bun.sleep(2)
+  const found = (await getEntry(db, entry))!
+  await editEntry(db, entry, found.entry.rev, { ...fields('⿰山東'), description: 'own note' }, who(recorder), null)
+  await editEntry(db, entry, found.entry.rev + 1, { ...fields('⿰山東'), description: 'swept' }, who(maintenance), null)
+  await Bun.sleep(2)
+  await addSighting(db, entry, { ...sighting, place: 'Another book' }, [], who(second))
+  for (const name of names.filter(name => name >= '0035')) raw.exec(readFileSync(join(migrations, name), 'utf8'))
+  expect((await notificationsOf(db, recorder.id)).notifications.map(notice => [notice.kind, notice.by_id, notice.read_at])).toEqual([['sighting', second.id, null]])
+  expect(await unreadCount(db, second.id)).toBe(0)
 })
