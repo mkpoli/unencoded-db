@@ -10,7 +10,8 @@ import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTa
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
-import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, WORD_SIZE, exactSize, alsoSearchIds, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, WORD_SIZE, exactSize, alsoSearchIds, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { PAGE } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -1820,4 +1821,25 @@ describe('digitized copy filter', () => {
     await setHidden(db, { entry }, true, who, null)
     expect(await copyPage(db, slug, 0)).toBeNull()
   })
+})
+
+test('a numbered page starts where the pages before it end', async () => {
+  for (let i = 0; i < 100; i++) await createEntry(db, fields({ claims: [newClaim('ids', `⿰山${String.fromCodePoint(0x4e00 + i)}`)] }), seen(), [], who)
+  for (const order of ['new', 'old', 'most', 'fewest'] as const) {
+    const whole = (await list(db, { order, limit: 500 }))!.tiles.map(tile => tile.id)
+    for (const number of [2, 3]) {
+      const after = await pageCursor(db, { order }, number)
+      expect((await list(db, { order, after }))!.tiles.map(tile => tile.id)).toEqual(whole.slice((number - 1) * PAGE, number * PAGE))
+    }
+    expect(await pageCount(db, { order })).toBe(Math.ceil(whole.length / PAGE))
+    expect(await pageCursor(db, { order }, Math.ceil(whole.length / PAGE) + 1)).toBeUndefined()
+  }
+  expect(await pageCursor(db, {}, 1)).toBeNull()
+  expect(await pageCursor(db, { query: 'x' }, 2)).toBeUndefined()
+  expect(await pageCursor(db, { order: 'random', seed: 1 }, 2)).toBeUndefined()
+  expect(await pageCount(db, { query: 'x' })).toBeNull()
+  expect(await pageCount(db, { order: 'earliest' })).toBe(0)
+  expect(pageOf('0')).toBeNull()
+  expect(pageOf('2')).toBe(2)
+  expect(pageOf(String(PAGES_MAX + 1))).toBeNull()
 })

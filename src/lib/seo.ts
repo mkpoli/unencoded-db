@@ -2,7 +2,7 @@ export const SITE_ORIGIN = 'https://rare.glyphatlas.org'
 export const PUBLIC_SECTIONS = ['', '/about', '/data', '/fonts', '/radicals', '/tags', '/chronology', '/sources'] as const
 
 const LIST_PARAMS: Record<string, readonly string[]> = {
-  '': ['q', 'also', 'script', 'filter', 'genre', 'collection', 'tag', 'radical', 'decade', 'in', 'out', 'sort', 'seed', 'after'],
+  '': ['q', 'also', 'script', 'filter', 'genre', 'collection', 'tag', 'radical', 'decade', 'in', 'out', 'sort', 'seed', 'after', 'page'],
   '/chronology': ['at', 'before', 'from'],
   '/sources': ['sort', 'after'],
 }
