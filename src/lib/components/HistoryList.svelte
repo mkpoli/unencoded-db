@@ -3,6 +3,7 @@
   import RevisionFields from './RevisionFields.svelte'
   import { tagLabels, type Tag } from '$lib/tags'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
+  import { enhance } from '$app/forms'
   import { href, t, when } from '$lib/t'
   import { recordCode } from '$lib/code'
 
@@ -13,14 +14,16 @@
     redacted?: boolean; redacted_at?: string | null
   }
 
-  let { rows, tags, dates, currentRev = null, showEntry = false, showActor = true, restore = false, redact = false, empty, next = null }: {
-    dates: Map<string, DateReading | null>; rows: Row[]; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; empty: string; next?: number | null
+  let { rows, tags, dates, currentRev = null, showEntry = false, showActor = true, restore = false, redact = false, thank = false, thanked = [], viewer = null, empty, next = null }: {
+    dates: Map<string, DateReading | null>; rows: Row[]; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; thank?: boolean; thanked?: number[]; viewer?: string | null; empty: string; next?: number | null
   } = $props()
   const labels = $derived(tagLabels(tags))
   const tagTypes = $derived(new Map(tags.map(tag => [tag.name, tag.type])))
 
   // The state a record or a sighting holds now stays; only a past one can be redacted.
   const past = (row: Row) => row.fields ? row.rev !== currentRev : row.sightingRev != null && row.rev !== row.sightingRev
+
+  const thankedFor = $derived(new Set(thanked))
 
   const stop = (event: MouseEvent) => event.stopPropagation()
 </script>
@@ -40,6 +43,17 @@
     </span>
     {#if row.redacted || row.redacted_at}<span class="revision-comment">{t('history.redacted')}</span>{:else if row.summary}<span class="revision-comment">{row.summary}</span>{/if}
   </span>
+  {#if thank}
+    <span class="revision-thank">
+      {#if thankedFor.has(row.id)}<span class="thanked">{t('history.thanked')}</span>
+      {:else if row.by_id && row.by_id !== viewer}
+        <form method="POST" action="?/thank" use:enhance={() => ({ update }) => update({ reset: false })}>
+          <input type="hidden" name="revision" value={row.id} />
+          <button class="thank" type="submit" onclick={stop}>{t('history.thank')}</button>
+        </form>
+      {/if}
+    </span>
+  {/if}
   <span class="revision-rev">{row.rev ? `r${row.rev}` : ''}</span>
   <span class="revision-toggle" aria-hidden="true"></span>
 {/snippet}
@@ -115,6 +129,10 @@
   a.revision-number:hover { color: var(--accent) }
   .revision-comment { overflow: hidden; color: var(--muted); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap }
   .revision-rev { flex: 0 0 36px; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap }
+  .revision-thank { flex: 0 0 auto; min-width: 44px; font-size: 12px; text-align: right; white-space: nowrap }
+  .thank { padding: 0; border: 0; background: none; color: var(--muted); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 3px }
+  .thank:hover, .thank:focus-visible { color: var(--accent) }
+  .thanked { color: var(--muted) }
   .revision-toggle { flex: 0 0 16px; color: var(--muted); font-size: 16px; line-height: 1; text-align: center }
   details .revision-toggle::before { content: '+' }
   details[open] .revision-toggle::before { content: '−' }
@@ -129,7 +147,9 @@
     .revision-row { flex-wrap: wrap; gap: 2px 10px; padding: 12px 2px }
     .revision-time { flex: 0 0 auto }
     .revision-actor { flex: 1 1 auto; order: 2 }
+    .revision-thank { order: 3; margin-left: auto }
     .revision-toggle { order: 3; margin-left: auto }
+    .revision-thank ~ .revision-toggle { margin-left: 0 }
     .revision-rev { display: none }
     .revision-change { flex: 1 0 100%; order: 4 }
     .revision-comment { white-space: normal }

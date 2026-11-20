@@ -622,5 +622,8 @@
   "error.tagCycle": "循環参照になるため設定できません。",
   "error.tagDepth": "自動付与の連鎖が深すぎるか多すぎます。",
   "error.tagLimit": "直接付与できるタグ数の上限に達しています。",
-  "error.tagTooLarge": "一度に更新する記録が多すぎます。"
+  "error.tagTooLarge": "一度に更新する記録が多すぎます。",
+  "history.thank": "感謝",
+  "history.thanked": "感謝済み",
+  "notifications.thank": "あなたの変更に感謝"
 }
