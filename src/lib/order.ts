@@ -21,5 +21,6 @@ export function pageSteps(from: number, to: number, last: number, beside = 2): (
     if (number === 1 || number === last || (number >= from - beside && number <= to + beside)) steps.push(number)
     else if (steps.at(-1) !== null) steps.push(null)
   }
-  return steps
+  // A gap of one number shows the number.
+  return steps.map((step, index) => step === null && steps[index + 1] === steps[index - 1]! + 2 ? steps[index - 1]! + 1 : step)
 }

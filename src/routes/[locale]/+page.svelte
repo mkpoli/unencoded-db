@@ -167,6 +167,7 @@
   }
   // The pages on screen: the one opened and those the list has grown by since.
   const lastOpen = $derived(Math.min(data.pages ?? data.number, data.number + Math.max(1, Math.ceil(shown.tiles.length / PAGE)) - 1))
+  const steps = $derived(pageSteps(data.number, lastOpen, data.pages ?? 1))
   const firstShown = $derived((data.number - 1) * PAGE + 1)
   // The decades records were first seen in, by century, oldest first.
   const centuries = $derived.by(() => {
@@ -273,12 +274,12 @@
     {#if shown.total}<p class="found">{t('browse.found', { n: `${shown.total.n}${shown.total.floor ? '+' : ''}` })}</p>{/if}
     {#if data.pages && data.records && shown.tiles.length}
       <div class="pager">
-        <p class="range">{t('browse.shown', { from: firstShown, to: firstShown + shown.tiles.length - 1, n: data.records })}</p>
+        <p class="range">{t('browse.shown', { from: firstShown, to: firstShown + shown.tiles.length - 1, n: `${data.records}${data.recordsFloor ? '+' : ''}` })}</p>
         {#if data.pages > 1}
-          <nav class="pages" aria-label={t('browse.page')}>
+          <nav class="pages" aria-label={t('browse.page')} data-sveltekit-preload-data="tap">
             {#if data.number > 1}<a class="chip" rel="prev" href={paged(data.number - 1)} aria-label={t('browse.previousPage')} title={t('browse.previousPage')}><span aria-hidden="true">‹</span></a>{:else}<span class="chip off" aria-hidden="true">‹</span>{/if}
-            {#each pageSteps(data.number, lastOpen, data.pages) as step, index (step ?? `gap${index}`)}
-              {#if step === null}<span class="gap" aria-hidden="true">…</span>{:else}<a class="chip" class:on={step >= data.number && step <= lastOpen} class:far={step !== 1 && step !== data.pages && (step < data.number - 1 || step > lastOpen + 1)} aria-current={step === data.number ? 'page' : undefined} href={paged(step)}>{step}</a>{/if}
+            {#each steps as step, index (step ?? `gap${index}`)}
+              {#if step === null}<span class="gap" aria-hidden="true">…</span>{:else}<a class="chip" class:on={step >= data.number && step <= lastOpen} class:far={(step === data.number - 2 && steps[index - 1] === null) || (step === lastOpen + 2 && steps[index + 1] === null)} aria-current={step === data.number ? 'page' : undefined} href={paged(step)}>{step}</a>{/if}
             {/each}
             {#if lastOpen < data.pages}<a class="chip" rel="next" href={paged(lastOpen + 1)} aria-label={t('browse.nextPage')} title={t('browse.nextPage')}><span aria-hidden="true">›</span></a>{:else}<span class="chip off" aria-hidden="true">›</span>{/if}
           </nav>
