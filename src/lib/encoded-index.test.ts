@@ -58,3 +58,19 @@ test('a load that fails is tried again by the next ask, and one that works is sh
   expect(await load()).toBe(2)
   expect(calls).toBe(2)
 })
+
+test('parts typed with no structure find the characters that hold them all, the one made of them alone first', () => {
+  const hits = lookup(index, '艹時')
+  expect(hits[0]).toMatchObject({ char: '蒔', tier: 'similar', score: 1 })
+  expect(hits.every(hit => hit.tier === 'similar')).toBe(true)
+  expect(hits.length).toBeLessThanOrEqual(TIER_MAX)
+  // The parts may be written out, in any order, as radical code points, or inside a description half written.
+  for (const text of ['寺日艹', '⺾時', '⿰⿱艹時']) expect(lookup(index, text)[0]?.char).toBe('蒔')
+  expect(lookup(index, '⿱艹')).toEqual([])
+})
+
+test('a guessed structure finds the character made of its parts first, and characters that hold them among others', () => {
+  const hits = lookup(index, '⿰艹時')
+  expect(hits[0]).toMatchObject({ char: '蒔', tier: 'similar' })
+  expect(lookup(index, '⿱日寺').find(hit => hit.char === '時')).toMatchObject({ tier: 'similar', score: 0.95 })
+})

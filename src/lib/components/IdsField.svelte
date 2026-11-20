@@ -5,7 +5,8 @@
   // under it, offered once the first is whole. Each is sent as an `ids` value of its own.
   //
   // While the first is whole, the field lists the records and encoded characters it may duplicate, in three
-  // tiers (see $lib/similar). A lone encoded character, or one the description matches, is the person's to
+  // tiers (see $lib/similar). Before it is whole, two or more parts list the records and characters that hold
+  // them all, and taking a character writes its description into the field. A lone encoded character, or one the description matches, is the person's to
   // place: the form describes that character and `onfill` receives what is known of it, or it describes a
   // different character of the same form and `onfill` receives the form alone.
   import { onMount, tick, untrack } from 'svelte'
@@ -13,9 +14,10 @@
   import { cleanIds, codePoints, IDS_MAX, splitIds } from '$lib/ids'
   import { idsMessages } from '$lib/ids-messages'
   import { characterFacts, fillOf, type CharacterFacts, type Fill } from '$lib/encoded'
-  import { encodedCandidates, expandedParts, TIER_MAX, TIERS, tierRecords, type Found, type RecordCandidate } from '$lib/candidates'
+  import { encodedCandidates, expandedParts, TIERS, tierRecords, type Found, type RecordCandidate } from '$lib/candidates'
   import { href, locale, media, t } from '$lib/t'
   import { recordCode } from '$lib/code'
+  import { LOOSE_MIN, MADE_OF } from '$lib/similar'
   import { browser } from '$app/environment'
   import type { IdsAdapter, IdsEditor } from 'ids-input/svelte'
   import IdsGlyph from './IdsGlyph.svelte'
@@ -34,6 +36,8 @@
   let rest = $state(untrack(() => values.slice(1).map(row)))
   const sequence = $derived(cleanIds(first))
   const whole = $derived(isDescription(sequence))
+  // Parts typed with no whole structure yet: enough of them are compared too.
+  const loose = $derived(!whole && [...sequence].filter(char => !/[\u2FF0-\u2FFF\u31EF]/u.test(char)).length >= LOOSE_MIN)
   $effect.pre(() => { primary = sequence })
 
   let main = $state<IdsLine>()
@@ -96,12 +100,15 @@
 
   let recordHits = $state.raw<Found[]>([])
   let encodedHits = $state.raw<Found[]>([])
-  const tiers = $derived(TIERS.map(tier => ({ tier, items: [...recordHits, ...encodedHits].filter(item => item.tier === tier).slice(0, TIER_MAX) })).filter(group => group.items.length))
+  // Records before characters, each kind already kept to its best few, nearest first.
+  const tiers = $derived(TIERS.map(tier => ({ tier, items: [...recordHits, ...encodedHits].filter(item => item.tier === tier) })).filter(group => group.items.length))
 
   // The details of a character the description matches are filled only when asked for.
   async function fill(char: string, homograph: boolean) {
     const facts = await characterFacts(char).catch(() => null)
-    if (facts) onfill?.(fillOf(facts, homograph))
+    if (!facts) return
+    if (!whole && facts.ids) first = facts.ids
+    onfill?.(fillOf(facts, homograph))
   }
 
   // A lone encoded character waiting for its choice, with the records that already carry its code.
@@ -130,17 +137,25 @@
       }, 500)
       return () => { live = false; clearTimeout(timer); controller.abort() }
     }
-    if (!whole) return
+    if (!whole && !loose) return
     const controller = new AbortController()
+    // The records are read by the parts of the description, and again by the characters those parts make
+    // (蒔 for 艹 and 時) once the encoded characters are known, since a record may be written with one.
+    const records = async (made: string[] = []) => {
+      const leaves = [...new Set([...made, ...await expandedParts(ids)])].slice(0, 12).join('')
+      const answer = await fetch(`/api/candidates?ids=${encodeURIComponent(ids)}${leaves ? `&leaves=${encodeURIComponent(leaves)}` : ''}${exclude ? `&exclude=${exclude}` : ''}`, { signal: controller.signal }).then(r => r.ok ? r.json() : [])
+      const found = Array.isArray(answer) ? answer.filter((item): item is RecordCandidate => typeof item?.id === 'number') : []
+      const tiered = await tierRecords(ids, found)
+      if (live) recordHits = tiered
+    }
     const timer = setTimeout(() => {
-      encodedCandidates(ids).then(found => { if (live) encodedHits = found }).catch(() => {})
-      ;(async () => {
-        const leaves = [...new Set(await expandedParts(ids))].slice(0, 12).join('')
-        const answer = await fetch(`/api/candidates?ids=${encodeURIComponent(ids)}${leaves ? `&leaves=${encodeURIComponent(leaves)}` : ''}${exclude ? `&exclude=${exclude}` : ''}`, { signal: controller.signal }).then(r => r.ok ? r.json() : [])
-        const records = Array.isArray(answer) ? answer.filter((item): item is RecordCandidate => typeof item?.id === 'number') : []
-        const tiered = await tierRecords(ids, records)
-        if (live) recordHits = tiered
-      })().catch(() => {})
+      const read = records().catch(() => {})
+      encodedCandidates(ids).then(async found => {
+        if (!live) return
+        encodedHits = found
+        const made = found.flatMap(hit => hit.source === 'encoded' && hit.score >= MADE_OF ? [hit.char] : []).slice(0, 4)
+        if (made.length) { await read; await records(made) }
+      }).catch(() => {})
     }, 350)
     return () => { live = false; clearTimeout(timer); controller.abort() }
   })
@@ -175,7 +190,7 @@
       </section>
     </div>
   {/if}
-  {#if whole && tiers.length}
+  {#if (whole || loose) && tiers.length}
     <div class="candidates" data-testid="candidates">
       {#each tiers as group (group.tier)}
         <section class="tier {group.tier}">
@@ -189,7 +204,7 @@
                     {:else if item.record.cover_key}<img src={media(item.record.cover_key)} alt="" loading="lazy" decoding="async" />{/if}
                   </span>
                   <span class="body">
-                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier !== 'similar'} <a class="text-link" href={href(`/entry/${item.record.id}/sighting/new`)} target="_blank">{t('field.candidateAdd')}</a>{/if}{#if group.tier !== 'same'} <a class="text-link" href={href(`/entry/${item.record.id}?ids_add=${encodeURIComponent(sequence)}#edit-ids`)} target="_blank">{t('field.candidateAddIds')}</a>{/if}</span>
+                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier !== 'similar'} <a class="text-link" href={href(`/entry/${item.record.id}/sighting/new`)} target="_blank">{t('field.candidateAdd')}</a>{/if}{#if whole && group.tier !== 'same'} <a class="text-link" href={href(`/entry/${item.record.id}?ids_add=${encodeURIComponent(sequence)}#edit-ids`)} target="_blank">{t('field.candidateAddIds')}</a>{/if}</span>
                     <span class="ids">{item.record.ids ?? ''}</span>
                   </span>
                 {:else}
