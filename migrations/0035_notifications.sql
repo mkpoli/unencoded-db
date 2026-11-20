@@ -14,6 +14,9 @@ CREATE TABLE notifications (
 CREATE INDEX notifications_by_person ON notifications(person, id);
 CREATE INDEX notifications_unread ON notifications(person, id) WHERE read_at IS NULL;
 CREATE INDEX notifications_by_comment ON notifications(comment_id) WHERE comment_id IS NOT NULL;
+-- One notice of one thing for each person, also after an anonymous person's notices join an account's.
+CREATE UNIQUE INDEX notifications_once_comment ON notifications(person, comment_id) WHERE comment_id IS NOT NULL;
+CREATE UNIQUE INDEX notifications_once_revision ON notifications(person, revision_id) WHERE revision_id IS NOT NULL;
 
 -- The changes made before notices existed are queued as unread, by the rule of `notify_revision` below.
 -- Evidence added later than a change is not told of it, and the catalogue's own maintenance tells nobody.
@@ -28,6 +31,7 @@ JOIN people p ON p.id = o.created_by
 JOIN people a ON a.id = r.actor
 WHERE r.kind IN ('edit','revert','sighting','sighting_edit','merge','unmerge')
   AND a.name <> 'Catalogue maintenance'
+  AND NOT (r.kind = 'merge' AND json_extract(r.snapshot, '$.into') IS NOT NULL)
   AND COALESCE(p.merged_into, p.id) <> COALESCE(a.merged_into, a.id)
 ORDER BY r.id;
 
@@ -45,14 +49,17 @@ BEGIN
 END;
 
 -- A change: the record's recorder and the recorders of its evidence; for an edit of one piece of evidence,
--- the record's recorder and that evidence's.
+-- the record's recorder and that evidence's. A merge writes a revision on each record, and the one on the
+-- record that remains tells both records' people, so the one on the record merged away tells nobody.
 CREATE TRIGGER notify_revision AFTER INSERT ON revisions
 WHEN NEW.kind IN ('edit','revert','sighting','sighting_edit','merge','unmerge')
+  AND NOT (NEW.kind = 'merge' AND json_extract(NEW.snapshot, '$.into') IS NOT NULL)
 BEGIN
   INSERT INTO notifications(person, revision_id, at)
   SELECT DISTINCT COALESCE(p.merged_into, p.id), NEW.id, NEW.at FROM people p
   WHERE p.id IN (
     SELECT created_by FROM entries WHERE id = NEW.entry_id
+    UNION SELECT created_by FROM entries WHERE NEW.kind = 'merge' AND id = json_extract(NEW.snapshot, '$.from')
     UNION SELECT created_by FROM sightings WHERE entry_id = NEW.entry_id AND hidden_at IS NULL AND (NEW.kind <> 'sighting_edit' OR id = NEW.sighting_id))
   AND COALESCE(p.merged_into, p.id) <> (SELECT COALESCE(merged_into, id) FROM people WHERE id = NEW.actor);
 END;

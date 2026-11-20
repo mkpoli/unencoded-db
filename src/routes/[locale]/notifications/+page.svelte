@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
   import Seo from '$lib/components/Seo.svelte'
   import { recordCode } from '$lib/code'
   import { href, t, when } from '$lib/t'
@@ -8,9 +7,16 @@
   // A comment opens at itself, a change to evidence at that evidence, any other change at the record's history.
   const target = (notice: Notification) => notice.comment_id ? `${href(`/entry/${notice.entry_id}`)}#comment-${notice.comment_id}`
     : notice.sighting_id ? `${href(`/entry/${notice.entry_id}`)}#sighting-${notice.sighting_id}` : href(`/entry/${notice.entry_id}/history`)
-  const unread = $derived(!form?.read && data.notifications.some(notification => !notification.read_at))
-  onMount(() => {
-    if (unread) void fetch('?', { method: 'POST', body: new FormData(), headers: { 'x-sveltekit-action': 'true' } }).catch(() => {})
+  // Unread notices of hidden things are counted and not listed, so the count decides, not the list.
+  const unread = $derived(!form?.read && data.unread > 0 && data.latest > 0)
+  let sent = 0
+  $effect(() => {
+    const upto = data.latest
+    if (!unread || upto <= sent) return
+    sent = upto
+    const body = new FormData()
+    body.set('upto', String(upto))
+    void fetch('?', { method: 'POST', body, headers: { 'x-sveltekit-action': 'true' } }).catch(() => {})
   })
 </script>
 
@@ -18,7 +24,7 @@
 <div class="page narrow stack">
   <h1>{t('notifications.title')}</h1>
   {#if !data.notifications.length}<p class="muted">{t('notifications.empty')}</p>{/if}
-  {#if unread}<noscript><form method="POST"><button class="button" type="submit">{t('notifications.markRead')}</button></form></noscript>{/if}
+  {#if unread}<noscript><form method="POST"><input type="hidden" name="upto" value={data.latest} /><button class="button" type="submit">{t('notifications.markRead')}</button></form></noscript>{/if}
   {#if data.notifications.length}
     <ol class="notices">
       {#each data.notifications as notification (notification.id)}

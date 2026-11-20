@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test'
 import { newClaim } from '$lib/claims'
 import { addComment, setCommentHidden } from './comments'
-import { addSighting, createEntry, editEntry, getEntry, type EntryFields, type SightingFields } from './entries'
-import { markRead, notificationsOf, unreadCount } from './notifications'
+import { addSighting, createEntry, editEntry, editSighting, getEntry, getSighting, mergeEntry, setHidden, type EntryFields, type SightingFields } from './entries'
+import { latestNotice, markRead, notificationsOf, unreadCount } from './notifications'
 import { createPerson } from './people'
 import { openTestDb } from './testdb'
 import { Database } from 'bun:sqlite'
@@ -34,7 +34,7 @@ test('recording a character tells nobody, and new evidence tells its recorder', 
 test('an edit tells everyone with evidence on the record except its writer', async () => {
   const { db, recorder, second, reader, who, entry, kinds } = await scene()
   await addSighting(db, entry, { ...sighting, place: 'Another book' }, [], who(second))
-  await markRead(db, recorder.id)
+  await markRead(db, recorder.id, await latestNotice(db, recorder.id))
   const found = (await getEntry(db, entry))!
   expect((await editEntry(db, entry, found.entry.rev, { ...fields('⿰山東'), description: 'checked' }, who(reader), 'gloss corrected')).ok).toBe(true)
   expect(await kinds(recorder)).toEqual(['edit', 'sighting'])
@@ -47,7 +47,7 @@ test('an edit tells everyone with evidence on the record except its writer', asy
 test('a comment tells the recorder of its evidence and the discussion so far, and hiding it clears the count', async () => {
   const { db, recorder, second, reader, who, entry, kinds } = await scene()
   await addSighting(db, entry, { ...sighting, place: 'Another book' }, [], who(second))
-  await markRead(db, recorder.id)
+  await markRead(db, recorder.id, await latestNotice(db, recorder.id))
   const first = await addComment(db, { entry, sighting: 1 }, 'Is this 觀?', who(reader))
   expect(await kinds(recorder)).toEqual(['comment', 'sighting'])
   expect(await kinds(second)).toEqual([])
@@ -99,4 +99,26 @@ test('changes made before notices existed are queued for the recorder', async ()
   for (const name of names.filter(name => name >= '0035')) raw.exec(readFileSync(join(migrations, name), 'utf8'))
   expect((await notificationsOf(db, recorder.id)).notifications.map(notice => [notice.kind, notice.by_id, notice.read_at])).toEqual([['sighting', second.id, null]])
   expect(await unreadCount(db, second.id)).toBe(0)
+})
+
+test('a merge tells each recorder once, and reading stops at what the page held', async () => {
+  const { db, recorder, second, reader, who, entry } = await scene()
+  const other = await createEntry(db, fields('⿰山西'), sighting, [], who(second))
+  expect((await mergeEntry(db, entry, other, who(reader), null)).ok).toBe(true)
+  expect(await unreadCount(db, recorder.id)).toBe(1)
+  expect(await unreadCount(db, second.id)).toBe(1)
+  const held = await latestNotice(db, recorder.id)
+  await addComment(db, { entry: other }, 'after the page was shown', who(reader))
+  await markRead(db, recorder.id, held)
+  expect(await unreadCount(db, recorder.id)).toBe(1)
+})
+
+test('an edit of evidence since hidden is not listed', async () => {
+  const { db, recorder, second, who, entry, kinds } = await scene()
+  await addSighting(db, entry, { ...sighting, place: 'Another book' }, [], who(recorder))
+  const held = (await getSighting(db, 2))!
+  expect((await editSighting(db, 2, held.rev, { ...sighting, place: 'Another book', note: 'x' }, null, who(second), 'private words', entry)).ok).toBe(true)
+  expect(await kinds(recorder)).toEqual(['sighting_edit'])
+  await setHidden(db, { entry, sighting: 2 }, true, who(second), null)
+  expect(await kinds(recorder)).toEqual([])
 })
