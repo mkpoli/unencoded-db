@@ -9,6 +9,7 @@
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import CharacterFields from '$lib/components/CharacterFields.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
+  import GlyphFace from '$lib/components/GlyphFace.svelte'
   import SpellingReport from '$lib/components/SpellingReport.svelte'
   import { GLYPH_STYLES } from '$lib/composer'
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
@@ -184,7 +185,7 @@
     <div class="head"><h2>{t('entry.about')}</h2><a class="button small" href="#edit-ids" data-edit="ids">{t('entry.edit')}</a></div>
     {#if sequences.length}
       <div class="identity">
-        <ul class="forms">{#each groups as group, position (group.ids)}<li class="form" bind:this={formsShown[position]}><ul class="styles">{#each GLYPH_STYLES as style (style)}<li><span class="plate"><IdsGlyph ids={group.ids} layout={group.layout} {style} /></span><span class="style-name">{t(`glyphStyle.${style}`)}</span></li>{/each}</ul><p class="sequence">{#each group.spellings as spelling, index (spelling)}<span class="ids" class:secondary={index > 0}>{spelling}</span><CopyButton text={spelling} />{/each}</p><SpellingReport record={entry.id} sequence={group.ids} layout={group.layout} drawing={style => formsShown[position]?.querySelector(`.styles > li:nth-child(${GLYPH_STYLES.indexOf(style) + 1}) svg`) ?? null} /></li>{/each}</ul>
+        <ul class="forms">{#each groups as group, position (group.ids)}<li class="form" bind:this={formsShown[position]}><ul class="styles">{#each GLYPH_STYLES as style (style)}<li><GlyphFace {style}><IdsGlyph ids={group.ids} layout={group.layout} {style} /></GlyphFace></li>{/each}</ul><p class="sequence">{#each group.spellings as spelling, index (spelling)}<span class="ids" class:secondary={index > 0}>{spelling}</span><CopyButton text={spelling} />{/each}</p><SpellingReport record={entry.id} sequence={group.ids} layout={group.layout} drawing={style => formsShown[position]?.querySelector(`.styles > li:nth-child(${GLYPH_STYLES.indexOf(style) + 1}) svg`) ?? null} /></li>{/each}</ul>
         <EditLink field="ids" name={t('field.ids')} />
         <div class="others">
           {#each others as spelling (spelling)}<button type="button" class="alt" onclick={() => addIds(spelling)}><span class="ids-text">{spelling}</span><span class="alt-add">+ {t('entry.idsAlternateAdd')}</span></button>{/each}
@@ -337,17 +338,14 @@
   .back { align-self:start; color:var(--muted) } .title { gap:8px } .code { font-variant-numeric:tabular-nums } .code-name { margin-inline-start:6px; font-weight:400; color:var(--muted) } .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
   h3 { font-size:14px; font-weight:600 }
   .identity { display:flex; flex-wrap:wrap; align-items:center; gap:12px 18px; min-width:0 }
-  .plate { flex:none; display:grid; place-items:center; width:96px; height:96px; border-radius:8px; background:var(--surface-tile) }
   /* The description drawn in each style the site composes, side by side, in place of one plate. */
   .forms { display:flex; flex-wrap:wrap; align-items:flex-start; gap:14px 22px; min-width:0; margin:0; padding:0; list-style:none }
   .form { display:flex; flex-direction:column; gap:6px; min-width:0 }
-  .styles { display:flex; flex-wrap:wrap; gap:10px; margin:0; padding:0; list-style:none }
-  .styles li { display:flex; flex-direction:column; align-items:center; gap:4px }
+  .styles { --face-size:96px; display:flex; flex-wrap:wrap; gap:10px; margin:0; padding:0; list-style:none }
   .sequence { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin:0; font-size:22px; line-height:1.35 }
   .form + .form .sequence { font-size:16px; color:var(--muted) }
   .sequence .secondary { font-size:16px; color:var(--muted) }
   .form :global(.report) { align-self:flex-start }
-  .style-name { font-size:12px; color:var(--muted) }
   .sites { display:flex; flex-wrap:wrap; gap:4px 12px; margin:0 } dd .sites { margin-top:4px }
   .others { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; min-width:0 }
   .alt { display:inline-flex; align-items:center; gap:8px; max-width:100%; padding:2px 10px; border:1px solid var(--line); border-radius:999px; background:none; font:inherit; font-size:13px; color:var(--ink); cursor:pointer }
@@ -373,7 +371,7 @@
   .pictures:not(.single) { --picture-height: 260px }
   .button.small { min-height:32px; padding:4px 10px; font-size:12.5px }
   .url { overflow-wrap:anywhere }
-  @media(max-width:700px) { .panel { padding:16px } .plate { width:72px; height:72px } .styles { gap:8px } .styles .plate { width:64px; height:64px } }
+  @media(max-width:700px) { .panel { padding:16px } .styles { --face-size:64px; gap:8px } }
   .first-seen { align-self:center; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; text-decoration:underline; text-decoration-color:var(--line-strong); text-underline-offset:3px }
   .first-seen:hover { color:var(--ink) }
   .badge.earliest { background:var(--accent-light); color:var(--accent) }
