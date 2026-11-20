@@ -1,6 +1,7 @@
 <script lang="ts">
   // A sighting's chain of go-betweens, nearest the cited work first. Each link carries the whole
-  // citation: the title, the author, the publisher, the date, and a web address where there is one.
+  // citation: the title, the author, what it appeared in, the publisher, the date, and a web address where
+  // there is one. A source without a title, as a chat message is, goes by what it appeared in.
   import EvidenceDate from './EvidenceDate.svelte'
   import type { DateReading } from '$lib/dates'
   import { href, t } from '$lib/t'
@@ -8,6 +9,8 @@
 
   type Via = StoredVia & { id?: number }
   let { vias, label = true, dates }: { vias: readonly Via[]; label?: boolean; dates?: Map<string, DateReading | null> } = $props()
+  // The container stands as the name of a source without a title, so it is not said twice.
+  const meta = (via: Via) => [via.author, via.title ? via.container : null, via.publisher].filter(Boolean)
   const web = (url: string | null) => Boolean(url && /^https?:\/\//i.test(url))
 </script>
 
@@ -21,19 +24,17 @@
           <div class="node">
             <span class="title">
               {#if via.id}
-                <a class="text-link" href={href(`/source/${via.id}`)}>{via.title || via.url || t('source.title')}</a>
+                <a class="text-link" href={href(`/source/${via.id}`)}>{via.title || via.container || via.url || t('source.title')}</a>
                 {#if web(via.url)} <a class="text-link url" href={via.url} target="_blank" rel="noopener noreferrer" aria-label={t('field.url')}>↗</a>{/if}
               {:else if web(via.url)}
-                <a class="text-link" href={via.url} target="_blank" rel="noopener noreferrer">{via.title || via.url}</a>
+                <a class="text-link" href={via.url} target="_blank" rel="noopener noreferrer">{via.title || via.container || via.url}</a>
               {:else}
-                <span>{via.title || t('source.title')}</span>
+                <span>{via.title || via.container || t('source.title')}</span>
               {/if}
             </span>
-            {#if via.author || via.publisher || via.report_date}
+            {#if meta(via).length || via.report_date}
               <span class="meta">
-                {#if via.author}{via.author}{/if}
-                {#if via.publisher}{#if via.author}{' · '}{/if}{via.publisher}{/if}
-                {#if via.report_date}{#if via.author || via.publisher}{' · '}{/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}
+                {meta(via).join(' · ')}{#if via.report_date}{#if meta(via).length}{' · '}{/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}
               </span>
             {/if}
             {#if via.quote}<blockquote class="quote">{via.quote}</blockquote>{/if}

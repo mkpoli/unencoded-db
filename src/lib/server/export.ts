@@ -174,9 +174,10 @@ export type MediaRow = {
   source_author: string | null
   source_publisher: string | null
   source_report_date: string | null
+  source_container: string | null
 }
 
-const MEDIA_COLUMNS = ['record_code', 'entry_id', 'sighting_id', 'image_key', 'image_url', 'thumb_key', 'thumb_url', 'image_type', 'image_w', 'image_h', 'box', 'source_id', 'source_title', 'source_author', 'source_publisher', 'source_report_date', 'source_url'] as const
+const MEDIA_COLUMNS = ['record_code', 'entry_id', 'sighting_id', 'image_key', 'image_url', 'thumb_key', 'thumb_url', 'image_type', 'image_w', 'image_h', 'box', 'source_id', 'source_title', 'source_author', 'source_publisher', 'source_report_date', 'source_container', 'source_url'] as const
 
 const mediaUrl = (origin: string, key: string) => new URL(`/media/v2/${key}`, origin).href
 
@@ -201,13 +202,14 @@ export function mediaCsvRows(rows: readonly MediaRow[], origin: string) {
     row.source_author,
     row.source_publisher,
     row.source_report_date,
+    row.source_container,
     row.source_url,
   ].map(csvCell).join(',')).join('\r\n') + (rows.length ? '\r\n' : '')
 }
 
 const MEDIA_QUERY = `SELECT m.position, m.image_key, m.image_type, m.image_w, m.image_h, m.thumb_key, m.box,
   s.id AS sighting_id, s.entry_id,
-  c.id AS source_id, c.url AS source_url, c.title AS source_title, c.author AS source_author, c.publisher AS source_publisher, c.report_date AS source_report_date
+  c.id AS source_id, c.url AS source_url, c.title AS source_title, c.author AS source_author, c.publisher AS source_publisher, c.report_date AS source_report_date, c.container AS source_container
   FROM sighting_media m
   JOIN sightings s ON s.id = m.sighting_id
   JOIN entries e ON e.id = s.entry_id

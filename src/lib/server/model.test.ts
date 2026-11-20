@@ -9,7 +9,7 @@ import { openTestDb } from './testdb'
 const migration = (name: string) => readFileSync(join(import.meta.dir, '../../../migrations', name), 'utf8')
 const who = { actor: 'p1', ip: null }
 const fields = (claims: Claim[] = []): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims })
-const seen = (extra: Partial<SightingFields> = {}): SightingFields => ({ place: 'a shop sign', url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null, ...extra })
+const seen = (extra: Partial<SightingFields> = {}): SightingFields => ({ place: 'a shop sign', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null, ...extra })
 const image = (name: string, box: string | null = null): StoredImage => ({ image_key: `${name}.jpg`, image_type: 'image/jpeg', image_w: 10, image_h: 10, thumb_key: `${name}-t.jpg`, box })
 const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null, links: Partial<Pick<Claim, 'sightings' | 'under'>> = {}): Claim => newClaim(kind, value, data, links)
 const book = { title: '字書', author: '某', publisher: '某社', report_date: '1900', url: null }
@@ -222,8 +222,8 @@ describe('sources', () => {
   })
 })
 
-const post = { url: 'https://example.test/post/1', title: 'A post', author: 'someone', publisher: null, report_date: '2026-05-01', quote: null }
-const thread = { url: null, title: 'A thread', author: null, publisher: 'A forum', report_date: null, quote: null }
+const post = { url: 'https://example.test/post/1', title: 'A post', author: 'someone', publisher: null, report_date: '2026-05-01', container: null, quote: null }
+const thread = { url: null, title: 'A thread', author: null, publisher: 'A forum', report_date: null, container: null, quote: null }
 const count = (raw: ReturnType<typeof open>['raw']) => (raw.query('SELECT COUNT(*) AS n FROM sources').get() as { n: number }).n
 const chain = (sighting: { vias: object[] }) => sighting.vias.map(via => (({ id: _, ...rest }: any) => rest)(via))
 
@@ -256,7 +256,7 @@ describe('found via', () => {
     expect(chain((await getSighting(db, sighting.id))!)).toEqual([post, thread])
     const form = new FormData()
     const quoted = { ...thread, quote: 'A quoted line' }
-    for (const via of [post, quoted, post, { url: null, title: null, author: null, publisher: null, report_date: null, quote: null }]) {
+    for (const via of [post, quoted, post, { url: null, title: null, author: null, publisher: null, report_date: null, container: null, quote: null }]) {
       form.append('via_url', via.url ?? ''); form.append('via_title', via.title ?? ''); form.append('via_author', via.author ?? ''); form.append('via_publisher', via.publisher ?? ''); form.append('via_report_date', via.report_date ?? ''); form.append('via_quote', via.quote ?? '')
     }
     expect(readSightingFields(form).vias).toEqual([post, quoted])
@@ -328,7 +328,7 @@ describe('found via', () => {
     expect(await getSighting(db, sighting.id)).toMatchObject({ vias: [], title: '字書' })
     // A source still cited as a via stays: the book becomes the via of a sighting that no longer cites it.
     const other = await addSighting(db, id, seen({ ...book, vias: [post] }), [], who)
-    const swapped = { ...post, vias: [{ url: null, title: '字書', author: '某', publisher: '某社', report_date: '1900', quote: null }] }
+    const swapped = { ...post, vias: [{ url: null, title: '字書', author: '某', publisher: '某社', report_date: '1900', container: null, quote: null }] }
     await editSighting(db, other!, 1, seen(swapped), null, who, null, id)
     expect(count(raw)).toBe(2)
     expect(await getSighting(db, other!)).toMatchObject({ title: 'A post' })
@@ -394,7 +394,7 @@ describe('found via', () => {
     expect(viaPage!.sightings[0].media.map(m => m.image_key)).toEqual(['q.jpg'])
     expect((await sourcePage(db, work))!.sightings.map(s => [s.tile.id, s.via])).toEqual([[a, false]])
     // A sighting that cites one source both ways is listed once.
-    const c = await createEntry(db, fields(), seen({ ...book, vias: [{ url: null, title: '字書', author: '某', publisher: '某社', report_date: '1900', quote: null }] }), [], who)
+    const c = await createEntry(db, fields(), seen({ ...book, vias: [{ url: null, title: '字書', author: '某', publisher: '某社', report_date: '1900', container: null, quote: null }] }), [], who)
     expect((await sourcePage(db, (await getEntry(db, c))!.sightings[0].source_id!))!.sightings.map(s => [s.tile.id, s.via])).toEqual([[a, false], [c, false]])
     await setHidden(db, { entry: a }, true, who, null)
     expect((await sourcePage(db, work))!.sightings.map(s => s.tile.id)).toEqual([c])

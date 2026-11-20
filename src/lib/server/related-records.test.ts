@@ -5,7 +5,7 @@ import { createPerson } from './people'
 import { relatedClaimsStatements, relatedPicturesStatement, relatedRecords, relatedTilesStatement, RELATED_PICTURES } from './related-records'
 import { openTestDb } from './testdb'
 
-const seen = (place: string, more: Partial<SightingFields> = {}): SightingFields => ({ place, url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null, ...more })
+const seen = (place: string, more: Partial<SightingFields> = {}): SightingFields => ({ place, url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null, ...more })
 const picture = (name: string): StoredImage => ({ image_key: `${name}.webp`, image_type: 'image/webp', image_w: 10, image_h: 10, thumb_key: `${name}-t.webp`, box: null })
 const record = (claims: Claim[]): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims })
 const relation = (character: string, relationship: string) => newClaim('relation', character, { relationship })

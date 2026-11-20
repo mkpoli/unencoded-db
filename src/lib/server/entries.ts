@@ -28,11 +28,11 @@ import { hashHex } from './image'
 import { ORDER, PAGE, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
 
 export type EntryFields = { script: string; script_other: string | null; description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
-// A source as its five citation fields. A sighting's `vias` list them from the one nearest the cited work outward.
+// A source as its citation fields. A sighting's `vias` list them from the one nearest the cited work outward.
 export type Citation = Record<typeof CITATION_FIELDS[number], string | null>
 // A link in a sighting's chain: the source, and the words of it this sighting quotes.
 export type Via = Citation & { quote: string | null }
-export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; vias: Via[]; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
+export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; vias: Via[]; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
 export type Entry = Omit<EntryFields, 'claims'> & { status: Status | null; id: number; rev: number; ids: string | null; layout: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
@@ -42,12 +42,13 @@ export type Sighting = Omit<SightingFields, 'vias'> & { id: number; entry_id: nu
 export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical', 'strokes'] as const
 // A sighting's citation is its source; the other fields are the sighting's own. Its `vias` are the sources
 // it passed through, from the one nearest the cited work to the one the contributor saw: a post that shows
-// a page of the cited work, say.
-export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date'] as const
+// a page of the cited work, say. `container` is what the source appeared in: the journal of an article, the
+// site of a page, the group of a chat message. A message has an author, a date and a container, and no title.
+export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date', 'container'] as const
 // The form sends each via as one value of each of these, repeated once per via and aligned by position.
-export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_quote'] as const
+export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_container', 'via_quote'] as const
 export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'context', 'style', 'types', 'note', 'quotes'] as const
-export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'original_date', 'page', 'context', 'style', 'types', 'note', 'quotes'] as const
+export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'container', 'original_date', 'page', 'context', 'style', 'types', 'note', 'quotes'] as const
 export const IMAGE_FIELDS = ['image_key', 'image_type', 'image_w', 'image_h', 'thumb_key', 'box'] as const
 
 const clean = (raw: unknown, max: number) => {
@@ -64,11 +65,12 @@ const link = (form: FormData, name: string) => cleanLink(form.get(name))
 
 const citationKey = (citation: Citation) => JSON.stringify(CITATION_FIELDS.map(field => citation[field]))
 // The vias of a chain: rows with no field are dropped, a row that repeats an earlier one is dropped, and
-// at most VIAS_MAX are kept. The quote stays with the link that carries it.
+// at most VIAS_MAX are kept. The quote stays with the link that carries it, and two links to one source
+// that quote different words are two links: two messages one person sent to a group on one day.
 export const tidyVias = (vias: readonly Via[]): Via[] => {
   const seen = new Set<string>()
   return vias.filter(via => {
-    const key = citationKey(via)
+    const key = citationKey(via) + '\u0000' + (via.quote ?? '')
     if (CITATION_FIELDS.every(field => via[field] === null) || seen.has(key)) return false
     seen.add(key)
     return true
@@ -86,7 +88,8 @@ function readVias(form: FormData): Via[] {
     author: clean(columns[2][index], 300),
     publisher: clean(columns[3][index], 300),
     report_date: dateText(columns[4][index]),
-    quote: clean(columns[5][index], 5000),
+    container: clean(columns[5][index], 300),
+    quote: clean(columns[6][index], 5000),
   })))
 }
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
@@ -128,6 +131,7 @@ export function readSightingFields(form: FormData): SightingFields {
     author: text(form, 'author', 300),
     publisher: text(form, 'publisher', 300),
     report_date: dateText(form.get('report_date')),
+    container: text(form, 'container', 300),
     vias: readVias(form),
     original_date: dateText(form.get('original_date')),
     page: text(form, 'page', 80),
@@ -212,9 +216,9 @@ function wordTags(entry: TagInput, claims: readonly Claim[], sightings: Sighting
   for (const claim of claims) if (WORD_KINDS.includes(claim.kind)) { add(claim.value); add(claim.data?.difference); add(claim.data?.evidence) }
   // A Unicode code is found by the character it names, which is what another site links with.
   for (const claim of claims) if (claim.kind === 'encoding' && claim.data?.charset === 'unicode') add(encodedCharacter(claim.value))
-  for (const sighting of sightings) for (const field of ['place', 'title', 'author', 'publisher', 'note'] as const) add(sighting[field])
+  for (const sighting of sightings) for (const field of ['place', 'title', 'author', 'publisher', 'container', 'note'] as const) add(sighting[field])
   for (const sighting of sightings) for (const quote of quotations(sighting.quotes)) { add(quote.text); add(quote.locator) }
-  for (const sighting of sightings) for (const via of sighting.vias) for (const field of ['title', 'quote', 'author', 'publisher'] as const) add(via[field])
+  for (const sighting of sightings) for (const via of sighting.vias) for (const field of ['title', 'quote', 'author', 'publisher', 'container'] as const) add(via[field])
   return [...words].slice(0, WORDS_MAX).map(word => `w:${word}`)
 }
 
@@ -355,11 +359,12 @@ function ownClaims(claims: readonly Claim[], sightings: { id: number }[]) {
 const CITED_BY_PLACE = `UPDATE claims SET sightings = (SELECT json_group_array((SELECT s.id FROM (SELECT id, row_number() OVER (ORDER BY id) AS place FROM sightings WHERE entry_id = claims.entry_id) s WHERE s.place = named.value)) FROM json_each(claims.sightings) named) WHERE entry_id = ${ENTRY_SEQ} AND sightings != '[]'`
 const CITED_IN_SNAPSHOT = `UPDATE revisions SET snapshot = json_set(snapshot, '$.claims', json((SELECT json_group_array(json(json_set(claim.value, '$.sightings', json((SELECT k.sightings FROM claims k WHERE k.entry_id = revisions.entry_id AND k.key = json_extract(claim.value, '$.key')))))) FROM json_each(revisions.snapshot, '$.claims') claim))) WHERE entry_id = ${ENTRY_SEQ} AND kind = 'create'`
 
-// The citation is the source's identity: the same five fields are the same row, whether a sighting cites
-// it as its work or as where it was found.
+// The citation is the source's identity: the same fields are the same row, whether a sighting cites
+// it as its work or as where it was found. A citation without a container hashes as its first five fields,
+// which is how every source was keyed before sources had one.
 async function citationOf(db: D1Database, values: (string | null)[], dates: DateBook) {
   if (values.every(value => value === null)) return { hash: null, statements: [] }
-  const hash = await hashHex(JSON.stringify(values))
+  const hash = await hashHex(JSON.stringify(values.at(-1) === null ? values.slice(0, -1) : values))
   const year = datedYear(values[CITATION_FIELDS.indexOf('report_date')], dates)?.n ?? null
   const publisher = values[CITATION_FIELDS.indexOf('publisher')]
   const key = publisher && nameKey(publisher)
@@ -369,9 +374,9 @@ async function citationOf(db: D1Database, values: (string | null)[], dates: Date
       WHERE NOT EXISTS (SELECT 1 FROM publisher_aliases WHERE lookup = ?2) ON CONFLICT(lookup) DO NOTHING`)
       .bind(nameLabel(publisher), key))
   }
-  const [url, title, author, imprint, date] = values
-  const sourceName = sourceNameKey(title || url || author || imprint || date || '')
-  statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName))
+  const [url, title, author, imprint, date, container] = values
+  const sourceName = sourceNameKey(title || url || author || imprint || date || container || '')
+  statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup, container_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName, container && nameKey(container) || null))
   return { hash, statements }
 }
 // The hash of the cited work, and the links of the chain with the words each quotes.
@@ -1234,7 +1239,7 @@ export async function tagCounts(db: D1Database) {
   return results
 }
 
-export type Source = { id: number; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null }
+export type Source = { id: number } & Citation
 
 export const getVisibleSource = (db: D1Database, id: number) => db.prepare(`
   SELECT id, ${CITATION_FIELDS.join(', ')} FROM sources
