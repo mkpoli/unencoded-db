@@ -18,7 +18,7 @@ const ROWS_MAX = 100
 
 export type RelatedPicture = { sighting: number; thumb_key: string; place: string; title: string | null; date: string | null }
 /** `relationships` are what this record states of the other, `stated` what the other states of this one. */
-export type RelatedRecord = { tile: Tile; relationships: RelationKind[]; stated: RelationKind[]; pictures: RelatedPicture[] }
+export type RelatedRecord = { tile: Tile; relationships: RelationKind[]; stated: RelationKind[]; pictures: RelatedPicture[]; /** The records this one's relations name by code that led here, itself or one merged into it. */ named: number[] }
 
 /** The spellings a relation's value is looked up by: as written, as a description, and as the characters its codes name; a record's code is that record alone. */
 const spellings = (value: string) => { const record = codedRecord(value); return record ? [recordCode(record)] : [...new Set([value, cleanIds(value), codePointCharacters(value)].filter(Boolean))] }
@@ -43,9 +43,13 @@ export const relatedPicturesStatement = (db: D1Database, ids: readonly number[])
     LEFT JOIN sources c ON c.id = s.source_id
     WHERE e.id IN (${marks(ids.length)})`).bind(...ids)
 
-// The records named by their codes, each as the record it was merged into when it was.
+// The records named by their codes, each followed through its merges to the record that stays; one that is
+// hidden, or leads to none, is left out. Every step is a read by key, and the steps are capped.
 const byCode = (db: D1Database, ids: readonly number[]) =>
-  db.prepare(`SELECT COALESCE(e.merged_into, e.id) AS entry_id, e.id AS value, 'code' AS kind, NULL AS relationship FROM entries e WHERE e.id IN (${marks(ids.length)}) AND e.hidden_at IS NULL`).bind(...ids)
+  db.prepare(`WITH RECURSIVE named(origin, id) AS (
+      SELECT value, value FROM json_each(?)
+      UNION ALL SELECT n.origin, e.merged_into FROM named n JOIN entries e ON e.id = n.id WHERE e.merged_into IS NOT NULL LIMIT ${NAMES_MAX * 4})
+    SELECT n.id AS entry_id, n.origin AS value, 'code' AS kind, NULL AS relationship FROM named n JOIN entries e ON e.id = n.id WHERE e.merged_into IS NULL AND e.hidden_at IS NULL`).bind(JSON.stringify(ids))
 
 export const relatedClaimsStatements = (db: D1Database, named: readonly string[], own: readonly string[]) => {
   const records = named.flatMap(name => codedRecord(name) ?? []).slice(0, NAMES_MAX)
@@ -73,16 +77,16 @@ export async function relatedRecords(db: D1Database, id: number, claims: readonl
 
   const statements = relatedClaimsStatements(db, [...said.keys()], own)
   if (!statements.length) return []
-  const found = new Map<number, { relationships: Set<RelationKind>; stated: Set<RelationKind> }>()
+  const found = new Map<number, { relationships: Set<RelationKind>; stated: Set<RelationKind>; named: number[] }>()
   const note = (entry: number, side: 'relationships' | 'stated', kinds: readonly RelationKind[]) => {
     if (entry === id) return
-    const held = found.get(entry) ?? { relationships: new Set(), stated: new Set() }
+    const held = found.get(entry) ?? { relationships: new Set(), stated: new Set(), named: [] }
     for (const kind of kinds) held[side].add(kind)
     found.set(entry, held)
   }
   for (const { results } of await db.batch<{ entry_id: number; value: string; kind: string; relationship: unknown }>(statements)) {
     for (const row of results) {
-      if (row.kind === 'code') { note(row.entry_id, 'relationships', said.get(recordCode(Number(row.value))) ?? []); continue }
+      if (row.kind === 'code') { note(row.entry_id, 'relationships', said.get(recordCode(Number(row.value))) ?? []); found.get(row.entry_id)?.named.push(Number(row.value)); continue }
       if (row.kind === 'relation') { if (isRelationKind(row.relationship)) note(row.entry_id, 'stated', [row.relationship]) }
       // A code is every spelling of its character this record wrote.
       else note(row.entry_id, 'relationships', row.kind === 'encoding' ? [encodedCharacter(row.value), ...codes(encodedCharacter(row.value))].flatMap(name => said.get(name) ?? []) : said.get(row.value) ?? [])
@@ -93,5 +97,5 @@ export async function relatedRecords(db: D1Database, id: number, claims: readonl
   const [tiles, pictures] = await db.batch<unknown>([relatedTilesStatement(db, ids), relatedPicturesStatement(db, ids)])
   const drawn = new Map<number, RelatedPicture[]>()
   for (const { entry_id, ...picture } of (pictures.results as (RelatedPicture & { entry_id: number })[]).sort((a, b) => a.sighting - b.sighting)) drawn.set(entry_id, [...(drawn.get(entry_id) ?? []), picture])
-  return (tiles.results as TileRow[]).sort((a, b) => a.id - b.id).map(row => ({ tile: toTile(row), relationships: [...found.get(row.id)!.relationships], stated: [...found.get(row.id)!.stated], pictures: drawn.get(row.id) ?? [] }))
+  return (tiles.results as TileRow[]).sort((a, b) => a.id - b.id).map(row => ({ tile: toTile(row), relationships: [...found.get(row.id)!.relationships], stated: [...found.get(row.id)!.stated], pictures: drawn.get(row.id) ?? [], named: found.get(row.id)!.named }))
 }

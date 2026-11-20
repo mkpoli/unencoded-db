@@ -27,4 +27,4 @@ export function parseRecordCode(text: string) {
 
 /** The id a relation names when its value is a record's code written with R+, or null. A relation's value is
  * otherwise a character or a description, which four 千字文 digits could also be. */
-export const codedRecord = (value: string) => /^\s*r\+/i.test(value) ? parseRecordCode(value) : null
+export const codedRecord = (value: string) => /^\s*r\+/i.test(value.normalize('NFKC')) ? parseRecordCode(value) : null

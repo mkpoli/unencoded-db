@@ -14,7 +14,7 @@
   // `sightings` are the ids the page shows, so that a claim links only to evidence that is on it.
   // `records` are the related records the page read, which draw the ones a relation names by code.
   let { claims, sightings, records = [] }: { claims: Claim[]; sightings: number[]; records?: RelatedRecord[] } = $props()
-  const tileOf = (value: string) => records.find(item => item.tile.id === codedRecord(value))?.tile ?? null
+  const tileOf = (value: string) => { const id = codedRecord(value); return id === null ? null : records.find(item => item.named.includes(id))?.tile ?? null }
 
   const meanings = $derived(claimsOf(claims, 'meaning'))
   const readings = $derived(claimsOf(claims, 'reading'))

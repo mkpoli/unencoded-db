@@ -44,8 +44,12 @@ test('a relation names a record by its code, from either side, and follows a mer
   expect((await related(b)).map(item => [item.tile.id, item.relationships, item.stated])).toEqual([[a, ['variant'], []]])
   expect((await related(a)).map(item => [item.tile.id, item.relationships, item.stated])).toEqual([[b, [], ['variant']]])
   const kept = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('kept'), [], who)
+  const last = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('last'), [], who)
   await mergeEntry(db, a, kept, who, null)
-  expect((await related(b)).map(item => item.tile.id)).toEqual([kept])
+  await mergeEntry(db, kept, last, who, null)
+  expect((await related(b)).map(item => [item.tile.id, item.named])).toEqual([[last, [a]]])
+  await setHidden(db, { entry: last }, true, who, null)
+  expect(await related(b)).toEqual([])
 })
 
 test('hidden records and hidden sightings are left out, and a record without relations reads nothing', async () => {
