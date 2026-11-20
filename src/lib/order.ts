@@ -14,3 +14,12 @@ export const sourceSortOf = (value: string | null | undefined): SourceSort | nul
 export const seedOf = (value: string | null | undefined) => value && /^(0|[1-9]\d{0,9})$/.test(value) && Number(value) < SEEDS ? Number(value) : null
 // The records one page of a list holds.
 export const PAGE = 48
+// The page numbers a pager offers: the first, the last and those beside the open ones, with null where numbers are left out.
+export function pageSteps(from: number, to: number, last: number, beside = 2): (number | null)[] {
+  const steps: (number | null)[] = []
+  for (let number = 1; number <= last; number++) {
+    if (number === 1 || number === last || (number >= from - beside && number <= to + beside)) steps.push(number)
+    else if (steps.at(-1) !== null) steps.push(null)
+  }
+  return steps
+}

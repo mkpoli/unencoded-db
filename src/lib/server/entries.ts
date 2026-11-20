@@ -1005,7 +1005,7 @@ export async function pageCursor(db: D1Database, listing: Listing, number: numbe
   return results.length === 2 ? cursorAt(range.order, results[0]) : undefined
 }
 /** How many pages a listing has, at most PAGES_MAX; null for a listing without numbered pages. */
-export async function pageCount(db: D1Database, listing: Listing): Promise<number | null> {
+export async function pageCount(db: D1Database, listing: Listing): Promise<{ records: number; pages: number } | null> {
   const range = pagedRange(listing)
   if (!range) return null
   // The orders by year list only the dated records, which no kept count names.
@@ -1013,7 +1013,8 @@ export async function pageCount(db: D1Database, listing: Listing): Promise<numbe
   const row = await (dated
     ? db.prepare(`SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags t WHERE t.tag = ? AND t.year IS NOT NULL AND ${LISTED} LIMIT ${PAGES_MAX * PAGE})`)
     : db.prepare('SELECT n FROM tag_counts WHERE tag = ?')).bind(range.tag).first<{ n: number }>()
-  return Math.min(PAGES_MAX, Math.ceil((row?.n ?? 0) / PAGE))
+  const records = Math.min(PAGES_MAX * PAGE, row?.n ?? 0)
+  return { records, pages: Math.ceil(records / PAGE) }
 }
 
 // A search is counted once, from the shortest range it is tested against: a key, a word or the exact
