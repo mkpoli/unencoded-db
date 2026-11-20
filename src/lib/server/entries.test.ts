@@ -12,7 +12,8 @@ import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTa
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
-import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, WORD_SIZE, exactSize, alsoSearchIds, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { PAGE } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -962,7 +963,7 @@ describe('order', () => {
 // with no scan of a table and no sort.
 describe('query cost', () => {
   const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
-  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 't:hakka' }, { facet: 't:IRG' }, { radical: '口' }, { decade: '1930' }, { decade: '1930', order: 'earliest', after: '1935.4' }, { decade: '1930', script: 'han', query: '亻' }, { radical: '儿兄克', script: 'han', filter: 'variant', facet: 't:hakka', query: '亻' }, { radical: '儿兄克', order: 'most' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 't:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 't:hakka', without: ['zitools'], query: '亻' }, ...(['new', 'old', 'fewest', 'earliest', 'latest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'new' || order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
+  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { query: '艹時', also: ['艹日寺', '蒔'] }, { script: 'han', filter: 'ids', order: 'new', query: '艹時', also: ['艹日寺'] }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 't:hakka' }, { facet: 't:IRG' }, { radical: '口' }, { decade: '1930' }, { decade: '1930', order: 'earliest', after: '1935.4' }, { decade: '1930', script: 'han', query: '亻' }, { radical: '儿兄克', script: 'han', filter: 'variant', facet: 't:hakka', query: '亻' }, { radical: '儿兄克', order: 'most' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 't:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 't:hakka', without: ['zitools'], query: '亻' }, ...(['new', 'old', 'fewest', 'earliest', 'latest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'new' || order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
   for (const shape of shapes) test(`list ${JSON.stringify(shape)}`, () => {
     const statement = listStatement(db, shape) as unknown as { sql: string; values: unknown[] }
     const details = plan(statement.sql, statement.values)
@@ -1649,6 +1650,42 @@ test('a record names the evidence that holds its earliest year through every wri
   const undated = await createEntry(db, fields(), seen(), [], who)
   expect(first(undated)).toBeNull()
 })
+test('parts typed with no structure find the records that spell them another way', async () => {
+  const typed = await createEntry(db, described('⿱艹時'), seen(), [], who)
+  const radical = await createEntry(db, described('⿱⺾時'), seen(), [], who)
+  const mate = await createEntry(db, described('⿱艸時'), seen(), [], who)
+  const written = await createEntry(db, described('⿱艹⿰日寺'), seen(), [], who)
+  const inside = await createEntry(db, described('⿰氵蒔'), seen(), [], who)
+  await createEntry(db, described('⿱艹新'), seen(), [], who)
+  await createEntry(db, described('⿰日寺'), seen(), [], who)
+  const found = async (listing: Parameters<typeof list>[1]) => (await list(db, { order: 'old', ...listing }))!.tiles.map(tile => tile.id)
+  // A part is found as its radical code point and as the parts counted as one with it.
+  expect(await found({ query: '艹時' })).toEqual([typed, radical, mate])
+  // The spellings the browser found are searched too: the parts written out, and the character they make.
+  expect(await found({ query: '艹時', also: ['艹日寺', '蒔'] })).toEqual([typed, radical, mate, written, inside])
+  expect(await searchTotal(db, { query: '艹時' })).toMatchObject({ n: 3, floor: false })
+  expect(await searchTotal(db, { query: '艹時', also: ['艹日寺', '蒔'] })).toMatchObject({ n: 5, floor: false })
+  expect(searchParts('艹時')).toEqual(['艹', '時'])
+  expect(searchParts('⿱艹時')).toBeNull()
+  expect(searchParts('艹 word')).toBeNull()
+  // Another spelling is parts alone, is not the query in another order, and is one of a few.
+  expect(alsoSearchParts('艹時', ['時艹', '艹日寺', '艹 日 寺', '⿱艹時', 'word', '日寺艹', '蒔', '一二三四五六'])).toEqual(['艹日寺', '蒔'])
+  expect(alsoSearchParts('艹時', ['一', '二', '三', '四', '五'])).toHaveLength(PART_ALSO_MAX)
+  expect(alsoSearchParts('word', ['艹日寺'])).toEqual([])
+  // The character the parts make finds the records that name it as a related character.
+  const variant = await createEntry(db, { ...described('⿱艹寺'), claims: [...described('⿱艹寺').claims, claim('relation', '蒔', { relationship: 'variant' })] }, seen(), [], who)
+  expect(await found({ query: '艹時', also: ['蒔'] })).toEqual([typed, radical, mate, inside, variant])
+  // A radical code point typed is the part it stands for, and a mate is read under the row its records are kept in.
+  expect(await found({ query: '⺾時' })).toEqual([typed, radical, mate])
+  const flesh = await createEntry(db, described('⿰⺼木'), seen(), [], who)
+  expect(await found({ query: '月木' })).toEqual([flesh])
+  // The widest search stays under the number of values one statement may bind.
+  const widest = { script: 'han', filter: 'variant', facet: 't:hakka', radical: '口', decade: '1930', within: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], without: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], query: '㔾七丸儿兔', also: ['兹冃冊凷刀', '叉友另囘堇', '夂奂尒彐擧'] }
+  const bound = (statement: unknown) => (statement as { values: unknown[] }).values.length
+  expect(bound(listStatement(db, widest))).toBeLessThanOrEqual(100)
+  expect(bound(totalStatement(db, widest, { words: Array(16).fill('p:一') }))).toBeLessThanOrEqual(100)
+})
+
 describe('search total', () => {
   test('a search counts every record it finds, from its shortest range', async () => {
     await createEntry(db, described('⿰木木'), seen(), [], who)
@@ -1679,12 +1716,14 @@ describe('search total', () => {
   test('each read is a range of an index', () => {
     const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
     const statements = [
-      totalStatement(db, { script: 'han', query: '亻 木' }, { tag: 'w:亻' }),
+      totalStatement(db, { script: 'han', query: '亻 木' }, { words: ['w:木', 'p:木'] }),
+      totalStatement(db, { script: 'han', query: 'word 木' }, { words: ['w:word'] }),
+      totalStatement(db, { script: 'han', query: '艹時', also: ['艹日寺', '蒔'] }, { words: ['w:時', 'p:時', 'p:寺', 'p:蒔'] }),
       totalStatement(db, { script: 'han', filter: 'variant', within: ['unicode'], query: '亻' }, { tag: 'r:unicode' }),
       totalStatement(db, { script: 'han', query: '⿰木木' }, { exact: ['⿰木木'] }),
       totalStatement(db, { script: 'han', query: '⿰木木', also: ['⿱木木', '⿰木水'] }, { exact: ['⿰木木', '⿱木木', '⿰木水'] }),
     ].map(statement => statement as unknown as { sql: string; values: unknown[] })
-    for (const { sql, values } of [...statements, { sql: WORD_SIZE, values: ['w:亻'] }, { sql: exactSize(1), values: ['⿰木木'] }, { sql: exactSize(3), values: ['⿰木木', '⿱木木', '⿰木水'] }]) {
+    for (const { sql, values } of [...statements, { sql: wordSize(1), values: ['w:word'] }, { sql: wordSize(3), values: ['w:艹', 'p:艹', 'p:艸'] }, { sql: exactSize(1), values: ['⿰木木'] }, { sql: exactSize(3), values: ['⿰木木', '⿱木木', '⿰木水'] }]) {
       const details = plan(sql, values)
       // Counting records once uses a temporary tree, over the capped range alone; nothing is sorted or grouped.
       expect(details.join('\n')).not.toMatch(/TEMP B-TREE FOR (ORDER BY|GROUP BY)/)
@@ -1799,6 +1838,34 @@ describe('digitized copy filter', () => {
     expect(await matchingCopies(db, title)).toEqual([])
   })
 
+  test('new Commons page citations inherit the book alias and keep their printed locator', async () => {
+    const editions = [
+      ['commons-nlc-40050', '大數小數命名標準研究意見書', '大数小数命名标准研究意见书', 'NLC416-08jh009205-40050_'],
+      ['commons-nlc-71313', '中等算術教科書', '中等算术教科书', 'NLC416-14jh005564-71313_'],
+    ]
+    for (const [slug, title, alias, file] of editions) {
+      const prefix = 'https://commons.wikimedia.org/wiki/File:' + file
+      const pageURL = (name: string) => prefix + name + '.pdf?page=121'
+      for (const name of [title, encodeURIComponent(title)]) {
+        await createEntry(db, fields(), seen({ title, url: pageURL(name), page: '104' }), [], who)
+      }
+      await createEntry(db, fields(), seen({ title, url: pageURL(title).replace(file, 'Other_') }), [], who)
+      await createEntry(db, fields(), seen({ title: 'A chapter', url: pageURL(title) }), [], who)
+      const page = (await copyPage(db, slug, 0))!
+      expect(page.totals).toEqual({ sightings: 3, records: 3 })
+      const matches = await suggestSources(db, alias)
+      expect(matches).toHaveLength(2)
+      for (const row of page.sightings.filter(row => row.page === '104')) {
+        expect(row.citations[0].scan).toBe('121')
+        expect(matches.some(source => source.id === row.citations[0].source)).toBe(true)
+      }
+      expect(await matchingCopies(db, alias)).toEqual([page.copy])
+      const first = matches[0].id
+      await editSourceAlias(db, first, alias, true, who.actor)
+      expect(await sourceAliases(db, first)).toEqual([])
+    }
+  })
+
   test('a copy used twice as an intermediary counts once and has no printed locator of its own', async () => {
     const intermediary = via({ title, url: prefix + '803' })
     const entry = await createEntry(db, fields(), seen({ title: 'Original', page: '葉五', vias: [intermediary] }), [], who)
@@ -1873,4 +1940,32 @@ describe('containers', () => {
     for (const [name, value] of [['place', 'A scan'], ['container', '集刊 第六本'], ['via_author', '貓村'], ['via_container', 'zi.tools討論羣'], ['via_publisher', 'QQ']]) form.append(name, value)
     expect(readSightingFields(form)).toMatchObject({ container: '集刊 第六本', vias: [{ author: '貓村', container: 'zi.tools討論羣', publisher: 'QQ', title: null }] })
   })
+})
+
+test('a numbered page starts where the pages before it end', async () => {
+  for (let i = 0; i < 100; i++) await createEntry(db, fields({ claims: [newClaim('ids', `⿰山${String.fromCodePoint(0x4e00 + i)}`)] }), seen(), [], who)
+  for (const order of ['new', 'old', 'most', 'fewest'] as const) {
+    const whole = (await list(db, { order, limit: 500 }))!.tiles.map(tile => tile.id)
+    for (const number of [2, 3]) {
+      const after = await pageCursor(db, { order }, number)
+      expect((await list(db, { order, after }))!.tiles.map(tile => tile.id)).toEqual(whole.slice((number - 1) * PAGE, number * PAGE))
+    }
+    expect(await pageCount(db, { order })).toEqual({ records: whole.length, pages: Math.ceil(whole.length / PAGE), floor: false })
+    expect(await pageCursor(db, { order }, Math.ceil(whole.length / PAGE) + 1)).toBeUndefined()
+  }
+  expect(await pageCursor(db, {}, 1)).toBeNull()
+  // A list that ends on a page boundary has no page after it.
+  const full = (await list(db, { limit: 500 }))!.tiles.length
+  for (let i = full; i % PAGE; i++) await createEntry(db, fields({ claims: [newClaim('ids', `⿰水${String.fromCodePoint(0x5000 + i)}`)] }), seen(), [], who)
+  const even = (await list(db, { limit: 500 }))!.tiles.length
+  expect(even % PAGE).toBe(0)
+  expect(await pageCursor(db, {}, even / PAGE)).toBeString()
+  expect(await pageCursor(db, {}, even / PAGE + 1)).toBeUndefined()
+  expect(await pageCursor(db, { query: 'x' }, 2)).toBeUndefined()
+  expect(await pageCursor(db, { order: 'random', seed: 1 }, 2)).toBeUndefined()
+  expect(await pageCount(db, { query: 'x' })).toBeNull()
+  expect(await pageCount(db, { order: 'earliest' })).toEqual({ records: 0, pages: 0, floor: false })
+  expect(pageOf('0')).toBeNull()
+  expect(pageOf('2')).toBe(2)
+  expect(pageOf(String(PAGES_MAX + 1))).toBeNull()
 })

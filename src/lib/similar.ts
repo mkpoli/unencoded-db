@@ -3,7 +3,11 @@
 //   probable equal once both are normalised (radical code points as the ideographs they stand for), their
 //            parts with a BabelStone description made of whole components are expanded, or each part is its IWDS
 //            group; a description with a placeholder (？, 〓, ①, ○) in it is never this or same;
-//   similar  the same parts in another structure, the same structure with one part different, or mostly the same parts.
+//   similar  the same parts in another structure, then the same structure with one part different, then mostly the
+//            same parts, then every part of the typed one among others: the field guesses a structure for parts
+//            typed without one (艹時 becomes ⿰艹時), so the description made of those parts comes first.
+// A text that is no description yet, parts typed with no structure (艹時) or a description half written, is
+// similar to every description that holds all its parts, the nearer the fewer other parts that one has.
 // BabelStone takes most characters down to strokes, so only a part built of components (no ⿻, no stroke) is
 // expanded, until none is. Nothing here touches the network or the page, so it runs in the browser, on the server and in tests.
 import { isNode, parse, type IdsPart } from 'ids-input'
@@ -22,7 +26,10 @@ const STROKES = new Set([...'一丨丿丶乙亅乚𠃌⺄㇒'])
 export const isStroke = (leaf: string) => STROKES.has(leaf) || /^[\u31C0-\u31EF]$/u.test(leaf)
 /** Jaccard overlap of the grouped parts at which a description is similar. */
 export const SIMILAR_MIN = 0.6
-const REARRANGED = 0.9
+/** The score from which a description is made of the typed parts and no other. */
+export const MADE_OF = 0.95
+const REARRANGED = MADE_OF
+const ONE_OFF = 0.9
 
 const idOrder = (a: string, b: string) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0) || (a < b ? -1 : a > b ? 1 : 0)
 const groupsOf = new Map<string, string[]>(Object.entries(groupData.groups as Record<string, string[]>).map(([part, ids]) => [part, [...ids].sort(idOrder)]))
@@ -124,6 +131,26 @@ function jaccard(a: Map<string, number>, b: Map<string, number>) {
   return either ? both / either : 0
 }
 
+/** Parts typed with no whole structure, read once: how many of each part, as its group, the text holds once expanded. */
+export type Loose = { counts: Map<string, number>; size: number }
+/** Parts at least for a text that is no description to be compared. */
+export const LOOSE_MIN = 2
+
+// A variation selector stays with the part it follows.
+const typedParts = (text: string) => (mapRadicals(text).match(/[^\uFE00-\uFE0F\u{E0100}-\u{E01EF}][\uFE00-\uFE0F\u{E0100}-\u{E01EF}]*/gu) ?? []).filter(part => !/^[\u2FF0-\u2FFF\u31EF]/u.test(part) && !isPlaceholder(part))
+/** The parts of a text that is no description once expanded, in order, operators and placeholders aside. */
+export const looseLeaves = (text: string, data: Data) => typedParts(text).flatMap(part => leavesOf(expandTree(part, data, EXPAND_DEPTH)))
+
+/** Such a text read for comparing, or null when its parts as typed are too few. */
+export function prepareLoose(text: string, data: Data): Loose | null {
+  if (typedParts(text).length < LOOSE_MIN) return null
+  const counts = new Map<string, number>(), leaves = looseLeaves(text, data)
+  for (const key of leaves.map(groupKey)) counts.set(key, (counts.get(key) ?? 0) + 1)
+  return { counts, size: leaves.length }
+}
+
+const holds = (all: Map<string, number>, some: Map<string, number>) => { for (const [key, n] of some) if ((all.get(key) ?? 0) < n) return false; return true }
+
 export type Hit = { tier: Tier; score: number }
 const RANK: Record<Tier, number> = { same: 0, probable: 1, similar: 2 }
 /** The nearer of two hits: the better tier, then the higher score. */
@@ -136,9 +163,21 @@ function tierOne(q: Prepared, c: Prepared | null, text: string): Hit | null {
   if (open && (q.normal === c.normal || q.grouped === c.grouped)) return { tier: 'probable', score: 1 }
   if (sameCounts(q.leaves, c.leaves)) return { tier: 'similar', score: REARRANGED }
   const structured = q.shape !== '*' && q.shape === c.shape
-  if (structured && q.keys.length === c.keys.length && q.keys.filter((key, i) => key !== c.keys[i]).length === 1) return { tier: 'similar', score: REARRANGED }
+  if (structured && q.keys.length === c.keys.length && q.keys.filter((key, i) => key !== c.keys[i]).length === 1) return { tier: 'similar', score: ONE_OFF }
   const score = jaccard(q.counts, c.counts)
-  return score >= SIMILAR_MIN ? { tier: 'similar', score } : null
+  if (score >= SIMILAR_MIN) return { tier: 'similar', score }
+  // Every typed part among others: the overlap is then the share of the candidate's parts that were typed.
+  return q.keys.length >= LOOSE_MIN && holds(c.counts, q.counts) ? { tier: 'similar', score } : null
+}
+
+/** A description that holds every typed part is similar, by the share of its parts that were typed. */
+export function looseTier(query: Loose, candidate: string | Prepared | readonly (string | Prepared)[], data: Data): Hit | null {
+  let best: Hit | null = null
+  for (const own of Array.isArray(candidate) ? candidate : [candidate]) {
+    const c = typeof own === 'string' ? prepare(own, data) : own
+    if (c && holds(c.counts, query.counts)) best = nearer(best, { tier: 'similar', score: query.size / c.keys.length })
+  }
+  return best
 }
 
 /**
