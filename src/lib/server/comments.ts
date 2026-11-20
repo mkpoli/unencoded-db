@@ -1,7 +1,5 @@
 // The discussion of a record: comments in the order they were written, each by whoever wrote it.
-import { COMMENT_MAX } from '$lib/comments'
-
-export const COMMENTS_SHOWN = 200
+import { COMMENT_MAX, COMMENTS_SHOWN } from '$lib/comments'
 
 export type Comment = { id: number; entry_id: number; sighting_id: number | null; body: string; at: string; hidden_at: string | null; by_id: string; by_name: string }
 

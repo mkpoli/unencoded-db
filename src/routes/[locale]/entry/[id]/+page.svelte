@@ -26,6 +26,7 @@
   import SenseList from '$lib/components/SenseList.svelte'
   import TagFields from '$lib/components/TagFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
+  import { COMMENTS_SHOWN } from '$lib/comments'
   import Discussion from '$lib/components/Discussion.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
   import type { Fill } from '$lib/encoded'
@@ -47,7 +48,7 @@
   const claims = $derived(data.claims)
   const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
   const commenting = $derived(Boolean(form?.error && page.url.searchParams.has('/comment')))
-  const shownComments = $derived(data.comments.filter(comment => !comment.hidden_at).length)
+  const shownComments = $derived.by(() => { const shown = data.comments.filter(comment => !comment.hidden_at).length; return shown && (data.comments.length >= COMMENTS_SHOWN ? `${shown}+` : String(shown)) })
   const editValues = $derived(editing && form?.values && 'script' in form.values ? form.values : { ...entry, claims })
   let filled = $state<Fill | null>(null)
   let editOpen = $state(untrack(() => editing || data.idsAdd !== null))
