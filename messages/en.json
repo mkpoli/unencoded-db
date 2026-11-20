@@ -356,6 +356,7 @@
   "report.sent": "Thank you. A moderator will look at it.",
   "browse.searchSegmentEmpty": "No matches in this set.",
   "browse.searched": "Searched {n} of {of}",
+  "browse.page": "Page",
   "browse.found": "{n} found",
   "browse.alsoSearched": "Also searched {n} other spellings",
   "browse.pageLeft": "{n} more page",

@@ -983,6 +983,39 @@ export async function list(db: D1Database, listing: Listing) {
   return { tiles, next, partial: read.searching && next !== null && tiles.length < limit, read: consumed }
 }
 
+// A list read whole from one range has numbered pages: page n starts after row (n − 1) × PAGE of that
+// range. A search and a shuffled list have none. Finding a page counts the rows before it in the index,
+// so the pages that can be asked for are bounded.
+export const PAGES_MAX = 400
+export const pageOf = (value: string | null | undefined) => value && /^[1-9]\d{0,3}$/.test(value) && Number(value) <= PAGES_MAX ? Number(value) : null
+function pagedRange(listing: Listing) {
+  const plan = listPlan(listing), order = listing.order ?? ORDER
+  if (!plan || order === 'random') return null
+  const read = listRead(plan)
+  return read.searching ? null : { tag: read.tag, order, ...ORDER_READS[order] }
+}
+/** The cursor page `number` of a listing starts after: null for the first page, undefined when the listing has no such page. */
+export async function pageCursor(db: D1Database, listing: Listing, number: number): Promise<string | null | undefined> {
+  if (number === 1) return null
+  const range = pagedRange(listing)
+  if (!range || !Number.isInteger(number) || number < 1 || number > PAGES_MAX) return undefined
+  // The row before the page and the page's first row: a page without a first row is no page.
+  const { results } = await db.prepare(`SELECT t.entry_id AS id, ${range.key} AS counted FROM entry_tags t WHERE t.tag = ? AND ${range.past} ORDER BY ${range.by} LIMIT 2 OFFSET ?`)
+    .bind(range.tag, ...cursorOf(range.order, null)!, (number - 1) * PAGE - 1).all<{ id: number; counted: number }>()
+  return results.length === 2 ? cursorAt(range.order, results[0]) : undefined
+}
+/** How many pages a listing has, at most PAGES_MAX; null for a listing without numbered pages. */
+export async function pageCount(db: D1Database, listing: Listing): Promise<number | null> {
+  const range = pagedRange(listing)
+  if (!range) return null
+  // The orders by year list only the dated records, which no kept count names.
+  const dated = range.order === 'earliest' || range.order === 'latest'
+  const row = await (dated
+    ? db.prepare(`SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags t WHERE t.tag = ? AND t.year IS NOT NULL AND ${LISTED} LIMIT ${PAGES_MAX * PAGE})`)
+    : db.prepare('SELECT n FROM tag_counts WHERE tag = ?')).bind(range.tag).first<{ n: number }>()
+  return Math.min(PAGES_MAX, Math.ceil((row?.n ?? 0) / PAGE))
+}
+
 // A search is counted once, from the shortest range it is tested against: a key, a word or the exact
 // description. At most TOTAL_READ records of that range are read; past that the count is a floor.
 export const TOTAL_READ = 1000
