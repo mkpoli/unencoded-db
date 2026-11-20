@@ -49,11 +49,13 @@
   import { onMount, tick, untrack } from 'svelte'
   import { parse } from 'ids-input'
   import { cleanIds } from '$lib/ids'
-  import { carryLayout, layoutForStyle, layoutText, placeOf, withStyleLayout, type Layout } from '$lib/layout'
+  import { carryLayout, cleanLayout, layoutForStyle, layoutText, placeOf, withStyleLayout, type Layout } from '$lib/layout'
+  import { glyphAddress } from '$lib/glyph-address'
   import { page } from '$app/state'
   import { GLYPH_STYLES, glyphStyleOf } from '$lib/composer'
   import { locale, t } from '$lib/t'
   import GlyphFace from './GlyphFace.svelte'
+  import IdsGlyph from './IdsGlyph.svelte'
 
   let { ids, layout = null, chosen = null, adjusting = $bindable(false) }: { ids: string; layout?: Layout | null; chosen?: number[] | null; adjusting?: boolean } = $props()
 
@@ -96,20 +98,45 @@
   }
   const preview = $derived(drawerFor(style))
   const parted = $derived(separate && preview?.separate === true)
+  // The small faces follow the description once typing has paused, so a keystroke does not restart
+  // their composers; the large face follows every keystroke.
+  let settled = $state(untrack(() => cleanIds(ids)))
+  $effect(() => {
+    const text = sequence
+    if (text === untrack(() => settled)) return
+    const timer = setTimeout(() => settled = text, 600)
+    return () => clearTimeout(timer)
+  })
+  const settledTree = $derived(settled ? parse(settled, { open: true }).tree : undefined)
+  const settledLayout = $derived(settled === statedFor ? stated : carryLayout(stated, statedFor, settled))
   // A small face shows its own layout as a fixed document over the same description. A document is
   // kept while its face's layout stays the same, so a move on the large face redraws none of the others.
   const documents = new Map<string, ReturnType<Tools['layoutDocument']>>()
   function faceDocument(face: GlyphStyle) {
-    const moved = layoutForStyle(stated, face)
-    if (!kit || !moved || sequence !== statedFor) return null
-    const key = `${statedFor} ${layoutText(moved)}`
+    const moved = layoutForStyle(settledLayout, face)
+    if (!kit || !moved) return null
+    const key = `${settled} ${layoutText(moved)}`
     let found = documents.get(key)
     if (found === undefined) {
       if (documents.size >= 32) documents.clear()
-      documents.set(key, found = kit.layoutDocument(statedFor, moved))
+      documents.set(key, found = kit.layoutDocument(settled, moved))
     }
     return found
   }
+  // The description and layout the form opened with. While a small face still shows them, the server's
+  // cached drawing stands for it and no composer is loaded; a face the server cannot draw loads one.
+  const opened = untrack(() => ({ ids: cleanIds(ids), layout: cleanLayout(layout, cleanIds(ids)) }))
+  function openedAddress(face: GlyphStyle) {
+    if (!opened.ids || settled !== opened.ids) return ''
+    const same = layoutText(layoutForStyle(settledLayout, face)) === layoutText(layoutForStyle(opened.layout, face))
+    return same ? glyphAddress(opened.ids, layoutText(opened.layout), face) : ''
+  }
+  // Each address the server was asked: its drawing, null when it had none, absent while it is asked.
+  let served = $state.raw(new Map<string, string | null>())
+  const asking = new Set<string>()
+  const servedFor = (face: GlyphStyle) => { const url = openedAddress(face); return url ? served.get(url) : null }
+  // A small face loads a composer only for a description the server has not drawn for it.
+  const composes = (face: GlyphStyle) => Boolean(settled) && servedFor(face) === null
   let step = $state<'idle' | 'loading' | 'composed' | 'final' | 'failed' | 'capped' | 'unavailable'>('idle')
   const pickedMoved = $derived(Boolean(picked && activeLayout?.[placeOf(picked)]))
 
@@ -130,13 +157,14 @@
     return () => { live = false }
   })
 
-  // The exports' manifests and layouts are read while the first description is still being typed.
-  // A face asks for another composer only when the kind it wants changes.
-  const wanted = $derived(GLYPH_STYLES.map(face => `${face}:${separateFor(face)}`).join(' '))
+  // The large face's export is read while the first description is still being typed; a small face's
+  // only once it has a description to draw. A face asks for another composer only when the kind it
+  // wants changes.
+  const wanted = $derived(GLYPH_STYLES.filter(face => face === style || composes(face)).map(face => `${face}:${separateFor(face)}`).join(' '))
   $effect(() => {
     if (!near) return
     let live = true
-    for (const key of wanted.split(' ')) {
+    for (const key of wanted.split(' ').filter(Boolean)) {
       if (untrack(() => drawers.has(key))) continue
       const [face, kind] = key.split(':') as [GlyphStyle, string]
       composer(kind === 'true', face).then(found => {
@@ -145,6 +173,18 @@
       }, () => {})
     }
     return () => { live = false }
+  })
+  $effect(() => {
+    if (!near) return
+    for (const face of others) {
+      const url = openedAddress(face)
+      if (!url || asking.has(url) || untrack(() => served.has(url))) continue
+      asking.add(url)
+      const answer = (d: string | null) => { asking.delete(url); served = new Map(served).set(url, d) }
+      fetch(url)
+        .then(response => response.ok ? response.json() : null)
+        .then((body: unknown) => answer(body && typeof body === 'object' && 'd' in body && typeof body.d === 'string' ? body.d : null), () => answer(null))
+    }
   })
   // The picked face becomes the large one, and the focus follows it there.
   let faces = $state<HTMLElement>()
@@ -209,14 +249,21 @@
     <div class="faces" role="group" aria-label={t('nav.glyphStyle')} bind:this={faces}>
       <div class="main">
         <GlyphFace {style} current onpick={pick}>
+          {@const ready = servedFor(style)}
           {#if kit && preview}
-            <!-- A preview keeps its last drawing until the next is done; a face never shows another's. -->
+            <!-- A preview keeps its last drawing until the next is done; a face never shows another's.
+                 The server's drawing covers it until its own is done. -->
             <div class="stage">
               {#key style}
                 <kit.IdsPreview adapter={{ preview: preview.draw }} {tree} chosen={adjusting ? picked : chosen} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
                   session={parted ? session : null} preserveStroke={style === 'sans'} {version} bind:step editable={adjusting && parted && step === 'composed'} onchoose={path => picked = path} onedit={read} />
               {/key}
+              {#if typeof ready === 'string' && step !== 'composed' && step !== 'final'}
+                <div class="plate cover"><IdsGlyph ids={sequence} path={ready} /></div>
+              {/if}
             </div>
+          {:else if typeof ready === 'string'}
+            <div class="plate"><IdsGlyph ids={sequence} path={ready} /></div>
           {:else}
             {@render fallback()}
           {/if}
@@ -225,10 +272,13 @@
       <div class="others">
         {#each others as face (face)}
           {@const drawer = drawerFor(face)}
+          {@const ready = servedFor(face)}
           <GlyphFace style={face} onpick={pick}>
             <div class="mini" aria-hidden="true">
-              {#if kit && drawer}
-                <kit.IdsPreview adapter={{ preview: drawer.draw }} {tree} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
+              {#if typeof ready === 'string'}
+                <IdsGlyph ids={settled} path={ready} />
+              {:else if kit && drawer && settledTree !== undefined && composes(face)}
+                <kit.IdsPreview adapter={{ preview: drawer.draw }} tree={settledTree} messages={kit.messages} locale={at} small={false} notes={false} delay={140}
                   document={drawer.separate ? faceDocument(face) : null} preserveStroke={face === 'sans'} />
               {/if}
             </div>
@@ -265,6 +315,8 @@
     --ids-accent: var(--accent); --ids-focus: var(--focus-ring); --ids-fault: var(--wrong);
   }
   .stage :global(.ids-preview) { width: 100% }
+  .stage { position: relative }
+  .cover { position: absolute; inset: 0; height: auto }
   .adjusting .stage :global(.ids-preview-large) { border-color: var(--accent); touch-action: none }
   /* The plate's own border shows the focus; the drawing inside it has none of its own. */
   .stage :global(.ids-preview-large svg[tabindex]:is(:focus, :focus-visible)) { outline: none }
@@ -278,6 +330,7 @@
   .others :global(.face) { --face-size: 100% }
   .others :global(.name) { font-size: 11px }
   .stage, .mini { width: 100% }
+  .mini { aspect-ratio: 1 }
   .mini {
     --ids-preview-size: 100%; --ids-ink: var(--ink); --ids-muted: var(--muted); --ids-line: transparent; --ids-surface: transparent;
     --ids-accent: var(--accent); --ids-fault: var(--wrong);
