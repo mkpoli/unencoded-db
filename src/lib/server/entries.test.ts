@@ -1797,6 +1797,34 @@ describe('digitized copy filter', () => {
     expect(await matchingCopies(db, title)).toEqual([])
   })
 
+  test('new Commons page citations inherit the book alias and keep their printed locator', async () => {
+    const editions = [
+      ['commons-nlc-40050', '大數小數命名標準研究意見書', '大数小数命名标准研究意见书', 'NLC416-08jh009205-40050_'],
+      ['commons-nlc-71313', '中等算術教科書', '中等算术教科书', 'NLC416-14jh005564-71313_'],
+    ]
+    for (const [slug, title, alias, file] of editions) {
+      const prefix = 'https://commons.wikimedia.org/wiki/File:' + file
+      const pageURL = (name: string) => prefix + name + '.pdf?page=121'
+      for (const name of [title, encodeURIComponent(title)]) {
+        await createEntry(db, fields(), seen({ title, url: pageURL(name), page: '104' }), [], who)
+      }
+      await createEntry(db, fields(), seen({ title, url: pageURL(title).replace(file, 'Other_') }), [], who)
+      await createEntry(db, fields(), seen({ title: 'A chapter', url: pageURL(title) }), [], who)
+      const page = (await copyPage(db, slug, 0))!
+      expect(page.totals).toEqual({ sightings: 3, records: 3 })
+      const matches = await suggestSources(db, alias)
+      expect(matches).toHaveLength(2)
+      for (const row of page.sightings.filter(row => row.page === '104')) {
+        expect(row.citations[0].scan).toBe('121')
+        expect(matches.some(source => source.id === row.citations[0].source)).toBe(true)
+      }
+      expect(await matchingCopies(db, alias)).toEqual([page.copy])
+      const first = matches[0].id
+      await editSourceAlias(db, first, alias, true, who.actor)
+      expect(await sourceAliases(db, first)).toEqual([])
+    }
+  })
+
   test('a copy used twice as an intermediary counts once and has no printed locator of its own', async () => {
     const intermediary = via({ title, url: prefix + '803' })
     const entry = await createEntry(db, fields(), seen({ title: 'Original', page: '葉五', vias: [intermediary] }), [], who)
