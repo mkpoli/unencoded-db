@@ -1,3 +1,4 @@
+import { copyOfSource, copyPage, matchingCopies } from './digitized-copies'
 import { editSourceAlias, sourceAliases, suggestSources } from './source-aliases'
 import { publicPublisher, publisherDirectory, publisherSuggestions } from './publishers'
 import { beforeEach, describe, expect, test } from 'bun:test'
@@ -1766,4 +1767,57 @@ test('source suggestions show evidence from the matching public sighting', async
   await setHidden(db, { entry: illustrated, sighting }, false, who, null)
   await setHidden(db, { entry: illustrated }, true, who, null)
   expect((await preview(title)).evidence).toMatchObject({ page: 'i', thumb: null })
+})
+
+describe('digitized copy filter', () => {
+  const slug = 'ntcu-848', title = '彙音字典'
+  const prefix = 'http://ip194097.ntcu.edu.tw/memory/TGB/thak.asp?id=848&page='
+
+  test('both spellings find the same copy, with separate scan and recorded page', async () => {
+    const one = { title, url: prefix + '801' }
+    const two = { title, url: prefix.replace('http:', 'https:') + '802' }
+    const entry = await createEntry(db, fields(), seen({ ...one, page: '卷二葉九', vias: [via(two)] }), [image], who)
+    const sighting = (await getEntry(db, entry))!.sightings[0].id
+    const original = (await copyPage(db, slug, 0))!
+    const [direct, indirect] = original.sightings[0].citations
+    await editSourceAlias(db, direct.source, '汇音字典', false, who.actor)
+    expect(original.totals).toEqual({ sightings: 1, records: 1 })
+    expect(original.sightings[0]).toMatchObject({ sighting, entry_id: entry, thumb: image.thumb_key, page: '卷二葉九' })
+    expect(direct).toMatchObject({ url: one.url, scan: '801', via: 0 })
+    expect(indirect).toMatchObject({ url: two.url, scan: '802', via: 1 })
+    for (const text of [title, '汇音字典']) expect(await matchingCopies(db, text)).toEqual([original.copy])
+    expect(await copyOfSource(db, direct.source)).toEqual(original.copy)
+    expect(await copyOfSource(db, indirect.source)).toEqual(original.copy)
+    for (const url of [prefix, prefix.replace('848', '849') + '801', prefix.replace('edu.tw', 'example.com') + '801', prefix + '801&x=1']) {
+      await createEntry(db, fields(), seen({ title, url }), [], who)
+    }
+    expect((await copyPage(db, slug, 0))!.totals).toEqual(original.totals)
+    await setHidden(db, { entry, sighting }, true, who, null)
+    expect(await copyPage(db, slug, 0)).toBeNull()
+    expect(await matchingCopies(db, title)).toEqual([])
+  })
+
+  test('a copy used twice as an intermediary counts once and has no printed locator of its own', async () => {
+    const intermediary = via({ title, url: prefix + '803' })
+    const entry = await createEntry(db, fields(), seen({ title: 'Original', page: '葉五', vias: [intermediary] }), [], who)
+    const first = (await getEntry(db, entry))!.sightings[0].id
+    raw.run('INSERT INTO sighting_vias(sighting_id, position, source_id) SELECT sighting_id, 1, source_id FROM sighting_vias WHERE sighting_id = ?', [first])
+    const original = (await copyPage(db, slug, 0))!
+    expect(original.sightings[0].citations).toHaveLength(1)
+    expect(original.sightings[0].page).toBeNull()
+    expect(original.sightings[0].citations[0].via).toBe(1)
+    // Another 50 public sightings of this one record cross the copy page boundary.
+    for (let i = 0; i < 50; i++) raw.run(`INSERT INTO sightings(entry_id,first_entry,source_id,place,created_by,created_at,updated_at)
+      VALUES (?, ?, ?, 'p', ?, 'now', 'now')`, [entry, entry, original.sightings[0].citations[0].source, who.actor])
+    const page = (await copyPage(db, slug, 0))!
+    expect(page.totals).toEqual({ sightings: 51, records: 1 })
+    expect(page.sightings).toHaveLength(50)
+    const next = (await copyPage(db, slug, page.next!))!
+    expect(next.sightings).toHaveLength(1)
+    expect(next.sightings[0].sighting).toBeGreaterThan(page.next!)
+    expect(next.next).toBeNull()
+    expect(await copyPage(db, slug, next.sightings[0].sighting)).toBeNull()
+    await setHidden(db, { entry }, true, who, null)
+    expect(await copyPage(db, slug, 0)).toBeNull()
+  })
 })

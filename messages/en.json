@@ -499,6 +499,8 @@
   "source.foundVia": "Found via this source",
   "source.record": "{n} record",
   "source.records": "{n} records",
+  "sources.digitizedCopy": "Digitized copy",
+  "sources.scan": "Scan {n}",
   "sources.filter": "Filter",
   "sources.clear": "Clear",
   "sources.noPublisherMatches": "No sources match this publisher.",

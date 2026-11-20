@@ -1,3 +1,4 @@
+import { matchingCopies } from '$lib/server/digitized-copies'
 import { publicPublisher } from '$lib/server/publishers'
 import { readDates } from '$lib/server/date-readings'
 import { error } from '@sveltejs/kit'
@@ -16,9 +17,12 @@ export const load: PageServerLoad = async (event) => {
   const query = (event.url.searchParams.get('q') ?? '').trim().slice(0, 300)
   const typed = event.url.searchParams.get('publisher')?.trim() ?? ''
   const found = typed ? await publicPublisher(db, typed) : null
-  const page = typed && !found ? { sources: [], next: null } : await sourceList(db, sort, cursor, found?.id ?? null, query)
+  const [page, copies] = await Promise.all([
+    typed && !found ? { sources: [], next: null } : sourceList(db, sort, cursor, found?.id ?? null, query),
+    query && !typed && !cursor ? matchingCopies(db, query) : [],
+  ])
   const publisher = found?.name ?? typed
   const glyphs = await tileGlyphs(event.platform, event.url.origin, page.sources.flatMap(source => source.tiles), event.locals.glyphStyle)
   const dates = await readDates(env(event).DB, page.sources.map(s => s.report_date))
-  return { ...page, sort, glyphs, dates, publisher, query }
+  return { ...page, sort, glyphs, dates, publisher, query, copies }
 }

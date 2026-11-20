@@ -31,6 +31,14 @@
       {#if data.publisher || data.query}<a class="text-link" href={sorted(data.sort, null, '', '')}>{t('sources.clear')}</a>{/if}
     </form>
   </search>
+  {#if data.copies.length}
+    <section class="copies" aria-label={t('sources.digitizedCopy')}>
+      <h2>{t('sources.digitizedCopy')}</h2>
+      {#each data.copies as copy (copy.slug)}
+        <a class="text-link" href={href(`/sources/copy/${copy.slug}`)}>{copy.title} · {copy.collection}</a>
+      {/each}
+    </section>
+  {/if}
   <nav class="sort" aria-label={t('sources.sort')}>
     {#each SOURCE_SORTS as sort}<a class="chip" class:on={data.sort === sort} aria-current={data.sort === sort ? 'true' : undefined} href={sorted(sort)}>{t(`sources.sort.${sort}`)}</a>{/each}
   </nav>
@@ -72,6 +80,8 @@
   .publisher-filter { display:flex; flex-wrap:wrap; gap:8px; align-items:end }
   .publisher-filter :global(.field) { width:min(100%, 22rem) }
   .publisher-filter .text-link { align-self:end; padding:8px }
+  .copies { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 16px }
+  .copies h2 { font-size:1rem; margin:0 }
   .sort { display:flex; flex-wrap:wrap; gap:4px }
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr)); gap:20px }
   .card { display:flex; flex-direction:column; min-width:0; border:1px solid var(--line); border-radius:10px; background:var(--surface); overflow:hidden }

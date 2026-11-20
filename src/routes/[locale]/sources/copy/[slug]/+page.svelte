@@ -1,0 +1,54 @@
+<script lang="ts">
+  import IdsGlyph from '$lib/components/IdsGlyph.svelte'
+  import Seo from '$lib/components/Seo.svelte'
+  import { href, media, t } from '$lib/t'
+  import { recordCode } from '$lib/code'
+  let { data } = $props()
+</script>
+
+<Seo title={`${data.copy.title} · ${data.copy.collection}`} />
+<div class="page narrow stack">
+  <a class="text-link" href={href('/sources')}>← {t('nav.sources')}</a>
+  <header class="stack">
+    <span class="small muted">{t('sources.digitizedCopy')} · {data.copy.collection}</span>
+    <h1>{data.copy.title}</h1>
+    <div class="row"><span>{t('entry.sightings')} · {data.totals.sightings}</span>
+      <span class="badge">{t(data.totals.records === 1 ? 'source.record' : 'source.records', { n: data.totals.records })}</span></div>
+  </header>
+  <ul class="evidence">
+    {#each data.sightings as row (row.sighting)}
+      <li>
+        <a class="record" href={href(`/entry/${row.entry_id}#sighting-${row.sighting}`)}>
+          <span class="plate" aria-hidden="true">
+            {#if row.thumb}<img src={media(row.thumb)} alt="" loading="lazy" decoding="async" />
+            {:else if row.ids}<IdsGlyph ids={row.ids} layout={row.layout} path={data.glyphs[row.entry_id]} />{/if}
+          </span>
+          <span>{#if row.ids}<strong>{row.ids}</strong>{/if}<span>{t('entry.record', { id: recordCode(row.entry_id) })}<span class="sr-only"> · {t('entry.sightings')} {row.sighting}</span></span></span>
+        </a>
+        <div class="links">
+          {#if row.page}<span>{t('field.page')} · {row.page}</span>{/if}
+          {#each row.citations as citation (citation.source)}
+            <div class="row">
+              {#if citation.via}<span class="badge">{t('source.foundVia')}</span>{/if}
+              <a class="text-link" href={citation.url} target="_blank" rel="noopener noreferrer">{t('sources.scan', { n: citation.scan })} ↗</a>
+              <a class="text-link" href={href(`/source/${citation.source}`)}>{t('source.title')} {citation.source}</a>
+            </div>
+          {/each}
+        </div>
+      </li>
+    {/each}
+  </ul>
+  {#if data.next}<a class="button more" href={`?after=${data.next}`}>{t('browse.more')}</a>{/if}
+</div>
+
+<style>
+  .evidence { list-style:none; padding:0; margin:0 }
+  li { display:flex; flex-wrap:wrap; gap:12px 24px; align-items:center; padding:12px 0; border-top:1px solid var(--line) }
+  .record { display:flex; align-items:center; gap:12px; flex:1 1 15rem; min-width:0; overflow-wrap:anywhere }
+  .record:hover strong { text-decoration:underline }
+  .record strong, .record > span > span { display:block }
+  .plate { display:grid; place-items:center; width:54px; height:54px; flex:none; overflow:hidden; background:var(--surface-tile); border-radius:6px }
+  .plate img { width:100%; height:100%; object-fit:contain }
+  .links { flex:1 1 14rem; min-width:0; font-size:.875rem; overflow-wrap:anywhere }
+  .more { align-self:start }
+</style>
