@@ -286,6 +286,7 @@
   "entry.hidden": "관리자가 이 기록을 숨겼습니다.",
   "entry.sightings": "증거",
   "entry.related": "관련 기록",
+  "entry.relatedStated": "{code}의 기술",
   "entry.addSighting": "증거 추가",
   "entry.addSightingHint": "출처가 더해질수록 기록의 근거가 튼튼해집니다.",
   "entry.firstAdded": "{name} 님이 추가, {date}",

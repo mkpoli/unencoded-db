@@ -11,19 +11,25 @@ import { TILE_COLUMNS, toTile, type Tile, type TileRow } from './entries'
 
 export const RELATED_MAX = 12
 export const RELATED_PICTURES = 4
-const NAMES_MAX = 40
+// D1 binds at most 100 values to a statement; each lookup binds its names and nothing else.
+const NAMES_MAX = 90
 const ROWS_MAX = 100
 
 export type RelatedPicture = { sighting: number; thumb_key: string; place: string; title: string | null; date: string | null }
-export type RelatedRecord = { tile: Tile; relationships: RelationKind[]; pictures: RelatedPicture[] }
+/** `relationships` are what this record states of the other, `stated` what the other states of this one. */
+export type RelatedRecord = { tile: Tile; relationships: RelationKind[]; stated: RelationKind[]; pictures: RelatedPicture[] }
 
 /** The spellings a relation's value is looked up by: as written, as a description, and as the characters its codes name. */
 const spellings = (value: string) => [...new Set([value, cleanIds(value), codePointCharacters(value)].filter(Boolean))]
 const single = (text: string) => [...text].length === 1
+/** A character's code as it is usually stored, in either letter case. */
+const codes = (char: string) => [codePoints(char), codePoints(char).toLowerCase()]
 
 const marks = (count: number) => Array.from({ length: count }, () => '?').join(', ')
-const byValue = (db: D1Database, kind: Claim['kind'], values: readonly string[], columns = 'entry_id, value') =>
-  db.prepare(`SELECT ${columns} FROM claims WHERE kind = ? AND value IN (${marks(values.length)}) LIMIT ${ROWS_MAX}`).bind(kind, ...values)
+// Claims by their value, of records anyone may see: a key of `claims_by_value` per name, then the record by its key.
+const byValue = (db: D1Database, kind: 'ids' | 'encoding' | 'relation', values: readonly string[]) =>
+  db.prepare(`SELECT k.entry_id, k.value, '${kind}' AS kind, json_extract(k.data, '$.relationship') AS relationship FROM claims k CROSS JOIN entries e ON e.id = k.entry_id
+    WHERE k.kind = '${kind}' AND k.value IN (${marks(values.length)})${kind === 'encoding' ? ` AND json_extract(k.data, '$.charset') = 'unicode'` : ''} AND e.merged_into IS NULL AND e.hidden_at IS NULL LIMIT ${ROWS_MAX}`).bind(...values)
 
 export const relatedTilesStatement = (db: D1Database, ids: readonly number[]) =>
   db.prepare(`SELECT ${TILE_COLUMNS} FROM entries e WHERE e.id IN (${marks(ids.length)}) AND e.merged_into IS NULL AND e.hidden_at IS NULL`).bind(...ids)
@@ -36,38 +42,41 @@ export const relatedPicturesStatement = (db: D1Database, ids: readonly number[])
     LEFT JOIN sources c ON c.id = s.source_id
     WHERE e.id IN (${marks(ids.length)})`).bind(...ids)
 
-export const relatedClaimsStatements = (db: D1Database, theirs: readonly string[], own: readonly string[]) => [
-  ...(theirs.length ? [byValue(db, 'ids', theirs)] : []),
-  ...(theirs.some(single) ? [byValue(db, 'encoding', theirs.filter(single).map(codePoints))] : []),
-  ...(own.length ? [byValue(db, 'relation', own, "entry_id, value, json_extract(data, '$.relationship') AS relationship")] : []),
-]
+export const relatedClaimsStatements = (db: D1Database, theirs: readonly string[], own: readonly string[]) => {
+  const characters = theirs.filter(single).slice(0, NAMES_MAX / 2)
+  return [
+    ...(theirs.length ? [byValue(db, 'ids', theirs.slice(0, NAMES_MAX))] : []),
+    ...(characters.length ? [byValue(db, 'encoding', characters.flatMap(codes))] : []),
+    ...(own.length ? [byValue(db, 'relation', own.slice(0, NAMES_MAX))] : []),
+  ]
+}
 
 export async function relatedRecords(db: D1Database, id: number, claims: readonly Claim[]): Promise<RelatedRecord[]> {
   // What this record calls the others, each spelling to the relationships stated of it.
-  const stated = new Map<string, RelationKind[]>()
+  const said = new Map<string, RelationKind[]>()
   for (const claim of claimsOf(claims, 'relation')) {
     const relationship = claim.data?.relationship
     if (!isRelationKind(relationship)) continue
-    for (const name of spellings(claim.value)) stated.set(name, [...(stated.get(name) ?? []), relationship])
+    for (const name of spellings(claim.value)) said.set(name, [...(said.get(name) ?? []), relationship])
   }
-  const theirs = [...stated.keys()].slice(0, NAMES_MAX)
   // What the others may call this record: its descriptions, and its encoded character with its code.
   const characters = claimsOf(claims, 'encoding').filter(claim => claim.data?.charset === 'unicode').map(claim => encodedCharacter(claim.value)).filter(Boolean)
-  const own = [...new Set([...claimsOf(claims, 'ids').map(claim => claim.value), ...characters, ...characters.map(codePoints)])].slice(0, NAMES_MAX)
+  const own = [...new Set([...claimsOf(claims, 'ids').map(claim => claim.value), ...characters, ...characters.flatMap(codes)])]
 
-  const statements = relatedClaimsStatements(db, theirs, own)
+  const statements = relatedClaimsStatements(db, [...said.keys()], own)
   if (!statements.length) return []
-  const found = new Map<number, Set<RelationKind>>()
-  const note = (entry: number, relationships: readonly RelationKind[]) => {
+  const found = new Map<number, { relationships: Set<RelationKind>; stated: Set<RelationKind> }>()
+  const note = (entry: number, side: 'relationships' | 'stated', kinds: readonly RelationKind[]) => {
     if (entry === id) return
-    const held = found.get(entry) ?? new Set()
-    for (const relationship of relationships) held.add(relationship)
+    const held = found.get(entry) ?? { relationships: new Set(), stated: new Set() }
+    for (const kind of kinds) held[side].add(kind)
     found.set(entry, held)
   }
-  for (const { results } of await db.batch<{ entry_id: number; value: string; relationship?: unknown }>(statements)) {
+  for (const { results } of await db.batch<{ entry_id: number; value: string; kind: string; relationship: unknown }>(statements)) {
     for (const row of results) {
-      if ('relationship' in row) { if (isRelationKind(row.relationship)) note(row.entry_id, [row.relationship]) }
-      else note(row.entry_id, stated.get(row.value) ?? stated.get(encodedCharacter(row.value)) ?? [])
+      if (row.kind === 'relation') { if (isRelationKind(row.relationship)) note(row.entry_id, 'stated', [row.relationship]) }
+      // A code is every spelling of its character this record wrote.
+      else note(row.entry_id, 'relationships', row.kind === 'encoding' ? [encodedCharacter(row.value), ...codes(encodedCharacter(row.value))].flatMap(name => said.get(name) ?? []) : said.get(row.value) ?? [])
     }
   }
   const ids = [...found.keys()].sort((a, b) => a - b).slice(0, RELATED_MAX)
@@ -75,5 +84,5 @@ export async function relatedRecords(db: D1Database, id: number, claims: readonl
   const [tiles, pictures] = await db.batch<unknown>([relatedTilesStatement(db, ids), relatedPicturesStatement(db, ids)])
   const drawn = new Map<number, RelatedPicture[]>()
   for (const { entry_id, ...picture } of (pictures.results as (RelatedPicture & { entry_id: number })[]).sort((a, b) => a.sighting - b.sighting)) drawn.set(entry_id, [...(drawn.get(entry_id) ?? []), picture])
-  return (tiles.results as TileRow[]).sort((a, b) => a.id - b.id).map(row => ({ tile: toTile(row), relationships: [...found.get(row.id)!], pictures: drawn.get(row.id) ?? [] }))
+  return (tiles.results as TileRow[]).sort((a, b) => a.id - b.id).map(row => ({ tile: toTile(row), relationships: [...found.get(row.id)!.relationships], stated: [...found.get(row.id)!.stated], pictures: drawn.get(row.id) ?? [] }))
 }

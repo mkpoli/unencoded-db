@@ -22,17 +22,17 @@ test('a record shows the records its relations name and the ones that name it, w
   const grass = await createEntry(db, record([newClaim('ids', '⿱艹雚'), relation('⿱𥫗雚', 'variant'), relation('U+89C0', 'variant'), relation('⿰木木', 'similar')]), seen('grass', { title: 'A rhyme book', original_date: '1550' }), [picture('g')], who)
   const bamboo = await createEntry(db, record([newClaim('ids', '⿱𥫗雚')]), seen('bamboo'), [picture('b1'), picture('b2')], who)
   for (let n = 0; n < RELATED_PICTURES; n++) await addSighting(db, bamboo, seen(`bamboo ${n}`), n ? [picture(`more${n}`)] : [], who)
-  const encoded = await createEntry(db, record([newClaim('ids', '⿰雚見'), newClaim('encoding', 'U+89C0', { charset: 'unicode' })]), seen('encoded'), [], who)
-  await createEntry(db, record([newClaim('ids', '⿰亻木')]), seen('unrelated'), [picture('u')], who)
+  const encoded = await createEntry(db, record([newClaim('ids', '⿰雚見'), newClaim('encoding', 'u+89c0', { charset: 'unicode' })]), seen('encoded'), [], who)
+  await createEntry(db, record([newClaim('ids', '⿰亻木'), newClaim('encoding', 'U+89C0', { charset: 'a font' })]), seen('unrelated'), [picture('u')], who)
 
   const fromGrass = await related(grass)
-  expect(fromGrass.map(item => [item.tile.id, item.relationships])).toEqual([[bamboo, ['variant']], [encoded, ['variant']]])
+  expect(fromGrass.map(item => [item.tile.id, item.relationships, item.stated])).toEqual([[bamboo, ['variant'], []], [encoded, ['variant'], []]])
   // The first picture of each of the first sightings; a sighting without one takes its place and shows nothing.
   expect(fromGrass[0].pictures.map(item => item.thumb_key)).toEqual(['b1-t.webp', 'more1-t.webp', 'more2-t.webp'])
   expect(fromGrass[1].pictures).toEqual([])
 
   const fromBamboo = await related(bamboo)
-  expect(fromBamboo.map(item => [item.tile.id, item.relationships])).toEqual([[grass, ['variant']]])
+  expect(fromBamboo.map(item => [item.tile.id, item.relationships, item.stated])).toEqual([[grass, [], ['variant']]])
   expect(fromBamboo[0].pictures).toEqual([{ sighting: 1, thumb_key: 'g-t.webp', place: 'grass', title: 'A rhyme book', date: '1550' }])
   expect((await related(encoded)).map(item => item.tile.id)).toEqual([grass])
 })
@@ -60,12 +60,12 @@ test('the reads use their indexes and no temporary sort', async () => {
     expect(details.join('\n')).not.toMatch(/TEMP B-TREE/)
     for (const detail of details) expect(detail).not.toMatch(/^SCAN (?!.*USING)/)
   }
-  for (const details of claims) expect(details.join('\n')).toContain('claims_by_value (kind=? AND value=?')
+  for (const details of claims) { expect(details.join('\n')).toContain('claims_by_value (kind=? AND value=?'); expect(details.join('\n')).toMatch(/SEARCH e USING INTEGER PRIMARY KEY/) }
 })
 
 test('without its index the lookup by value scans the claims', async () => {
   const { db, raw } = await fixture()
   raw.exec('DROP INDEX claims_by_value')
   const { sql, values } = relatedClaimsStatements(db, ['⿱𥫗雚'], [])[0] as unknown as { sql: string; values: unknown[] }
-  expect((raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')).toMatch(/SCAN claims/)
+  expect((raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')).toMatch(/SCAN k\b/)
 })

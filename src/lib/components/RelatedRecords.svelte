@@ -10,7 +10,7 @@
 </script>
 
 <ul class="related">
-  {#each records as { tile, relationships, pictures } (tile.id)}
+  {#each records as { tile, relationships, stated, pictures } (tile.id)}
     <li>
       <a class="record" href={href(`/entry/${tile.id}`)}>
         <span class="plate">
@@ -20,7 +20,7 @@
         <span class="named">
           <span class="code">{recordCode(tile.id)}</span>
           <span class="ids">{tile.ids ?? ''}</span>
-          <span class="kinds">{#each relationships as relationship}<span class="badge">{t(`relationship.${relationship}`)}</span>{/each}</span>
+          <span class="kinds">{#each relationships as relationship}<span class="badge">{t(`relationship.${relationship}`)}</span>{/each}{#each stated.filter(kind => !relationships.includes(kind)) as relationship}<span class="badge there" title={t('entry.relatedStated', { code: recordCode(tile.id) })}>{t(`relationship.${relationship}`)}</span>{/each}</span>
         </span>
       </a>
       {#if pictures.length}
@@ -51,6 +51,8 @@
   .record:hover .code { color: var(--accent) }
   .ids { max-width: 100%; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .kinds { display: flex; flex-wrap: wrap; gap: 4px }
+  /* Stated on the other record only. */
+  .badge.there { border: 1px dashed var(--line-strong); background: none }
   .pictures { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none }
   .pictures a { display: flex; flex-direction: column; gap: 4px; min-width: 0 }
   .pictures img { width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 6px; background: var(--surface-sunken) }
