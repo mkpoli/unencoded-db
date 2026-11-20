@@ -214,6 +214,23 @@
   })
 </script>
 
+{#snippet turner(id: string)}
+  {@const last = data.pages ?? 1}
+  <nav class="pages" aria-label={t('browse.page')} data-sveltekit-preload-data="tap">
+    {#if data.number > 1}<a class="chip" rel="prev" href={paged(data.number - 1)} aria-label={t('browse.previousPage')} title={t('browse.previousPage')}><span aria-hidden="true">‹</span></a>{:else}<span class="chip off" aria-hidden="true">‹</span>{/if}
+    {#each steps as step, index (step ?? `gap${index}`)}
+      {#if step === null}<span class="gap" aria-hidden="true">…</span>{:else}<a class="chip" class:on={step >= data.number && step <= lastOpen} class:far={(step === data.number - 2 && steps[index - 1] === null) || (step === lastOpen + 2 && steps[index + 1] === null)} aria-current={step === data.number ? 'page' : undefined} href={paged(step)}>{step}</a>{/if}
+    {/each}
+    {#if lastOpen < last}<a class="chip" rel="next" href={paged(lastOpen + 1)} aria-label={t('browse.nextPage')} title={t('browse.nextPage')}><span aria-hidden="true">›</span></a>{:else}<span class="chip off" aria-hidden="true">›</span>{/if}
+  </nav>
+  <form class="jump" method="GET" onsubmit={turn}>
+    {#each unplaced as [name, value]}<input type="hidden" {name} {value} />{/each}
+    <label for={id}>{t('browse.page')}</label>
+    {#key data.number}<input class="input" {id} name="page" inputmode="numeric" pattern="[1-9][0-9]*" autocomplete="off" value={data.number} />{/key}
+    <span aria-hidden="true">/</span><span>{last}</span>
+    <button class="button" type="submit">{t('browse.go')}</button>
+  </form>
+{/snippet}
 <Seo />
 <div class="page stack">
   <div class="heading">
@@ -276,22 +293,7 @@
     {#if data.pages && data.records && shown.tiles.length}
       <div class="pager">
         <p class="range">{t('browse.shown', { from: firstShown, to: firstShown + shown.tiles.length - 1, n: `${data.records}${data.recordsFloor ? '+' : ''}` })}</p>
-        {#if data.pages > 1}
-          <nav class="pages" aria-label={t('browse.page')} data-sveltekit-preload-data="tap">
-            {#if data.number > 1}<a class="chip" rel="prev" href={paged(data.number - 1)} aria-label={t('browse.previousPage')} title={t('browse.previousPage')}><span aria-hidden="true">‹</span></a>{:else}<span class="chip off" aria-hidden="true">‹</span>{/if}
-            {#each steps as step, index (step ?? `gap${index}`)}
-              {#if step === null}<span class="gap" aria-hidden="true">…</span>{:else}<a class="chip" class:on={step >= data.number && step <= lastOpen} class:far={(step === data.number - 2 && steps[index - 1] === null) || (step === lastOpen + 2 && steps[index + 1] === null)} aria-current={step === data.number ? 'page' : undefined} href={paged(step)}>{step}</a>{/if}
-            {/each}
-            {#if lastOpen < data.pages}<a class="chip" rel="next" href={paged(lastOpen + 1)} aria-label={t('browse.nextPage')} title={t('browse.nextPage')}><span aria-hidden="true">›</span></a>{:else}<span class="chip off" aria-hidden="true">›</span>{/if}
-          </nav>
-          <form class="jump" method="GET" onsubmit={turn}>
-            {#each unplaced as [name, value]}<input type="hidden" {name} {value} />{/each}
-            <label for="page">{t('browse.page')}</label>
-            {#key data.number}<input class="input" id="page" name="page" inputmode="numeric" pattern="[1-9][0-9]*" autocomplete="off" value={data.number} />{/key}
-            <span aria-hidden="true">/</span><span>{data.pages}</span>
-            <button class="button" type="submit">{t('browse.go')}</button>
-          </form>
-        {/if}
+        {#if data.pages > 1}{@render turner('page')}{/if}
       </div>
     {/if}
     {#if data.also.length}<details class="found also"><summary>{t('browse.alsoSearched', { n: data.also.length })}</summary><ul>{#each data.also as spelling}<li class="ids">{spelling}</li>{/each}</ul></details>{/if}
@@ -315,6 +317,7 @@
       {/if}
     </div>
   {/if}
+  {#if !data.searchError && data.pages && data.pages > 1 && shown.tiles.length}<div class="pager foot">{@render turner('page-foot')}</div>{/if}
 </div>
 <style>
   /* The list loads on as it scrolls, so its footer is out of reach; the chats sit under the heading. */
@@ -342,6 +345,7 @@
   .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(var(--tile-size),100%),1fr)); gap:22px 16px }
   :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .tiles { gap:8px }
   .pager { display:flex; flex-wrap:wrap; align-items:center; gap:8px 20px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
+  .foot { justify-content:flex-end }
   .range { margin:0; margin-inline-end:auto }
   .pages { display:flex; flex-wrap:wrap; align-items:center; gap:2px }
   .pages .chip { justify-content:center; min-inline-size:34px; padding-inline:8px } .pages .off { opacity:.35; cursor:default } .pages .off:hover { color:var(--muted) } .gap { padding-inline:4px }
