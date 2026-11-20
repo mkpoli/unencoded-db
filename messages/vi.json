@@ -285,6 +285,7 @@
   "entry.mergedInto": "Mục từ này đã được gộp vào mục từ {id}.",
   "entry.hidden": "Người kiểm duyệt đã ẩn mục từ này.",
   "entry.sightings": "Bằng chứng",
+  "entry.related": "Mục từ liên quan",
   "entry.addSighting": "Thêm bằng chứng",
   "entry.addSightingHint": "Mỗi nguồn bổ sung giúp củng cố mục từ.",
   "entry.firstAdded": "{name} thêm vào ngày {date}",

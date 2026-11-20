@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RelatedRecords from '$lib/components/RelatedRecords.svelte'
   import SourceQuotations from '$lib/components/SourceQuotations.svelte'
   import EvidenceDate from '$lib/components/EvidenceDate.svelte'
   import { page } from '$app/state'
@@ -283,6 +284,7 @@
     <a class="text-link small" href="https://www.unicode.org/irg/pp/" target="_blank" rel="noopener">{t('ready.rules')} ↗</a>
   </section>
   {/if}
+  {#if data.related.length}<section class="stack" id="related"><h2>{t('entry.related')}</h2><RelatedRecords records={data.related} /></section>{/if}
   <section class="stack"><h2>{t('entry.sightings')}</h2>
     {#each data.sightings as sighting (sighting.id)}
       {@const types = parseSightingTypes(sighting.types)}

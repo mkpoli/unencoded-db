@@ -285,6 +285,7 @@
   "entry.mergedInto": "此记录已合并到记录{id}。",
   "entry.hidden": "管理员已隐藏此记录。",
   "entry.sightings": "证据",
+  "entry.related": "相关记录",
   "entry.addSighting": "添加证据",
   "entry.addSightingHint": "更多出处可以增强记录的证据。",
   "entry.firstAdded": "由{name}添加，{date}",

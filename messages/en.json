@@ -285,6 +285,7 @@
   "entry.mergedInto": "This record was merged into record {id}.",
   "entry.hidden": "A moderator has hidden this record.",
   "entry.sightings": "Evidence",
+  "entry.related": "Related records",
   "entry.addSighting": "Add evidence",
   "entry.addSightingHint": "Each further source makes the record stronger.",
   "entry.firstAdded": "Added by {name}, {date}",
