@@ -1,4 +1,5 @@
 <script lang="ts">
+  import RelatedRecords from '$lib/components/RelatedRecords.svelte'
   import SourceQuotations from '$lib/components/SourceQuotations.svelte'
   import EvidenceDate from '$lib/components/EvidenceDate.svelte'
   import { page } from '$app/state'
@@ -246,7 +247,7 @@
       {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
     </dl>
     <div class="senses">
-      <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} />
+      <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} records={data.related} />
       {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
       {:else}<EditLink field="senses" name={t('entry.addSenses')} add />{/if}
     </div>
@@ -323,6 +324,7 @@
     {/each}
     <div class="row"><a class="button primary" href={href(`/entry/${entry.id}/sighting/new`)}>{t('entry.addSighting')}</a></div>
   </section>
+  {#if data.related.length}<section class="stack" id="related"><h2>{t('entry.related')}</h2><RelatedRecords records={data.related} /></section>{/if}
 </div>
 <style>
   .heading { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px 16px }

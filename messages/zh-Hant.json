@@ -285,6 +285,8 @@
   "entry.mergedInto": "此記錄已合併到記錄{id}。",
   "entry.hidden": "管理員已隱藏此記錄。",
   "entry.sightings": "證據",
+  "entry.related": "相關記錄",
+  "entry.relatedStated": "{code}的記述",
   "entry.addSighting": "新增證據",
   "entry.addSightingHint": "更多出處可以增強記錄的證據。",
   "entry.firstAdded": "由{name}新增，{date}",

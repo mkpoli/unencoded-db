@@ -285,6 +285,8 @@
   "entry.mergedInto": "この記録は記録{id}に統合されました。",
   "entry.hidden": "この記録は管理者によって非表示にされています。",
   "entry.sightings": "証拠",
+  "entry.related": "関連する記録",
+  "entry.relatedStated": "{code}の記述",
   "entry.addSighting": "証拠を追加",
   "entry.addSightingHint": "出典が増えると、文字の裏付けがより確かになります。",
   "entry.firstAdded": "{name}が追加、{date}",

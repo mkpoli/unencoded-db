@@ -10,6 +10,7 @@ import { filedUnder, radicalPath } from '$lib/radicals'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
+import { relatedRecords } from '$lib/server/related-records'
 import { positiveId } from '../../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
@@ -30,7 +31,8 @@ export const load: PageServerLoad = async (event) => {
   // A description another page proposes to add, ?ids_add=: one, and only a whole one. It is added to the form, not saved.
   const proposed = cleanIds(event.url.searchParams.get('ids_add') ?? '')
   const idsAdd = isDescription(proposed) ? proposed : null
-  return { dates, idsAdd, entry: found.entry, claims: found.claims, sightings, filed, tags: await tagList(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
+  const related = await relatedRecords(env(event).DB, id, found.claims)
+  return { dates, idsAdd, related, entry: found.entry, claims: found.claims, sightings, filed, tags: await tagList(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
 }
 
 export const actions: Actions = {
