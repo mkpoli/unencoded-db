@@ -4,7 +4,8 @@ import { UNREAD_SHOWN } from '$lib/notifications'
 export const NOTIFICATIONS_PAGE = 50
 
 // `kind` is 'comment', 'thank' or the kind of the revision; `text` is the comment's opening or the summary of the revision, for a thank the one thanked for.
-export type Notification = { id: number; read_at: string | null; kind: string; entry_id: number; sighting_id: number | null; comment_id: number | null; ids: string | null; text: string | null; at: string; by_id: string | null; by_name: string | null }
+// `change`, `change_sighting`, `snapshot` and `redacted_at` are the revision's own, for showing what it held.
+export type Notification = { id: number; read_at: string | null; kind: string; entry_id: number; sighting_id: number | null; comment_id: number | null; ids: string | null; text: string | null; at: string; by_id: string | null; by_name: string | null; change: string | null; change_sighting: number | null; snapshot: string | null; redacted_at: string | null }
 
 /** How many notices a person has not read, counted no further than one past what the badge shows. */
 export async function unreadCount(db: D1Database, person: string) {
@@ -14,7 +15,7 @@ export async function unreadCount(db: D1Database, person: string) {
 
 export async function notificationsOf(db: D1Database, person: string, before: number | null = null) {
   const { results } = await db.prepare(`SELECT n.id, n.read_at, CASE WHEN k.id IS NOT NULL THEN 'thank' ELSE COALESCE(r.kind, 'comment') END AS kind, e.id AS entry_id, COALESCE(c.sighting_id, r.sighting_id) AS sighting_id, c.id AS comment_id, e.ids,
-      CASE WHEN c.id IS NOT NULL THEN substr(c.body, 1, 280) WHEN r.redacted_at IS NULL THEN r.summary END AS text, n.at, COALESCE(m.id, p.id) AS by_id, COALESCE(m.name, p.name) AS by_name
+      CASE WHEN c.id IS NOT NULL THEN substr(c.body, 1, 280) WHEN r.redacted_at IS NULL THEN r.summary END AS text, n.at, COALESCE(m.id, p.id) AS by_id, COALESCE(m.name, p.name) AS by_name, r.kind AS change, r.sighting_id AS change_sighting, r.snapshot, r.redacted_at
     FROM notifications n LEFT JOIN comments c ON c.id = n.comment_id LEFT JOIN thanks k ON k.id = n.thank_id LEFT JOIN revisions r ON r.id = COALESCE(n.revision_id, k.revision_id) JOIN entries e ON e.id = COALESCE(c.entry_id, r.entry_id)
       LEFT JOIN sightings s ON s.id = r.sighting_id LEFT JOIN people p ON p.id = COALESCE(c.author, k.person, r.actor) LEFT JOIN people m ON m.id = p.merged_into
     WHERE n.person = ? AND n.id < ? AND c.hidden_at IS NULL AND e.hidden_at IS NULL AND s.hidden_at IS NULL ORDER BY n.id DESC LIMIT ?`)

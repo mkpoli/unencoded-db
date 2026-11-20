@@ -157,3 +157,15 @@ test('the rebuilt table keeps the notices it held', async () => {
   expect(old.query('SELECT id, person, comment_id, revision_id, at, read_at FROM notifications').all()).toEqual(before)
   expect(old.query("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all()).toEqual(raw.query("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all())
 })
+
+test('a notice of a change carries the version it left, and a comment carries none', async () => {
+  const { load } = await import('../../routes/[locale]/notifications/+page.server')
+  const { db, recorder, second, who, entry } = await scene()
+  const found = (await getEntry(db, entry))!
+  expect((await editEntry(db, entry, found.entry.rev, { ...fields('⿰山東'), description: 'checked' }, who(second), 'gloss corrected')).ok).toBe(true)
+  await addSighting(db, entry, { ...sighting, place: 'Another book' }, [], who(second))
+  await addComment(db, { entry }, 'Is this 觀?', who(second))
+  const seen = await load({ url: new URL('http://localhost/en/notifications'), params: { locale: 'en' }, platform: { env: { DB: db } }, locals: { person: recorder } } as any) as any
+  expect(seen.notifications.map((notice: any) => [notice.kind, notice.fields?.description ?? null, notice.sightingFields?.place ?? null])).toEqual([['comment', null, null], ['sighting', null, 'Another book'], ['edit', 'checked', null]])
+  expect(seen.notifications[2]).not.toHaveProperty('snapshot')
+})
