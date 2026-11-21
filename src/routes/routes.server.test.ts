@@ -281,6 +281,11 @@ test('the tags endpoint creates, renames, moves, implies, unimplies, deletes and
   expect(await answer({ action: 'alias', name: '寺院用字', alias: '神社用字' })).toMatchObject({ status: 409, body: { error: 'aliased' } })
   expect(await answer({ action: 'alias', name: '寺院用字', alias: '寺用字' })).toMatchObject({ status: 200, body: { ok: true } })
   expect(await answer({ action: 'unalias', alias: '寺用字' })).toMatchObject({ status: 200, body: { ok: true } })
+  expect(await answer({ action: 'name', name: '寺院用字', locale: 'en', label: 'Temple characters' })).toMatchObject({ status: 200, body: { ok: true } })
+  expect(await answer({ action: 'name', subject: 'group', id: group, locale: 'ja', label: '寺社' })).toMatchObject({ status: 200, body: { ok: true } })
+  const named = (await tagsLoad({ platform } as any)) as any
+  expect(named.tags).toContainEqual(expect.objectContaining({ name: '寺院用字', names: { en: 'Temple characters' } }))
+  expect(named.groups).toContainEqual(expect.objectContaining({ id: group, names: { ja: '寺社' } }))
 })
 
 test('the radicals page lists the radicals in use, browse narrows by one and the record names it', async () => {

@@ -647,5 +647,8 @@
   "tags.change.split": "Đã tách",
   "tags.change.alias": "Đã thêm tên khác",
   "tags.change.unalias": "Đã bỏ tên khác",
-  "error.tagAliased": "Tên này đã là tên khác của một thẻ."
+  "error.tagAliased": "Tên này đã là tên khác của một thẻ.",
+  "tags.names": "Tên theo ngôn ngữ",
+  "tags.change.name": "Đã đặt tên",
+  "tags.groupChange.name": "Đã đặt tên nhóm"
 }

@@ -16,10 +16,18 @@ export type Tag = {
   group: number | null
   /** Other names that resolve to this tag: ones given to it, and the names of tags merged into it. */
   aliases: string[]
+  /** The tag's name in each interface language that has one, by locale. */
+  names: Names
   used?: boolean
 }
+export type Names = Partial<Record<string, string>>
 /** A group of tags within one type: the middle tier. */
-export type TagGroup = { id: number; type: TagType; label: string; position: number; rev: number }
+export type TagGroup = { id: number; type: TagType; label: string; names: Names; position: number; rev: number }
+
+/** What a tag or a group is called in a language: its name there, or its label. */
+export const shownLabel = (item: { label: string; names?: Names }, locale: string) => item.names?.[locale] || item.label
+/** Tags or groups with each label as a language shows it. */
+export const localized = <T extends { label: string; names?: Names }>(items: readonly T[], locale: string): T[] => items.map(item => ({ ...item, label: shownLabel(item, locale) }))
 export type TagRef = Pick<Tag, 'name' | 'label' | 'type' | 'position' | 'implies'>
 
 export const COLLECTIONS = [{ slug: 'extension-e', label: 'Extension E' }] as const
@@ -43,11 +51,11 @@ export function validTagName(value: string) {
   return Boolean(value) && value.length <= TAG_LENGTH_MAX && value === value.normalize('NFC').trim() && !/^#/u.test(value) && !/[\s|,，、\p{Cc}]/u.test(value)
 }
 
-type Named = Pick<Tag, 'name' | 'label'> & { aliases?: readonly string[] }
+type Named = Pick<Tag, 'name' | 'label'> & { aliases?: readonly string[]; names?: Names }
 
 /**
  * The canonical name a typed tag is stored as, or null when invalid. Matches an existing tag by name,
- * display label or alias, stripping a leading `#`; anything else valid is kept as a new tag name.
+ * display label, alias or its name in a language, stripping a leading `#`; anything else valid is kept as a new tag name.
  */
 export function cleanTag(value: string, tags: readonly Named[]): string | null {
   const typed = value.normalize('NFC').trim().replace(/^#+/, '').trim()
@@ -56,8 +64,11 @@ export function cleanTag(value: string, tags: readonly Named[]): string | null {
   if (byName) return byName.name
   const byLabel = tags.find(tag => tag.label === typed)
   if (byLabel) return byLabel.name
+  // An alias names one tag for good; a name in another language only shows it, so the alias wins.
   const byAlias = tags.find(tag => tag.aliases?.includes(typed))
   if (byAlias) return byAlias.name
+  const byLanguage = tags.find(tag => Object.values(tag.names ?? {}).includes(typed))
+  if (byLanguage) return byLanguage.name
   return validTagName(typed) ? typed : null
 }
 
