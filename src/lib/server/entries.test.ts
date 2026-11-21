@@ -1541,6 +1541,18 @@ describe('typed tags and implications', () => {
     expect((await state()).groups.map(group => group.label)).toEqual(['簡化字'])
     expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
     expect((await state()).groups.map(group => [group.id, group.label, group.position])).toEqual([[made1.id, '俗字', 0], [made2.id, '簡化字', 1]])
+    // A deleted group's id is not handed out again, so undoing a move into it does not land in a newer group.
+    const spare = await createGroup(db, (await state()).groups, { type: 'region', label: '臨時' }, who)
+    if (!spare.ok) throw new Error('group not made')
+    expect(await moveTag(db, await listed(), (await state()).groups, { name: '臺灣', group: spare.id }, who)).toEqual({ ok: true })
+    expect(await moveTag(db, await listed(), (await state()).groups, { name: '臺灣', type: 'region', group: null }, who)).toEqual({ ok: true })
+    const movedOut = latest()
+    expect(await deleteGroup(db, (await state()).groups, { id: spare.id }, who)).toEqual({ ok: true })
+    const next = await createGroup(db, (await state()).groups, { type: 'meta', label: '新' }, who)
+    expect(next).toMatchObject({ ok: true })
+    expect(next.ok && next.id).not.toBe(spare.id)
+    expect(await undoTagChange(db, await state(), movedOut, who)).toEqual({ ok: true })
+    expect(await row('臺灣')).toMatchObject({ type: 'region', group: null })
     const created = (raw.query("SELECT id FROM tag_changes WHERE subject = 'group' AND name = ? AND kind = 'create'").get(String(made2.id)) as { id: number }).id
     expect(await undoTagChange(db, await state(), created, who)).toEqual({ ok: false, code: 'conflict' })
 
@@ -1597,6 +1609,37 @@ describe('typed tags and implications', () => {
     // Undoing that split merges again.
     expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
     expect(await row('布依方塊字')).toMatchObject({ aliases: ['布依字'] })
+  })
+
+  test('a merge refused for any reason changes nothing, refiles records whose implication could not move, and never closes a cycle', async () => {
+    // A stale read of the target is refused before anything is stamped.
+    await made('甲A'); await made('乙B')
+    const stale = await listed()
+    expect(await renameTag(db, await listed(), { name: '乙B', label: '乙B改' }, who)).toEqual({ ok: true })
+    const settled = everything()
+    expect(await mergeTag(db, stale, { name: '甲A', into: '乙B' }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(everything()).toEqual(settled)
+    expect(await renameTag(db, stale, { name: '甲A', label: '甲A改' }, who)).toEqual({ ok: true })
+    expect(await row('甲A')).toMatchObject({ label: '甲A改' })
+
+    // B → C → A: C's link to A cannot become C → B, yet C's records leave A.
+    await made('A'); await made('C', 'general', ['A']); await made('B', 'general', ['C'])
+    const id = await createEntry(db, fields({ claims: [claim('tag', 'C')] }), seen(), [], who)
+    expect(tagsOf(id)).toEqual(['t:A', 't:C'])
+    expect(await mergeTag(db, await listed(), { name: 'A', into: 'B' }, who)).toEqual({ ok: true })
+    expect(tagsOf(id)).toEqual(['t:C'])
+    expect(countOf('t:A')).toBe(0)
+    const merged = filed()
+    await refreshAll()
+    expect(filed()).toEqual(merged)
+
+    // A → X read before X → Y is added elsewhere: merging A into Y would close Y → X → Y, so it is refused.
+    await made('X'); await made('Y'); await made('Q', 'general', ['X'])
+    const read = await listed()
+    expect(await implyTag(db, await listed(), { name: 'X', target: 'Y' }, who)).toEqual({ ok: true })
+    const before = everything()
+    expect(await mergeTag(db, read, { name: 'Q', into: 'Y' }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(everything()).toEqual(before)
   })
 
   test('an alias given to a tag finds it, and taking it off leaves the records that name it a tag of their own', async () => {

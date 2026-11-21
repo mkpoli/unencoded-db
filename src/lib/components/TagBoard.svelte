@@ -48,9 +48,9 @@
   const groupById = $derived(new Map(shownGroups.map(group => [group.id, group])))
   const sections = $derived(arrangeTags(shownTags, shownGroups, { every: true }))
 
-  // A place as a select's value: a type alone, or a group by its id.
-  const placeValue = (type: TagType, group: number | null) => (group === null ? type : `g${group}`)
-  const readPlace = (value: string): { type?: TagType; group: number | null } => value.startsWith('g') ? { group: Number(value.slice(1)) } : { type: value as TagType, group: null }
+  // A place as a select's value: a type alone, or a group by its id after `#`.
+  const placeValue = (type: TagType, group: number | null) => (group === null ? type : `#${group}`)
+  const readPlace = (value: string): { type?: TagType; group: number | null } => value.startsWith('#') ? { group: Number(value.slice(1)) } : { type: value as TagType, group: null }
 
   // Which tags are implied by at least one other tag (so they cannot be deleted directly).
   const impliedBy = $derived.by(() => {

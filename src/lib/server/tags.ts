@@ -216,7 +216,11 @@ export async function moveTag(db: D1Database, tags: readonly Tag[], groups: read
 
 // The records filed under a tag or any tag that implies it, live ones only: a hidden or merged record
 // holds no rows to list it by.
-const MOVED = `WITH RECURSIVE ${DOWN('?1')}, moved(entry_id) AS (
+// The tags below each tag in the JSON array `?2`.
+const MOVED = `WITH RECURSIVE down(name) AS (
+  SELECT value FROM json_each(?2)
+  UNION SELECT i.tag FROM tag_implications i JOIN down ON i.implies = down.name
+), moved(entry_id) AS (
   SELECT cl.entry_id FROM claims cl JOIN entries e ON e.id = cl.entry_id
   WHERE cl.kind = 'tag' AND cl.value IN (SELECT name FROM down UNION ALL SELECT a.alias FROM down CROSS JOIN tag_aliases a ON a.tag = down.name)
     AND e.merged_into IS NULL AND e.hidden_at IS NULL
@@ -237,15 +241,16 @@ const MOVED_ROWS = "SELECT tag, entry_id FROM entry_tags WHERE entry_id IN (SELE
 
 /**
  * The statements that file every record under a tag (and anything implying it) again after an
- * implication changes. Each runs only while the tag's stamp stands.
+ * implication changes, and the records under each tag of `also` with them. Each runs only while the
+ * tag's stamp stands.
  */
-export function refileStatements(db: D1Database, name: string) {
-  const guard = stamped('?1')
+export function refileStatements(db: D1Database, name: string, also: readonly string[] = []) {
+  const guard = stamped('?1'), more = JSON.stringify([name, ...also])
   return [
-    db.prepare(`${MOVED}, rows AS (${MOVED_ROWS}) UPDATE tag_counts SET n = n - (SELECT count(*) FROM rows WHERE rows.tag = tag_counts.tag) WHERE tag IN (SELECT tag FROM rows) AND ${guard}`).bind(name),
-    db.prepare(`${MOVED} DELETE FROM entry_tags WHERE entry_id IN (SELECT entry_id FROM moved) AND tag >= 't:' AND tag < 't;' AND ${guard}`).bind(name),
-    db.prepare(`${MOVED}${FILED} ${FILE_ROWS} WHERE ${guard}`).bind(name),
-    db.prepare(`${MOVED} INSERT INTO tag_counts(tag, n) SELECT tag, count(*) FROM (${MOVED_ROWS}) WHERE ${guard} GROUP BY tag ON CONFLICT(tag) DO UPDATE SET n = n + excluded.n`).bind(name),
+    db.prepare(`${MOVED}, rows AS (${MOVED_ROWS}) UPDATE tag_counts SET n = n - (SELECT count(*) FROM rows WHERE rows.tag = tag_counts.tag) WHERE tag IN (SELECT tag FROM rows) AND ${guard}`).bind(name, more),
+    db.prepare(`${MOVED} DELETE FROM entry_tags WHERE entry_id IN (SELECT entry_id FROM moved) AND tag >= 't:' AND tag < 't;' AND ${guard}`).bind(name, more),
+    db.prepare(`${MOVED}${FILED} ${FILE_ROWS} WHERE ${guard}`).bind(name, more),
+    db.prepare(`${MOVED} INSERT INTO tag_counts(tag, n) SELECT tag, count(*) FROM (${MOVED_ROWS}) WHERE ${guard} GROUP BY tag ON CONFLICT(tag) DO UPDATE SET n = n + excluded.n`).bind(name, more),
   ]
 }
 
@@ -351,6 +356,20 @@ function joinable(graph: Tag[], edges: readonly Edge[]) {
   }
   return kept
 }
+// Whether the implications as they stand, less the edges of tag `gone` and the edges in `removed`, plus
+// the edges in `added` (JSON arrays of [tag, implies]), stay free of cycles. Checked as the batch runs,
+// so a change made elsewhere since the read cannot close a cycle.
+const acyclic = (added: string, removed: string, gone: string) => `NOT EXISTS (
+  WITH RECURSIVE extra(tag, implies) AS (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(${added})),
+  reach(source, name) AS (
+    SELECT tag, implies FROM extra
+    UNION SELECT reach.source, i.implies FROM reach JOIN tag_implications i ON i.tag = reach.name
+      WHERE i.implies <> ${gone} AND i.tag <> ${gone}
+        AND NOT EXISTS (SELECT 1 FROM json_each(${removed}) r WHERE json_extract(r.value, '$[0]') = i.tag AND json_extract(r.value, '$[1]') = i.implies)
+    UNION SELECT reach.source, extra.implies FROM reach JOIN extra ON extra.tag = reach.name
+  )
+  SELECT 1 FROM reach WHERE reach.name = reach.source
+)`
 const copied = (tags: readonly Tag[]) => tags.map(tag => ({ ...tag, implies: [...tag.implies], aliases: [...tag.aliases] }))
 async function moveAllowance(db: D1Database, names: readonly string[], who: Who, limited: boolean) {
   const since = new Date(Date.now() - 3600_000).toISOString()
@@ -388,17 +407,24 @@ export async function mergeTag(db: D1Database, tags: readonly Tag[], input: { na
   const before: MergedState = { label: found.label, names: found.names, type: found.type, group: found.group, position: found.position, implies: found.implies, impliedBy, aliases: found.aliases }
   const both = `${stamped('?1')} AND ${stamped('?2')}`
   const since = new Date(Date.now() - 3600_000).toISOString(), limited = input.undo ? 0 : 1
+  // Every condition sits in the first write, so a refused merge leaves no stamp behind. The tags that
+  // implied the merged one must be the ones read: their records are refiled from them.
   const wrote = await landed(db, [
     db.prepare(`UPDATE tags SET rev = ${STAMP} WHERE name = ?1 AND rev = ?2
+      AND EXISTS (SELECT 1 FROM tags WHERE name = ?6 AND rev = ?7)
       AND COALESCE((SELECT n FROM tag_counts WHERE tag = 't:' || ?1), 0) + COALESCE((SELECT n FROM tag_counts WHERE tag = 't:' || ?6), 0) <= ${MOVE_RECORDS_MAX}
-      AND (NOT ?5 OR ${RECENT_MOVES('?3', '?4')} < ${MOVES_PER_HOUR})`).bind(found.name, found.rev, who.actor, since, limited, into.name),
+      AND (NOT ?5 OR ${RECENT_MOVES('?3', '?4')} < ${MOVES_PER_HOUR})
+      AND (SELECT json_group_array(tag) FROM (SELECT tag FROM tag_implications WHERE implies = ?1 ORDER BY tag)) = ?8
+      AND ${acyclic('?9', "'[]'", '?1')}`).bind(found.name, found.rev, who.actor, since, limited, into.name, into.rev, JSON.stringify([...impliedBy].sort()), JSON.stringify(added)),
     db.prepare(`UPDATE tags SET rev = ${STAMP} WHERE name = ?2 AND rev = ?3 AND ${stamped('?1')}`).bind(found.name, into.name, into.rev),
     db.prepare(`DELETE FROM tag_implications WHERE tag = ?1 AND ${both}`).bind(found.name, into.name),
     db.prepare(`DELETE FROM tag_implications WHERE implies = ?1 AND ${both}`).bind(found.name, into.name),
     ...(added.length ? [db.prepare(`INSERT OR IGNORE INTO tag_implications(tag, implies) SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?3) WHERE ${both}`).bind(found.name, into.name, JSON.stringify(added))] : []),
     db.prepare(`UPDATE tag_aliases SET tag = ?2 WHERE tag = ?1 AND ${both}`).bind(found.name, into.name),
     db.prepare(`INSERT INTO tag_aliases(alias, tag, created_by, created_at) SELECT ?1, ?2, ?3, ?4 WHERE ${both}`).bind(found.name, into.name, who.actor, now()),
-    ...refileStatements(db, into.name),
+    // Records filed through an implication of the merged tag that could not move to the other tag are
+    // refiled too: they sit under the tags that implied it.
+    ...refileStatements(db, into.name, impliedBy),
     db.prepare(`DELETE FROM tags WHERE name = ?1 AND ${both}`).bind(found.name, into.name),
     db.prepare("DELETE FROM tag_counts WHERE tag = 't:' || ?1 AND n <= 0 AND NOT EXISTS (SELECT 1 FROM tags WHERE name = ?1)").bind(found.name),
     logEntry(db, `${stamped('?8')} AND EXISTS (SELECT 1 FROM tag_aliases WHERE alias = ?1 AND tag = ?8) AND NOT EXISTS (SELECT 1 FROM tags WHERE name = ?1)`, found.name, 'merge', before, { into: into.name, added, ...(input.undo ? { undo: input.undo } : {}) }, who, 'tag', into.name),
@@ -431,17 +457,20 @@ export async function splitTag(db: D1Database, tags: readonly Tag[], groups: rea
   if (refusal) return refused(refusal)
   const own = stamped('?1')
   const wrote = await landed(db, [
-    db.prepare(`UPDATE tags SET rev = ${STAMP} WHERE name = ?1 AND rev = ?2 AND EXISTS (SELECT 1 FROM tag_aliases WHERE alias = ?3 AND tag = ?1)`).bind(owner.name, owner.rev, input.alias),
+    // Every condition sits in the first write, so a refused split leaves no stamp behind.
+    db.prepare(`UPDATE tags SET rev = ${STAMP} WHERE name = ?1 AND rev = ?2 AND EXISTS (SELECT 1 FROM tag_aliases WHERE alias = ?3 AND tag = ?1)
+      AND NOT EXISTS (SELECT 1 FROM tags WHERE name IN (?3, ?4) OR label IN (?3, ?4)) AND NOT EXISTS (SELECT 1 FROM tag_aliases WHERE alias = ?4 AND alias <> ?3)
+      AND (?5 IS NULL OR EXISTS (SELECT 1 FROM tag_groups WHERE id = ?5 AND type = ?6))
+      AND ${acyclic('?7', '?8', "''")}`)
+      .bind(owner.name, owner.rev, input.alias, label, place.group, place.type, JSON.stringify(restored), JSON.stringify(removed)),
     db.prepare(`INSERT INTO tags(name, label, names, type, group_id, position, rev, created_by, created_at)
-      SELECT ?1, ?2, ?9, ?3, ?4, COALESCE(?5, ${NEXT_POSITION.replace('?', '?3')}), ${STAMP}, ?6, ?7
-      WHERE ${stamped('?8')} AND NOT EXISTS (SELECT 1 FROM tags WHERE name IN (?1, ?2) OR label IN (?1, ?2))
-        AND (?4 IS NULL OR EXISTS (SELECT 1 FROM tag_groups WHERE id = ?4 AND type = ?3))`)
+      SELECT ?1, ?2, ?9, ?3, ?4, COALESCE(?5, ${NEXT_POSITION.replace('?', '?3')}), ${STAMP}, ?6, ?7 WHERE ${stamped('?8')}`)
       .bind(input.alias, label, place.type, place.group, typeof before.position === 'number' ? before.position : null, who.actor, now(), owner.name, JSON.stringify(before.names ?? {})),
     db.prepare(`DELETE FROM tag_aliases WHERE alias = ?1 AND ${own}`).bind(input.alias),
     ...(returning.length ? [db.prepare(`UPDATE tag_aliases SET tag = ?1 WHERE tag = ?2 AND alias IN (SELECT value FROM json_each(?3)) AND ${own}`).bind(input.alias, owner.name, JSON.stringify(returning))] : []),
     ...removed.map(([from, to]) => db.prepare(`DELETE FROM tag_implications WHERE tag = ?2 AND implies = ?3 AND ${own}`).bind(input.alias, from, to)),
     ...(restored.length ? [db.prepare(`INSERT OR IGNORE INTO tag_implications(tag, implies) SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?2) WHERE ${own}`).bind(input.alias, JSON.stringify(restored))] : []),
-    ...refileStatements(db, owner.name),
+    ...refileStatements(db, owner.name, removed.map(([from]) => from)),
     ...refileStatements(db, input.alias),
     logEntry(db, own, input.alias, 'split', { tag: owner.name }, { label, ...place, ...(restored.length ? { implies: restored } : {}), ...(input.undo ? { undo: input.undo } : {}) }, who),
   ])
@@ -458,9 +487,9 @@ export async function aliasTag(db: D1Database, tags: readonly Tag[], input: { na
   if (ownerOf(tags, alias)) return refused('aliased')
   if (found.aliases.length >= TAG_ALIASES_MAX) return refused('limit')
   const wrote = await landed(db, [
-    db.prepare(`UPDATE tags SET rev = ${STAMP} WHERE name = ?1 AND rev = ?2`).bind(found.name, found.rev),
-    db.prepare(`INSERT INTO tag_aliases(alias, tag, created_by, created_at) SELECT ?1, ?2, ?3, ?4
-      WHERE ${stamped('?2')} AND NOT EXISTS (SELECT 1 FROM tags WHERE name = ?1 OR label = ?1) AND NOT EXISTS (SELECT 1 FROM tag_aliases WHERE alias = ?1)`).bind(alias, found.name, who.actor, now()),
+    db.prepare(`UPDATE tags SET rev = ${STAMP} WHERE name = ?1 AND rev = ?2
+      AND NOT EXISTS (SELECT 1 FROM tags WHERE name = ?3 OR label = ?3) AND NOT EXISTS (SELECT 1 FROM tag_aliases WHERE alias = ?3)`).bind(found.name, found.rev, alias),
+    db.prepare(`INSERT INTO tag_aliases(alias, tag, created_by, created_at) SELECT ?1, ?2, ?3, ?4 WHERE ${stamped('?2')}`).bind(alias, found.name, who.actor, now()),
     logEntry(db, `${stamped('?8')} AND EXISTS (SELECT 1 FROM tag_aliases WHERE alias = ?1 AND tag = ?8)`, alias, 'alias', null, { tag: found.name, ...(input.undo ? { undo: input.undo } : {}) }, who, 'tag', found.name),
   ])
   return wrote ? { ok: true } : refused('conflict')
@@ -502,7 +531,7 @@ export async function createGroup(db: D1Database, groups: readonly TagGroup[], i
   const made = `SELECT id FROM tag_groups WHERE type = ?1 AND label = ?2 AND rev = ${STAMP}`
   const wrote = await landed(db, [
     db.prepare(`INSERT INTO tag_groups(id, type, label, names, position, rev, created_by, created_at)
-      SELECT COALESCE(?3, (SELECT COALESCE(MAX(id), 0) + 1 FROM tag_groups)), ?1, ?2, ?7, COALESCE(?4, (SELECT COALESCE(MAX(position) + 1, 0) FROM tag_groups WHERE type = ?1)), ${STAMP}, ?5, ?6
+      SELECT ?3, ?1, ?2, ?7, COALESCE(?4, (SELECT COALESCE(MAX(position) + 1, 0) FROM tag_groups WHERE type = ?1)), ${STAMP}, ?5, ?6
       WHERE NOT EXISTS (SELECT 1 FROM tag_groups WHERE type = ?1 AND label = ?2) AND (?3 IS NULL OR NOT EXISTS (SELECT 1 FROM tag_groups WHERE id = ?3))`)
       .bind(input.type, label, input.id ?? null, input.position ?? null, who.actor, now(), JSON.stringify(input.names ?? {})),
     db.prepare(`INSERT INTO tag_changes(id, subject, name, kind, before, after, actor, at) SELECT ${STAMP}, 'group', CAST(id AS TEXT), 'create', NULL, ?3, ?4, ?5 FROM (${made})`)
