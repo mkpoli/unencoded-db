@@ -5,14 +5,17 @@ import {
   createGroup,
   createTag,
   deleteGroup,
+  aliasTag,
   deleteTag,
   implyTag,
+  mergeTag,
   moveGroup,
   moveTag,
   renameGroup,
   renameTag,
   tagChanges,
   taxonomy,
+  unaliasTag,
   undoTagChange,
   unimplyTag,
   type ChangeCode,
@@ -23,6 +26,7 @@ import type { RequestHandler } from './$types'
 const STATUS_BY_CODE: Partial<Record<ChangeCode, number>> = {
   conflict: 409,
   exists: 409,
+  aliased: 409,
   missing: 404,
   slow: 429,
   too_large: 413,
@@ -111,6 +115,20 @@ export const POST: RequestHandler = async (event) => {
       if (group === undefined) return json({ error: 'invalid' }, { status: 400 })
       const type = typeof body.type === 'string' ? body.type : undefined
       const result = await moveTag(db, tags, groups, { name: textField(body.name), type, group, index: indexField(body.index), rev }, who)
+      return result.ok ? json({ ok: true, ...(await snapshot(db)) }) : fail(result.code)
+    }
+    case 'merge': {
+      const intoRev = optionalRev(body.intoRev)
+      if (intoRev === null) return json({ error: 'invalid' }, { status: 400 })
+      const result = await mergeTag(db, tags, { name: textField(body.name), into: textField(body.into), rev, intoRev }, who)
+      return result.ok ? json({ ok: true, ...(await snapshot(db)) }) : fail(result.code)
+    }
+    case 'alias': {
+      const result = await aliasTag(db, tags, { name: textField(body.name), alias: textField(body.alias), rev }, who)
+      return result.ok ? json({ ok: true, ...(await snapshot(db)) }) : fail(result.code)
+    }
+    case 'unalias': {
+      const result = await unaliasTag(db, tags, groups, { alias: textField(body.alias) }, who)
       return result.ok ? json({ ok: true, ...(await snapshot(db)) }) : fail(result.code)
     }
     case 'group.create': {

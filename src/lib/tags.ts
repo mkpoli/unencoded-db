@@ -14,6 +14,8 @@ export type Tag = {
   n: number
   implies: string[]
   group: number | null
+  /** Other names that resolve to this tag: ones given to it, and the names of tags merged into it. */
+  aliases: string[]
   used?: boolean
 }
 /** A group of tags within one type: the middle tier. */
@@ -27,6 +29,7 @@ export const TAG_LENGTH_MAX = 40
 export const TAG_IMPLIES_MAX = 20
 export const TAG_IMPLY_DEPTH_MAX = 8
 export const TAG_CLOSURE_MAX = 64
+export const TAG_ALIASES_MAX = 20
 export const GROUP_LABEL_MAX = 40
 export const GROUPS_MAX = 300
 
@@ -40,24 +43,32 @@ export function validTagName(value: string) {
   return Boolean(value) && value.length <= TAG_LENGTH_MAX && value === value.normalize('NFC').trim() && !/^#/u.test(value) && !/[\s|,，、\p{Cc}]/u.test(value)
 }
 
+type Named = Pick<Tag, 'name' | 'label'> & { aliases?: readonly string[] }
+
 /**
- * The canonical name a typed tag is stored as, or null when invalid. Matches an existing tag by name
- * or by display label, stripping a leading `#`; anything else valid is kept as a new tag name.
+ * The canonical name a typed tag is stored as, or null when invalid. Matches an existing tag by name,
+ * display label or alias, stripping a leading `#`; anything else valid is kept as a new tag name.
  */
-export function cleanTag(value: string, tags: readonly Pick<Tag, 'name' | 'label'>[]): string | null {
+export function cleanTag(value: string, tags: readonly Named[]): string | null {
   const typed = value.normalize('NFC').trim().replace(/^#+/, '').trim()
   if (!typed || typed.length > TAG_LENGTH_MAX) return null
   const byName = tags.find(tag => tag.name === typed)
   if (byName) return byName.name
   const byLabel = tags.find(tag => tag.label === typed)
   if (byLabel) return byLabel.name
+  const byAlias = tags.find(tag => tag.aliases?.includes(typed))
+  if (byAlias) return byAlias.name
   return validTagName(typed) ? typed : null
 }
 
-/** Each tag's display label by its canonical name; an unknown name shows as written. */
-export const tagLabels = (tags: readonly Pick<Tag, 'name' | 'label'>[]) => new Map(tags.map(tag => [tag.name, tag.label]))
+/** The tag a name stands for: the tag of that name, or the one it is an alias of. */
+export const canonicalName = (name: string, tags: readonly Pick<Named, 'name' | 'aliases'>[]) => tags.find(tag => tag.aliases?.includes(name))?.name ?? name
 
-export const tagLookup = <T extends Pick<Tag, 'name'>>(tags: readonly T[]) => new Map(tags.map(tag => [tag.name, tag]))
+/** Each tag's display label by its canonical name and by its aliases; an unknown name shows as written. */
+export const tagLabels = (tags: readonly Named[]) => new Map(tags.flatMap(tag => [tag.name, ...(tag.aliases ?? [])].map(name => [name, tag.label] as const)))
+
+/** Each tag by its canonical name and by its aliases. */
+export const tagLookup = <T extends Pick<Tag, 'name'> & { aliases?: readonly string[] }>(tags: readonly T[]) => new Map(tags.flatMap(tag => [tag.name, ...(tag.aliases ?? [])].map(name => [name, tag] as const)))
 
 export const byTagOrder = (a: Pick<Tag, 'position' | 'name'>, b: Pick<Tag, 'position' | 'name'>) => a.position - b.position || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
 
@@ -96,11 +107,11 @@ export type ImpliedTag = { name: string; via: string[] }
  * Returns the deduplicated `direct` tags, the automatically carried `implied` tags (each with the
  * immediate carrying tag names in `via`), and `all` (`direct` followed by `implied`).
  */
-export function implicationClosure(direct: readonly string[], tags: readonly Pick<TagRef, 'name' | 'implies'>[]): { direct: string[]; implied: ImpliedTag[]; all: string[] } {
+export function implicationClosure(direct: readonly string[], tags: readonly (Pick<TagRef, 'name' | 'implies'> & { aliases?: readonly string[] })[]): { direct: string[]; implied: ImpliedTag[]; all: string[] } {
   const byName = new Map(tags.map(tag => [tag.name, tag]))
   const directList: string[] = []
   const directSet = new Set<string>()
-  for (const name of direct) {
+  for (const name of direct.map(item => canonicalName(item, tags))) {
     if (!name || directSet.has(name)) continue
     directSet.add(name)
     directList.push(name)
@@ -207,6 +218,7 @@ export function readNewTag(form: FormData, tags: readonly Pick<Tag, 'name' | 'la
 
 const TAG_ERROR_KEYS = {
   exists: 'error.tagExists',
+  aliased: 'error.tagAliased',
   conflict: 'error.tagConflict',
   cycle: 'error.tagCycle',
   depth: 'error.tagDepth',

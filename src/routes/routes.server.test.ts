@@ -272,6 +272,15 @@ test('the tags endpoint creates, renames, moves, implies, unimplies, deletes and
   expect(await answer({ action: 'group.delete', id: group })).toMatchObject({ status: 400, body: { error: 'used' } })
   expect(await answer({ action: 'create', name: '神社用字', group })).toMatchObject({ status: 200, body: { ok: true, created: true } })
   expect(((await tagsLoad({ platform } as any)) as any).tags).toContainEqual(expect.objectContaining({ name: '神社用字', type: 'domain', group }))
+
+  // Merging leaves the merged name as an alias that browsing still finds; an alias is given and taken off.
+  expect(await answer({ action: 'merge', name: '神社用字', into: '寺院用字', rev: await rev('神社用字'), intoRev: await rev('寺院用字') })).toMatchObject({ status: 200, body: { ok: true } })
+  expect(((await tagsLoad({ platform } as any)) as any).tags).toContainEqual(expect.objectContaining({ name: '寺院用字', aliases: ['神社用字'] }))
+  expect(await browseLoad({ url: new URL(`https://example.test/en?tag=${encodeURIComponent('神社用字')}`), locals: { glyphStyle: 'sans' }, platform } as any)).toMatchObject({ tag: '寺院用字' })
+  expect(await answer({ action: 'merge', name: '寺院用字', into: '神社用字' })).toMatchObject({ status: 400, body: { error: 'target' } })
+  expect(await answer({ action: 'alias', name: '寺院用字', alias: '神社用字' })).toMatchObject({ status: 409, body: { error: 'aliased' } })
+  expect(await answer({ action: 'alias', name: '寺院用字', alias: '寺用字' })).toMatchObject({ status: 200, body: { ok: true } })
+  expect(await answer({ action: 'unalias', alias: '寺用字' })).toMatchObject({ status: 200, body: { ok: true } })
 })
 
 test('the radicals page lists the radicals in use, browse narrows by one and the record names it', async () => {

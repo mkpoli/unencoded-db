@@ -635,5 +635,17 @@
   "tags.groupChange.create": "Group added",
   "tags.groupChange.rename": "Group renamed",
   "tags.groupChange.move": "Group moved",
-  "tags.groupChange.delete": "Group deleted"
+  "tags.groupChange.delete": "Group deleted",
+  "tags.aliases": "Also called:",
+  "tags.alias": "Alias",
+  "tags.addAlias": "Add an alias to {name}",
+  "tags.unalias": "Remove the alias {alias}",
+  "tags.merge": "Merge into…",
+  "tags.mergeInto": "Merge {name} into another tag",
+  "tags.mergeConfirm": "Merge {name} into {target}? Records tagged {name} will be listed under {target}, and {name} stays as its alias.",
+  "tags.change.merge": "Merged",
+  "tags.change.split": "Split off",
+  "tags.change.alias": "Alias added",
+  "tags.change.unalias": "Alias removed",
+  "error.tagAliased": "That name is already an alias of a tag."
 }
