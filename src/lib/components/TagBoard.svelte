@@ -8,6 +8,7 @@
     arrangeTags,
     canImply,
     implicationClosure,
+    localized,
     sectionTags,
     tagErrorKey,
     tagLabels,
@@ -17,7 +18,8 @@
     type TagType,
   } from '$lib/tags'
   import type { TagChange } from '$lib/server/tags'
-  import { href, t, when } from '$lib/t'
+  import { LOCALES, LOCALE_NAMES } from '$lib/i18n'
+  import { href, locale, t, when } from '$lib/t'
 
   let { tags = $bindable<Tag[]>([]), groups = $bindable<TagGroup[]>([]), changes = $bindable<TagChange[]>([]), ondone }: {
     tags: Tag[]
@@ -36,10 +38,15 @@
   let aliasDrafts = $state<Record<string, string>>({})
   let newGroups = $state<Partial<Record<TagType, string>>>({})
 
-  const byName = $derived(tagLookup(tags))
-  const labels = $derived(tagLabels(tags))
-  const groupById = $derived(new Map(groups.map(group => [group.id, group])))
-  const sections = $derived(arrangeTags(tags, groups, { every: true }))
+  // Shown in the reader's language; the label fields edit the labels themselves.
+  const shownTags = $derived(localized(tags, locale()))
+  const shownGroups = $derived(localized(groups, locale()))
+  const own = $derived(new Map(tags.map(tag => [tag.name, tag])))
+  const ownGroups = $derived(new Map(groups.map(group => [group.id, group])))
+  const byName = $derived(tagLookup(shownTags))
+  const labels = $derived(tagLabels(shownTags))
+  const groupById = $derived(new Map(shownGroups.map(group => [group.id, group])))
+  const sections = $derived(arrangeTags(shownTags, shownGroups, { every: true }))
 
   // A place as a select's value: a type alone, or a group by its id.
   const placeValue = (type: TagType, group: number | null) => (group === null ? type : `g${group}`)
@@ -116,13 +123,15 @@
     return rest
   }
 
-  async function saveLabel(tag: Tag) {
+  async function saveLabel(shown: Tag) {
+    const tag = own.get(shown.name) ?? shown
     const next = (drafts[tag.name] ?? tag.label).trim()
     if (!next || next === tag.label) return void (drafts = without(drafts, tag.name))
     if (await mutate({ action: 'rename', name: tag.name, label: next, rev: tag.rev })) drafts = without(drafts, tag.name)
   }
 
-  async function saveGroupLabel(group: TagGroup) {
+  async function saveGroupLabel(shown: TagGroup) {
+    const group = ownGroups.get(shown.id) ?? shown
     const next = (groupDrafts[group.id] ?? group.label).trim()
     if (!next || next === group.label) return void (groupDrafts = without(groupDrafts, group.id))
     if (await mutate({ action: 'group.rename', id: group.id, label: next, rev: group.rev })) groupDrafts = without(groupDrafts, group.id)
@@ -263,6 +272,7 @@
       const target = String(before.implies)
       return `× ${labels.get(target) ?? target}`
     }
+    if (change.kind === 'name' && before && after) return `${LOCALE_NAMES[String(after.locale) as keyof typeof LOCALE_NAMES] ?? String(after.locale)}: ${before.label ?? '—'} → ${after.label ?? '—'}`
     if (change.kind === 'merge' && after?.into) return `→ ${labels.get(String(after.into)) ?? String(after.into)}`
     if (change.kind === 'split' && before?.tag) return `← ${labels.get(String(before.tag)) ?? String(before.tag)}`
     if (change.kind === 'alias' && after?.tag) return `= ${labels.get(String(after.tag)) ?? String(after.tag)}`
@@ -276,9 +286,33 @@
   <button type="button" class="grip" aria-label={label} title={label} {onpointerdown} {onkeydown}><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg></button>
 {/snippet}
 
+{#snippet namesEditor(subject: 'tag' | 'group', key: string | number, item: { label: string; names: Record<string, string | undefined>; rev: number })}
+  {@const filled = LOCALES.filter(code => item.names[code]).length}
+  <details class="names">
+    <summary>{t('tags.names')}{#if filled}{' '}<span class="muted">({filled})</span>{/if}</summary>
+    <div class="names-grid">
+      {#each LOCALES as code (code)}
+        <label class="name-field">
+          <span lang={code}>{LOCALE_NAMES[code]}</span>
+          <input
+            class="input"
+            type="text"
+            lang={code}
+            maxlength={GROUP_LABEL_MAX}
+            value={item.names[code] ?? ''}
+            disabled={busy}
+            onchange={event => mutate({ action: 'name', subject, ...(subject === 'group' ? { id: key } : { name: key }), locale: code, label: event.currentTarget.value, rev: item.rev })}
+          />
+        </label>
+      {/each}
+    </div>
+  </details>
+{/snippet}
+
 {#snippet tagRow(tag: Tag, index: number, shelfTags: Tag[])}
-  {@const currentLabel = drafts[tag.name] ?? tag.label}
-  {@const dirty = currentLabel.trim() !== tag.label && currentLabel.trim().length > 0}
+  {@const ownLabel = own.get(tag.name)?.label ?? tag.label}
+  {@const currentLabel = drafts[tag.name] ?? ownLabel}
+  {@const dirty = currentLabel.trim() !== ownLabel && currentLabel.trim().length > 0}
   {@const closure = implicationClosure([tag.name], tags)}
   {@const candidates = tags.filter(other => canImply(tags, tag.name, other.name) === null)}
   {@const parents = impliedBy.get(tag.name) ?? []}
@@ -356,6 +390,8 @@
         >×</button>
       </div>
     </div>
+
+    {@render namesEditor('tag', tag.name, own.get(tag.name) ?? tag)}
 
     <form class="implications" onsubmit={event => addAlias(event, tag)}>
       <span class="imp-label">{t('tags.aliases')}</span>
@@ -496,8 +532,9 @@
       {#each sectionGroups as shelf, groupIndex (shelf.group!.id)}
         {@const group = shelf.group!}
         {@const at = stayingGroups.indexOf(shelf)}
-        {@const currentLabel = groupDrafts[group.id] ?? group.label}
-        {@const dirty = currentLabel.trim() !== group.label && currentLabel.trim().length > 0}
+        {@const ownLabel = ownGroups.get(group.id)?.label ?? group.label}
+        {@const currentLabel = groupDrafts[group.id] ?? ownLabel}
+        {@const dirty = currentLabel.trim() !== ownLabel && currentLabel.trim().length > 0}
         {#if at >= 0 && groupDropsHere(section.type, at)}<div class="drop-line wide" aria-hidden="true"></div>{/if}
         <div class="group-card" class:dragged={drag?.kind === 'group' && drag.group.id === group.id} data-group-card={group.id}>
           <div class="group-head">
@@ -527,6 +564,7 @@
               onclick={() => mutate({ action: 'group.delete', id: group.id, rev: group.rev })}
             >×</button>
           </div>
+          {@render namesEditor('group', group.id, ownGroups.get(group.id) ?? group)}
           {@render shelfRows(section.type, group.id, shelf.tags)}
         </div>
       {/each}
@@ -611,6 +649,10 @@
   .implications { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px }
   .imp-label { color: var(--muted) }
   .x { appearance: none; border: 0; background: none; color: inherit; cursor: pointer; padding: 0 2px; font-size: 14px; line-height: 1 }
+  .names summary { inline-size: fit-content; font-size: 12.5px; color: var(--muted); cursor: pointer }
+  .names-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 6px 10px; margin-top: 6px }
+  .name-field { display: grid; gap: 2px; font-size: 12px; color: var(--muted) }
+  .name-field .input { min-height: 30px; padding: 3px 8px; font-size: 13px }
   .alias { display: inline-flex; align-items: center; gap: 2px; padding: 1px 8px; border: 1px dashed var(--line-strong); border-radius: 999px; color: var(--muted) }
   .alias-input { inline-size: 9rem; min-height: 28px; padding: 2px 8px; font-size: 12.5px }
   .add-imp { width: auto; min-height: 28px; padding: 2px 8px; font-size: 12.5px }

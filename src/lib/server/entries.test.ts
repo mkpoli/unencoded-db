@@ -7,8 +7,8 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { TAG_IMPLY_DEPTH_MAX, TAG_TYPES, arrangeTags, canImply, cleanTag, implicationClosure, tagLabels } from '$lib/tags'
-import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement, mergeTag, aliasTag, unaliasTag, aliasesStatement } from './tags'
+import { TAG_IMPLY_DEPTH_MAX, TAG_TYPES, arrangeTags, canImply, cleanTag, implicationClosure, localized, tagLabels } from '$lib/tags'
+import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement, mergeTag, aliasTag, unaliasTag, aliasesStatement, nameTier } from './tags'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
@@ -1355,6 +1355,7 @@ describe('typed tags and implications', () => {
     await undoTagChange(spy, await taxonomy(db), latest(), who)
     await aliasTag(spy, await listed(), { name: '乙', alias: '乙別' }, who)
     await unaliasTag(spy, await listed(), [], { alias: '乙別' }, who)
+    await nameTier(spy, await taxonomy(db), { subject: 'tag', name: '乙', locale: 'en', label: 'B' }, who)
     const filedRecord = await createEntry(spy, fields({ claims: [claim('tag', '乙')] }), seen(), [], who)
     await editEntry(spy, filedRecord, 1, fields({ claims: [claim('tag', 'music')] }), who, null)
     expect(sent.length).toBeGreaterThan(12)
@@ -1621,6 +1622,44 @@ describe('typed tags and implications', () => {
     expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
     expect(await row('俗字')).toMatchObject({ aliases: [] })
     expect(await unaliasTag(db, await listed(), [], { alias: '俗書' }, who)).toEqual({ ok: false, code: 'missing' })
+  })
+
+  test('a tag or a group is named in each language, shown there, found by it, and kept through delete and merge', async () => {
+    await made('方俗字', 'form')
+    const name = async (locale: string, label: string, subject: 'tag' | 'group' = 'tag', key = '方俗字') => nameTier(db, await taxonomy(db), { subject, name: key, locale, label }, who)
+    expect(await name('en', 'Dialect vernacular characters')).toEqual({ ok: true })
+    expect(await name('ja', '方言俗字')).toEqual({ ok: true })
+    expect(await name('xx', '甲')).toEqual({ ok: false, code: 'invalid' })
+    expect(await row('方俗字')).toMatchObject({ label: '方俗字', names: { en: 'Dialect vernacular characters', ja: '方言俗字' } })
+    expect(localized(await listed(), 'ja').find(tag => tag.name === '方俗字')?.label).toBe('方言俗字')
+    expect(localized(await listed(), 'ko').find(tag => tag.name === '方俗字')?.label).toBe('方俗字')
+    expect(cleanTag('方言俗字', await listed())).toBe('方俗字')
+    // An empty name takes it off; undo puts it back.
+    expect(await name('ja', '')).toEqual({ ok: true })
+    expect((await row('方俗字'))?.names).toEqual({ en: 'Dialect vernacular characters' })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect((await row('方俗字'))?.names).toEqual({ en: 'Dialect vernacular characters', ja: '方言俗字' })
+    // A stale write is refused.
+    const stale = await taxonomy(db)
+    expect(await name('ko', '방속자')).toEqual({ ok: true })
+    expect(await nameTier(db, stale, { subject: 'tag', name: '方俗字', locale: 'vi', label: 'x', rev: stale.tags.find(tag => tag.name === '方俗字')!.rev }, who)).toEqual({ ok: false, code: 'conflict' })
+    // Delete and merge keep the names for undoing.
+    await made('土俗字', 'form')
+    expect(await name('en', 'Local vernacular', 'tag', '土俗字')).toEqual({ ok: true })
+    expect(await deleteTag(db, await listed(), { name: '土俗字' }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect((await row('土俗字'))?.names).toEqual({ en: 'Local vernacular' })
+    expect(await mergeTag(db, await listed(), { name: '土俗字', into: '方俗字' }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect((await row('土俗字'))?.names).toEqual({ en: 'Local vernacular' })
+    // Groups too.
+    const group = await createGroup(db, (await taxonomy(db)).groups, { type: 'form', label: '俗字' }, who)
+    if (!group.ok) throw new Error('group not made')
+    expect(await name('en', 'Vernacular forms', 'group', String(group.id))).toEqual({ ok: true })
+    expect((await taxonomy(db)).groups.find(item => item.id === group.id)?.names).toEqual({ en: 'Vernacular forms' })
+    expect(await deleteGroup(db, (await taxonomy(db)).groups, { id: group.id }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect((await taxonomy(db)).groups.find(item => item.id === group.id)?.names).toEqual({ en: 'Vernacular forms' })
   })
 
   test('every valid tag name is accepted as a t: facet', () => {

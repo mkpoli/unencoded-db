@@ -5,7 +5,7 @@
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
   import Tile from '$lib/components/Tile.svelte'
-  import { COLLECTIONS, arrangeTags } from '$lib/tags'
+  import { COLLECTIONS, arrangeTags, localized } from '$lib/tags'
   import { MARKED } from '$lib/registries'
   import { ORDER, PAGE, SORTS, pageSteps } from '$lib/order'
   import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
@@ -16,11 +16,11 @@
   import ChatLinks from '$lib/components/ChatLinks.svelte'
   import GlyphStyleTabs from '$lib/components/GlyphStyleTabs.svelte'
   import { GLYPH_STYLE_COOKIE, type GlyphStyle } from '$lib/composer'
-  import { href, t } from '$lib/t'
+  import { href, locale, t } from '$lib/t'
   import { TILE_SIZE_COOKIE, TILE_SIZES, pageColumns, tileSizeOf } from '$lib/tile-size'
   import type { Snapshot } from './$types'
   let { data } = $props()
-  const tagSections = $derived(arrangeTags(data.tags, data.groups))
+  const tagSections = $derived(arrangeTags(localized(data.tags, locale()), localized(data.groups, locale())))
   // Further pages are appended as the list nears its end. They belong to the listing they were read for,
   // and a new listing starts again from its own first page.
   type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: string | null; partial: boolean; total: typeof data.total; scanned: number }

@@ -36,7 +36,7 @@
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { codePage, marksOf, registryLabel } from '$lib/registries'
-  import { COLLECTIONS, implicationClosure, tagLabels, tagLookup } from '$lib/tags'
+  import { COLLECTIONS, implicationClosure, localized, tagLabels, tagLookup } from '$lib/tags'
   import { boxesOf, evidenceFile, pictureAlt } from '$lib/picture'
   import { CHECKS, readiness } from '$lib/readiness'
   import { parseSightingTypes, scriptName } from '$lib/scripts'
@@ -144,7 +144,7 @@
   const structured = $derived(recordData({ locale: locale(), id: entry.id, name: seoTitle, description: seoDescription, siteName: t('app.name'), image: cover && media(cover.image_key), sources }))
   const marks = $derived(marksOf(encodings))
   const tagsByName = $derived(tagLookup(data.tags))
-  const labels = $derived(tagLabels(data.tags))
+  const labels = $derived(tagLabels(localized(data.tags, locale())))
   const closure = $derived(implicationClosure(valuesOf(claims, 'tag'), data.tags))
   const collections = $derived(COLLECTIONS.filter(collection => valuesOf(claims, 'collection').includes(collection.slug)))
   const brief = (text: string) => [...text].length > 40 ? [...text].slice(0, 39).join('') + '…' : text

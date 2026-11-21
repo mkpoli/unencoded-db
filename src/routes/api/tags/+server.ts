@@ -9,6 +9,7 @@ import {
   deleteTag,
   implyTag,
   mergeTag,
+  nameTier,
   moveGroup,
   moveTag,
   renameGroup,
@@ -129,6 +130,12 @@ export const POST: RequestHandler = async (event) => {
     }
     case 'unalias': {
       const result = await unaliasTag(db, tags, groups, { alias: textField(body.alias) }, who)
+      return result.ok ? json({ ok: true, ...(await snapshot(db)) }) : fail(result.code)
+    }
+    case 'name': {
+      const subject = body.subject === 'group' ? 'group' : 'tag'
+      const name = subject === 'group' ? String(idField(body.id) ?? '') : textField(body.name)
+      const result = await nameTier(db, { tags, groups }, { subject, name, locale: textField(body.locale), label: textField(body.label), rev }, who)
       return result.ok ? json({ ok: true, ...(await snapshot(db)) }) : fail(result.code)
     }
     case 'group.create': {
