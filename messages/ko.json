@@ -635,5 +635,17 @@
   "tags.groupChange.create": "중분류 추가",
   "tags.groupChange.rename": "중분류 이름 바꿈",
   "tags.groupChange.move": "중분류 이동",
-  "tags.groupChange.delete": "중분류 삭제"
+  "tags.groupChange.delete": "중분류 삭제",
+  "tags.aliases": "다른 이름:",
+  "tags.alias": "다른 이름",
+  "tags.addAlias": "{name}에 다른 이름 추가",
+  "tags.unalias": "다른 이름 {alias} 빼기",
+  "tags.merge": "합칠 태그…",
+  "tags.mergeInto": "{name}을(를) 다른 태그에 합치기",
+  "tags.mergeConfirm": "{name}을(를) {target}에 합칠까요? {name} 태그가 붙은 기록은 {target} 아래에 나오고, {name}은(는) 그 다른 이름이 됩니다.",
+  "tags.change.merge": "합침",
+  "tags.change.split": "분리",
+  "tags.change.alias": "다른 이름 추가",
+  "tags.change.unalias": "다른 이름 삭제",
+  "error.tagAliased": "이미 어떤 태그의 다른 이름입니다."
 }

@@ -635,5 +635,17 @@
   "tags.groupChange.create": "添加中分类",
   "tags.groupChange.rename": "中分类改名",
   "tags.groupChange.move": "移动中分类",
-  "tags.groupChange.delete": "删除中分类"
+  "tags.groupChange.delete": "删除中分类",
+  "tags.aliases": "别名：",
+  "tags.alias": "别名",
+  "tags.addAlias": "为{name}添加别名",
+  "tags.unalias": "移除别名“{alias}”",
+  "tags.merge": "合并到…",
+  "tags.mergeInto": "将{name}合并到其他标签",
+  "tags.mergeConfirm": "要将{name}合并到{target}吗？标有{name}的记录将归入{target}，{name}则成为它的别名。",
+  "tags.change.merge": "合并",
+  "tags.change.split": "拆出",
+  "tags.change.alias": "添加别名",
+  "tags.change.unalias": "移除别名",
+  "error.tagAliased": "这个名称已是某个标签的别名。"
 }

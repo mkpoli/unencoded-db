@@ -8,7 +8,7 @@ import { Database } from 'bun:sqlite'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TAG_IMPLY_DEPTH_MAX, TAG_TYPES, arrangeTags, canImply, cleanTag, implicationClosure, tagLabels } from '$lib/tags'
-import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement } from './tags'
+import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement, mergeTag, aliasTag, unaliasTag, aliasesStatement } from './tags'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
@@ -1350,11 +1350,16 @@ describe('typed tags and implications', () => {
     await moveGroup(spy, (await taxonomy(db)).groups, { id: grouped.id, type: 'meta' }, who)
     await moveTag(spy, await listed(), (await taxonomy(db)).groups, { name: 'nom', type: 'form', group: null }, who)
     await deleteGroup(spy, (await taxonomy(db)).groups, { id: grouped.id }, who)
+    await made('丁', 'meta', ['乙'])
+    await mergeTag(spy, await listed(), { name: '丁', into: '乙' }, who)
+    await undoTagChange(spy, await taxonomy(db), latest(), who)
+    await aliasTag(spy, await listed(), { name: '乙', alias: '乙別' }, who)
+    await unaliasTag(spy, await listed(), [], { alias: '乙別' }, who)
     const filedRecord = await createEntry(spy, fields({ claims: [claim('tag', '乙')] }), seen(), [], who)
     await editEntry(spy, filedRecord, 1, fields({ claims: [claim('tag', 'music')] }), who, null)
     expect(sent.length).toBeGreaterThan(12)
-    for (const statement of sent.filter(statement => /tags|tag_groups|tag_implications|'t:'/.test(statement.sql))) {
-      expect(`${statement.sql}: ${plan(statement)}`).not.toMatch(/claims_by_value \(kind=\?\)|AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (tags|tag_groups|tag_implications|tag_counts|claims|entries|entry_tags|people|cl|e|t|c)\b/)
+    for (const statement of sent.filter(statement => /tags|tag_groups|tag_aliases|tag_implications|'t:'/.test(statement.sql))) {
+      expect(`${statement.sql}: ${plan(statement)}`).not.toMatch(/claims_by_value \(kind=\?\)|AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (tags|tag_groups|tag_aliases|tag_implications|tag_counts|claims|entries|entry_tags|people|cl|e|t|c)\b/)
     }
 
     const reads: [string, string, RegExp][] = [
@@ -1362,6 +1367,7 @@ describe('typed tags and implications', () => {
       ['used', plan(tagsStatement(db, true)), /SEARCH t USING PRIMARY KEY \(tag=\?\)[\s\S]*SEARCH claims USING COVERING INDEX claims_by_value \(kind=\? AND value=\?\)/],
       ['implications', plan(implicationsStatement(db)), /: SCAN tag_implications$/],
       ['groups', plan(groupsStatement(db)), /SCAN tag_groups USING INDEX tag_groups_by_type/],
+      ['aliases', plan(aliasesStatement(db)), /SCAN tag_aliases USING COVERING INDEX tag_aliases_by_tag/],
       ['move size', plan(moveSizeStatement(db, '甲')), /SEARCH tag_counts USING PRIMARY KEY \(tag=\?\)/],
       ['recent moves', plan(recentMovesStatement(db, who.actor, '2026')), /SEARCH tag_changes USING (COVERING )?INDEX tag_changes_by_actor \(actor=\?/],
       ['latest change', plan(latestChangeStatement(db, '甲')), /SEARCH tag_changes USING COVERING INDEX tag_changes_by_name \(subject=\? AND name=\?\)/],
@@ -1541,6 +1547,80 @@ describe('typed tags and implications', () => {
     const form = arrangeTags(await listed(), (await state()).groups).find(section => section.type === 'form')!
     expect(form.shelves.map(shelf => [shelf.group?.label ?? null, shelf.tags.length])).toEqual([['簡化字', 3], [null, form.shelves.at(-1)!.tags.length]])
     expect(arrangeTags(await listed(), (await state()).groups, { every: true }).find(section => section.type === 'form')!.shelves.map(shelf => shelf.group?.label ?? null)).toEqual(['俗字', '簡化字', null])
+  })
+
+  test('merging files a tag\'s records under another, keeps its name as an alias, and undoes back to the tag it was', async () => {
+    await made('布依字', 'general', ['dialect'])
+    await made('布依方塊字', 'general')
+    await made('壯字', 'general', ['布依字'])
+    const direct = await createEntry(db, fields({ claims: [claim('tag', '布依字')] }), seen(), [], who)
+    const carried = await createEntry(db, fields({ claims: [claim('tag', '壯字')] }), seen(), [], who)
+    const other = await createEntry(db, fields({ claims: [claim('tag', '布依方塊字')] }), seen(), [], who)
+    const before = everything()
+    expect(tagsOf(direct)).toEqual(['t:dialect', 't:布依字'])
+
+    expect(await mergeTag(db, await listed(), { name: '布依字', into: '布依方塊字' }, who)).toEqual({ ok: true })
+    expect(await row('布依字')).toBeUndefined()
+    expect(await row('布依方塊字')).toMatchObject({ implies: ['dialect'], aliases: ['布依字'], n: 3 })
+    expect(await row('壯字')).toMatchObject({ implies: ['布依方塊字'] })
+    // Claims stay as written; the records are filed under the tag the alias stands for.
+    expect((await getEntry(db, direct))!.claims.map(c => c.value)).toEqual(['布依字'])
+    expect(tagsOf(direct)).toEqual(['t:dialect', 't:布依方塊字'])
+    expect(tagsOf(carried)).toEqual(['t:dialect', 't:壯字', 't:布依方塊字'])
+    expect(tagsOf(other)).toEqual(['t:dialect', 't:布依方塊字'])
+    expect(countOf('t:布依字')).toBe(0)
+    expect(raw.query("SELECT count(*) AS n FROM tag_counts WHERE tag = 't:布依字'").get()).toEqual({ n: 0 })
+    // The alias resolves wherever a name is typed or shown, and an edit or refresh files the same way.
+    expect(cleanTag('布依字', await listed())).toBe('布依方塊字')
+    expect(tagLabels(await listed()).get('布依字')).toBe('布依方塊字')
+    expect(implicationClosure(['布依字'], await listed()).all).toEqual(['布依方塊字', 'dialect'])
+    const merged = filed()
+    await refreshAll()
+    expect(filed()).toEqual(merged)
+    await ensureTags(db, ['布依字'], who)
+    expect(await row('布依字')).toBeUndefined()
+    // A name taken by an alias is refused as a label or a new alias; the tag holding aliases stays.
+    expect(await renameTag(db, await listed(), { name: '壯字', label: '布依字' }, who)).toEqual({ ok: false, code: 'aliased' })
+    expect(await aliasTag(db, await listed(), { name: '壯字', alias: '布依字' }, who)).toEqual({ ok: false, code: 'aliased' })
+    expect(await aliasTag(db, await listed(), { name: '壯字', alias: '布依方塊字' }, who)).toEqual({ ok: false, code: 'exists' })
+    expect(await deleteTag(db, await listed(), { name: '布依方塊字' }, who)).toEqual({ ok: false, code: 'used' })
+
+    // Undo brings the tag back with its implications, and every row as it was.
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    const undone = everything()
+    const shape = (rows: unknown[]) => (rows as { name: string; label: string; type: string; group_id: number | null; position: number }[]).map(({ name, label, type, group_id, position }) => ({ name, label, type, group_id, position }))
+    expect([shape(undone[0]), undone[1], undone[3], undone[4]]).toEqual([shape(before[0]), before[1], before[3], before[4]])
+    expect(await row('布依字')).toMatchObject({ implies: ['dialect'], aliases: [] })
+    expect(await row('布依方塊字')).toMatchObject({ implies: [], aliases: [] })
+    expect(await row('壯字')).toMatchObject({ implies: ['布依字'] })
+    // Undoing that split merges again.
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect(await row('布依方塊字')).toMatchObject({ aliases: ['布依字'] })
+  })
+
+  test('an alias given to a tag finds it, and taking it off leaves the records that name it a tag of their own', async () => {
+    await made('俗字', 'form')
+    expect(await aliasTag(db, await listed(), { name: '俗字', alias: '#俗體字' }, who)).toEqual({ ok: true })
+    expect(await row('俗字')).toMatchObject({ aliases: ['俗體字'] })
+    expect(cleanTag('俗體字', await listed())).toBe('俗字')
+    expect(await aliasTag(db, await listed(), { name: '俗字', alias: 'a b' }, who)).toEqual({ ok: false, code: 'invalid' })
+    // A record written through the API with the alias is filed under the tag.
+    const id = await createEntry(db, fields({ claims: [claim('tag', '俗體字')] }), seen(), [], who)
+    expect(tagsOf(id)).toEqual(['t:俗字'])
+    expect(await row('俗體字')).toBeUndefined()
+    // In use, taking the alias off makes it a tag again in the same place; unused, it just goes.
+    expect(await unaliasTag(db, await listed(), [], { alias: '俗體字' }, who)).toEqual({ ok: true })
+    expect(await row('俗體字')).toMatchObject({ type: 'form', aliases: [], n: 1 })
+    expect(tagsOf(id)).toEqual(['t:俗體字'])
+    expect(countOf('t:俗字')).toBe(0)
+    expect(await aliasTag(db, await listed(), { name: '俗字', alias: '俗書' }, who)).toEqual({ ok: true })
+    expect(await unaliasTag(db, await listed(), [], { alias: '俗書' }, who)).toEqual({ ok: true })
+    expect(await row('俗書')).toBeUndefined()
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect(await row('俗字')).toMatchObject({ aliases: ['俗書'] })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect(await row('俗字')).toMatchObject({ aliases: [] })
+    expect(await unaliasTag(db, await listed(), [], { alias: '俗書' }, who)).toEqual({ ok: false, code: 'missing' })
   })
 
   test('every valid tag name is accepted as a t: facet', () => {

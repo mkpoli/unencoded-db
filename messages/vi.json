@@ -635,5 +635,17 @@
   "tags.groupChange.create": "Đã thêm nhóm",
   "tags.groupChange.rename": "Đã đổi tên nhóm",
   "tags.groupChange.move": "Đã chuyển nhóm",
-  "tags.groupChange.delete": "Đã xóa nhóm"
+  "tags.groupChange.delete": "Đã xóa nhóm",
+  "tags.aliases": "Tên khác:",
+  "tags.alias": "Tên khác",
+  "tags.addAlias": "Thêm tên khác cho {name}",
+  "tags.unalias": "Bỏ tên khác {alias}",
+  "tags.merge": "Gộp vào…",
+  "tags.mergeInto": "Gộp {name} vào thẻ khác",
+  "tags.mergeConfirm": "Gộp {name} vào {target}? Các mục từ gắn {name} sẽ nằm dưới {target}, và {name} trở thành tên khác của thẻ đó.",
+  "tags.change.merge": "Đã gộp",
+  "tags.change.split": "Đã tách",
+  "tags.change.alias": "Đã thêm tên khác",
+  "tags.change.unalias": "Đã bỏ tên khác",
+  "error.tagAliased": "Tên này đã là tên khác của một thẻ."
 }
