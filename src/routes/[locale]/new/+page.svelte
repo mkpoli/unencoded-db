@@ -232,7 +232,7 @@
     </section>
     <details class="panel filing" open>
       <summary class="section-title">{t('field.filing')}</summary>
-      <div class="group filed"><TagFields tags={data.tags} selected={valuesOf(claims, 'tag')} collections={valuesOf(claims, 'collection')} /></div>
+      <div class="group filed"><TagFields tags={data.tags} groups={data.groups} selected={valuesOf(claims, 'tag')} collections={valuesOf(claims, 'collection')} /></div>
     </details>
     <section class="panel noted">
       <div class="titled"><label class="section-title" for="description">{t('field.notes')}</label><span class="subtitle" id="description-note">{t('field.description')}</span></div>

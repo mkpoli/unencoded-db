@@ -213,7 +213,7 @@ test('a new typed tag typed into the form without scripts is created with its im
   await expect(categoriesLoad({ params: { locale: 'en' } } as any)).rejects.toMatchObject({ status: 301, location: '/en/tags' })
 })
 
-test('the tags endpoint creates, renames, retypes, implies, unimplies, deletes and undoes a tag, and /tags reads them with recent changes', async () => {
+test('the tags endpoint creates, renames, moves, implies, unimplies, deletes and undoes a tag, and /tags reads them with recent changes', async () => {
   const { db } = openTestDb()
   const platform = { env: { DB: db } }
   const post = (body: Record<string, unknown>) => ({
@@ -238,7 +238,7 @@ test('the tags endpoint creates, renames, retypes, implies, unimplies, deletes a
   expect((await answer({ action: 'create', name: 'a b' })).status).toBe(400)
 
   const read = await rev('寺院用字')
-  expect(await answer({ action: 'retype', name: '寺院用字', rev: read, type: 'meta' })).toMatchObject({ status: 200, body: { ok: true } })
+  expect(await answer({ action: 'move', name: '寺院用字', rev: read, type: 'meta' })).toMatchObject({ status: 200, body: { ok: true } })
   expect(await answer({ action: 'rename', name: '寺院用字', rev: read, label: '衝突' })).toMatchObject({ status: 409, body: { error: 'conflict' } })
   expect(await answer({ action: 'imply', name: 'dialect', target: 'hakka' })).toMatchObject({ status: 400, body: { error: 'cycle' } })
   expect(await answer({ action: 'imply', name: '寺院用字', rev: await rev('寺院用字'), target: 'music' })).toMatchObject({ status: 200, body: { ok: true } })
@@ -255,9 +255,23 @@ test('the tags endpoint creates, renames, retypes, implies, unimplies, deletes a
   expect(page.tags).toContainEqual(expect.objectContaining({ name: '寺院用字', label: '寺社用字', type: 'meta', implies: ['music'], n: 0, used: false }))
   expect(page.tags).toContainEqual(expect.objectContaining({ name: '戶籍用字', type: 'domain', implies: [] }))
   expect(page.changes.slice(0, 7).map((change: { kind: string; name: string }) => [change.kind, change.name])).toEqual([
-    ['create', '戶籍用字'], ['delete', '戶籍用字'], ['rename', '寺院用字'], ['unimply', '寺院用字'], ['imply', '寺院用字'], ['retype', '寺院用字'], ['create', '寺院用字'],
+    ['create', '戶籍用字'], ['delete', '戶籍用字'], ['rename', '寺院用字'], ['unimply', '寺院用字'], ['imply', '寺院用字'], ['move', '寺院用字'], ['create', '寺院用字'],
   ])
   expect(page.changes[0].by_name).toMatch(/^anon-/)
+
+  // Groups: made in a type, a tag placed in one, the group moved with its tag, and refused while it holds it.
+  const made = await answer({ action: 'group.create', type: 'meta', label: '寺社' })
+  expect(made).toMatchObject({ status: 200, body: { ok: true, groups: [{ type: 'meta', label: '寺社' }] } })
+  const group = (made.body as { value: number }).value
+  expect(await answer({ action: 'move', name: '寺院用字', rev: await rev('寺院用字'), group, index: 0 })).toMatchObject({ status: 200, body: { ok: true } })
+  expect((await answer({ action: 'move', name: '寺院用字', group: 'x' })).status).toBe(400)
+  const placed = (await tagsLoad({ platform } as any)) as any
+  expect(placed.tags).toContainEqual(expect.objectContaining({ name: '寺院用字', type: 'meta', group }))
+  expect(await answer({ action: 'group.move', id: group, type: 'domain', rev: placed.groups[0].rev })).toMatchObject({ status: 200, body: { ok: true } })
+  expect(((await tagsLoad({ platform } as any)) as any).tags).toContainEqual(expect.objectContaining({ name: '寺院用字', type: 'domain', group }))
+  expect(await answer({ action: 'group.delete', id: group })).toMatchObject({ status: 400, body: { error: 'used' } })
+  expect(await answer({ action: 'create', name: '神社用字', group })).toMatchObject({ status: 200, body: { ok: true, created: true } })
+  expect(((await tagsLoad({ platform } as any)) as any).tags).toContainEqual(expect.objectContaining({ name: '神社用字', type: 'domain', group }))
 })
 
 test('the radicals page lists the radicals in use, browse narrows by one and the record names it', async () => {

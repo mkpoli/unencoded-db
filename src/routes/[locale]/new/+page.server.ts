@@ -1,4 +1,4 @@
-import { createTag, tagList } from '$lib/server/tags'
+import { createTag, taxonomy } from '$lib/server/tags'
 import { fail, redirect } from '@sveltejs/kit'
 import { mapSightings, newClaim } from '$lib/claims'
 import { readNewTag } from '$lib/tags'
@@ -15,13 +15,13 @@ import type { Actions, PageServerLoad } from './$types'
 export const load: PageServerLoad = async (event) => {
   const id = positiveId(event.url.searchParams.get('sighting'))
   const { DB } = env(event)
-  const tags = await tagList(DB)
-  if (!id) return { seed: null, tags }
+  const { tags, groups } = await taxonomy(DB)
+  if (!id) return { seed: null, tags, groups }
   const sighting = await getSighting(DB, id)
   const entry = sighting && !sighting.hidden_at ? await getEntryRow(DB, sighting.entry_id) : null
-  if (!sighting || !entry || entry.hidden_at || entry.merged_into) return { seed: null, tags }
+  if (!sighting || !entry || entry.hidden_at || entry.merged_into) return { seed: null, tags, groups }
   const values: Partial<SightingFields> = { ...Object.fromEntries((['place', 'original_date', 'page', ...CITATION_FIELDS] as const).map(field => [field, sighting[field]])), vias: sighting.vias.map(({ id: _, ...via }) => via) }
-  return { seed: { values, pictures: sighting.media.map(picture => picture.image_key) }, tags }
+  return { seed: { values, pictures: sighting.media.map(picture => picture.image_key) }, tags, groups }
 }
 
 const filled = (form: FormData, fields: SightingFields) => Object.values({ ...fields, vias: fields.vias.length }).some(Boolean) || form.getAll('image').some(file => file instanceof File && file.size > 0)
@@ -38,7 +38,7 @@ export const actions: Actions = {
     await guardWrite(event, 'ADDS')
     const form = await event.request.formData()
     const { DB, MEDIA } = env(event)
-    const tags = await tagList(DB)
+    const { tags, groups } = await taxonomy(DB)
     const { fields: read, error: claimError } = readEntryFields(form, tags)
     const all = sightingForms(form).map(section => ({ form: section, fields: readSightingFields(section) }))
     const sections = all.filter(section => filled(section.form, section.fields))
@@ -70,7 +70,7 @@ export const actions: Actions = {
     for (const [index, fields] of sightings.entries()) drafts.push({ fields, media: await storeImages(MEDIA, pictures[index]) })
     const person = await writer(event, DB)
     const who = { actor: person.id, ip: await ipHash(event) }
-    if (fresh && !(await createTag(DB, tags, fresh, who)).ok) return reject(400, 'tag')
+    if (fresh && !(await createTag(DB, tags, fresh, who, groups)).ok) return reject(400, 'tag')
     const id = await createEntry(DB, entry, drafts[0].fields, drafts[0].media, who, drafts.slice(1))
     notifyIndexNow(event, { entries: [id] })
     redirect(303, `/${event.params.locale}/entry/${id}`)

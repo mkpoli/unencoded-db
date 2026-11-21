@@ -580,3 +580,17 @@ test('0030 moves reviewed words to their link, preserves identity and skips late
   expect(raw.query('PRAGMA foreign_key_check').all()).toEqual([])
   raw.close()
 })
+
+test('0044 moves the tag change log under subjects and never hands out a used id again', () => {
+  const raw = new Database(':memory:')
+  const all = readdirSync(join(import.meta.dir, '../../../migrations')).sort()
+  for (const name of all.filter(name => name < '0044')) raw.exec(migration(name))
+  raw.exec("INSERT INTO tag_changes(name, kind, before, after, actor, at) VALUES ('nom', 'retype', '{\"type\":\"general\"}', '{\"type\":\"form\"}', NULL, '2026'), ('nom', 'rename', NULL, NULL, NULL, '2026')")
+  const last = (raw.query('SELECT MAX(id) AS id FROM tag_changes').get() as { id: number }).id
+  raw.exec(`DELETE FROM tag_changes WHERE id = ${last}`)
+  for (const name of all.filter(name => name >= '0044')) raw.exec(migration(name))
+  expect(raw.query("SELECT subject, name, kind FROM tag_changes WHERE id = ?").get(last - 1)).toEqual({ subject: 'tag', name: 'nom', kind: 'retype' })
+  raw.exec("INSERT INTO tag_changes(name, kind) VALUES ('nom', 'move')")
+  expect((raw.query('SELECT MAX(id) AS id FROM tag_changes').get() as { id: number }).id).toBe(last + 1)
+  expect(raw.query("SELECT count(*) AS n FROM tag_changes WHERE name = ''").get()).toEqual({ n: 0 })
+})
