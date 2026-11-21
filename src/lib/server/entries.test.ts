@@ -1534,6 +1534,18 @@ describe('typed tags and implications', () => {
     expect((await state()).groups.map(group => group.label)).toEqual(['簡化字'])
     expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
     expect((await state()).groups.map(group => [group.id, group.label, group.position])).toEqual([[made1.id, '俗字', 0], [made2.id, '簡化字', 1]])
+    // A deleted group's id is not handed out again, so undoing a move into it does not land in a newer group.
+    const spare = await createGroup(db, (await state()).groups, { type: 'region', label: '臨時' }, who)
+    if (!spare.ok) throw new Error('group not made')
+    expect(await moveTag(db, await listed(), (await state()).groups, { name: '臺灣', group: spare.id }, who)).toEqual({ ok: true })
+    expect(await moveTag(db, await listed(), (await state()).groups, { name: '臺灣', type: 'region', group: null }, who)).toEqual({ ok: true })
+    const movedOut = latest()
+    expect(await deleteGroup(db, (await state()).groups, { id: spare.id }, who)).toEqual({ ok: true })
+    const next = await createGroup(db, (await state()).groups, { type: 'meta', label: '新' }, who)
+    expect(next).toMatchObject({ ok: true })
+    expect(next.ok && next.id).not.toBe(spare.id)
+    expect(await undoTagChange(db, await state(), movedOut, who)).toEqual({ ok: true })
+    expect(await row('臺灣')).toMatchObject({ type: 'region', group: null })
     const created = (raw.query("SELECT id FROM tag_changes WHERE subject = 'group' AND name = ? AND kind = 'create'").get(String(made2.id)) as { id: number }).id
     expect(await undoTagChange(db, await state(), created, who)).toEqual({ ok: false, code: 'conflict' })
 
