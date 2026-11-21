@@ -1,7 +1,8 @@
 -- A middle tier between a tag's type and the tag: each type holds ordered groups, and a tag sits in at
--- most one group of its own type or loose under the type.
+-- most one group of its own type or loose under the type. An id is never handed out twice, so an old
+-- change that names a deleted group cannot land in a new one.
 CREATE TABLE tag_groups (
-  id INTEGER PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   type TEXT NOT NULL CHECK (type IN ('general','region','language','form','domain','meta')),
   label TEXT NOT NULL,
   position INTEGER NOT NULL DEFAULT 0,

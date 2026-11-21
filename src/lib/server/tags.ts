@@ -491,7 +491,7 @@ export async function createGroup(db: D1Database, groups: readonly TagGroup[], i
   const made = `SELECT id FROM tag_groups WHERE type = ?1 AND label = ?2 AND rev = ${STAMP}`
   const wrote = await landed(db, [
     db.prepare(`INSERT INTO tag_groups(id, type, label, position, rev, created_by, created_at)
-      SELECT COALESCE(?3, (SELECT COALESCE(MAX(id), 0) + 1 FROM tag_groups)), ?1, ?2, COALESCE(?4, (SELECT COALESCE(MAX(position) + 1, 0) FROM tag_groups WHERE type = ?1)), ${STAMP}, ?5, ?6
+      SELECT ?3, ?1, ?2, COALESCE(?4, (SELECT COALESCE(MAX(position) + 1, 0) FROM tag_groups WHERE type = ?1)), ${STAMP}, ?5, ?6
       WHERE NOT EXISTS (SELECT 1 FROM tag_groups WHERE type = ?1 AND label = ?2) AND (?3 IS NULL OR NOT EXISTS (SELECT 1 FROM tag_groups WHERE id = ?3))`)
       .bind(input.type, label, input.id ?? null, input.position ?? null, who.actor, now()),
     db.prepare(`INSERT INTO tag_changes(id, subject, name, kind, before, after, actor, at) SELECT ${STAMP}, 'group', CAST(id AS TEXT), 'create', NULL, ?3, ?4, ?5 FROM (${made})`)
