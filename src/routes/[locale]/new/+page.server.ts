@@ -53,7 +53,7 @@ export const actions: Actions = {
     // `sighting` numbers the one an error is about; 0 names none.
     const reject = (status: 400 | 429, error: string, sighting = 0) => fail(status, { error, sighting, values: { ...entry, sightings } })
     if (claimError) return reject(400, claimError)
-    if (fresh === 'invalid') return reject(400, 'tag')
+    if (fresh === 'invalid' || (fresh && fresh.group !== null && !groups.some(group => group.id === fresh.group))) return reject(400, 'tag')
     if (!sections.length) return reject(400, 'evidence', 1)
     if (sections.length > ADD_SIGHTINGS_MAX) return reject(400, 'sightingsMax')
 
