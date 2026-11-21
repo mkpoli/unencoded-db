@@ -1677,6 +1677,12 @@ describe('typed tags and implications', () => {
     expect(localized(await listed(), 'ja').find(tag => tag.name === '方俗字')?.label).toBe('方言俗字')
     expect(localized(await listed(), 'ko').find(tag => tag.name === '方俗字')?.label).toBe('方俗字')
     expect(cleanTag('方言俗字', await listed())).toBe('方俗字')
+    // A name in a language never takes over another tag's alias.
+    await made('簡字', 'form')
+    expect(await aliasTag(db, await listed(), { name: '簡字', alias: 'jianzi' }, who)).toEqual({ ok: true })
+    await made('甲字', 'form')
+    expect(await name('en', 'jianzi', 'tag', '甲字')).toEqual({ ok: true })
+    expect(cleanTag('jianzi', await listed())).toBe('簡字')
     // An empty name takes it off; undo puts it back.
     expect(await name('ja', '')).toEqual({ ok: true })
     expect((await row('方俗字'))?.names).toEqual({ en: 'Dialect vernacular characters' })

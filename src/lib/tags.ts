@@ -64,8 +64,11 @@ export function cleanTag(value: string, tags: readonly Named[]): string | null {
   if (byName) return byName.name
   const byLabel = tags.find(tag => tag.label === typed)
   if (byLabel) return byLabel.name
-  const byAlias = tags.find(tag => tag.aliases?.includes(typed) || Object.values(tag.names ?? {}).includes(typed))
+  // An alias names one tag for good; a name in another language only shows it, so the alias wins.
+  const byAlias = tags.find(tag => tag.aliases?.includes(typed))
   if (byAlias) return byAlias.name
+  const byLanguage = tags.find(tag => Object.values(tag.names ?? {}).includes(typed))
+  if (byLanguage) return byLanguage.name
   return validTagName(typed) ? typed : null
 }
 
