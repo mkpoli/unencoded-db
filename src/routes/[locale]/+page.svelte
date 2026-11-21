@@ -5,7 +5,7 @@
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
   import Tile from '$lib/components/Tile.svelte'
-  import { COLLECTIONS, arrangeTagsByType } from '$lib/tags'
+  import { COLLECTIONS, arrangeTags } from '$lib/tags'
   import { MARKED } from '$lib/registries'
   import { ORDER, PAGE, SORTS, pageSteps } from '$lib/order'
   import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
@@ -20,7 +20,7 @@
   import { TILE_SIZE_COOKIE, TILE_SIZES, pageColumns, tileSizeOf } from '$lib/tile-size'
   import type { Snapshot } from './$types'
   let { data } = $props()
-  const tagGroups = $derived(arrangeTagsByType(data.tags))
+  const tagSections = $derived(arrangeTags(data.tags, data.groups))
   // Further pages are appended as the list nears its end. They belong to the listing they were read for,
   // and a new listing starts again from its own first page.
   type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: string | null; partial: boolean; total: typeof data.total; scanned: number }
@@ -257,7 +257,7 @@
     {:else}
       <div class="field"><label for="tag">{t('field.tags')}</label><select class="input" id="tag" name="tag" value={data.tag ?? ''}>
         <option value="">{t('browse.all')}</option>
-        {#each tagGroups as group (group.type)}<optgroup label={t(`tagType.${group.type}`)}>{#each group.tags as item (item.name)}<option value={item.name}>{item.label} ({item.n})</option>{/each}</optgroup>{/each}
+        {#each tagSections as section (section.type)}{#each section.shelves as shelf (shelf.group?.id ?? 0)}<optgroup label={shelf.group ? `${t(`tagType.${section.type}`)} › ${shelf.group.label}` : t(`tagType.${section.type}`)}>{#each shelf.tags as item (item.name)}<option value={item.name}>{item.label} ({item.n})</option>{/each}</optgroup>{/each}{/each}
       </select></div>
     {/if}
     <div class="field decade"><label for="decade">{t('browse.decadeLabel')}</label><select class="input" id="decade" name="decade" value={data.decade ?? ''}>

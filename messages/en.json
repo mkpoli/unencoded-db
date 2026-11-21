@@ -598,7 +598,6 @@
   "tags.save": "Save",
   "tags.changes": "Recent changes",
   "tags.rename": "Rename {name}",
-  "tags.retype": "Change type for {name}",
   "tags.delete": "Delete {name}",
   "tags.inUse": "Cannot delete while used by records or other tags.",
   "tags.carries": "Automatically carries:",
@@ -622,5 +621,19 @@
   "error.tagCycle": "That would create a circular implication.",
   "error.tagDepth": "That implication chain is too deep or wide.",
   "error.tagLimit": "A tag cannot carry that many direct tags.",
-  "error.tagTooLarge": "Too many records to update at once."
+  "error.tagTooLarge": "Too many records to update at once.",
+  "field.tagGroup": "Group",
+  "field.tagPlace": "Type and group",
+  "tags.noGroup": "No group",
+  "tags.moveTo": "Move {name} to",
+  "tags.drag": "Drag {name} to move it",
+  "tags.renameGroup": "Rename the group {name}",
+  "tags.deleteGroup": "Delete the group {name}",
+  "tags.groupInUse": "A group can be deleted once it holds no tags.",
+  "tags.addGroup": "New group",
+  "tags.addGroupTo": "Add a group to {type}",
+  "tags.groupChange.create": "Group added",
+  "tags.groupChange.rename": "Group renamed",
+  "tags.groupChange.move": "Group moved",
+  "tags.groupChange.delete": "Group deleted"
 }

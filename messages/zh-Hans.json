@@ -598,7 +598,6 @@
   "tags.save": "保存",
   "tags.changes": "最近更改",
   "tags.rename": "重命名{name}",
-  "tags.retype": "更改{name}的类型",
   "tags.delete": "删除{name}",
   "tags.inUse": "尚有记录或其它标签引用，无法删除。",
   "tags.carries": "自动携带：",
@@ -622,5 +621,19 @@
   "error.tagCycle": "这会形成循环关联，无法添加。",
   "error.tagDepth": "自动携带的层级过深或范围过大。",
   "error.tagLimit": "单个标签直接携带的标签数量已达上限。",
-  "error.tagTooLarge": "记录太多，无法一次更新。"
+  "error.tagTooLarge": "记录太多，无法一次更新。",
+  "field.tagGroup": "中分类",
+  "field.tagPlace": "类型与中分类",
+  "tags.noGroup": "不归中分类",
+  "tags.moveTo": "将{name}移至",
+  "tags.drag": "拖动以移动{name}",
+  "tags.renameGroup": "重命名中分类“{name}”",
+  "tags.deleteGroup": "删除中分类“{name}”",
+  "tags.groupInUse": "中分类内尚有标签，无法删除。",
+  "tags.addGroup": "新中分类",
+  "tags.addGroupTo": "在{type}下添加中分类",
+  "tags.groupChange.create": "添加中分类",
+  "tags.groupChange.rename": "中分类改名",
+  "tags.groupChange.move": "移动中分类",
+  "tags.groupChange.delete": "删除中分类"
 }

@@ -598,7 +598,6 @@
   "tags.save": "Lưu",
   "tags.changes": "Thay đổi gần đây",
   "tags.rename": "Đổi tên {name}",
-  "tags.retype": "Đổi loại cho {name}",
   "tags.delete": "Xóa {name}",
   "tags.inUse": "Không thể xóa khi đang được mục từ hoặc thẻ khác dùng.",
   "tags.carries": "Tự động kèm:",
@@ -622,5 +621,19 @@
   "error.tagCycle": "Liên kết này tạo thành vòng lặp.",
   "error.tagDepth": "Chuỗi thẻ tự động quá sâu hoặc quá rộng.",
   "error.tagLimit": "Thẻ này đã đạt giới hạn số thẻ kèm trực tiếp.",
-  "error.tagTooLarge": "Quá nhiều mục từ để cập nhật cùng lúc."
+  "error.tagTooLarge": "Quá nhiều mục từ để cập nhật cùng lúc.",
+  "field.tagGroup": "Nhóm",
+  "field.tagPlace": "Loại và nhóm",
+  "tags.noGroup": "Không thuộc nhóm",
+  "tags.moveTo": "Chuyển {name} đến",
+  "tags.drag": "Kéo để chuyển {name}",
+  "tags.renameGroup": "Đổi tên nhóm {name}",
+  "tags.deleteGroup": "Xóa nhóm {name}",
+  "tags.groupInUse": "Không thể xóa nhóm còn chứa thẻ.",
+  "tags.addGroup": "Nhóm mới",
+  "tags.addGroupTo": "Thêm nhóm vào {type}",
+  "tags.groupChange.create": "Đã thêm nhóm",
+  "tags.groupChange.rename": "Đã đổi tên nhóm",
+  "tags.groupChange.move": "Đã chuyển nhóm",
+  "tags.groupChange.delete": "Đã xóa nhóm"
 }

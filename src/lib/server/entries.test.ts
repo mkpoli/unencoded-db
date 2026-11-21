@@ -7,8 +7,8 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { TAG_IMPLY_DEPTH_MAX, TAG_TYPES, arrangeTagsByType, canImply, cleanTag, implicationClosure, tagLabels } from '$lib/tags'
-import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, retypeTag, tagList, tagsStatement, undoTagChange, unimplyTag } from './tags'
+import { TAG_IMPLY_DEPTH_MAX, TAG_TYPES, arrangeTags, canImply, cleanTag, implicationClosure, tagLabels } from '$lib/tags'
+import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement } from './tags'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
@@ -1245,7 +1245,7 @@ describe('typed tags and implications', () => {
     expect((await getEntry(db, nomId))!.claims.map(c => c.value)).toEqual(['nom'])
 
     // Pure implicationClosure tracks diamond DAG paths cleanly.
-    const grouped = arrangeTagsByType(all)
+    const grouped = arrangeTags(all, [])
     expect(grouped.map(g => g.type)).toEqual(['region', 'language', 'form', 'domain'])
     const closure = implicationClosure(['nom', 'shinjitai'], all)
     expect(closure.direct).toEqual(['nom', 'shinjitai'])
@@ -1308,14 +1308,14 @@ describe('typed tags and implications', () => {
     expect(await implyTag(db, await listed(), { name: 't0', target: prev }, who)).toEqual({ ok: false, code: 'cycle' })
 
     // Retype and rename preserve implications and canonical names.
-    expect(await retypeTag(db, await listed(), { name: 'extra', type: 'meta' }, who)).toEqual({ ok: true })
+    expect(await moveTag(db, await listed(), [], { name: 'extra', type: 'meta' }, who)).toEqual({ ok: true })
     expect(await row('extra')).toMatchObject({ type: 'meta' })
     expect(await renameTag(db, await listed(), { name: 'extra', label: '別名' }, who)).toEqual({ ok: true })
     expect(tagLabels(await listed()).get('extra')).toBe('別名')
     expect(cleanTag('別名', await listed())).toBe('extra')
     // Duplicate label or name collision refused.
     expect(await renameTag(db, await listed(), { name: 't0', label: '別名' }, who)).toEqual({ ok: false, code: 'exists' })
-    expect(await retypeTag(db, await listed(), { name: 'extra', type: 'bogus' }, who)).toEqual({ ok: false, code: 'invalid' })
+    expect(await moveTag(db, await listed(), [], { name: 'extra', type: 'bogus' }, who)).toEqual({ ok: false, code: 'invalid' })
   })
 
   test('unused tags delete cleanly; tags used by records or upstream implications cannot be deleted', async () => {
@@ -1338,25 +1338,33 @@ describe('typed tags and implications', () => {
     await createTag(spy, await listed(), { name: '乙', type: 'form', implies: ['甲'] }, who)
     await ensureTags(spy, ['丙', '乙'], who)
     await renameTag(spy, await listed(), { name: '乙', label: '乙二' }, who)
-    await retypeTag(spy, await listed(), { name: '乙', type: 'meta' }, who)
+    await moveTag(spy, await listed(), [], { name: '乙', type: 'meta' }, who)
     await implyTag(spy, await listed(), { name: '乙', target: 'dialect' }, who)
     await unimplyTag(spy, await listed(), { name: '乙', target: '甲' }, who)
     await deleteTag(spy, await listed(), { name: '丙' }, who)
-    await undoTagChange(spy, await listed(), latest(), who)
+    await undoTagChange(spy, await taxonomy(db), latest(), who)
+    const grouped = await createGroup(spy, (await taxonomy(db)).groups, { type: 'form', label: '組' }, who)
+    if (!grouped.ok) throw new Error('group not made')
+    await moveTag(spy, await listed(), (await taxonomy(db)).groups, { name: 'nom', group: grouped.id, index: 0 }, who)
+    await renameGroup(spy, (await taxonomy(db)).groups, { id: grouped.id, label: '組二' }, who)
+    await moveGroup(spy, (await taxonomy(db)).groups, { id: grouped.id, type: 'meta' }, who)
+    await moveTag(spy, await listed(), (await taxonomy(db)).groups, { name: 'nom', type: 'form', group: null }, who)
+    await deleteGroup(spy, (await taxonomy(db)).groups, { id: grouped.id }, who)
     const filedRecord = await createEntry(spy, fields({ claims: [claim('tag', '乙')] }), seen(), [], who)
     await editEntry(spy, filedRecord, 1, fields({ claims: [claim('tag', 'music')] }), who, null)
     expect(sent.length).toBeGreaterThan(12)
-    for (const statement of sent.filter(statement => /tags|tag_implications|'t:'/.test(statement.sql))) {
-      expect(`${statement.sql}: ${plan(statement)}`).not.toMatch(/claims_by_value \(kind=\?\)|AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (tags|tag_implications|tag_counts|claims|entries|entry_tags|people|cl|e|t|c)\b/)
+    for (const statement of sent.filter(statement => /tags|tag_groups|tag_implications|'t:'/.test(statement.sql))) {
+      expect(`${statement.sql}: ${plan(statement)}`).not.toMatch(/claims_by_value \(kind=\?\)|AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (tags|tag_groups|tag_implications|tag_counts|claims|entries|entry_tags|people|cl|e|t|c)\b/)
     }
 
     const reads: [string, string, RegExp][] = [
       ['list', plan(tagsStatement(db)), /SCAN c USING INDEX tags_by_type[\s\S]*SEARCH t USING PRIMARY KEY \(tag=\?\)/],
       ['used', plan(tagsStatement(db, true)), /SEARCH t USING PRIMARY KEY \(tag=\?\)[\s\S]*SEARCH claims USING COVERING INDEX claims_by_value \(kind=\? AND value=\?\)/],
       ['implications', plan(implicationsStatement(db)), /: SCAN tag_implications$/],
+      ['groups', plan(groupsStatement(db)), /SCAN tag_groups USING INDEX tag_groups_by_type/],
       ['move size', plan(moveSizeStatement(db, '甲')), /SEARCH tag_counts USING PRIMARY KEY \(tag=\?\)/],
       ['recent moves', plan(recentMovesStatement(db, who.actor, '2026')), /SEARCH tag_changes USING (COVERING )?INDEX tag_changes_by_actor \(actor=\?/],
-      ['latest change', plan(latestChangeStatement(db, '甲')), /SEARCH tag_changes USING COVERING INDEX tag_changes_by_name \(name=\?\)/],
+      ['latest change', plan(latestChangeStatement(db, '甲')), /SEARCH tag_changes USING COVERING INDEX tag_changes_by_name \(subject=\? AND name=\?\)/],
       ['changes', plan(changesStatement(db)), /SCAN c[\s\S]*SEARCH p USING INDEX sqlite_autoindex_people_1 \(id=\?\)/],
       ...refileStatements(db, '甲').map((statement, index): [string, string, RegExp] => [
         `refile ${index}`,
@@ -1384,7 +1392,7 @@ describe('typed tags and implications', () => {
     expect(await implyTag(db, stale, { name: 'C', target: 'P2' }, who)).toEqual({ ok: true })
     const after = everything()
     // Second write from stale snapshot is refused cleanly.
-    expect(await retypeTag(db, stale, { name: 'C', type: 'meta' }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(await moveTag(db, stale, [], { name: 'C', type: 'meta' }, who)).toEqual({ ok: false, code: 'conflict' })
     expect(everything()).toEqual(after)
 
     // Race between imply/unimply and editEntry leaves record filed under final tag graph.
@@ -1431,7 +1439,7 @@ describe('typed tags and implications', () => {
     expect(await implyTag(db, await listed(), { name: 'L1', target: 'L2' }, who)).toEqual({ ok: true })
     const implyId = latest()
     expect(await unimplyTag(db, await listed(), { name: 'L1', target: 'L2' }, who)).toEqual({ ok: false, code: 'slow' })
-    expect(await undoTagChange(db, await listed(), implyId, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), implyId, who)).toEqual({ ok: true })
     expect(await row('L1')).toMatchObject({ implies: [] })
   })
 
@@ -1441,28 +1449,28 @@ describe('typed tags and implications', () => {
     await createEntry(db, fields({ claims: [claim('tag', '乙')] }), seen({ report_date: '1850' }), [], who)
     const before = everything()
 
-    expect(await retypeTag(db, await listed(), { name: '乙', type: 'meta' }, who)).toEqual({ ok: true })
-    expect(await undoTagChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(await moveTag(db, await listed(), [], { name: '乙', type: 'meta' }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
     expect([tagsOf(1), countOf('t:甲')]).toEqual([['t:乙', 't:甲'], 1])
 
     expect(await unimplyTag(db, await listed(), { name: '乙', target: '甲' }, who)).toEqual({ ok: true })
     expect([tagsOf(1), countOf('t:甲')]).toEqual([['t:乙'], 0])
-    expect(await undoTagChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
     expect([tagsOf(1), countOf('t:甲')]).toEqual([['t:乙', 't:甲'], 1])
 
     // Only the latest change of a tag can be undone.
     await renameTag(db, await listed(), { name: '乙', label: '乙改' }, who)
     const staleId = latest() - 1
-    expect(await undoTagChange(db, await listed(), staleId, who)).toEqual({ ok: false, code: 'conflict' })
-    expect(await undoTagChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), staleId, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
     expect(await row('乙')).toMatchObject({ label: '乙', type: 'form', implies: ['甲'] })
 
     // Unused tag create/delete roundtrip.
     await made('丙', 'meta', ['乙'])
     const createId = latest()
-    expect(await undoTagChange(db, await listed(), createId, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), createId, who)).toEqual({ ok: true })
     expect(await row('丙')).toBeUndefined()
-    expect(await undoTagChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
     expect(await row('丙')).toMatchObject({ type: 'meta', implies: ['乙'] })
 
     // Deleting a tag log row cannot make a stale rev succeed.
@@ -1471,6 +1479,94 @@ describe('typed tags and implications', () => {
     raw.run('DELETE FROM tag_changes WHERE id = ?', [latest()])
     expect(await renameTag(db, zStale, { name: '丙', label: '丙錯' }, who)).toEqual({ ok: false, code: 'conflict' })
     expect(before[0]).toBeDefined()
+  })
+
+  test('groups hold tags in order within a type, carry them to another type, and every change undoes', async () => {
+    const state = () => taxonomy(db)
+    const shelfOf = async (type: string, group: number | null) => (await listed()).filter(tag => tag.type === type && tag.group === group).sort((a, b) => a.position - b.position).map(tag => tag.name)
+    const made1 = await createGroup(db, (await state()).groups, { type: 'form', label: '俗字' }, who)
+    const made2 = await createGroup(db, (await state()).groups, { type: 'form', label: '簡化字' }, who)
+    if (!made1.ok || !made2.ok) throw new Error('groups not made')
+    expect(await createGroup(db, (await state()).groups, { type: 'form', label: '俗字' }, who)).toEqual({ ok: false, code: 'exists' })
+    expect(await createGroup(db, (await state()).groups, { type: 'bogus', label: '甲' }, who)).toEqual({ ok: false, code: 'invalid' })
+    expect((await state()).groups.map(group => [group.label, group.position])).toEqual([['俗字', 0], ['簡化字', 1]])
+
+    // A tag made in a group takes the group's type; tags placed by index keep their neighbours in order.
+    const { tags, groups } = await state()
+    expect(await createTag(db, tags, { name: '方俗字', type: 'meta', group: made1.id }, who, groups)).toMatchObject({ ok: true })
+    expect(await row('方俗字')).toMatchObject({ type: 'form', group: made1.id })
+    expect(await moveTag(db, await listed(), groups, { name: 'abbreviation', group: made2.id }, who)).toEqual({ ok: true })
+    expect(await moveTag(db, await listed(), groups, { name: 'simplified-cn', group: made2.id, index: 0 }, who)).toEqual({ ok: true })
+    expect(await moveTag(db, await listed(), groups, { name: 'ryakuji', group: made2.id, index: 1 }, who)).toEqual({ ok: true })
+    expect(await shelfOf('form', made2.id)).toEqual(['simplified-cn', 'ryakuji', 'abbreviation'])
+    // A group of another type, or a missing one, is refused.
+    expect(await moveTag(db, await listed(), groups, { name: 'hakka', type: 'language', group: made2.id }, who)).toEqual({ ok: false, code: 'invalid' })
+    expect(await moveTag(db, await listed(), groups, { name: 'hakka', group: 999 }, who)).toEqual({ ok: false, code: 'target' })
+    // A stale read is refused and changes nothing.
+    const stale = await listed()
+    expect(await moveTag(db, stale, groups, { name: 'ryakuji', group: made2.id, index: 0 }, who)).toEqual({ ok: true })
+    const settled = everything()
+    expect(await moveTag(db, stale, groups, { name: 'ryakuji', group: null, type: 'meta' }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(everything()).toEqual(settled)
+    expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
+    expect(await shelfOf('form', made2.id)).toEqual(['simplified-cn', 'ryakuji', 'abbreviation'])
+
+    // Moving a group to another type takes its tags there, without touching how records are filed.
+    const id = await createEntry(db, fields({ claims: [claim('tag', 'simplified-cn')] }), seen(), [], who)
+    const filedBefore = tagsOf(id)
+    const moved = (await state()).groups.find(group => group.id === made2.id)!
+    expect(await moveGroup(db, (await state()).groups, { id: made2.id, type: 'meta', index: 0, rev: moved.rev }, who)).toEqual({ ok: true })
+    expect((await listed()).filter(tag => tag.group === made2.id).map(tag => tag.type)).toEqual(['meta', 'meta', 'meta'])
+    expect(tagsOf(id)).toEqual(filedBefore)
+    expect(await moveGroup(db, (await state()).groups, { id: made2.id, type: 'form', rev: moved.rev }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
+    expect((await listed()).filter(tag => tag.group === made2.id).map(tag => tag.type)).toEqual(['form', 'form', 'form'])
+    expect((await state()).groups.map(group => [group.label, group.type, group.position])).toEqual([['俗字', 'form', 0], ['簡化字', 'form', 1]])
+
+    // Renaming, deleting and their undoing; a group that holds tags stays.
+    expect(await renameGroup(db, (await state()).groups, { id: made1.id, label: '簡化字' }, who)).toEqual({ ok: false, code: 'exists' })
+    expect(await renameGroup(db, (await state()).groups, { id: made1.id, label: '方俗' }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
+    expect((await state()).groups.find(group => group.id === made1.id)?.label).toBe('俗字')
+    expect(await deleteGroup(db, (await state()).groups, { id: made1.id }, who)).toEqual({ ok: false, code: 'used' })
+    expect(await moveTag(db, await listed(), (await state()).groups, { name: '方俗字', type: 'form', group: null }, who)).toEqual({ ok: true })
+    expect(await deleteGroup(db, (await state()).groups, { id: made1.id }, who)).toEqual({ ok: true })
+    expect((await state()).groups.map(group => group.label)).toEqual(['簡化字'])
+    expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
+    expect((await state()).groups.map(group => [group.id, group.label, group.position])).toEqual([[made1.id, '俗字', 0], [made2.id, '簡化字', 1]])
+    // Two moves from one read cannot interleave; a deleted tag comes back to its place.
+    const read = await listed()
+    expect(await moveTag(db, read, (await state()).groups, { name: 'ryakuji', group: made2.id, index: 2 }, who)).toEqual({ ok: true })
+    const moved2 = everything()
+    expect(await moveTag(db, read, (await state()).groups, { name: 'simplified-cn', group: made2.id, index: 2 }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(everything()).toEqual(moved2)
+    expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
+    await made('臨字', 'form')
+    expect(await moveTag(db, await listed(), (await state()).groups, { name: '臨字', group: made2.id, index: 1 }, who)).toEqual({ ok: true })
+    const placed = await shelfOf('form', made2.id)
+    expect(await deleteTag(db, await listed(), { name: '臨字' }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
+    expect(await shelfOf('form', made2.id)).toEqual(placed)
+    expect(await deleteTag(db, await listed(), { name: '臨字' }, who)).toEqual({ ok: true })
+    // A deleted group's id is not handed out again, so undoing a move into it does not land in a newer group.
+    const spare = await createGroup(db, (await state()).groups, { type: 'region', label: '臨時' }, who)
+    if (!spare.ok) throw new Error('group not made')
+    expect(await moveTag(db, await listed(), (await state()).groups, { name: '臺灣', group: spare.id }, who)).toEqual({ ok: true })
+    expect(await moveTag(db, await listed(), (await state()).groups, { name: '臺灣', type: 'region', group: null }, who)).toEqual({ ok: true })
+    const movedOut = latest()
+    expect(await deleteGroup(db, (await state()).groups, { id: spare.id }, who)).toEqual({ ok: true })
+    const next = await createGroup(db, (await state()).groups, { type: 'meta', label: '新' }, who)
+    expect(next).toMatchObject({ ok: true })
+    expect(next.ok && next.id).not.toBe(spare.id)
+    expect(await undoTagChange(db, await state(), movedOut, who)).toEqual({ ok: true })
+    expect(await row('臺灣')).toMatchObject({ type: 'region', group: null })
+    const created = (raw.query("SELECT id FROM tag_changes WHERE subject = 'group' AND name = ? AND kind = 'create'").get(String(made2.id)) as { id: number }).id
+    expect(await undoTagChange(db, await state(), created, who)).toEqual({ ok: false, code: 'conflict' })
+
+    // The tiers read back in order: groups first, then the tags in none.
+    const form = arrangeTags(await listed(), (await state()).groups).find(section => section.type === 'form')!
+    expect(form.shelves.map(shelf => [shelf.group?.label ?? null, shelf.tags.length])).toEqual([['簡化字', 3], [null, form.shelves.at(-1)!.tags.length]])
+    expect(arrangeTags(await listed(), (await state()).groups, { every: true }).find(section => section.type === 'form')!.shelves.map(shelf => shelf.group?.label ?? null)).toEqual(['俗字', '簡化字', null])
   })
 
   test('every valid tag name is accepted as a t: facet', () => {

@@ -5,18 +5,20 @@
     COLLECTIONS,
     TAG_LENGTH_MAX,
     TAG_TYPES,
-    arrangeTagsByType,
+    arrangeTags,
+    sectionTags,
     cleanTag,
     implicationClosure,
     tagErrorKey,
     tagLabels,
     tagLookup,
     type Tag,
+    type TagGroup,
     type TagType,
   } from '$lib/tags'
   import { t } from '$lib/t'
 
-  let { tags = [], selected = [], collections = [] }: { tags?: Tag[]; selected?: string[]; collections?: string[] } = $props()
+  let { tags = [], groups = [], selected = [], collections = [] }: { tags?: Tag[]; groups?: TagGroup[]; selected?: string[]; collections?: string[] } = $props()
 
   const uid = $props.id()
   const GENERAL_PILL_LIMIT = 24
@@ -27,6 +29,7 @@
   let typedTags = $state('')
   let draftName = $state('')
   let draftType = $state<TagType>('general')
+  let draftGroup = $state('')
   let draftImplies = $state('')
   let creating = $state(false)
   let addError = $state<string | null>(null)
@@ -40,6 +43,7 @@
         name: value,
         label: value,
         type: 'general' as const,
+        group: null,
         position: Number.MAX_SAFE_INTEGER - selected.length + index,
         rev: 0,
         n: 0,
@@ -69,8 +73,9 @@
       return false
     })
   })
-  const groups = $derived(arrangeTagsByType(pillTags))
-  const allGroups = $derived(arrangeTagsByType(all))
+  const sections = $derived(arrangeTags(pillTags, groups))
+  const allSections = $derived(arrangeTags(all, groups))
+  const draftGroups = $derived(groups.filter(group => group.type === draftType))
 
   const activeDirect = $derived.by(() => {
     const set = new Set<string>()
@@ -97,6 +102,7 @@
           action: 'create',
           name,
           type: draftType,
+          group: draftGroup ? Number(draftGroup) : null,
           implies: draftImplies ? [draftImplies] : [],
         }),
       })
@@ -124,11 +130,13 @@
   <input type="hidden" name="tags_present" value="1" />
   <input type="hidden" name="collections_present" value="1" />
 
-  {#each groups as group (group.type)}
+  {#each sections as section (section.type)}
     <div class="type-group">
-      <span class="type-heading" data-tag-type={group.type}>{t(`tagType.${group.type}`)}</span>
+      <span class="type-heading" data-tag-type={section.type}>{t(`tagType.${section.type}`)}</span>
+      {#each section.shelves as shelf (shelf.group?.id ?? 0)}
+      {#if shelf.group}<span class="shelf-heading">{shelf.group.label}</span>{/if}
       <div class="pills">
-        {#each group.tags as row (row.name)}
+        {#each shelf.tags as row (row.name)}
           {@const via = impliedMap.get(row.name)}
           <CheckPill
             name="tag"
@@ -141,6 +149,7 @@
           />
         {/each}
       </div>
+      {/each}
     </div>
   {/each}
 
@@ -194,19 +203,30 @@
       </div>
       <div class="field">
         <label for="{uid}-new-type">{t('field.tagType')}</label>
-        <select id="{uid}-new-type" class="input" name="tag_new_type" bind:value={draftType}>
+        <select id="{uid}-new-type" class="input" name="tag_new_type" bind:value={draftType} onchange={() => (draftGroup = '')}>
           {#each TAG_TYPES as tagType (tagType)}
             <option value={tagType}>{t(`tagType.${tagType}`)}</option>
           {/each}
         </select>
       </div>
+      {#if draftGroups.length}
+        <div class="field">
+          <label for="{uid}-new-group">{t('field.tagGroup')}</label>
+          <select id="{uid}-new-group" class="input" name="tag_new_group" bind:value={draftGroup}>
+            <option value="">{t('tags.noGroup')}</option>
+            {#each draftGroups as group (group.id)}
+              <option value={String(group.id)}>{group.label}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
       <div class="field">
         <label for="{uid}-new-implies">{t('field.tagImplies')}</label>
         <select id="{uid}-new-implies" class="input" name="tag_new_implies" bind:value={draftImplies}>
           <option value="">{t('field.tagImpliesNone')}</option>
-          {#each allGroups as group (group.type)}
-            <optgroup label={t(`tagType.${group.type}`)}>
-              {#each group.tags as item (item.name)}
+          {#each allSections as section (section.type)}
+            <optgroup label={t(`tagType.${section.type}`)}>
+              {#each sectionTags(section) as item (item.name)}
                 <option value={item.name}>{item.label}</option>
               {/each}
             </optgroup>
@@ -241,13 +261,14 @@
   .type-heading[data-tag-type=form] { color: var(--tag-form-ink) }
   .type-heading[data-tag-type=domain] { color: var(--tag-domain-ink) }
   .type-heading[data-tag-type=meta] { color: var(--tag-meta-ink) }
+  .shelf-heading { font-size: 12px; color: var(--muted) }
   .pills { display: flex; flex-wrap: wrap; gap: 6px }
   .implied-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 7px; background: var(--surface-sunken); font-size: 12.5px }
   .implied-label { color: var(--muted); font-weight: 500 }
   .via { font-size: 11.5px; opacity: 0.8 }
   .new-tag { container: new-tag / inline-size; border: 1px solid var(--line); border-radius: 7px; padding: 8px 12px }
   .new-tag summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 500 }
-  .new-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr) minmax(0, 1.2fr) auto; gap: 8px; align-items: end; margin-top: 10px }
+  .new-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 8px; align-items: end; margin-top: 10px }
   .new-action { display: flex; align-items: end }
   .error-inline { margin: 8px 0 0; font-size: 13px; color: var(--wrong) }
   @container new-tag (inline-size < 36rem) {

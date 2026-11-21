@@ -598,7 +598,6 @@
   "tags.save": "儲存",
   "tags.changes": "最近變更",
   "tags.rename": "重新命名{name}",
-  "tags.retype": "更改{name}的類型",
   "tags.delete": "刪除{name}",
   "tags.inUse": "尚有記錄或其他標籤參照，無法刪除。",
   "tags.carries": "自動攜帶：",
@@ -622,5 +621,19 @@
   "error.tagCycle": "這會形成循環關聯，無法新增。",
   "error.tagDepth": "自動攜帶的層級過深或範圍過大。",
   "error.tagLimit": "單一標籤直接攜帶的標籤數量已達上限。",
-  "error.tagTooLarge": "記錄太多，無法一次更新。"
+  "error.tagTooLarge": "記錄太多，無法一次更新。",
+  "field.tagGroup": "中分類",
+  "field.tagPlace": "類型與中分類",
+  "tags.noGroup": "不歸中分類",
+  "tags.moveTo": "將{name}移至",
+  "tags.drag": "拖曳以移動{name}",
+  "tags.renameGroup": "重新命名中分類「{name}」",
+  "tags.deleteGroup": "刪除中分類「{name}」",
+  "tags.groupInUse": "中分類內尚有標籤，無法刪除。",
+  "tags.addGroup": "新中分類",
+  "tags.addGroupTo": "在{type}下新增中分類",
+  "tags.groupChange.create": "新增中分類",
+  "tags.groupChange.rename": "中分類改名",
+  "tags.groupChange.move": "移動中分類",
+  "tags.groupChange.delete": "刪除中分類"
 }
