@@ -598,7 +598,6 @@
   "tags.save": "保存",
   "tags.changes": "最近の変更",
   "tags.rename": "{name}の表示名を変更",
-  "tags.retype": "{name}の種類を変更",
   "tags.delete": "{name}を削除",
   "tags.inUse": "記録またはほかのタグから参照されているため削除できません。",
   "tags.carries": "自動付与:",
@@ -622,5 +621,19 @@
   "error.tagCycle": "循環参照になるため設定できません。",
   "error.tagDepth": "自動付与の連鎖が深すぎるか多すぎます。",
   "error.tagLimit": "直接付与できるタグ数の上限に達しています。",
-  "error.tagTooLarge": "一度に更新する記録が多すぎます。"
+  "error.tagTooLarge": "一度に更新する記録が多すぎます。",
+  "field.tagGroup": "中分類",
+  "field.tagPlace": "種類と中分類",
+  "tags.noGroup": "中分類なし",
+  "tags.moveTo": "{name}の移動先",
+  "tags.drag": "ドラッグして{name}を移動",
+  "tags.renameGroup": "中分類「{name}」の名前を変更",
+  "tags.deleteGroup": "中分類「{name}」を削除",
+  "tags.groupInUse": "タグが残っている中分類は削除できません。",
+  "tags.addGroup": "新しい中分類",
+  "tags.addGroupTo": "{type}に中分類を追加",
+  "tags.groupChange.create": "中分類を追加",
+  "tags.groupChange.rename": "中分類の名前を変更",
+  "tags.groupChange.move": "中分類を移動",
+  "tags.groupChange.delete": "中分類を削除"
 }

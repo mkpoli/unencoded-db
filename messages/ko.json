@@ -598,7 +598,6 @@
   "tags.save": "저장",
   "tags.changes": "최근 변경",
   "tags.rename": "{name} 이름 바꾸기",
-  "tags.retype": "{name} 유형 바꾸기",
   "tags.delete": "{name} 삭제",
   "tags.inUse": "기록이나 다른 태그에서 사용 중이므로 삭제할 수 없습니다.",
   "tags.carries": "자동 포함:",
@@ -622,5 +621,19 @@
   "error.tagCycle": "순환 관계가 생겨 설정할 수 없습니다.",
   "error.tagDepth": "자동 포함 단계나 범위가 너무 큽니다.",
   "error.tagLimit": "직접 포함할 수 있는 태그 수를 넘었습니다.",
-  "error.tagTooLarge": "한 번에 갱신할 기록이 너무 많습니다."
+  "error.tagTooLarge": "한 번에 갱신할 기록이 너무 많습니다.",
+  "field.tagGroup": "중분류",
+  "field.tagPlace": "유형과 중분류",
+  "tags.noGroup": "중분류 없음",
+  "tags.moveTo": "{name} 옮길 곳",
+  "tags.drag": "끌어서 {name} 옮기기",
+  "tags.renameGroup": "중분류 {name} 이름 바꾸기",
+  "tags.deleteGroup": "중분류 {name} 삭제",
+  "tags.groupInUse": "태그가 남아 있는 중분류는 삭제할 수 없습니다.",
+  "tags.addGroup": "새 중분류",
+  "tags.addGroupTo": "{type}에 중분류 추가",
+  "tags.groupChange.create": "중분류 추가",
+  "tags.groupChange.rename": "중분류 이름 바꿈",
+  "tags.groupChange.move": "중분류 이동",
+  "tags.groupChange.delete": "중분류 삭제"
 }
