@@ -2222,6 +2222,9 @@ describe('personal communications', () => {
   })
 
   test('a kind alone stores no source', async () => {
+    const form = new FormData()
+    for (const [name, value] of [['place', 'A scan'], ['source_kind', 'personal']]) form.append(name, value)
+    expect(readSightingFields(form).source_kind).toBeNull()
     const id = await createEntry(db, fields(), seen({ url: null, title: null, source_kind: 'personal' }), [], who)
     expect((await getEntry(db, id))!.sightings[0].source_id).toBeNull()
   })

@@ -133,6 +133,8 @@
     const keep = (current: string, name: keyof Filled) => !current || current === posted?.[name] ? next?.[name] ?? '' : current
     place = keep(place, 'place'); title = keep(title, 'title'); author = keep(author, 'author'); page = keep(page, 'page')
     publisher = keep(publisher, 'publisher')
+    // A post is public, so the source it fills is not a personal communication.
+    if (next && !next.viaUrl) kind = ''
     let direct = passages.find(item => item.key === postedPassage)
     if (!direct && next?.quote) {
       direct = passages.find(item => !item.text && !item.locator)
@@ -153,11 +155,12 @@
     if (row) {
       const before = [row.url, row.title, row.author, row.publisher, row.date].join('\u0000')
       const hadSource = !blankVia(row)
+      if (found && !hadSource) row.kind = ''
       row.url = keep(row.url, 'viaUrl'); row.title = keep(row.title, 'viaTitle'); row.author = keep(row.author, 'viaAuthor')
       row.publisher = keep(row.publisher, 'viaPublisher'); row.date = keep(row.date, 'viaDate')
       // Words written for the source this row held no longer belong to it once a post replaces it. A row
       // that held no source is being filled, so words already in it are for this post.
-      if (hadSource && [row.url, row.title, row.author, row.publisher, row.date].join('\u0000') !== before) row.quote = ''
+      if (hadSource && [row.url, row.title, row.author, row.publisher, row.date].join('\u0000') !== before) { row.quote = ''; row.kind = '' }
       if (!next?.viaUrl || row.url === next.viaUrl) row.quote = keep(row.quote, 'viaQuote')
       postedKey = found ? row.key : null
       if (row.url) viaOpen = true
@@ -236,7 +239,7 @@
 
 {#snippet kindField(id: string, name: string, value: string, onpick: (value: string) => void)}
   <div class="field"><label for={id}>{t('field.sourceKind')}</label>
-    <select {id} class="input" {name} {value} onchange={event => onpick(event.currentTarget.value)}><option value="">{t('field.unset')}</option>{#each SOURCE_KINDS as item}<option value={item}>{t(`sourceKind.${item}`)}</option>{/each}</select></div>
+    <select {id} class="input" {name} {value} onchange={event => onpick(event.currentTarget.value)}><option value="">—</option>{#each SOURCE_KINDS as item}<option value={item}>{t(`sourceKind.${item}`)}</option>{/each}</select></div>
 {/snippet}
 
 <div class="field">

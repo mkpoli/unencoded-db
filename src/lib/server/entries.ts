@@ -125,7 +125,7 @@ export function readSightingFields(form: FormData): SightingFields {
     return text ? [{ text, locator: clean(locators[i], 300) }] : []
   })
   const chosen = (name: string) => new Set(form.getAll(name).map(String))
-  return {
+  const fields: SightingFields = {
     // A link alone answers where it was found.
     place: text(form, 'place', 500) ?? safeUrl ?? '',
     url: safeUrl,
@@ -144,6 +144,8 @@ export function readSightingFields(form: FormData): SightingFields {
     note: text(form, 'note', 5000),
     quotes: quotes.length ? JSON.stringify(quotes) : null,
   }
+  if (blankCitation(fields)) fields.source_kind = null
+  return fields
 }
 
 // The marks of one picture as the form sends them, a JSON array of [x, y, width, height]. Each is kept inside the image.
