@@ -3,10 +3,10 @@ import { quotations } from '$lib/quotations'
 // module walks every cursor, shapes the rows as JSON or CSV, and names the licence and the counts once.
 import { CLAIM_KINDS, claimsOf, primaryLayoutOf, scopesOf, type Claim } from '$lib/claims'
 import { recordCode } from '$lib/code'
-import { parseSightingTypes } from '$lib/scripts'
+import { parseContexts, parseSightingTypes } from '$lib/scripts'
 import { exportPage, parseMarks, SIGHTING_FIELDS, type ExportEntry, type Sighting } from './entries'
 
-export const DATASET_VERSION = 1
+export const DATASET_VERSION = 2
 export const DATASET_NAME = 'Rare Character Compendium'
 export const DATASET_LICENSE = 'CC BY-SA 4.0'
 export const DATASET_LICENSE_URL = 'https://creativecommons.org/licenses/by-sa/4.0/'
@@ -80,7 +80,7 @@ export async function* exportBatches(db: D1Database, size = EXPORT_BATCH_MAX): A
   }
 }
 
-const exportedSighting = (sighting: Sighting) => ({ ...sighting, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types) })
+const exportedSighting = (sighting: Sighting) => ({ ...sighting, quotes: quotations(sighting.quotes), contexts: parseContexts(sighting.contexts), types: parseSightingTypes(sighting.types) })
 
 /** The JSON file, one record at a time and one piece of evidence at a time. A record split across the
  * export pages keeps its first page's metadata and claims, and its evidence continues without a break. */
@@ -151,7 +151,7 @@ export function csvRows(entries: readonly ExportEntry[], bulk = true) {
       ...entryColumns.map(field => entry[field]),
       ...stated,
       sighting?.id,
-      ...SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : sighting?.[field]),
+      ...SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : field === 'contexts' ? parseContexts(sighting?.contexts).join(', ') : sighting?.[field]),
       sighting ? JSON.stringify(sighting.vias) : '',
       sighting?.media.map(image => image.image_key).join('; '),
     ]).map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n'

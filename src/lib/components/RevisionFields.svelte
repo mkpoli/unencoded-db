@@ -10,7 +10,7 @@
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { registryLabel } from '$lib/registries'
   import { COLLECTIONS, type TagType } from '$lib/tags'
-  import { parseSightingTypes } from '$lib/scripts'
+  import { parseContexts, parseSightingTypes } from '$lib/scripts'
   import { statusOf } from '$lib/status'
   import ViaChain from '$lib/components/ViaChain.svelte'
   import RelationCharacter from './RelationCharacter.svelte'
@@ -55,6 +55,7 @@
 {#if sighting}
   {@const source = fields as SightingFields}
   {@const types = parseSightingTypes(source.types)}
+  {@const contexts = parseContexts(source.contexts)}
   <div class="snapshot">
     <div class="source-head">
       {#if source.place}<h3>{source.place}</h3>{/if}
@@ -62,7 +63,7 @@
     </div>
     <dl class="facts">
       {#each sourceFields as field}{#if source[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={source[field.key]} reading={dates?.get(source[field.key] ?? '')} />{:else}{source[field.key]}{/if}</dd></div>{/if}{/each}
-      {#if source.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${source.context}`)}</dd></div>{/if}
+      {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
       {#if source.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${source.style}`)}</dd></div>{/if}
       {#if types.length}<div><dt>{t('field.sourceTypes')}</dt><dd>{types.map(type => t(`evidence.type.${type}`)).join(' · ')}</dd></div>{/if}
       {#if source.vias.length}<div class="wide"><dt>{t('field.via')}</dt><dd><ViaChain vias={source.vias} dates={dates} label={false} /></dd></div>{/if}

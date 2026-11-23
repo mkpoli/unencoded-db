@@ -1,5 +1,5 @@
 import { readDates, sightingDates } from '$lib/server/date-readings'
-import { createTag, tagList } from '$lib/server/tags'
+import { createTag, taxonomy } from '$lib/server/tags'
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
 import { addComment, cleanComment, commentsOf, setCommentHidden } from '$lib/server/comments'
 import { isDescription } from 'ids-input'
@@ -37,7 +37,7 @@ export const load: PageServerLoad = async (event) => {
   const about = asked && sightings.some(sighting => sighting.id === asked) ? asked : null
   const comments = await commentsOf(env(event).DB, id, Boolean(event.locals.person?.moderator))
   const related = await relatedRecords(env(event).DB, id, found.claims)
-  return { dates, idsAdd, related, about, comments, entry: found.entry, claims: found.claims, sightings, filed, tags: await tagList(env(event).DB), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
+  return { dates, idsAdd, related, about, comments, entry: found.entry, claims: found.claims, sightings, filed, ...(await taxonomy(env(event).DB)), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
 }
 
 async function commentVisibility(event: RequestEvent, hidden: boolean) {
@@ -76,7 +76,7 @@ export const actions: Actions = {
     const found = await getEntry(DB, id)
     if (!found || found.entry.hidden_at || found.entry.merged_into) error(404)
     const form = await event.request.formData()
-    const tags = await tagList(DB)
+    const { tags, groups } = await taxonomy(DB)
     const { fields: read, error: claimError } = readEntryFields(form, tags, { ...found.entry, claims: found.claims })
     // A tag typed into the form without scripts is made with the edit and attached.
     const fresh = readNewTag(form, tags)
@@ -89,7 +89,7 @@ export const actions: Actions = {
     const person = await writer(event, DB)
     const summary = String(form.get('summary') ?? '').trim().slice(0, 500) || null
     const who = { actor: person.id, ip: await ipHash(event) }
-    if (fresh && !(await createTag(DB, tags, fresh, who)).ok) return fail(400, { error: 'tag', values })
+    if (fresh && !(await createTag(DB, tags, fresh, who, groups)).ok) return fail(400, { error: 'tag', values })
     const result = await editEntry(DB, id, rev, values, who, summary)
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code, values })
     notifyIndexNow(event, { entries: [id] })

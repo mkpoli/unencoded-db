@@ -35,14 +35,17 @@ test('export walks every visible sighting and empty entry with a composite curso
   expect([...new Set(entries)]).toEqual([1, 3])
 })
 
-test('export gives source types as a list in JSON and a readable cell in CSV', async () => {
+test('export gives source types and contexts as lists in JSON and readable cells in CSV', async () => {
   const { db, raw } = fixture()
-  raw.prepare("UPDATE sightings SET types = ? WHERE entry_id = 1 AND place = 'source 0'").run(JSON.stringify(['mention', 'definition']))
+  raw.prepare("UPDATE sightings SET types = ?, contexts = ? WHERE entry_id = 1 AND place = 'source 0'").run(JSON.stringify(['mention', 'definition']), JSON.stringify(['running_text', 'heading']))
   const jsonResponse = await exportGet({ url: new URL('https://example.test/api/entries?limit=5&format=json'), platform: { env: { DB: db } } } as any)
   const body = await jsonResponse.json() as any
   expect(body.entries[0].evidence[0].types).toEqual(['mention', 'definition'])
+  expect(body.entries[0].evidence[0].contexts).toEqual(['running_text', 'heading'])
   const csvResponse = await exportGet({ url: new URL('https://example.test/api/entries?limit=5&format=csv'), platform: { env: { DB: db } } } as any)
-  expect(await csvResponse.text()).toContain('"mention, definition"')
+  const csv = await csvResponse.text()
+  expect(csv).toContain('"mention, definition"')
+  expect(csv).toContain('"running_text, heading"')
 })
 
 test('export carries the via chain in JSON and CSV', async () => {

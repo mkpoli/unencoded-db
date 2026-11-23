@@ -1,10 +1,10 @@
 <script lang="ts">
   import type { DateReading } from '$lib/dates'
   import RevisionFields from './RevisionFields.svelte'
-  import { tagLabels, type Tag } from '$lib/tags'
+  import { localized, tagLabels, type Tag } from '$lib/tags'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
   import { enhance } from '$app/forms'
-  import { href, t, when } from '$lib/t'
+  import { href, locale, t, when } from '$lib/t'
   import { recordCode } from '$lib/code'
 
   type Row = {
@@ -17,7 +17,7 @@
   let { rows, tags, dates, currentRev = null, showEntry = false, showActor = true, restore = false, redact = false, thank = false, thanked = [], viewer = null, empty, next = null }: {
     dates: Map<string, DateReading | null>; rows: Row[]; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; thank?: boolean; thanked?: number[]; viewer?: string | null; empty: string; next?: number | null
   } = $props()
-  const labels = $derived(tagLabels(tags))
+  const labels = $derived(tagLabels(localized(tags, locale())))
   const tagTypes = $derived(new Map(tags.map(tag => [tag.name, tag.type])))
 
   // The state a record or a sighting holds now stays; only a past one can be redacted.

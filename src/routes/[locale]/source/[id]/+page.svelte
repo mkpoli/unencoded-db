@@ -84,7 +84,7 @@
           {#if sighting.place}<h3>{sighting.place}</h3>{/if}
           {#if sighting.types.length}<div class="row badges">{#each sighting.types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
           <dl class="facts">{#each seenFacts as fact}{#if sighting[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{#if fact.key === 'original_date'}<EvidenceDate text={sighting.original_date} reading={data.dates.get(sighting.original_date ?? '')} />{:else}{sighting[fact.key]}{/if}</dd></div>{/if}{/each}
-            {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
+            {#if sighting.contexts.length}<div><dt>{t('field.context')}</dt><dd>{sighting.contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
             {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
           </dl>
           {#if !sighting.via}<SourceQuotations quotes={sighting.quotes} url={source.url} />{/if}

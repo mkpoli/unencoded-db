@@ -5,7 +5,7 @@
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
   import Tile from '$lib/components/Tile.svelte'
-  import { COLLECTIONS, arrangeTagsByType } from '$lib/tags'
+  import { COLLECTIONS, arrangeTags, localized } from '$lib/tags'
   import { MARKED } from '$lib/registries'
   import { ORDER, PAGE, SORTS, pageSteps } from '$lib/order'
   import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
@@ -16,11 +16,11 @@
   import ChatLinks from '$lib/components/ChatLinks.svelte'
   import GlyphStyleTabs from '$lib/components/GlyphStyleTabs.svelte'
   import { GLYPH_STYLE_COOKIE, type GlyphStyle } from '$lib/composer'
-  import { href, t } from '$lib/t'
-  import { TILE_SIZE_COOKIE, TILE_SIZES, tileSizeOf } from '$lib/tile-size'
+  import { href, locale, t } from '$lib/t'
+  import { TILE_SIZE_COOKIE, TILE_SIZES, pageColumns, tileSizeOf } from '$lib/tile-size'
   import type { Snapshot } from './$types'
   let { data } = $props()
-  const tagGroups = $derived(arrangeTagsByType(data.tags))
+  const tagSections = $derived(arrangeTags(localized(data.tags, locale()), localized(data.groups, locale())))
   // Further pages are appended as the list nears its end. They belong to the listing they were read for,
   // and a new listing starts again from its own first page.
   type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: string | null; partial: boolean; total: typeof data.total; scanned: number }
@@ -133,6 +133,17 @@
       if (ticket === switching) shownStyle = null
     }
   }
+  // The grid's columns divide a page, so each page read ends on a full row. Without scripts the grid fits as many as it can.
+  let grid = $state<HTMLElement>()
+  $effect(() => {
+    if (!grid) return
+    const node = grid, tile = tileSize
+    const fit = () => { node.style.gridTemplateColumns = `repeat(${pageColumns(node.clientWidth, Math.min(tile, node.clientWidth), parseFloat(getComputedStyle(node).columnGap) || 0, PAGE)},minmax(0,1fr))` }
+    const watching = new ResizeObserver(fit)
+    watching.observe(node)
+    fit()
+    return () => watching.disconnect()
+  })
   function sizeTiles(index: number) {
     tileSize = TILE_SIZES[index] ?? tileSize
     document.cookie = `${TILE_SIZE_COOKIE}=${tileSize};path=/;max-age=31536000;samesite=lax`
@@ -246,7 +257,7 @@
     {:else}
       <div class="field"><label for="tag">{t('field.tags')}</label><select class="input" id="tag" name="tag" value={data.tag ?? ''}>
         <option value="">{t('browse.all')}</option>
-        {#each tagGroups as group (group.type)}<optgroup label={t(`tagType.${group.type}`)}>{#each group.tags as item (item.name)}<option value={item.name}>{item.label} ({item.n})</option>{/each}</optgroup>{/each}
+        {#each tagSections as section (section.type)}{#each section.shelves as shelf (shelf.group?.id ?? 0)}<optgroup label={shelf.group ? `${t(`tagType.${section.type}`)} › ${shelf.group.label}` : t(`tagType.${section.type}`)}>{#each shelf.tags as item (item.name)}<option value={item.name}>{item.label} ({item.n})</option>{/each}</optgroup>{/each}{/each}
       </select></div>
     {/if}
     <div class="field decade"><label for="decade">{t('browse.decadeLabel')}</label><select class="input" id="decade" name="decade" value={data.decade ?? ''}>
@@ -298,7 +309,7 @@
     {/if}
     {#if data.also.length}<details class="found also"><summary>{t('browse.alsoSearched', { n: data.also.length })}</summary><ul>{#each data.also as spelling}<li class="ids">{spelling}</li>{/each}</ul></details>{/if}
     {#if shown.tiles.length}
-      <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
+      <div class="tiles" bind:this={grid}>{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
     {:else if !shown.partial || done}
       <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.script || data.filter || data.collection || data.tag || data.radical || data.decade || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
     {/if}
