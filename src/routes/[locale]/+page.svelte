@@ -370,7 +370,7 @@
   :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .tiles { gap:8px }
   .pager { display:flex; flex-wrap:wrap; align-items:center; gap:8px 20px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
   .foot { justify-content:flex-end }
-  .sizes { display:flex; align-items:center; gap:2px } .sizes span { margin-inline-end:6px } .sizes .chip { justify-content:center; min-inline-size:34px; padding-inline:8px }
+  .sizes { display:flex; flex-wrap:wrap; align-items:center; gap:2px } .sizes span { margin-inline-end:6px } .sizes .chip { justify-content:center; min-inline-size:34px; padding-inline:8px }
   .range { margin:0; margin-inline-end:auto }
   .pages { display:flex; flex-wrap:wrap; align-items:center; gap:2px }
   .pages .chip { justify-content:center; min-inline-size:34px; padding-inline:8px } .pages .off { opacity:.35; cursor:default } .pages .off:hover { color:var(--muted) } .gap { padding-inline:4px }
