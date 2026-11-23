@@ -15,7 +15,8 @@ WITH candidates AS (
   FROM sightings s JOIN date_readings d ON d.transcription = s.original_date
   WHERE s.hidden_at IS NULL AND d.reading IS NOT NULL
 ), ranked AS (
-  SELECT *, row_number() OVER (PARTITION BY entry_id ORDER BY year, until, id, kind) AS position FROM candidates
+  SELECT *, row_number() OVER (PARTITION BY entry_id ORDER BY year, bound, id, kind) AS position
+  FROM (SELECT *, min(until) OVER (PARTITION BY id) AS bound FROM candidates)
 ), earliest AS MATERIALIZED (
   SELECT e.id, CAST(r.year AS TEXT) AS year, r.kind, r.id AS sighting
   FROM entries e LEFT JOIN ranked r ON r.entry_id = e.id AND r.position = 1

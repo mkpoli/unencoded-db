@@ -232,14 +232,16 @@ function partTags(claims: readonly Claim[]) {
 const yearOf = (text: string | null) => text === null ? null : Number(text)
 
 type Year = NonNullable<ReturnType<typeof datedYear>>
-// Dates order by year, then by the day each had passed: 5 April, 11 April, April, the year alone.
+// Dates order by year, then by the last day each can mean: 5 April, 11 April, April, the year alone.
 // scripts/reindex-dates.sql ranks by the same order.
 const before = (a: Year, b: Year) => a.n < b.n || (a.n === b.n && a.end < b.end)
 
-// A sighting's year: the work's own date unless the date it was reported is the earlier.
+// A sighting's year: the work's own date unless the report's year is the earlier. A work is no later
+// than its report, so the nearer last day of the two bounds it.
 function sightingYear(sighting: Pick<SightingFields, 'report_date' | 'original_date'>, dates: DateBook) {
   const report = datedYear(sighting.report_date, dates), original = datedYear(sighting.original_date, dates)
-  return original && !(report && before(report, original)) ? { ...original, kind: 'original' as const } : report ? { ...report, kind: 'report' as const } : null
+  const year = original && (!report || original.n <= report.n) ? { ...original, kind: 'original' as const } : report && { ...report, kind: 'report' as const }
+  return year && original && report ? { ...year, end: original.end < report.end ? original.end : report.end } : year
 }
 
 // The earliest attestation among visible sightings, and the sighting that holds it: the first added
