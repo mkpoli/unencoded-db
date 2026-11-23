@@ -1,8 +1,8 @@
 <script lang="ts">
   import Seo from '$lib/components/Seo.svelte'
   import TagBoard from '$lib/components/TagBoard.svelte'
-  import { TAG_TYPES, arrangeTags, implicationClosure, tagLookup } from '$lib/tags'
-  import { href, t } from '$lib/t'
+  import { TAG_TYPES, arrangeTags, implicationClosure, localized, tagLookup } from '$lib/tags'
+  import { href, locale, t } from '$lib/t'
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()
@@ -12,9 +12,9 @@
   let liveGroups = $state<typeof data.groups | null>(null)
   let liveChanges = $state<typeof data.changes | null>(null)
 
-  const tags = $derived(liveTags ?? data.tags)
+  const tags = $derived(localized(liveTags ?? data.tags, locale()))
   const byName = $derived(tagLookup(tags))
-  const sections = $derived(arrangeTags(tags, liveGroups ?? data.groups))
+  const sections = $derived(arrangeTags(tags, localized(liveGroups ?? data.groups, locale())))
 </script>
 
 <Seo title={t('nav.tags')} />

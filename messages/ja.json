@@ -647,5 +647,8 @@
   "tags.change.split": "分離",
   "tags.change.alias": "別名を追加",
   "tags.change.unalias": "別名を削除",
-  "error.tagAliased": "その名前はすでにタグの別名です。"
+  "error.tagAliased": "その名前はすでにタグの別名です。",
+  "tags.names": "言語別の名前",
+  "tags.change.name": "名前を設定",
+  "tags.groupChange.name": "中分類の名前を設定"
 }

@@ -1,4 +1,5 @@
-import { GROUPS_MAX, TAG_ALIASES_MAX, TAG_CLOSURE_MAX, TAG_IMPLIES_MAX, byGroupOrder, byTagOrder, canImply, cleanTag, isTagType, validGroupLabel, validTagName, type Tag, type TagGroup, type TagType } from '$lib/tags'
+import { isLocale } from '$lib/i18n'
+import { GROUPS_MAX, TAG_ALIASES_MAX, TAG_CLOSURE_MAX, TAG_IMPLIES_MAX, byGroupOrder, byTagOrder, canImply, cleanTag, isTagType, validGroupLabel, validTagName, type Names, type Tag, type TagGroup, type TagType } from '$lib/tags'
 
 type Who = { actor: string; ip: string | null }
 const now = () => new Date().toISOString()
@@ -8,7 +9,7 @@ const now = () => new Date().toISOString()
 // names each one directly, hidden and merged records too, or whether it has aliases.
 export const TAGS_MAX = 1000
 export const tagsStatement = (db: D1Database, used = false) =>
-  db.prepare(`SELECT c.name, c.label, c.type, c.position, c.rev, c.group_id, COALESCE(t.n, 0) AS n${used ? ", EXISTS (SELECT 1 FROM claims WHERE kind = 'tag' AND value = c.name) OR EXISTS (SELECT 1 FROM tag_aliases WHERE tag = c.name) AS used" : ''} FROM tags c LEFT JOIN tag_counts t ON t.tag = 't:' || c.name ORDER BY c.type, c.position, c.name LIMIT ${TAGS_MAX}`)
+  db.prepare(`SELECT c.name, c.label, c.names, c.type, c.position, c.rev, c.group_id, COALESCE(t.n, 0) AS n${used ? ", EXISTS (SELECT 1 FROM claims WHERE kind = 'tag' AND value = c.name) OR EXISTS (SELECT 1 FROM tag_aliases WHERE tag = c.name) AS used" : ''} FROM tags c LEFT JOIN tag_counts t ON t.tag = 't:' || c.name ORDER BY c.type, c.position, c.name LIMIT ${TAGS_MAX}`)
 export const implicationsStatement = (db: D1Database) =>
   db.prepare(`SELECT tag, implies FROM tag_implications ORDER BY tag, implies LIMIT ${TAGS_MAX * TAG_IMPLIES_MAX}`)
 
@@ -25,8 +26,9 @@ export async function tagList(db: D1Database, used = false): Promise<Tag[]> {
   for (const row of aliases.results as { tag: string; alias: string }[]) {
     aliasMap.set(row.tag, [...(aliasMap.get(row.tag) ?? []), row.alias])
   }
-  return (rows.results as (Omit<Tag, 'implies' | 'used' | 'group' | 'aliases'> & { group_id: number | null; used?: number | boolean })[]).map(({ used: rawUsed, group_id, ...row }) => ({
+  return (rows.results as (Omit<Tag, 'implies' | 'used' | 'group' | 'aliases' | 'names'> & { names: string; group_id: number | null; used?: number | boolean })[]).map(({ used: rawUsed, group_id, names, ...row }) => ({
     ...row,
+    names: namesOf(names),
     group: group_id,
     implies: impliesMap.get(row.name) ?? [],
     aliases: aliasMap.get(row.name) ?? [],
@@ -34,11 +36,20 @@ export async function tagList(db: D1Database, used = false): Promise<Tag[]> {
   }))
 }
 
+// The names column holds an object of strings by locale; anything else reads as none.
+function namesOf(raw: string | null): Names {
+  try {
+    const parsed: unknown = JSON.parse(raw ?? '{}')
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return Object.fromEntries(Object.entries(parsed).filter(([locale, name]) => isLocale(locale) && typeof name === 'string'))
+  } catch { return {} }
+}
+
 export const groupsStatement = (db: D1Database) =>
-  db.prepare(`SELECT id, type, label, position, rev FROM tag_groups ORDER BY type, position, id LIMIT ${GROUPS_MAX}`)
+  db.prepare(`SELECT id, type, label, names, position, rev FROM tag_groups ORDER BY type, position, id LIMIT ${GROUPS_MAX}`)
 export async function groupList(db: D1Database): Promise<TagGroup[]> {
-  const { results } = await groupsStatement(db).all<TagGroup>()
-  return results
+  const { results } = await groupsStatement(db).all<Omit<TagGroup, 'names'> & { names: string }>()
+  return results.map(({ names, ...group }) => ({ ...group, names: namesOf(names) }))
 }
 /** The three tiers at once: the tags and the groups they sit in. */
 export async function taxonomy(db: D1Database, used = false) {
@@ -49,7 +60,7 @@ export async function taxonomy(db: D1Database, used = false) {
 // The latest changes of the tags, newest first, with who made each: a range of the key from the end.
 export const CHANGES_SHOWN = 20
 // `retype` is the kind older type changes were logged as; a type change is now a `move`.
-export type TagChangeKind = 'create' | 'move' | 'rename' | 'retype' | 'imply' | 'unimply' | 'merge' | 'split' | 'alias' | 'unalias' | 'delete'
+export type TagChangeKind = 'create' | 'move' | 'rename' | 'name' | 'retype' | 'imply' | 'unimply' | 'merge' | 'split' | 'alias' | 'unalias' | 'delete'
 export type TagSubject = 'tag' | 'group'
 export type TagChange = { id: number; subject: TagSubject; name: string; kind: TagChangeKind; before: string | null; after: string | null; at: string; by_id: string | null; by_name: string | null }
 export const changesStatement = (db: D1Database) =>
@@ -91,16 +102,16 @@ const NEXT_POSITION = '(SELECT COALESCE(MAX(position) + 1, 0) FROM tags WHERE ty
 export type NewTag = { name: string; type?: string | null; group?: number | null; implies?: readonly string[] }
 export type TagCreateResult = { ok: true; value: string; created: boolean } | { ok: false; code: 'invalid' | 'target' | 'depth' | 'limit' | 'conflict' }
 
-function inserted(db: D1Database, input: { name: string; label: string; type: TagType; group: number | null; implies: readonly string[]; position?: number }, who: Who, after: Record<string, unknown> = {}) {
+function inserted(db: D1Database, input: { name: string; label: string; type: TagType; group: number | null; implies: readonly string[]; position?: number; names?: Names }, who: Who, after: Record<string, unknown> = {}) {
   const targets = JSON.stringify(input.implies)
   return landed(db, [
-    db.prepare(`INSERT OR IGNORE INTO tags(name, label, type, group_id, position, rev, created_by, created_at)
-      SELECT ?1, ?2, ?3, ?7, COALESCE(?8, ${NEXT_POSITION.replace('?', '?3')}), ${STAMP}, ?4, ?5
+    db.prepare(`INSERT OR IGNORE INTO tags(name, label, names, type, group_id, position, rev, created_by, created_at)
+      SELECT ?1, ?2, ?9, ?3, ?7, COALESCE(?8, ${NEXT_POSITION.replace('?', '?3')}), ${STAMP}, ?4, ?5
       WHERE NOT EXISTS (SELECT 1 FROM tags WHERE name IN (?1, ?2) OR label IN (?1, ?2))
         AND NOT EXISTS (SELECT 1 FROM tag_aliases WHERE alias IN (?1, ?2))
         AND (?7 IS NULL OR EXISTS (SELECT 1 FROM tag_groups WHERE id = ?7 AND type = ?3))
         AND (SELECT count(*) FROM json_each(?6) j WHERE EXISTS (SELECT 1 FROM tags WHERE name = j.value) AND j.value <> ?1) = json_array_length(?6)`)
-      .bind(input.name, input.label, input.type, who.actor, now(), targets, input.group, input.position ?? null),
+      .bind(input.name, input.label, input.type, who.actor, now(), targets, input.group, input.position ?? null, JSON.stringify(input.names ?? {})),
     ...(input.implies.length ? [
       db.prepare(`INSERT OR IGNORE INTO tag_implications(tag, implies)
         SELECT ?1, value FROM json_each(?2) WHERE ${stamped('?1')}`).bind(input.name, targets),
@@ -124,7 +135,7 @@ export async function createTag(db: D1Database, tags: readonly Tag[], input: New
   const implies = [...new Set((input.implies ?? []).map(item => item.normalize('NFC').trim()).filter(Boolean))]
   if (implies.length > TAG_IMPLIES_MAX) return { ok: false, code: 'limit' }
   if (implies.some(target => target === value || !tags.some(tag => tag.name === target))) return { ok: false, code: 'target' }
-  const synthetic: Tag[] = [...tags, { name: value, label: value, type, group: group?.id ?? null, position: Number.MAX_SAFE_INTEGER, rev: 0, n: 0, implies: [], aliases: [] }]
+  const synthetic: Tag[] = [...tags, { name: value, label: value, type, group: group?.id ?? null, position: Number.MAX_SAFE_INTEGER, rev: 0, n: 0, implies: [], aliases: [], names: {} }]
   // Validate depth/closure bounds for every initial implication edge.
   for (const target of implies) {
     const refusal = canImply(synthetic, value, target)
@@ -321,7 +332,7 @@ export async function deleteTag(db: D1Database, tags: readonly Tag[], input: { n
   const free = await db.prepare(`SELECT ${unused} AS free`).bind(found.name).first<{ free: number }>()
   if (!free?.free) return refused('used')
   const guard = `EXISTS (SELECT 1 FROM tags WHERE name = ?1 AND rev = ?7) AND ${unused}`
-  const before = { label: found.label, type: found.type, position: found.position, ...(found.group !== null ? { group: found.group } : {}), ...(found.implies.length ? { implies: found.implies } : {}) }
+  const before = { label: found.label, type: found.type, position: found.position, ...(found.group !== null ? { group: found.group } : {}), ...(found.implies.length ? { implies: found.implies } : {}), ...(Object.keys(found.names).length ? { names: found.names } : {}) }
   const wrote = await landed(db, [
     db.prepare(`INSERT INTO tag_changes(id, name, kind, before, after, actor, at) SELECT ${STAMP}, ?1, 'delete', ?2, ?3, ?4, ?5 WHERE ${guard.replace('?7', '?6')}`)
       .bind(found.name, JSON.stringify(before), input.undo ? JSON.stringify({ undo: input.undo }) : null, who.actor, now(), found.rev),
@@ -373,7 +384,7 @@ async function moveAllowance(db: D1Database, names: readonly string[], who: Who,
   return null
 }
 
-type MergedState = { label: string; type: TagType; group: number | null; position: number; implies: string[]; impliedBy: string[]; aliases: string[] }
+type MergedState = { label: string; names: Names; type: TagType; group: number | null; position: number; implies: string[]; impliedBy: string[]; aliases: string[] }
 
 /**
  * Merges a tag into another: the records that name it, its aliases and its implications pass to the other
@@ -395,7 +406,7 @@ export async function mergeTag(db: D1Database, tags: readonly Tag[], input: { na
   ])
   const refusal = await moveAllowance(db, [found.name, into.name], who, !input.undo)
   if (refusal) return refused(refusal)
-  const before: MergedState = { label: found.label, type: found.type, group: found.group, position: found.position, implies: found.implies, impliedBy, aliases: found.aliases }
+  const before: MergedState = { label: found.label, names: found.names, type: found.type, group: found.group, position: found.position, implies: found.implies, impliedBy, aliases: found.aliases }
   const both = `${stamped('?1')} AND ${stamped('?2')}`
   const since = new Date(Date.now() - 3600_000).toISOString(), limited = input.undo ? 0 : 1
   // Every condition sits in the first write, so a refused merge leaves no stamp behind. The tags that
@@ -438,7 +449,7 @@ export async function splitTag(db: D1Database, tags: readonly Tag[], groups: rea
   const place = before.type && isTagType(before.type) ? { type: before.type, group: group?.id ?? null } : { type: owner.type, group: owner.group }
   const removed = (input.restore?.added ?? []).filter(([from, to]) => tags.find(tag => tag.name === from)?.implies.includes(to))
   const graph = copied(tags).map(tag => ({ ...tag, implies: tag.implies.filter(target => !removed.some(([from, to]) => from === tag.name && to === target)) }))
-  graph.push({ name: input.alias, label, ...place, position: Number.MAX_SAFE_INTEGER, rev: 0, n: 0, implies: [], aliases: [] })
+  graph.push({ name: input.alias, label, ...place, position: Number.MAX_SAFE_INTEGER, rev: 0, n: 0, implies: [], aliases: [], names: {} })
   const restored = joinable(graph, [
     ...(before.implies ?? []).map((target): Edge => [input.alias, target]),
     ...(before.impliedBy ?? []).map((name): Edge => [name, input.alias]),
@@ -454,9 +465,9 @@ export async function splitTag(db: D1Database, tags: readonly Tag[], groups: rea
       AND (?5 IS NULL OR EXISTS (SELECT 1 FROM tag_groups WHERE id = ?5 AND type = ?6))
       AND ${acyclic('?7', '?8', "''")}`)
       .bind(owner.name, owner.rev, input.alias, label, place.group, place.type, JSON.stringify(restored), JSON.stringify(removed)),
-    db.prepare(`INSERT INTO tags(name, label, type, group_id, position, rev, created_by, created_at)
-      SELECT ?1, ?2, ?3, ?4, COALESCE(?5, ${NEXT_POSITION.replace('?', '?3')}), ${STAMP}, ?6, ?7 WHERE ${stamped('?8')}`)
-      .bind(input.alias, label, place.type, place.group, typeof before.position === 'number' ? before.position : null, who.actor, now(), owner.name),
+    db.prepare(`INSERT INTO tags(name, label, names, type, group_id, position, rev, created_by, created_at)
+      SELECT ?1, ?2, ?9, ?3, ?4, COALESCE(?5, ${NEXT_POSITION.replace('?', '?3')}), ${STAMP}, ?6, ?7 WHERE ${stamped('?8')}`)
+      .bind(input.alias, label, place.type, place.group, typeof before.position === 'number' ? before.position : null, who.actor, now(), owner.name, JSON.stringify(before.names ?? {})),
     db.prepare(`DELETE FROM tag_aliases WHERE alias = ?1 AND ${own}`).bind(input.alias),
     ...(returning.length ? [db.prepare(`UPDATE tag_aliases SET tag = ?1 WHERE tag = ?2 AND alias IN (SELECT value FROM json_each(?3)) AND ${own}`).bind(input.alias, owner.name, JSON.stringify(returning))] : []),
     ...removed.map(([from, to]) => db.prepare(`DELETE FROM tag_implications WHERE tag = ?2 AND implies = ?3 AND ${own}`).bind(input.alias, from, to)),
@@ -514,17 +525,17 @@ const groupShelf = (groups: readonly TagGroup[], type: TagType) => groups.filter
 const groupPlace = (groups: readonly TagGroup[], group: TagGroup) => ({ type: group.type, index: groupShelf(groups, group.type).findIndex(item => item.id === group.id) })
 
 /** Adds a group to a type, last among its groups, or back at the id and place it had when undoing. */
-export async function createGroup(db: D1Database, groups: readonly TagGroup[], input: { type: string; label: string; id?: number; position?: number } & Undo, who: Who): Promise<GroupResult> {
+export async function createGroup(db: D1Database, groups: readonly TagGroup[], input: { type: string; label: string; id?: number; position?: number; names?: Names } & Undo, who: Who): Promise<GroupResult> {
   const label = input.label.normalize('NFC').trim()
   if (!isTagType(input.type) || !validGroupLabel(label)) return { ok: false, code: 'invalid' }
   if (groups.some(group => group.type === input.type && group.label === label)) return { ok: false, code: 'exists' }
   if (groups.length >= GROUPS_MAX) return { ok: false, code: 'limit' }
   const made = `SELECT id FROM tag_groups WHERE type = ?1 AND label = ?2 AND rev = ${STAMP}`
   const wrote = await landed(db, [
-    db.prepare(`INSERT INTO tag_groups(id, type, label, position, rev, created_by, created_at)
-      SELECT ?3, ?1, ?2, COALESCE(?4, (SELECT COALESCE(MAX(position) + 1, 0) FROM tag_groups WHERE type = ?1)), ${STAMP}, ?5, ?6
+    db.prepare(`INSERT INTO tag_groups(id, type, label, names, position, rev, created_by, created_at)
+      SELECT ?3, ?1, ?2, ?7, COALESCE(?4, (SELECT COALESCE(MAX(position) + 1, 0) FROM tag_groups WHERE type = ?1)), ${STAMP}, ?5, ?6
       WHERE NOT EXISTS (SELECT 1 FROM tag_groups WHERE type = ?1 AND label = ?2) AND (?3 IS NULL OR NOT EXISTS (SELECT 1 FROM tag_groups WHERE id = ?3))`)
-      .bind(input.type, label, input.id ?? null, input.position ?? null, who.actor, now()),
+      .bind(input.type, label, input.id ?? null, input.position ?? null, who.actor, now(), JSON.stringify(input.names ?? {})),
     db.prepare(`INSERT INTO tag_changes(id, subject, name, kind, before, after, actor, at) SELECT ${STAMP}, 'group', CAST(id AS TEXT), 'create', NULL, ?3, ?4, ?5 FROM (${made})`)
       .bind(input.type, label, JSON.stringify({ type: input.type, label, ...(input.undo ? { undo: input.undo } : {}) }), who.actor, now()),
   ])
@@ -583,8 +594,29 @@ export async function deleteGroup(db: D1Database, groups: readonly TagGroup[], i
   const guard = 'EXISTS (SELECT 1 FROM tag_groups WHERE id = ?1 AND rev = ?2) AND NOT EXISTS (SELECT 1 FROM tags WHERE group_id = ?1)'
   const wrote = await landed(db, [
     db.prepare(`INSERT INTO tag_changes(id, subject, name, kind, before, after, actor, at) SELECT ${STAMP}, 'group', CAST(?1 AS TEXT), 'delete', ?3, ?4, ?5, ?6 WHERE ${guard}`)
-      .bind(found.id, found.rev, JSON.stringify({ type: found.type, label: found.label, position: found.position }), input.undo ? JSON.stringify({ undo: input.undo }) : null, who.actor, now()),
+      .bind(found.id, found.rev, JSON.stringify({ type: found.type, label: found.label, position: found.position, ...(Object.keys(found.names).length ? { names: found.names } : {}) }), input.undo ? JSON.stringify({ undo: input.undo }) : null, who.actor, now()),
     db.prepare(`DELETE FROM tag_groups WHERE id = ?1 AND rev = ?2 AND NOT EXISTS (SELECT 1 FROM tags WHERE group_id = ?1)`).bind(found.id, found.rev),
+  ])
+  return wrote ? { ok: true } : refused('conflict')
+}
+
+/**
+ * Sets what a tag or a group is called in one interface language; an empty name takes it off, and the
+ * language shows the label again.
+ */
+export async function nameTier(db: D1Database, state: { tags: readonly Tag[]; groups: readonly TagGroup[] }, input: { subject: TagSubject; name: string; locale: string; label: string; rev?: number } & Undo, who: Who): Promise<ChangeResult> {
+  const found = input.subject === 'group' ? currentGroup(state.groups, Number(input.name), input.rev) : current(state.tags, input.name, input.rev)
+  if (typeof found === 'string') return refused(found)
+  const label = input.label.normalize('NFC').trim()
+  if (!isLocale(input.locale) || (label && !validGroupLabel(label))) return refused('invalid')
+  const was = found.names[input.locale] ?? null
+  if ((was ?? '') === label) return { ok: true }
+  const [table, key, guard] = input.subject === 'group' ? ['tag_groups', 'id', groupStamped('?1')] : ['tags', 'name', stamped('?1')]
+  const id = input.subject === 'group' ? (found as TagGroup).id : (found as Tag).name
+  const path = `$."${input.locale}"`
+  const wrote = await landed(db, [
+    db.prepare(`UPDATE ${table} SET names = CASE WHEN ?4 = '' THEN json_remove(names, ?2) ELSE json_set(names, ?2, ?4) END, rev = ${STAMP} WHERE ${key} = ?1 AND rev = ?3`).bind(id, path, found.rev, label),
+    logEntry(db, guard, String(id), 'name', { locale: input.locale, label: was }, { locale: input.locale, label: label || null, ...(input.undo ? { undo: input.undo } : {}) }, who, input.subject),
   ])
   return wrote ? { ok: true } : refused('conflict')
 }
@@ -592,7 +624,7 @@ export async function deleteGroup(db: D1Database, groups: readonly TagGroup[], i
 // The latest change of a tag or a group, read from the end of its range of the log.
 export const latestChangeStatement = (db: D1Database, name: string, subject: TagSubject = 'tag') => db.prepare('SELECT MAX(id) AS id FROM tag_changes WHERE subject = ? AND name = ?').bind(subject, name)
 
-type Logged = { label?: string; type?: string; group?: number | null; index?: number; position?: number; implies?: string[] | string; impliedBy?: string[]; aliases?: string[]; tag?: string; into?: string; added?: Edge[] }
+type Logged = { names?: Names; locale?: string; label?: string | null; type?: string; group?: number | null; index?: number; position?: number; implies?: string[] | string; impliedBy?: string[]; aliases?: string[]; tag?: string; into?: string; added?: Edge[] }
 const placeFrom = (logged: Logged) => ({ type: logged.type, group: typeof logged.group === 'number' ? logged.group : null, index: logged.index })
 
 /**
@@ -610,6 +642,10 @@ export async function undoTagChange(db: D1Database, state: { tags: readonly Tag[
     before = change.before ? JSON.parse(change.before) : {}
     after = change.after ? JSON.parse(change.after) : {}
   } catch { return refused('invalid') }
+  if (change.kind === 'name') {
+    const rev = change.subject === 'group' ? groups.find(group => group.id === Number(change.name))?.rev : tags.find(tag => tag.name === change.name)?.rev
+    return nameTier(db, state, { subject: change.subject, name: change.name, locale: before.locale ?? '', label: before.label ?? '', rev, undo: id }, who)
+  }
   if (change.subject === 'group') {
     const groupId = Number(change.name)
     const rev = groups.find(group => group.id === groupId)?.rev
@@ -618,7 +654,7 @@ export async function undoTagChange(db: D1Database, state: { tags: readonly Tag[
       case 'rename': return renameGroup(db, groups, { id: groupId, label: before.label ?? '', rev, undo: id }, who)
       case 'move': return moveGroup(db, groups, { id: groupId, type: before.type, index: before.index, rev, undo: id }, who)
       case 'delete': {
-        const made = await createGroup(db, groups, { type: before.type ?? '', label: before.label ?? '', id: groupId, position: before.position, undo: id }, who)
+        const made = await createGroup(db, groups, { type: before.type ?? '', label: before.label ?? '', id: groupId, position: before.position, names: before.names, undo: id }, who)
         return made.ok ? { ok: true } : made
       }
       default: return refused('invalid')
@@ -637,7 +673,7 @@ export async function undoTagChange(db: D1Database, state: { tags: readonly Tag[
     case 'unimply': return typeof before.implies === 'string' ? implyTag(db, tags, { name: change.name, target: before.implies, rev, undo: id }, who) : refused('invalid')
     case 'merge': {
       const added = Array.isArray(after.added) ? after.added.filter((edge): edge is Edge => Array.isArray(edge) && edge.length === 2 && edge.every(item => typeof item === 'string')) : []
-      const restore = { before: { ...before, type: isTagType(before.type) ? before.type : undefined, implies: Array.isArray(before.implies) ? before.implies : [] }, added }
+      const restore = { before: { ...before, label: before.label ?? undefined, type: isTagType(before.type) ? before.type : undefined, implies: Array.isArray(before.implies) ? before.implies : [] }, added }
       return splitTag(db, tags, groups, { alias: change.name, restore, undo: id }, who)
     }
     case 'split': return typeof before.tag === 'string' ? mergeTag(db, tags, { name: change.name, into: before.tag, undo: id }, who) : refused('invalid')
@@ -650,7 +686,7 @@ export async function undoTagChange(db: D1Database, state: { tags: readonly Tag[
       const group = known(typeof before.group === 'number' ? before.group : null)
       const implies = Array.isArray(before.implies) ? before.implies.filter(target => tags.some(tag => tag.name === target)) : []
       if (tags.some(tag => [tag.name, tag.label].some(taken => taken === change.name || taken === label))) return refused('exists')
-      return await inserted(db, { name: change.name, label, type: group === null ? type : groups.find(item => item.id === group)!.type, group, implies, position: before.position }, who, { undo: id }) ? { ok: true } : refused('conflict')
+      return await inserted(db, { name: change.name, label, type: group === null ? type : groups.find(item => item.id === group)!.type, group, implies, position: before.position, names: before.names }, who, { undo: id }) ? { ok: true } : refused('conflict')
     }
     default: return refused('invalid')
   }

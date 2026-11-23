@@ -7,6 +7,7 @@
     TAG_TYPES,
     arrangeTags,
     canonicalName,
+    localized,
     sectionTags,
     cleanTag,
     implicationClosure,
@@ -17,9 +18,11 @@
     type TagGroup,
     type TagType,
   } from '$lib/tags'
-  import { t } from '$lib/t'
+  import { locale, t } from '$lib/t'
 
-  let { tags = [], groups = [], selected: named = [], collections = [] }: { tags?: Tag[]; groups?: TagGroup[]; selected?: string[]; collections?: string[] } = $props()
+  let { tags: given = [], groups: givenGroups = [], selected: named = [], collections = [] }: { tags?: Tag[]; groups?: TagGroup[]; selected?: string[]; collections?: string[] } = $props()
+  const tags = $derived(localized(given, locale()))
+  const groups = $derived(localized(givenGroups, locale()))
   // A record that names a tag by an alias shows, and saves, the tag it stands for.
   const selected = $derived([...new Set(named.map(name => canonicalName(name, tags)))])
 
@@ -48,6 +51,7 @@
         type: 'general' as const,
         group: null,
         aliases: [],
+        names: {},
         position: Number.MAX_SAFE_INTEGER - selected.length + index,
         rev: 0,
         n: 0,

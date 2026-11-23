@@ -647,5 +647,8 @@
   "tags.change.split": "Split off",
   "tags.change.alias": "Alias added",
   "tags.change.unalias": "Alias removed",
-  "error.tagAliased": "That name is already an alias of a tag."
+  "error.tagAliased": "That name is already an alias of a tag.",
+  "tags.names": "Names by language",
+  "tags.change.name": "Name set",
+  "tags.groupChange.name": "Group name set"
 }

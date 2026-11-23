@@ -647,5 +647,8 @@
   "tags.change.split": "拆出",
   "tags.change.alias": "添加别名",
   "tags.change.unalias": "移除别名",
-  "error.tagAliased": "这个名称已是某个标签的别名。"
+  "error.tagAliased": "这个名称已是某个标签的别名。",
+  "tags.names": "各语言名称",
+  "tags.change.name": "设置名称",
+  "tags.groupChange.name": "设置中分类名称"
 }
