@@ -3,7 +3,7 @@ import { Database } from 'bun:sqlite'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { newClaim } from '$lib/claims'
-import { createEntry, editEntry, setHidden, type EntryFields, type SightingFields } from '$lib/server/entries'
+import { addSighting, createEntry, editEntry, editSighting, getEntry, getSighting, mergeEntry, setHidden, unmergeEntry, type EntryFields, type SightingFields } from '$lib/server/entries'
 import { contributorsStatement, createPerson, joinAtlas, PEOPLE_PAGES, startSession } from '$lib/server/people'
 import { d1Over, openTestDb } from '$lib/server/testdb'
 import { load } from './+page.server'
@@ -41,7 +41,7 @@ test('the banned, the maintenance account and those with only hidden changes are
   for (const person of [banned, maintenance, moderator]) await createEntry(db, fields, sighting, [], who(person))
   raw.query("UPDATE people SET banned_at = '2026' WHERE id = ?").run(banned.id)
   await setHidden(db, { entry: hidden }, true, who(moderator), null)
-  expect(await shown(db)).toEqual([['Moderator', 3]])
+  expect(await shown(db)).toEqual([['Moderator', 2]])
 })
 
 test('the page number is bounded', async () => {
@@ -50,17 +50,25 @@ test('the page number is bounded', async () => {
   expect((await list(db)).people).toEqual([])
 })
 
-test('the list is read from its index and checks each person\'s changes by key', () => {
+test('the list is read from its index alone', () => {
   const plan = (index: boolean) => {
     const { db, raw } = openTestDb()
     if (!index) raw.exec('DROP INDEX people_by_changes')
     const statement = contributorsStatement(db, 1) as unknown as { sql: string; values: unknown[] }
     return (raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')
   }
-  expect(plan(true)).toMatch(/p USING INDEX people_by_changes/)
-  expect(plan(true)).toMatch(/SEARCH r USING INDEX revisions_by_actor/)
-  expect(plan(true)).not.toMatch(/TEMP B-TREE FOR ORDER BY|SCAN (r|e|s|a)(\s|$)/)
+  expect(plan(true)).toBe('SEARCH p USING INDEX people_by_changes (changes>?)')
   expect(plan(false)).toMatch(/TEMP B-TREE FOR ORDER BY/)
+})
+
+test('a count reads only the changes of the record it concerns', () => {
+  const { raw } = openTestDb()
+  const plan = (where: string) => (raw.query(`EXPLAIN QUERY PLAN SELECT account, COUNT(*) FROM visible_revisions WHERE ${where} GROUP BY account`).all() as { detail: string }[]).map(row => row.detail).join('\n')
+  expect(plan('id = 1')).toMatch(/SEARCH r USING INTEGER PRIMARY KEY/)
+  for (const where of ['entry_id = 1', 'entry_id IN (1, 2)']) {
+    expect(plan(where)).toMatch(/SEARCH r USING INDEX revisions_by_entry/)
+    expect(plan(where)).not.toMatch(/SCAN/)
+  }
 })
 
 test('the migration counts the changes already made', async () => {
@@ -75,4 +83,38 @@ test('the migration counts the changes already made', async () => {
   for (const name of names.filter(name => name >= '0048')) raw.exec(readFileSync(join(migrations, name), 'utf8'))
   expect(raw.query('SELECT id, changes FROM people ORDER BY id').all()).toEqual([{ id: 'account', changes: 2 }, { id: 'anon', changes: 0 }, { id: 'quiet', changes: 0 }])
   expect(await shown(d1Over(raw) as any)).toEqual([['Account', 2]])
+})
+
+test('the count stays what a person\'s page shows through hiding, merging and signing in', async () => {
+  const { db, raw } = openTestDb()
+  const account = await createPerson(db, 'atlas-1', 'Named'), other = await createPerson(db, null, 'Other'), moderator = await createPerson(db, null, 'Moderator')
+  const agrees = () => {
+    const counted = raw.query('SELECT id, changes AS n FROM people WHERE changes <> 0 ORDER BY id').all()
+    expect(counted).toEqual(raw.query('SELECT account AS id, COUNT(*) AS n FROM visible_revisions GROUP BY account ORDER BY account').all())
+  }
+  // A fixed sequence, so that a failure repeats.
+  let seed = 7
+  const pick = (n: number) => (seed = (seed * 1103515245 + 12345) % 2147483648) % n
+  let anon = await createPerson(db)
+  const entries: number[] = []
+  const merged: number[] = []
+  for (let step = 0; step < 400; step++) {
+    const actor = who([account, other, anon][pick(3)])
+    const id = entries.length ? entries[pick(entries.length)] : 0
+    const found = id ? (await getEntry(db, id))! : null
+    const evidence = found?.sightings.length ? found.sightings[pick(found.sightings.length)] : null
+    const move = pick(9)
+    if (!found || move === 0) entries.push(await createEntry(db, fields, sighting, [], actor))
+    else if (move === 1) await editEntry(db, id, found.entry.rev, { ...fields, description: `step ${step}` }, actor, null)
+    else if (move === 2) await addSighting(db, id, { ...sighting, place: `Step ${step}` }, [], actor)
+    else if (move === 3 && evidence) { const held = (await getSighting(db, evidence.id))!; await editSighting(db, evidence.id, held.rev, { ...sighting, note: `step ${step}` }, null, actor, null, id) }
+    else if (move === 4) await setHidden(db, { entry: id }, !found.entry.hidden_at, who(moderator), null)
+    else if (move === 5 && evidence) await setHidden(db, { entry: id, sighting: evidence.id }, !evidence.hidden_at, who(moderator), null)
+    else if (move === 6 && entries.length > 1) { const into = entries[pick(entries.length)]; if ((await mergeEntry(db, id, into, who(moderator), null)).ok) merged.push(id) }
+    else if (move === 7 && merged.length) await unmergeEntry(db, merged[pick(merged.length)], who(moderator))
+    else if (move === 8 && step % 5 === 0) { await joinAtlas(db, anon, 'atlas-1', 'Named', await startSession(db, anon.id)); anon = await createPerson(db) }
+    agrees()
+  }
+  expect(merged.length).toBeGreaterThan(0)
+  expect((raw.query("SELECT COUNT(DISTINCT kind) AS n FROM revisions").get() as { n: number }).n).toBe(8)
 })

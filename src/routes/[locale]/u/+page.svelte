@@ -16,7 +16,7 @@
         <li class:mine={person.id === data.person?.id} class:podium={data.first + i <= 3}>
           <span class="place">{number.format(data.first + i)}</span>
           <span class="avatar" class:unnamed={!letter} aria-hidden="true">{letter ?? '?'}</span>
-          <a class="name" href={href(`/u/${person.id}`)}>{person.name}</a>
+          <a class="name" aria-current={person.id === data.person?.id ? 'true' : undefined} href={href(`/u/${person.id}`)}>{person.name}</a>
           <span class="total">{t(person.changes === 1 ? 'people.change' : 'people.changes', { n: number.format(person.changes) })}</span>
         </li>
       {/each}
@@ -31,7 +31,7 @@
   .people { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line) }
   .people li { position: relative; display: flex; align-items: center; gap: 14px; padding: 12px 8px; border-bottom: 1px solid var(--line); font-size: 13px }
   .people li:hover { background: var(--surface-tile) }
-  .people li.mine { background: var(--accent-light) }
+  .people li.mine { background: var(--accent-light); box-shadow: inset 3px 0 var(--accent) }
   .place { flex: 0 0 34px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right }
   .podium .place { color: var(--ink); font-size: 15px; font-weight: 600 }
   .avatar { display: grid; flex: 0 0 30px; place-items: center; height: 30px; border-radius: 50%; background: var(--accent-light); color: var(--accent); font-size: 13px; font-weight: 600 }

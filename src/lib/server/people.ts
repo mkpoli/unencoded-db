@@ -154,12 +154,9 @@ export const PEOPLE_PAGES = 50
 export type Contributor = { id: string; name: string; changes: number }
 
 export function contributorsStatement(db: D1Database, page: number) {
-  // Someone whose every change is on hidden or merged records has nothing to show, and the catalogue's
-  // own maintenance is nobody.
+  // The catalogue's own maintenance is nobody.
   return db.prepare(`SELECT p.id, p.name, p.changes FROM people p
     WHERE p.merged_into IS NULL AND p.changes > 0 AND p.banned_at IS NULL AND p.name <> 'Catalogue maintenance'
-      AND EXISTS (SELECT 1 FROM revisions r JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id
-        WHERE r.actor IN (SELECT a.id FROM people a WHERE a.id = p.id OR a.merged_into = p.id) AND e.hidden_at IS NULL AND e.merged_into IS NULL AND s.hidden_at IS NULL)
     ORDER BY p.changes DESC, p.id LIMIT ? OFFSET ?`).bind(PEOPLE_PAGE + 1, (page - 1) * PEOPLE_PAGE)
 }
 
