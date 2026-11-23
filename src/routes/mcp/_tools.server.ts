@@ -15,7 +15,7 @@ import { cleanIds, IDS_LENGTH_MAX } from '$lib/ids'
 import { ADD_SIGHTINGS_MAX, BOXES_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
 import { REGISTRIES } from '$lib/registries'
 import { RELATION_KINDS } from '$lib/related'
-import { CONTEXTS, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, STYLES, VIAS_MAX } from '$lib/scripts'
+import { CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, STYLES, VIAS_MAX } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
 import { tagList } from '$lib/server/tags'
 import { addSighting, CITATION_FIELDS, createEntry, getEntry, hasLink, list, mediaVisible, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX } from '$lib/server/entries'
@@ -173,8 +173,8 @@ function sightingForm(input: Json) {
   const put = (name: string, value: string) => { if (value.trim()) form.set(name, value) }
   put('url', link(input.url, 'url'))
   for (const name of ['place', 'title', 'author', 'publisher', 'report_date', 'container', 'original_date', 'page', 'note']) put(name, text(input[name]))
-  put('context', choice(input.context, CONTEXTS, 'context'))
   put('style', choice(input.style, STYLES, 'style'))
+  for (const context of items(input.contexts)) form.append('contexts', choice(context, CONTEXTS, 'contexts'))
   for (const type of items(input.types)) form.append('types', choice(type, SIGHTING_TYPES, 'types'))
   const quotes = items(input.quotes)
   if (quotes.length > QUOTATIONS_MAX) throw new Refusal(`A sighting quotes up to ${QUOTATIONS_MAX} passages.`)
@@ -336,7 +336,7 @@ async function getRecord(event: RequestEvent, input: Json) {
     sightings: sightings.map(sighting => ({
       id: sighting.id, place: sighting.place,
       ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
-      original_date: sighting.original_date, page: sighting.page, context: sighting.context, style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note,
+      original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note,
       vias: sighting.vias.map(({ id: _, ...via }) => via),
       pictures: sighting.media.map(picture => ({ url: `${event.url.origin}/media/v2/${picture.image_key}`, width: picture.image_w, height: picture.image_h, marks: picture.box ? JSON.parse(picture.box) as number[][] : [] })),
     })),
@@ -369,7 +369,7 @@ const SIGHTING = {
   ...CITATION,
   original_date: { type: 'string', description: 'The date of an older work shown in the picture, when the cited publication reproduces one.' },
   page: { type: 'string', description: 'Page, folio or volume within the work.' },
-  context: { type: 'string', enum: CONTEXTS, description: 'How the character appears.' },
+  contexts: { type: 'array', items: { type: 'string', enum: CONTEXTS }, description: 'How the character appears, in every way the source shows it.' },
   style: { type: 'string', enum: STYLES, description: 'The writing style.' },
   types: { type: 'array', items: { type: 'string', enum: SIGHTING_TYPES }, description: 'What the source provides: mention (discusses the character), attestation (uses it in a text), description (says how it is written), definition (gives a meaning), reading (gives a pronunciation), relation (names a variant or the same character).' },
   quotes: { type: 'array', maxItems: QUOTATIONS_MAX, items: { type: 'object', required: ['text'], properties: { text: { type: 'string' }, locator: { type: 'string' } } }, description: 'Quoted passages, each with an optional attribution or location in the source.' },

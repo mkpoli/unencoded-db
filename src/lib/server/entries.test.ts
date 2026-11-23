@@ -24,7 +24,7 @@ const relation = (character: string, relationship: string, difference = '', evid
 // A source is found among the sightings that passed through it by the index of the chain, never by a scan.
 const VIA_SEARCH = /SEARCH v USING (COVERING )?INDEX sighting_vias_by_source \(source_id=\?\)/
 const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, container: null, quote: null, ...over })
-const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null, ...over })
+const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
 const image: StoredImage = { image_key: 'a.webp', image_type: 'image/webp', image_w: 100, image_h: 100, thumb_key: 't.webp', box: null }
 
 let db: D1Database, raw: ReturnType<typeof openTestDb>['raw'], who: { actor: string; ip: null }
@@ -608,6 +608,13 @@ describe('the wiki', () => {
     await setHidden(db, { entry: id }, false, who, null)
     expect((await list(db, {}))!.tiles).toHaveLength(1)
   })
+})
+
+test('a sighting keeps every context checked, in the order of the list', () => {
+  const form = new FormData()
+  for (const context of ['heading', 'running_text', 'heading', 'unknown']) form.append('contexts', context)
+  expect(readSightingFields(form).contexts).toBe(JSON.stringify(['running_text', 'heading']))
+  expect(readSightingFields(new FormData()).contexts).toBeNull()
 })
 
 describe('source types', () => {
