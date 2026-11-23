@@ -2196,7 +2196,7 @@ describe('digitized copy filter', () => {
 })
 
 describe('personal communications', () => {
-  const letter = (more: Partial<Via> = {}) => via({ author: '貓村', publisher: 'QQ', report_date: '2026-11-14', source_kind: 'personal', quote: 'as told', ...more })
+  const letter = (more: Partial<Via> = {}) => via({ author: '甲', publisher: 'QQ', report_date: '2026-11-14', source_kind: 'personal', quote: 'as told', ...more })
 
   test('a private message is a source of its own, apart from the same citation without the kind', async () => {
     const id = await createEntry(db, fields(), seen({ title: 'A book', vias: [letter(), letter({ source_kind: null })] }), [], who)
@@ -2215,10 +2215,10 @@ describe('personal communications', () => {
   test('the form sends a kind for the source and each via, and a kind alone names no source', () => {
     const form = new FormData()
     for (const [name, value] of [['place', 'A scan'], ['author', 'x'], ['source_kind', 'personal']]) form.append(name, value)
-    for (const [author, kind] of [['貓村', ''], ['雲九', 'personal'], ['玄晖', 'other'], ['', 'personal']]) { form.append('via_author', author); form.append('via_source_kind', kind) }
+    for (const [author, kind] of [['甲', ''], ['乙', 'personal'], ['丙', 'other'], ['', 'personal']]) { form.append('via_author', author); form.append('via_source_kind', kind) }
     const read = readSightingFields(form)
     expect(read.source_kind).toBe('personal')
-    expect(read.vias.map(via => [via.author, via.source_kind])).toEqual([['貓村', null], ['雲九', 'personal'], ['玄晖', null]])
+    expect(read.vias.map(via => [via.author, via.source_kind])).toEqual([['甲', null], ['乙', 'personal'], ['丙', null]])
   })
 
   test('a kind alone stores no source', async () => {
