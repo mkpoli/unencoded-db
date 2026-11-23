@@ -32,6 +32,7 @@ export const SOCIAL_PAGES = {
   radicals: { path: '/radicals', title: 'nav.radicals', specimen: 3, publicTitle: true },
   sources: { path: '/sources', title: 'nav.sources', source: 2837, publicTitle: true },
   tags: { path: '/tags', title: 'nav.tags', specimen: 3, publicTitle: true },
+  contributors: { path: '/u', title: 'people.title', publicTitle: true },
   contributor: { path: '/u/[id]', title: 'social.contributor' },
   fallback: { path: null, title: 'app.name', detail: 'app.tagline' },
   unavailable: { path: null, title: 'error.title' },
