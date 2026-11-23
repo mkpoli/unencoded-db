@@ -7,14 +7,15 @@ WITH years AS MATERIALIZED (
 UPDATE sources SET year = years.year FROM years WHERE sources.id = years.id AND sources.year IS NOT years.year;
 
 WITH candidates AS (
-  SELECT s.entry_id, s.id, c.year, 'report' AS kind
-  FROM sightings s JOIN sources c ON c.id = s.source_id WHERE s.hidden_at IS NULL AND c.year IS NOT NULL
+  SELECT s.entry_id, s.id, c.year, json_extract(d.reading, '$.end') AS until, 'report' AS kind
+  FROM sightings s JOIN sources c ON c.id = s.source_id JOIN date_readings d ON d.transcription = c.report_date
+  WHERE s.hidden_at IS NULL AND d.reading IS NOT NULL
   UNION ALL
-  SELECT s.entry_id, s.id, CAST(substr(json_extract(d.reading, '$.start'), 1, 4) AS INTEGER), 'original'
+  SELECT s.entry_id, s.id, CAST(substr(json_extract(d.reading, '$.start'), 1, 4) AS INTEGER), json_extract(d.reading, '$.end'), 'original'
   FROM sightings s JOIN date_readings d ON d.transcription = s.original_date
   WHERE s.hidden_at IS NULL AND d.reading IS NOT NULL
 ), ranked AS (
-  SELECT *, row_number() OVER (PARTITION BY entry_id ORDER BY year, id, kind) AS position FROM candidates
+  SELECT *, row_number() OVER (PARTITION BY entry_id ORDER BY year, until, id, kind) AS position FROM candidates
 ), earliest AS MATERIALIZED (
   SELECT e.id, CAST(r.year AS TEXT) AS year, r.kind, r.id AS sighting
   FROM entries e LEFT JOIN ranked r ON r.entry_id = e.id AND r.position = 1

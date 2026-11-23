@@ -232,20 +232,25 @@ function partTags(claims: readonly Claim[]) {
 // The year a list is read by: a record's first year as a number, which keeps no leading zero.
 const yearOf = (text: string | null) => text === null ? null : Number(text)
 
-// A sighting's year: the work's own date when it is the earlier, else the date it was reported.
+type Year = NonNullable<ReturnType<typeof datedYear>>
+// Dates order by year, then by the day each had passed: 5 April, 11 April, April, the year alone.
+// scripts/reindex-dates.sql ranks by the same order.
+const before = (a: Year, b: Year) => a.n < b.n || (a.n === b.n && a.end < b.end)
+
+// A sighting's year: the work's own date unless the date it was reported is the earlier.
 function sightingYear(sighting: Pick<SightingFields, 'report_date' | 'original_date'>, dates: DateBook) {
   const report = datedYear(sighting.report_date, dates), original = datedYear(sighting.original_date, dates)
-  return original && (!report || original.n <= report.n) ? { ...original, kind: 'original' as const } : report ? { ...report, kind: 'report' as const } : null
+  return original && !(report && before(report, original)) ? { ...original, kind: 'original' as const } : report ? { ...report, kind: 'report' as const } : null
 }
 
 // The earliest attestation among visible sightings, and the sighting that holds it: the first added
-// of those that share its year.
+// of those that share its date.
 export function earliestSighting<T extends Pick<SightingFields, 'report_date' | 'original_date'> & { id?: number; hidden_at?: string | null }>(sightings: T[], dates: DateBook = new Map()) {
-  let found: { text: string; n: number; kind: YearKind; sighting: T } | null = null
+  let found: (Year & { kind: YearKind; sighting: T }) | null = null
   for (const sighting of sightings) {
     if (sighting.hidden_at) continue
     const year = sightingYear(sighting, dates)
-    if (year && (!found || year.n < found.n)) found = { ...year, sighting }
+    if (year && (!found || before(year, found))) found = { ...year, sighting }
   }
   return found
 }

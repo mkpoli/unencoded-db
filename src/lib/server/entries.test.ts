@@ -1878,6 +1878,11 @@ test('the earliest attestation is a work\'s own date when older than its report,
   expect(earliestSighting([at(1, '1999', null), at(2, '1800', null, 'hidden')])).toMatchObject({ text: '1999', sighting: { id: 1 } })
   expect(earliestSighting([at(1, '1935', null), at(2, '1935', null)])).toMatchObject({ sighting: { id: 1 } })
   expect(earliestSighting([at(1, null, null), at(2, '令和', null)])).toBeNull()
+  // Within a year the day decides, and a date stated only to the month or year follows the days in it.
+  expect(earliestSighting([at(1, '1921年4月11日', null), at(2, '1921年4月5日', null)])).toMatchObject({ text: '1921', sighting: { id: 2 } })
+  expect(earliestSighting([at(1, '1921', null), at(2, '1921年4月', null), at(3, '1921-04-11', null)])).toMatchObject({ sighting: { id: 3 } })
+  expect(earliestSighting([at(1, '1921年10月5日', null), at(2, '1921', '1921年9月')])).toMatchObject({ kind: 'original', sighting: { id: 2 } })
+  expect(earliestSighting([at(1, '1921', '1921')])).toMatchObject({ kind: 'original' })
 })
 
 test('a record names the evidence that holds its earliest year through every write', async () => {
@@ -1898,6 +1903,14 @@ test('a record names the evidence that holds its earliest year through every wri
   expect(await editSighting(db, latest.id, latest.rev, seen({ place: 'A sign', report_date: '1800' }), null, who, null, id)).toMatchObject({ ok: true })
   expect(first(id)).toBe(latest.id)
   expect(added.id).toBe(older!)
+  // A day earlier in the same year takes over, and the sweep's reindex names the same evidence.
+  const day = (date: string) => addSighting(db, id, seen({ place: date, report_date: date }), [], who)
+  await day('1750年4月11日')
+  const earlier = await day('1750年4月5日')
+  expect(first(id)).toBe(earlier!)
+  raw.exec('UPDATE entries SET first_sighting = NULL')
+  raw.exec(readFileSync(new URL('../../../scripts/reindex-dates.sql', import.meta.url), 'utf8'))
+  expect(first(id)).toBe(earlier!)
   // A record with no year names none.
   const undated = await createEntry(db, fields(), seen(), [], who)
   expect(first(undated)).toBeNull()
