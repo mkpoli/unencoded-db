@@ -51,7 +51,9 @@ export type Status = (typeof STATUSES)[number]
 
 // The most vias a sighting's chain holds.
 export const VIAS_MAX = 4
+// How a character appears in a source. One page can show it several ways, as in both the title and the text.
 export const CONTEXTS = ['running_text', 'heading', 'logo', 'handwriting', 'other'] as const
+export type Context = (typeof CONTEXTS)[number]
 export const STYLES = ['regular', 'semi_cursive', 'seal', 'clerical', 'other'] as const
 
 // What one source provides: it may mention a character as a topic, attest it in running text, describe its
@@ -59,20 +61,29 @@ export const STYLES = ['regular', 'semi_cursive', 'seal', 'clerical', 'other'] a
 // several at once.
 export const SIGHTING_TYPES = ['mention', 'attestation', 'description', 'definition', 'reading', 'relation'] as const
 export type SightingType = (typeof SIGHTING_TYPES)[number]
-export const isSightingType = (value: unknown): value is SightingType => SIGHTING_TYPES.includes(value as SightingType)
-export function parseSightingTypes(raw: string | null | undefined): SightingType[] {
+
+// A sighting stores the options chosen from a list as a JSON array in the order of the list, or null for none.
+function parseChosen<T extends string>(options: readonly T[], raw: string | null | undefined): T[] {
   try {
     const value: unknown = JSON.parse(raw || '[]')
-    return Array.isArray(value) ? SIGHTING_TYPES.filter(type => value.includes(type)) : []
+    return Array.isArray(value) ? options.filter(option => value.includes(option)) : []
   } catch { return [] }
 }
-export function isStoredSightingTypes(raw: string | null): boolean {
+function isStoredChosen(options: readonly string[], raw: string | null): boolean {
   if (raw === null) return true
   try {
     const value: unknown = JSON.parse(raw)
-    return Array.isArray(value) && value.length <= SIGHTING_TYPES.length && value.every(isSightingType)
+    return Array.isArray(value) && value.length <= options.length && value.every(item => options.includes(item))
   } catch { return false }
 }
+export const storeChosen = (options: readonly string[], chosen: ReadonlySet<string>) => {
+  const kept = options.filter(option => chosen.has(option))
+  return kept.length ? JSON.stringify(kept) : null
+}
+export const parseSightingTypes = (raw: string | null | undefined) => parseChosen(SIGHTING_TYPES, raw)
+export const isStoredSightingTypes = (raw: string | null) => isStoredChosen(SIGHTING_TYPES, raw)
+export const parseContexts = (raw: string | null | undefined) => parseChosen(CONTEXTS, raw)
+export const isStoredContexts = (raw: string | null) => isStoredChosen(CONTEXTS, raw)
 
 // A form that holds several sightings opens each of them with this field, so the fields after it, up to
 // the next one, are read as that sighting's.

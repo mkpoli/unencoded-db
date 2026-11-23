@@ -6,7 +6,7 @@ import { openTestDb } from '$lib/server/testdb'
 import { load } from './+page.server'
 
 const fields: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', '⿰木木')] }
-const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null }
+const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
 const event = (db: D1Database, person: string, before?: string) => ({
   params: { locale: 'en', id: person },
   url: new URL(`http://localhost/en/u/${person}${before === undefined ? '' : `?before=${before}`}`),

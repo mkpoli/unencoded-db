@@ -1,4 +1,4 @@
-import { tagList } from '$lib/server/tags'
+import { taxonomy } from '$lib/server/tags'
 import { error, redirect } from '@sveltejs/kit'
 import { alsoSearch, counts, cursorOf, decadeTag, exactSearchIds, facetTag, list, listTag, markTags, pageCount, pageCursor, pageOf, radicalTag, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, searchTotal, terms } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
@@ -47,11 +47,11 @@ export const load: PageServerLoad = async (event) => {
   // A record's code typed whole, R+0022 or 天天玄玄, opens the record it names.
   const coded = placed === null && number === 1 ? parseRecordCode(query) : null
   // A merged record opens the one it was merged into, and neither may be hidden.
-  const [tags, named] = await Promise.all([
-    tagList(db),
+  const [{ tags, groups }, named] = await Promise.all([
+    taxonomy(db),
     coded ? db.prepare('SELECT COALESCE(m.id, e.id) AS id FROM entries e LEFT JOIN entries m ON m.id = e.merged_into WHERE e.id = ? AND e.hidden_at IS NULL AND (e.merged_into IS NULL OR m.hidden_at IS NULL)').bind(coded).first<{ id: number }>() : null,
   ])
-  const tag = requestedTag ? (tags.find(item => item.name === requestedTag || item.label === requestedTag)?.name ?? requestedTag) : null
+  const tag = requestedTag ? (tags.find(item => item.name === requestedTag || item.label === requestedTag || item.aliases.includes(requestedTag))?.name ?? requestedTag) : null
   const facet = collection ? `c:${collection}` : tag ? `t:${tag}` : null
   if (named) redirect(303, `/${event.params.locale}/entry/${named.id}`)
   // A whole description, or a query of parts alone, is also searched under the other spellings the browser found for it: ?also=, at most a few.
@@ -73,5 +73,5 @@ export const load: PageServerLoad = async (event) => {
   const [page, totals, total] = await Promise.all([searchError ? null : list(db, listing), counts(db), searchError || after !== null ? null : searchTotal(db, listing)])
   if (!page && !searchError) error(404)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, page?.tiles ?? [], event.locals.glyphStyle)
-  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, tags, total, pages, per, records: counted?.records ?? null, recordsFloor: counted?.floor ?? false, number, glyphs, script, filter, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
+  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, tags, groups, total, pages, per, records: counted?.records ?? null, recordsFloor: counted?.floor ?? false, number, glyphs, script, filter, collection, tag, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
 }
