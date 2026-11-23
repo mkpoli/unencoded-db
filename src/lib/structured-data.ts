@@ -2,8 +2,9 @@ import { SITE_ORIGIN } from './seo'
 
 export const RECORD_LICENSE = 'https://creativecommons.org/licenses/by-sa/4.0/'
 const CONTEXT = 'https://schema.org'
+const SITE = { '@type': 'WebSite', '@id': `${SITE_ORIGIN}/`, url: `${SITE_ORIGIN}/` }
 
-export type SourceFacts = { id: number; title?: string | null; author?: string | null; publisher?: string | null; report_date?: string | null; url?: string | null }
+export type SourceFacts = { id: number; title?: string | null; author?: string | null; publisher?: string | null; report_date?: string | null; url?: string | null; container?: string | null }
 type Json = Record<string, unknown>
 
 // A date in ISO form (YYYY, YYYY-MM or YYYY-MM-DD). Era names and other transcriptions are not dates here.
@@ -18,6 +19,8 @@ export function machineDate(text: string | null | undefined): string | null {
 
 const present = (fields: Json): Json => Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== null && value !== undefined && value !== ''))
 const web = (url: string | null | undefined) => (url && /^https?:\/\//i.test(url) ? url : null)
+// What the source appeared in: a journal issue, a chat group, a site.
+const containerOf = (source: SourceFacts): Json | null => (source.container ? { '@type': 'CreativeWork', name: source.container } : null)
 const sourceUrl = (locale: string, id: number) => `${SITE_ORIGIN}/${locale}/source/${id}`
 
 function breadcrumbs(trail: { name: string; url: string }[]): Json {
@@ -30,7 +33,7 @@ function breadcrumbs(trail: { name: string; url: string }[]): Json {
 function citation(locale: string, source: SourceFacts): Json {
   return present({
     '@type': 'CreativeWork', name: source.title, creator: source.author, publisher: source.publisher,
-    datePublished: machineDate(source.report_date), url: sourceUrl(locale, source.id),
+    datePublished: machineDate(source.report_date), isPartOf: containerOf(source), url: sourceUrl(locale, source.id),
   })
 }
 
@@ -51,7 +54,7 @@ export function recordData(facts: RecordFacts): Json[] {
       '@context': CONTEXT, '@type': 'CreativeWork', '@id': url, url, name: facts.name, description: facts.description,
       // The picture is its own object with no licence of its own here: the record's licence does not reach it.
       image: facts.image ? { '@type': 'ImageObject', contentUrl: new URL(facts.image, SITE_ORIGIN).href } : null, inLanguage: facts.locale, license: RECORD_LICENSE,
-      isPartOf: { '@type': 'WebSite', '@id': `${SITE_ORIGIN}/`, url: `${SITE_ORIGIN}/` },
+      isPartOf: SITE,
       citation: sources.length ? sources.map(source => citation(facts.locale, source)) : null,
     }),
     breadcrumbs([{ name: facts.siteName, url: `${SITE_ORIGIN}/${facts.locale}` }, { name: facts.name, url }]),
@@ -61,12 +64,12 @@ export function recordData(facts: RecordFacts): Json[] {
 export type SourcePageFacts = { locale: string; source: SourceFacts; name: string; siteName: string; sourcesName: string }
 
 export function sourceData({ locale, source, name, siteName, sourcesName }: SourcePageFacts): Json[] {
-  const url = sourceUrl(locale, source.id)
+  const url = sourceUrl(locale, source.id), container = containerOf(source)
   return [
     present({
       '@context': CONTEXT, '@type': 'CreativeWork', '@id': url, url, name, creator: source.author, publisher: source.publisher,
       datePublished: machineDate(source.report_date), sameAs: web(source.url), inLanguage: locale,
-      isPartOf: { '@type': 'WebSite', '@id': `${SITE_ORIGIN}/`, url: `${SITE_ORIGIN}/` },
+      isPartOf: container ? [SITE, container] : SITE,
     }),
     breadcrumbs([{ name: siteName, url: `${SITE_ORIGIN}/${locale}` }, { name: sourcesName, url: `${SITE_ORIGIN}/${locale}/sources` }, { name, url }]),
   ]
@@ -88,7 +91,7 @@ export function datasetData(facts: DatasetFacts): Json[] {
     name: facts.name, alternateName: facts.alternateName, description: facts.description,
     license: facts.license, isAccessibleForFree: true, version: String(facts.version),
     publisher: { '@type': 'Organization', name: facts.publisher },
-    isPartOf: { '@type': 'WebSite', '@id': `${SITE_ORIGIN}/`, url: `${SITE_ORIGIN}/` },
+    isPartOf: SITE,
     distribution: facts.downloads.map(download => ({
       '@type': 'DataDownload', name: download.name, encodingFormat: ENCODINGS[download.format],
       contentUrl: `${SITE_ORIGIN}/api/export?format=${download.format}`,
