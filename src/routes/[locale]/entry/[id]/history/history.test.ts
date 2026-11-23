@@ -7,7 +7,7 @@ import { openTestDb } from '$lib/server/testdb'
 import { actions, load } from './+page.server'
 
 const fields: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] }
-const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null }
+const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
 
 test('malformed sighting types are ignored', async () => {
   const { db } = openTestDb()
@@ -134,7 +134,7 @@ test('snapshots expose only entry fields and ignore malformed snapshots', async 
   expect(rows.find((row: any) => row.kind === 'create').fields).toEqual(fields)
   await db.prepare("UPDATE revisions SET snapshot = ? WHERE entry_id = ? AND kind = 'create'").bind('{broken', id).run()
   expect((await load(event) as any).rows.find((row: any) => row.kind === 'create').fields).toBeNull()
-  await db.prepare("UPDATE revisions SET snapshot = ? WHERE entry_id = ? AND kind = 'sighting'").bind(JSON.stringify({ ...sighting, context: 'invalid' }), id).run()
+  await db.prepare("UPDATE revisions SET snapshot = ? WHERE entry_id = ? AND kind = 'sighting'").bind(JSON.stringify({ ...sighting, contexts: '["invalid"]' }), id).run()
   expect((await load(event) as any).rows.find((row: any) => row.kind === 'sighting').sightingFields).toBeNull()
 })
 

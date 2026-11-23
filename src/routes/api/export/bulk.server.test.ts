@@ -31,7 +31,7 @@ test('one JSON file carries every record with its author, claims and evidence', 
   expect(response.headers.get('content-type')).toContain('application/json')
   expect(response.headers.get('content-disposition')).toMatch(/rare-character-compendium-\d{4}-\d{2}-\d{2}\.json/)
   const body = await response.json() as any
-  expect(body.dataset).toMatchObject({ name: 'Rare Character Compendium', version: 1, license: 'CC BY-SA 4.0', homepage: 'https://example.test/', counts: { records: 2, evidence: 250 } })
+  expect(body.dataset).toMatchObject({ name: 'Rare Character Compendium', version: 2, license: 'CC BY-SA 4.0', homepage: 'https://example.test/', counts: { records: 2, evidence: 250 } })
   expect(body.entries.map((entry: { id: number }) => entry.id)).toEqual([1, 3])
   expect(body.entries[0]).toMatchObject({ id: 1, code: 'R+0001', created_by_name: 'Person', types: [] })
   expect(body.entries[0].claims.map((claim: { kind: string }) => claim.kind)).toEqual(['ids', 'reading'])

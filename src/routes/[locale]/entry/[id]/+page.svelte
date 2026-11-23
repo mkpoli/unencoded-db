@@ -39,7 +39,7 @@
   import { COLLECTIONS, implicationClosure, localized, tagLabels, tagLookup } from '$lib/tags'
   import { boxesOf, evidenceFile, pictureAlt } from '$lib/picture'
   import { CHECKS, readiness } from '$lib/readiness'
-  import { parseSightingTypes, scriptName } from '$lib/scripts'
+  import { parseContexts, parseSightingTypes, scriptName } from '$lib/scripts'
   import { snippet } from '$lib/seo'
   import { recordData } from '$lib/structured-data'
   import type { Sighting, StoredImage } from '$lib/server/entries'
@@ -293,6 +293,7 @@
   <section class="stack"><h2>{t('entry.sightings')}</h2>
     {#each data.sightings as sighting (sighting.id)}
       {@const types = parseSightingTypes(sighting.types)}
+      {@const contexts = parseContexts(sighting.contexts)}
       <article class="panel stack" id="sighting-{sighting.id}">
         {#if sighting.media.length}
           <div class="pictures" class:single={sighting.media.length === 1}>
@@ -309,7 +310,7 @@
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
         {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} />{/if}
         <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
-          {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
+          {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
         </dl>
         <SourceQuotations quotes={sighting.quotes} url={sighting.url} />
