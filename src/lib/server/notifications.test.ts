@@ -85,8 +85,8 @@ test('changes made before notices existed are queued for the recorder', async ()
   const raw = new Database(':memory:')
   const migrations = join(import.meta.dir, '../../../migrations')
   const names = readdirSync(migrations).sort()
-  // The code under test writes the source columns of today, so their migration runs first.
-  const early = (name: string) => name < '0035' || name === '0041_source_container.sql'
+  // The code under test writes the source columns and reads the tag aliases of today, so their migrations run first.
+  const early = (name: string) => name < '0035' || name === '0041_source_container.sql' || name === '0045_tag_aliases.sql'
   for (const name of names.filter(early)) raw.exec(readFileSync(join(migrations, name), 'utf8'))
   const db = d1Over(raw)
   const recorder = await createPerson(db), second = await createPerson(db), maintenance = await createPerson(db, null, 'Catalogue maintenance')

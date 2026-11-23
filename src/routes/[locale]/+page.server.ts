@@ -49,7 +49,7 @@ export const load: PageServerLoad = async (event) => {
     taxonomy(db),
     coded ? db.prepare('SELECT COALESCE(m.id, e.id) AS id FROM entries e LEFT JOIN entries m ON m.id = e.merged_into WHERE e.id = ? AND e.hidden_at IS NULL AND (e.merged_into IS NULL OR m.hidden_at IS NULL)').bind(coded).first<{ id: number }>() : null,
   ])
-  const tag = requestedTag ? (tags.find(item => item.name === requestedTag || item.label === requestedTag)?.name ?? requestedTag) : null
+  const tag = requestedTag ? (tags.find(item => item.name === requestedTag || item.label === requestedTag || item.aliases.includes(requestedTag))?.name ?? requestedTag) : null
   const facet = collection ? `c:${collection}` : tag ? `t:${tag}` : null
   if (named) redirect(303, `/${event.params.locale}/entry/${named.id}`)
   // A whole description, or a query of parts alone, is also searched under the other spellings the browser found for it: ?also=, at most a few.

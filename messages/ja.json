@@ -635,5 +635,17 @@
   "tags.groupChange.create": "中分類を追加",
   "tags.groupChange.rename": "中分類の名前を変更",
   "tags.groupChange.move": "中分類を移動",
-  "tags.groupChange.delete": "中分類を削除"
+  "tags.groupChange.delete": "中分類を削除",
+  "tags.aliases": "別名:",
+  "tags.alias": "別名",
+  "tags.addAlias": "{name}に別名を追加",
+  "tags.unalias": "別名「{alias}」を外す",
+  "tags.merge": "統合先…",
+  "tags.mergeInto": "{name}をほかのタグに統合",
+  "tags.mergeConfirm": "{name}を{target}に統合しますか？ {name}の付いた記録は{target}に載り、{name}はその別名になります。",
+  "tags.change.merge": "統合",
+  "tags.change.split": "分離",
+  "tags.change.alias": "別名を追加",
+  "tags.change.unalias": "別名を削除",
+  "error.tagAliased": "その名前はすでにタグの別名です。"
 }

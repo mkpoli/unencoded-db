@@ -6,6 +6,7 @@
     TAG_LENGTH_MAX,
     TAG_TYPES,
     arrangeTags,
+    canonicalName,
     sectionTags,
     cleanTag,
     implicationClosure,
@@ -18,7 +19,9 @@
   } from '$lib/tags'
   import { t } from '$lib/t'
 
-  let { tags = [], groups = [], selected = [], collections = [] }: { tags?: Tag[]; groups?: TagGroup[]; selected?: string[]; collections?: string[] } = $props()
+  let { tags = [], groups = [], selected: named = [], collections = [] }: { tags?: Tag[]; groups?: TagGroup[]; selected?: string[]; collections?: string[] } = $props()
+  // A record that names a tag by an alias shows, and saves, the tag it stands for.
+  const selected = $derived([...new Set(named.map(name => canonicalName(name, tags)))])
 
   const uid = $props.id()
   const GENERAL_PILL_LIMIT = 24
@@ -44,6 +47,7 @@
         label: value,
         type: 'general' as const,
         group: null,
+        aliases: [],
         position: Number.MAX_SAFE_INTEGER - selected.length + index,
         rev: 0,
         n: 0,

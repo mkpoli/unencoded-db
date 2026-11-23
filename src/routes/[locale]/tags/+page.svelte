@@ -65,6 +65,7 @@
                       {#if tag.label !== tag.name}<span class="slug">({tag.name})</span>{/if}
                       <span class="n">{tag.n}</span>
                     </a>
+                    {#each tag.aliases as alias (alias)}<span class="alias">= {alias}</span>{/each}
                     {#if tag.implies.length}
                       <span class="arrow" aria-hidden="true">→</span>
                       {#each tag.implies as target (target)}
@@ -108,5 +109,6 @@
   .tag-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px }
   .slug, .n { font-size: 11.5px; opacity: 0.78 }
   .arrow { color: var(--muted); font-size: 13px }
+  .alias { color: var(--muted); font-size: 12.5px }
   .tag-chip.small { padding: 1px 8px; font-size: 12px }
 </style>

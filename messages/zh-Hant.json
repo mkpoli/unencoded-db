@@ -635,5 +635,17 @@
   "tags.groupChange.create": "新增中分類",
   "tags.groupChange.rename": "中分類改名",
   "tags.groupChange.move": "移動中分類",
-  "tags.groupChange.delete": "刪除中分類"
+  "tags.groupChange.delete": "刪除中分類",
+  "tags.aliases": "別名：",
+  "tags.alias": "別名",
+  "tags.addAlias": "為{name}新增別名",
+  "tags.unalias": "移除別名「{alias}」",
+  "tags.merge": "合併到…",
+  "tags.mergeInto": "將{name}合併到其他標籤",
+  "tags.mergeConfirm": "要將{name}合併到{target}嗎？標有{name}的記錄將歸入{target}，{name}則成為它的別名。",
+  "tags.change.merge": "合併",
+  "tags.change.split": "拆出",
+  "tags.change.alias": "新增別名",
+  "tags.change.unalias": "移除別名",
+  "error.tagAliased": "這個名稱已是某個標籤的別名。"
 }

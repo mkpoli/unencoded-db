@@ -33,6 +33,7 @@
   let newImplies = $state('')
   let drafts = $state<Record<string, string>>({})
   let groupDrafts = $state<Record<number, string>>({})
+  let aliasDrafts = $state<Record<string, string>>({})
   let newGroups = $state<Partial<Record<TagType, string>>>({})
 
   const byName = $derived(tagLookup(tags))
@@ -125,6 +126,18 @@
     const next = (groupDrafts[group.id] ?? group.label).trim()
     if (!next || next === group.label) return void (groupDrafts = without(groupDrafts, group.id))
     if (await mutate({ action: 'group.rename', id: group.id, label: next, rev: group.rev })) groupDrafts = without(groupDrafts, group.id)
+  }
+
+  async function addAlias(event: Event, tag: Tag) {
+    event.preventDefault()
+    const alias = (aliasDrafts[tag.name] ?? '').trim()
+    if (alias && await mutate({ action: 'alias', name: tag.name, alias, rev: tag.rev })) aliasDrafts = without(aliasDrafts, tag.name)
+  }
+
+  function merge(tag: Tag, target: string) {
+    const into = byName.get(target)
+    if (!into || !confirm(t('tags.mergeConfirm', { name: tag.label, target: into.label }))) return
+    mutate({ action: 'merge', name: tag.name, into: into.name, rev: tag.rev, intoRev: into.rev })
   }
 
   const moveTag = (tag: Tag, place: { type?: TagType; group: number | null; index?: number }) => mutate({ action: 'move', name: tag.name, ...place, rev: tag.rev })
@@ -227,7 +240,8 @@
     return group ? `${type} › ${group.label}` : type
   }
   function changeName(change: TagChange) {
-    if (change.subject === 'tag') return labels.get(change.name) ?? change.name
+    // A name that is now an alias is shown as written; the label of the tag it points to would hide what changed.
+    if (change.subject === 'tag') return tags.some(tag => tag.name === change.name) ? labels.get(change.name) ?? change.name : change.name
     const known = groupById.get(Number(change.name))
     return known?.label ?? String(parse(change.before)?.label ?? parse(change.after)?.label ?? change.name)
   }
@@ -249,6 +263,10 @@
       const target = String(before.implies)
       return `× ${labels.get(target) ?? target}`
     }
+    if (change.kind === 'merge' && after?.into) return `→ ${labels.get(String(after.into)) ?? String(after.into)}`
+    if (change.kind === 'split' && before?.tag) return `← ${labels.get(String(before.tag)) ?? String(before.tag)}`
+    if (change.kind === 'alias' && after?.tag) return `= ${labels.get(String(after.tag)) ?? String(after.tag)}`
+    if (change.kind === 'unalias' && before?.tag) return `≠ ${labels.get(String(before.tag)) ?? String(before.tag)}`
     if (change.kind === 'create' && after?.type) return placeName(after)
     return ''
   }
@@ -306,6 +324,28 @@
             </optgroup>
           {/each}
         </select>
+        <select
+          class="input type-select"
+          aria-label={t('tags.mergeInto', { name: tag.label })}
+          disabled={busy}
+          value=""
+          onchange={event => {
+            const target = event.currentTarget.value
+            event.currentTarget.value = ''
+            if (target) merge(tag, target)
+          }}
+        >
+          <option value="">{t('tags.merge')}</option>
+          {#each sections as mSection (mSection.type)}
+            {#if sectionTags(mSection).some(other => other.name !== tag.name)}
+              <optgroup label={t(`tagType.${mSection.type}`)}>
+                {#each sectionTags(mSection).filter(other => other.name !== tag.name) as other (other.name)}
+                  <option value={other.name}>{other.label}</option>
+                {/each}
+              </optgroup>
+            {/if}
+          {/each}
+        </select>
         <button
           type="button"
           class="button danger"
@@ -316,6 +356,28 @@
         >×</button>
       </div>
     </div>
+
+    <form class="implications" onsubmit={event => addAlias(event, tag)}>
+      <span class="imp-label">{t('tags.aliases')}</span>
+      {#each tag.aliases as alias (alias)}
+        <span class="alias">
+          {alias}
+          <button type="button" class="x" disabled={busy} aria-label={t('tags.unalias', { alias })} onclick={() => mutate({ action: 'unalias', alias })}>×</button>
+        </span>
+      {/each}
+      <input
+        class="input alias-input"
+        type="text"
+        maxlength={TAG_LENGTH_MAX}
+        placeholder="+ {t('tags.alias')}"
+        aria-label={t('tags.addAlias', { name: tag.label })}
+        value={aliasDrafts[tag.name] ?? ''}
+        oninput={event => (aliasDrafts = { ...aliasDrafts, [tag.name]: event.currentTarget.value })}
+      />
+      {#if (aliasDrafts[tag.name] ?? '').trim()}
+        <button class="button" type="submit" disabled={busy}>{t('tags.add')}</button>
+      {/if}
+    </form>
 
     <div class="implications">
       <span class="imp-label">{t('tags.carries')}</span>
@@ -549,6 +611,8 @@
   .implications { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px }
   .imp-label { color: var(--muted) }
   .x { appearance: none; border: 0; background: none; color: inherit; cursor: pointer; padding: 0 2px; font-size: 14px; line-height: 1 }
+  .alias { display: inline-flex; align-items: center; gap: 2px; padding: 1px 8px; border: 1px dashed var(--line-strong); border-radius: 999px; color: var(--muted) }
+  .alias-input { inline-size: 9rem; min-height: 28px; padding: 2px 8px; font-size: 12.5px }
   .add-imp { width: auto; min-height: 28px; padding: 2px 8px; font-size: 12.5px }
   .group-add { display: flex; flex-wrap: wrap; gap: 6px }
   .group-add .input { flex: 0 1 220px; inline-size: auto; min-inline-size: 0; padding: 5px 8px }
