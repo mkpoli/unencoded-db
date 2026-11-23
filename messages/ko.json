@@ -514,6 +514,7 @@
   "source.aliasAdded": "{alias} 추가",
   "source.aliasRemoved": "{alias} 삭제",
   "source.aliases": "다른 이름",
+  "source.titleVariant": "서명의 다른 표기",
   "source.alias": "다른 이름",
   "source.addAlias": "이름 추가",
   "source.remove": "삭제",

@@ -2066,6 +2066,50 @@ describe('digitized copy filter', () => {
   const slug = 'ntcu-848', title = '彙音字典'
   const prefix = 'http://ip194097.ntcu.edu.tw/memory/TGB/thak.asp?id=848&page='
 
+  test('shared readings find the book, its page citations and printed editions', async () => {
+    const book = await createEntry(db, fields(), seen({ title, url: prefix + '801' }), [], who)
+    const print = await createEntry(db, fields(), seen({ title, publisher: 'Print' }), [], who)
+    await createEntry(db, fields(), seen({ title: 'A chapter', url: prefix + '802' }), [], who)
+    await createEntry(db, fields(), seen({ title: 'Another book', author: title }), [], who)
+    const queries = [title, '汇音字典', 'Huiyinzidian', 'Huì-yīn Zìdiǎn', 'HUI4 YIN1 ZI4 DIAN3',
+      'Huiyin Dictionary', 'Ionjiten', 'ＩＯＮ　ＪＩＴＥＮ', 'いおんじてん', 'ｲｵﾝｼﾞﾃﾝ',
+      '휘음자전', '휘음자전'.normalize('NFD'), 'hwieumjajoen', 'Hwi-eum Jajeon', '《汇音字典》', 'huì yī']
+    for (const q of queries) {
+      const matches = await suggestSources(db, q)
+      expect(matches.map(row => row.title)).toEqual([title, title])
+      expect(new Set(matches.map(row => row.evidence?.entry))).toEqual(new Set([book, print]))
+      expect((await sourceList(db, 'new', null, null, q)).sources.map(row => row.title)).toEqual([title, title])
+      expect((await matchingCopies(db, q)).map(copy => copy.slug)).toEqual([slug])
+    }
+    const [edition] = await suggestSources(db, '汇音字典')
+    await editSourceAlias(db, edition.id, '汇音字典', false, who.actor)
+    await editSourceAlias(db, edition.id, '汇音字典', true, who.actor)
+    expect((await suggestSources(db, '汇音字典')).find(s => s.id === edition.id)).toMatchObject({
+      alias: null, reading: '汇音字典', title,
+    })
+    for (const q of ['-', 'No such reading']) expect(await suggestSources(db, q)).toEqual([])
+    await setHidden(db, { entry: book }, true, who, null)
+    expect(await matchingCopies(db, 'いおんじてん')).toEqual([])
+    expect((await suggestSources(db, 'ionjiten')).map(row => row.publisher)).toEqual(['Print'])
+  })
+
+  test('paging a reading keeps literal titles and returns each citation once', async () => {
+    const put = raw.prepare('INSERT INTO sources(hash, title, name_lookup, records) VALUES (?, ?, ?, 1)')
+    for (let i = 0; i < 30; i++) put.run(String(i), title, title)
+    put.run('other', 'Hui Yin studies', 'hui yin studies')
+    const all = []
+    let cursor: [string, number] | null = null
+    for (;;) {
+      const page = await suggestSources(db, 'Hui Yin', cursor)
+      all.push(...page.slice(0, 24))
+      if (page.length <= 24) break
+      cursor = [page[23].lookup, page[23].id]
+    }
+    expect(all).toHaveLength(31)
+    expect(new Set(all.map(row => row.id)).size).toBe(31)
+    expect(all.some(row => row.title === 'Hui Yin studies')).toBe(true)
+  })
+
   test('both spellings find the same copy, with separate scan and recorded page', async () => {
     const one = { title, url: prefix + '801' }
     const two = { title, url: prefix.replace('http:', 'https:') + '802' }

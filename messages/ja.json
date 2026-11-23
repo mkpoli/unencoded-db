@@ -514,6 +514,7 @@
   "source.aliasAdded": "「{alias}」を追加",
   "source.aliasRemoved": "「{alias}」を削除",
   "source.aliases": "別名",
+  "source.titleVariant": "書名の別表記",
   "source.alias": "別名",
   "source.addAlias": "別名を追加",
   "source.remove": "削除",

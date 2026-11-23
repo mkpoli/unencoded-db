@@ -514,6 +514,7 @@
   "source.aliasAdded": "Đã thêm {alias}",
   "source.aliasRemoved": "Đã xóa {alias}",
   "source.aliases": "Tên khác",
+  "source.titleVariant": "Cách viết khác của nhan đề",
   "source.alias": "Tên khác",
   "source.addAlias": "Thêm tên",
   "source.remove": "Xóa",

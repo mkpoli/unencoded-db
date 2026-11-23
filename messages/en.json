@@ -514,6 +514,7 @@
   "source.aliasAdded": "Added {alias}",
   "source.aliasRemoved": "Removed {alias}",
   "source.aliases": "Alternate names",
+  "source.titleVariant": "Title variant",
   "source.alias": "Alternate name",
   "source.addAlias": "Add name",
   "source.remove": "Remove",

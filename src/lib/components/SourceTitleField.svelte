@@ -66,7 +66,8 @@
           {#if evidence?.thumb}<img src={media(evidence.thumb)} width="68" height="76" alt="" loading="lazy" decoding="async" />{/if}
           <span class="description">
             <strong>{option.label}</strong>
-            {#if source.alias && source.alias !== option.label}<span>{t('source.alias')} · {source.alias}</span>{/if}
+            {#if source.reading && source.reading !== option.label}<span>{t('source.titleVariant')} · {source.reading}</span>
+            {:else if source.alias && source.alias !== option.label}<span>{t('source.alias')} · {source.alias}</span>{/if}
             {#if source.author}<span>{t('field.author')} · {source.author}</span>{/if}
             {#if source.container && source.title}<span>{t('field.container')} · {source.container}</span>{/if}
             {#if source.publisher}<span>{t('field.publisher')} · {source.publisher}</span>{/if}

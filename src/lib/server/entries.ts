@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit'
 import { quotations, QUOTATIONS_MAX } from '../quotations'
 import { sampledSightings } from './source-sightings'
-import { sourceMatches } from './source-aliases'
+import { sourceMatches, sourceMatchParams } from './source-aliases'
 import { nameKey, nameLabel, sourceNameKey } from '../name-key'
 // The store of records: an entry is a character, a claim is one thing the record states about it, a
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
@@ -1342,7 +1342,7 @@ function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | nul
   const bound = order.key ? [cursor?.key ?? start, cursor?.id ?? start] : [cursor?.id ?? start]
   type Row = Source & { year: number | null; records: number; direct: string; via: string }
   return db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(false)} AS direct, ${seen(true)} AS via FROM ${query ? `(SELECT DISTINCT source_id FROM (${sourceMatches})) m CROSS JOIN sources c ON c.id = m.source_id` : `sources c INDEXED BY ${order.index}${publisher !== null ? '_publisher' : ''}`} WHERE ${order.where} ${publisher !== null ? 'AND c.publisher_id = ?' : ''} AND ${after} ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction} LIMIT ?`)
-    .bind(...(query ? [sourceNameKey(query), sourceNameKey(query)] : []), ...(publisher !== null ? [publisher] : []), ...bound, limit).all<Row>().then(({ results }) => results)
+    .bind(...(query ? sourceMatchParams(query) : []), ...(publisher !== null ? [publisher] : []), ...bound, limit).all<Row>().then(({ results }) => results)
 }
 
 // A page of the source gallery in one order: its sources, each with the records seen in it, and the cursor
