@@ -29,7 +29,7 @@ export async function suggestSources(db: D1Database, text: string, cursor: NameC
   const { results } = await db.prepare(`WITH titles AS MATERIALIZED (
     SELECT title, min(lookup) AS lookup FROM source_title_readings WHERE ${prefix} GROUP BY title
   )
-  SELECT c.id, c.title, c.url, c.author, c.publisher, c.report_date, c.container, c.records,
+  SELECT c.id, c.title, c.url, c.author, c.publisher, c.report_date, c.container, c.source_kind, c.records,
     (SELECT json_object('thumb', thumb, 'entry', entry, 'ids', ids, 'place', place, 'page', page, 'via', via)
       FROM (${sample(false)} UNION ALL ${sample(true)}) ORDER BY thumb IS NULL, via, sighting LIMIT 1) AS evidence,
     n.lookup, a.spelling AS alias, r.spelling AS reading FROM (

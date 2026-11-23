@@ -44,6 +44,7 @@
   import { recordData } from '$lib/structured-data'
   import type { Sighting, StoredImage } from '$lib/server/entries'
   import { href, locale, media, t, day } from '$lib/t'
+  import { kindName } from '$lib/source-kind'
   import { recordCode, recordName } from '$lib/code'
   let { data, form } = $props()
   const entry = $derived(data.entry)
@@ -155,6 +156,7 @@
     { key: 'author', label: 'field.author' },
     { key: 'title', label: 'field.title' },
     { key: 'container', label: 'field.container' },
+    { key: 'source_kind', label: 'field.sourceKind' },
     { key: 'publisher', label: 'field.publisher' },
     { key: 'report_date', label: 'field.reportDate' },
     { key: 'original_date', label: 'field.originalDate' },
@@ -309,7 +311,7 @@
         {#if types.length || data.earliest?.sighting === sighting.id}<div class="row badges">{#if data.earliest?.sighting === sighting.id}<span class="badge earliest">{t('entry.earliest')}</span>{/if}{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
         {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} />{/if}
-        <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
+        <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else if field.key === 'source_kind'}{kindName(sighting.source_kind)}{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
           {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
         </dl>

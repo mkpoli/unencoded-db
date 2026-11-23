@@ -16,11 +16,13 @@
   import RelationCharacter from './RelationCharacter.svelte'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
   import { locale, t } from '$lib/t'
+  import { kindName } from '$lib/source-kind'
   let { fields, dates, sighting = false, labels = new Map(), tagTypes = new Map() }: { dates?: Map<string, DateReading | null>; fields: EntryFields | SightingFields; sighting?: boolean; labels?: ReadonlyMap<string, string>; tagTypes?: ReadonlyMap<string, TagType> } = $props()
   const sourceFields = [
     { key: 'title', label: 'field.title' },
     { key: 'author', label: 'field.author' },
     { key: 'container', label: 'field.container' },
+    { key: 'source_kind', label: 'field.sourceKind' },
     { key: 'publisher', label: 'field.publisher' },
     { key: 'report_date', label: 'field.reportDate' },
     { key: 'original_date', label: 'field.originalDate' },
@@ -62,7 +64,7 @@
       {#if source.url}<a class="text-link url" href={source.url} target="_blank" rel="noopener noreferrer">{source.url} ↗</a>{/if}
     </div>
     <dl class="facts">
-      {#each sourceFields as field}{#if source[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={source[field.key]} reading={dates?.get(source[field.key] ?? '')} />{:else}{source[field.key]}{/if}</dd></div>{/if}{/each}
+      {#each sourceFields as field}{#if source[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={source[field.key]} reading={dates?.get(source[field.key] ?? '')} />{:else if field.key === 'source_kind'}{kindName(source.source_kind)}{:else}{source[field.key]}{/if}</dd></div>{/if}{/each}
       {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
       {#if source.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${source.style}`)}</dd></div>{/if}
       {#if types.length}<div><dt>{t('field.sourceTypes')}</dt><dd>{types.map(type => t(`evidence.type.${type}`)).join(' · ')}</dd></div>{/if}

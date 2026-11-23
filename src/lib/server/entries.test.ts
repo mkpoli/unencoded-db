@@ -23,8 +23,8 @@ const described = (...sequences: string[]) => fields({ claims: sequences.map(seq
 const relation = (character: string, relationship: string, difference = '', evidence = ''): Claim => claim('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) })
 // A source is found among the sightings that passed through it by the index of the chain, never by a scan.
 const VIA_SEARCH = /SEARCH v USING (COVERING )?INDEX sighting_vias_by_source \(source_id=\?\)/
-const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, container: null, quote: null, ...over })
-const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
+const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, quote: null, ...over })
+const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
 const image: StoredImage = { image_key: 'a.webp', image_type: 'image/webp', image_w: 100, image_h: 100, thumb_key: 't.webp', box: null }
 
 let db: D1Database, raw: ReturnType<typeof openTestDb>['raw'], who: { actor: string; ip: null }
@@ -2192,6 +2192,38 @@ describe('digitized copy filter', () => {
     expect(await copyPage(db, slug, next.sightings[0].sighting)).toBeNull()
     await setHidden(db, { entry }, true, who, null)
     expect(await copyPage(db, slug, 0)).toBeNull()
+  })
+})
+
+describe('personal communications', () => {
+  const letter = (more: Partial<Via> = {}) => via({ author: '貓村', publisher: 'QQ', report_date: '2026-11-14', source_kind: 'personal', quote: 'as told', ...more })
+
+  test('a private message is a source of its own, apart from the same citation without the kind', async () => {
+    const id = await createEntry(db, fields(), seen({ title: 'A book', vias: [letter(), letter({ source_kind: null })] }), [], who)
+    const { vias } = (await getEntry(db, id))!.sightings[0]
+    expect(vias.map(via => via.source_kind)).toEqual(['personal', null])
+    expect(vias[0].id).not.toBe(vias[1].id)
+  })
+
+  test('a citation is keyed by its fields up to the last one given', async () => {
+    const key = (author: string) => (raw.query('SELECT hash FROM sources WHERE author = ?').get(author) as { hash: string }).hash
+    await createEntry(db, fields(), seen({ title: 'A book', vias: [letter({ author: 'a' }), letter({ author: 'b', source_kind: null, container: 'group' })] }), [], who)
+    expect(key('a')).toBe(await hashHex(JSON.stringify([null, null, 'a', 'QQ', '2026-11-14', null, 'personal'])))
+    expect(key('b')).toBe(await hashHex(JSON.stringify([null, null, 'b', 'QQ', '2026-11-14', 'group'])))
+  })
+
+  test('the form sends a kind for the source and each via, and a kind alone names no source', () => {
+    const form = new FormData()
+    for (const [name, value] of [['place', 'A scan'], ['author', 'x'], ['source_kind', 'personal']]) form.append(name, value)
+    for (const [author, kind] of [['貓村', ''], ['雲九', 'personal'], ['玄晖', 'other'], ['', 'personal']]) { form.append('via_author', author); form.append('via_source_kind', kind) }
+    const read = readSightingFields(form)
+    expect(read.source_kind).toBe('personal')
+    expect(read.vias.map(via => [via.author, via.source_kind])).toEqual([['貓村', null], ['雲九', 'personal'], ['玄晖', null]])
+  })
+
+  test('a kind alone stores no source', async () => {
+    const id = await createEntry(db, fields(), seen({ url: null, title: null, source_kind: 'personal' }), [], who)
+    expect((await getEntry(db, id))!.sightings[0].source_id).toBeNull()
   })
 })
 
