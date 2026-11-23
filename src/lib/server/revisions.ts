@@ -1,6 +1,6 @@
 import { quotations } from '../quotations'
 import { readDates, sightingDates } from './date-readings'
-import { CONTEXTS, STYLES, VIAS_MAX, isStoredSightingTypes } from '$lib/scripts'
+import { STYLES, VIAS_MAX, isStoredContexts, isStoredSightingTypes } from '$lib/scripts'
 import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, tidyVias, type EntryFields, type SightingFields, type Via } from './entries'
 
 // Only entry fields are public; a snapshot can also hold sighting or internal data.
@@ -33,7 +33,7 @@ export function sightingSnapshot(raw: string): SightingFields | null {
       if (typeof value[field] !== 'string' && value[field] !== null) return null
     }
     quotations(value.quotes)
-    if (value.context !== null && !(CONTEXTS as readonly string[]).includes(value.context)) return null
+    if (!isStoredContexts(value.contexts)) return null
     if (value.style !== null && !(STYLES as readonly string[]).includes(value.style)) return null
     if (!isStoredSightingTypes(value.types)) return null
     if (value.url !== null && !/^https?:\/\//i.test(value.url)) return null

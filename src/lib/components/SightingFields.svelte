@@ -8,7 +8,7 @@
   import ContainerField from './ContainerField.svelte'
   import { tick, untrack } from 'svelte'
   import { flip } from 'svelte/animate'
-  import { CONTEXTS, SIGHTING_TYPES, STYLES, parseSightingTypes } from '$lib/scripts'
+  import { CONTEXTS, SIGHTING_TYPES, STYLES, parseContexts, parseSightingTypes } from '$lib/scripts'
   import { cleanLinkInput } from '$lib/link-input'
   import { fetchPost, postId, type PostInfo } from '$lib/source-url'
   import { t } from '$lib/t'
@@ -18,7 +18,8 @@
   let { values = {}, onphotos }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void } = $props()
   const uid = $props.id()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
-  const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.container || values.original_date || values.page || values.context || values.style || values.types || values.quotes || values.note))
+  const appears = $derived(new Set(parseContexts(values.contexts)))
+  const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.container || values.original_date || values.page || values.contexts || values.style || values.types || values.quotes || values.note))
 
   let place = $state(untrack(() => values.place ?? ''))
   let url = $state(untrack(() => values.url ?? ''))
@@ -261,11 +262,15 @@
     <div class="field"><label for="{uid}-page">{t('field.page')}</label><input id="{uid}-page" class="input" name="page" bind:value={page} maxlength="80" /></div>
     <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" bind:value={reportDate} aria-describedby="{uid}-report_date-hint" /><p class="hint" id="{uid}-report_date-hint">{t('field.reportDateHint')}</p></div>
     <div class="field"><label for="{uid}-original_date">{t('field.originalDate')}</label><input id="{uid}-original_date" class="input" name="original_date" value={values.original_date ?? ''} aria-describedby="{uid}-original_date-hint" /><p class="hint" id="{uid}-original_date-hint">{t('field.originalDateHint')}</p></div>
-    <div class="field"><label for="{uid}-context">{t('field.context')}</label>
-      <select id="{uid}-context" class="input" name="context" value={values.context ?? ''}><option value="">{t('field.unset')}</option>{#each CONTEXTS as item}<option value={item}>{t(`context.${item}`)}</option>{/each}</select></div>
     <div class="field"><label for="{uid}-style">{t('field.style')}</label>
       <select id="{uid}-style" class="input" name="style" value={values.style ?? ''}><option value="">{t('field.unset')}</option>{#each STYLES as item}<option value={item}>{t(`style.${item}`)}</option>{/each}</select></div>
   </div>
+  <fieldset class="types">
+    <legend>{t('field.context')}</legend>
+    <div class="contexts">
+      {#each CONTEXTS as context}<label class="type context"><input type="checkbox" name="contexts" value={context} checked={appears.has(context)} /><span class="type-name">{t(`context.${context}`)}</span></label>{/each}
+    </div>
+  </fieldset>
   {#each passages as row (row.key)}
     <div class="field"><label for="{uid}-quote-{row.key}">{t('field.quote')}</label><textarea id="{uid}-quote-{row.key}" class="input" name="quote_text" rows="2" maxlength="5000" bind:value={row.text}></textarea></div>
     <div class="field"><label for="{uid}-locator-{row.key}">{t('field.quoteLocator')}</label><input id="{uid}-locator-{row.key}" class="input" name="quote_locator" maxlength="300" bind:value={row.locator} /></div>
@@ -319,8 +324,8 @@
 </details>
 
 <style>
-  .types { container: evidence-types / inline-size; display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0 }
-  .types legend { padding: 0; font-weight: 500 }
+  .types { container: evidence-types / inline-size; display: flex; flex-direction: column; min-width: 0; margin: 0; padding: 0; border: 0 }
+  .types legend { padding: 0 0 8px; font-weight: 500 }
   .type-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px }
   .type { display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 7px; cursor: pointer }
   .type:hover { border-color: var(--line-strong) }
@@ -329,6 +334,9 @@
   .type-text { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
   .type-name { font-size: 13.5px; font-weight: 500 }
   .type .hint { font-size: 12px }
+  .contexts { display: flex; flex-wrap: wrap; gap: 8px }
+  .context { align-items: center; min-block-size: var(--target-size) }
+  .context input { margin: 0 }
   .via { display: flex; flex-direction: column; gap: 12px; min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 7px }
   .via-list { position: relative; display: flex; flex-direction: column; gap: 12px; overflow-anchor: none }
   .via-list.sorting { user-select: none; cursor: grabbing }
