@@ -49,10 +49,10 @@ The Sources page filters direct and intermediate citations by publisher. A contr
 
 ## Agents
 
-`https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. In Claude Code:
+`https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. `/[locale]/mcp` carries the setup commands, install links and tool list. In Claude Code:
 
 ```sh
-claude mcp add --transport http rare https://rare.glyphatlas.org/mcp
+claude mcp add --scope user --transport http rare https://rare.glyphatlas.org/mcp
 ```
 
 | Tool | Does |
