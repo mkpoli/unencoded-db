@@ -73,7 +73,7 @@ An agent can sign in, and then writes under a person's name. The site is the OAu
 |---|---|
 | `entries` | One character: script, status, description, radical, strokes, and the summary a gallery tile draws |
 | `claims` | What a record states more than once: description sequences, composition, readings, meanings, codes, related characters, IVD, categories, collections, tags |
-| `sightings` | One place the character was seen: where, page, date, context, style, source types |
+| `sightings` | One place the character was seen: where, page, date, contexts, style, source types |
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
 | `source_aliases`, `source_alias_changes`, `source_search_names` | Alternate names for individual citations, their contributor history, and the lookup index for visible sources |
 | `date_readings`, `evidence_dates` | Calendar readings and the view of transcribed dates in sources, sightings and revision history |

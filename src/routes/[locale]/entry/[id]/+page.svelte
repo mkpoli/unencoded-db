@@ -36,10 +36,10 @@
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { codePage, marksOf, registryLabel } from '$lib/registries'
-  import { COLLECTIONS, implicationClosure, tagLabels, tagLookup } from '$lib/tags'
+  import { COLLECTIONS, implicationClosure, localized, tagLabels, tagLookup } from '$lib/tags'
   import { boxesOf, evidenceFile, pictureAlt } from '$lib/picture'
   import { CHECKS, readiness } from '$lib/readiness'
-  import { parseSightingTypes, scriptName } from '$lib/scripts'
+  import { parseContexts, parseSightingTypes, scriptName } from '$lib/scripts'
   import { snippet } from '$lib/seo'
   import { recordData } from '$lib/structured-data'
   import type { Sighting, StoredImage } from '$lib/server/entries'
@@ -144,7 +144,7 @@
   const structured = $derived(recordData({ locale: locale(), id: entry.id, name: seoTitle, description: seoDescription, siteName: t('app.name'), image: cover && media(cover.image_key), sources }))
   const marks = $derived(marksOf(encodings))
   const tagsByName = $derived(tagLookup(data.tags))
-  const labels = $derived(tagLabels(data.tags))
+  const labels = $derived(tagLabels(localized(data.tags, locale())))
   const closure = $derived(implicationClosure(valuesOf(claims, 'tag'), data.tags))
   const collections = $derived(COLLECTIONS.filter(collection => valuesOf(claims, 'collection').includes(collection.slug)))
   const brief = (text: string) => [...text].length > 40 ? [...text].slice(0, 39).join('') + '…' : text
@@ -276,7 +276,7 @@
         <div id="edit-senses"><SenseEditor claims={editValues.claims} evidence={options} fill={filled} /></div>
         <details class="filing" id="edit-filing" open>
           <summary class="section-title">{t('field.filing')}</summary>
-          <div class="stack filed"><TagFields tags={data.tags} selected={valuesOf(editValues.claims, 'tag')} collections={valuesOf(editValues.claims, 'collection')} /></div>
+          <div class="stack filed"><TagFields tags={data.tags} groups={data.groups} selected={valuesOf(editValues.claims, 'tag')} collections={valuesOf(editValues.claims, 'collection')} /></div>
         </details>
       {/key}
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" /></div>
@@ -293,6 +293,7 @@
   <section class="stack"><h2>{t('entry.sightings')}</h2>
     {#each data.sightings as sighting (sighting.id)}
       {@const types = parseSightingTypes(sighting.types)}
+      {@const contexts = parseContexts(sighting.contexts)}
       <article class="panel stack" id="sighting-{sighting.id}">
         {#if sighting.media.length}
           <div class="pictures" class:single={sighting.media.length === 1}>
@@ -309,7 +310,7 @@
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
         {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} />{/if}
         <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
-          {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
+          {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
         </dl>
         <SourceQuotations quotes={sighting.quotes} url={sighting.url} />
