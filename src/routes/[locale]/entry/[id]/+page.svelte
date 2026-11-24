@@ -164,12 +164,13 @@
   ] as const
   const at = locale()
 
-  let preparing = $state<string | null>(null)
+  let preparing = $state<Record<string, boolean>>({})
   let favError = $state('')
   $effect(() => { void entry.id; favError = '' })
   async function download(sighting: Sighting, picture: StoredImage, position: number) {
     const key = `${sighting.id}:${position}`
-    preparing = key
+    if (preparing[key]) return
+    preparing[key] = true
     try {
       const file = await evidenceFile(media(picture.image_key), boxesOf(picture.box), `${recordCode(entry.id)}-${sighting.id}-${position + 1}`)
       const link = document.createElement('a')
@@ -177,7 +178,7 @@
       link.download = file.name
       link.click()
       setTimeout(() => URL.revokeObjectURL(link.href), 1000)
-    } finally { if (preparing === key) preparing = null }
+    } finally { delete preparing[key] }
   }
 </script>
 
@@ -303,7 +304,7 @@
             {#each sighting.media as picture, position (`${position}:${picture.image_key}`)}
               <figure>
                 <MarkedPicture {picture} alt={pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} />
-                <figcaption><button class="button small" type="button" title={t('sighting.evidenceHint')} disabled={preparing === `${sighting.id}:${position}`} onclick={() => download(sighting, picture, position)}>{t('sighting.evidence')}</button></figcaption>
+                <figcaption><button class="button small" type="button" title={t('sighting.evidenceHint')} disabled={Boolean(preparing[`${sighting.id}:${position}`])} onclick={() => download(sighting, picture, position)}>{t('sighting.evidence')}</button></figcaption>
               </figure>
             {/each}
           </div>
