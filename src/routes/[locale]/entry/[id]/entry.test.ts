@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
+import { parse } from 'svelte/compiler'
 import { createEntry, type EntryFields, type SightingFields } from '$lib/server/entries'
 import { createPerson } from '$lib/server/people'
 import { openTestDb } from '$lib/server/testdb'
@@ -44,4 +46,34 @@ test('a comment is saved under its writer and may name only the record\'s own ev
   }
   await expect(hide(reader)).rejects.toMatchObject({ status: 403 })
   await expect(hide({ ...reader, moderator: true })).rejects.toMatchObject({ status: 303 })
+})
+
+test('sighting media loops key by position rather than image_key alone', () => {
+  const templates = [
+    new URL('./+page.svelte', import.meta.url),
+    new URL('./sighting/[sighting]/edit/+page.svelte', import.meta.url),
+    new URL('../../source/[id]/+page.svelte', import.meta.url),
+  ]
+  const visit = (node: unknown, onEach: (block: { expression: { start: number; end: number }; index?: string; key?: { start: number; end: number } }) => void) => {
+    if (!node || typeof node !== 'object') return
+    if (Array.isArray(node)) { for (const item of node) visit(item, onEach); return }
+    const record = node as Record<string, unknown>
+    if (record.type === 'EachBlock') onEach(record as never)
+    for (const value of Object.values(record)) visit(value, onEach)
+  }
+  let checked = 0
+  for (const file of templates) {
+    const source = readFileSync(file, 'utf8')
+    const ast = parse(source, { modern: true })
+    visit(ast.fragment, block => {
+      const expr = source.slice(block.expression.start, block.expression.end)
+      if (!expr.endsWith('.media')) return
+      checked++
+      expect(block.key).toBeDefined()
+      expect(block.index).toBeTruthy()
+      const key = source.slice(block.key!.start, block.key!.end)
+      expect(key).toContain(block.index!)
+    })
+  }
+  expect(checked).toBe(templates.length)
 })

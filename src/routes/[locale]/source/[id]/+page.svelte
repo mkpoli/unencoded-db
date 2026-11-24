@@ -78,7 +78,7 @@
         <div class="stack body">
           {#if sighting.media.length}
             <div class="pictures" class:single={sighting.media.length === 1}>
-              {#each sighting.media as picture, position (picture.image_key)}<MarkedPicture {picture} alt={pictureAlt([tile.ids, recordCode(tile.id), sighting.via ? null : source.title, sighting.place], position, sighting.media.length)} />{/each}
+              {#each sighting.media as picture, position (`${position}:${picture.image_key}`)}<MarkedPicture {picture} alt={pictureAlt([tile.ids, recordCode(tile.id), sighting.via ? null : source.title, sighting.place], position, sighting.media.length)} />{/each}
             </div>
           {/if}
           {#if sighting.via}<span class="badge via">{t('source.foundVia')}</span>{/if}

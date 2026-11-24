@@ -28,7 +28,7 @@
     <section class="panel stack">
       {#if data.sighting.media.length}
         <div class="current">
-          {#each data.sighting.media as picture, position (picture.image_key)}
+          {#each data.sighting.media as picture, position (`${position}:${picture.image_key}`)}
             <StoredPicture {picture} {position} drawn={drawn?.[position] ?? null} bind:removed onready={(working) => marking[position] = working} />
           {/each}
         </div>

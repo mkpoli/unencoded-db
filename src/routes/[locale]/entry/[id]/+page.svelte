@@ -168,7 +168,8 @@
   let favError = $state('')
   $effect(() => { void entry.id; favError = '' })
   async function download(sighting: Sighting, picture: StoredImage, position: number) {
-    preparing = picture.image_key
+    const key = `${sighting.id}:${position}`
+    preparing = key
     try {
       const file = await evidenceFile(media(picture.image_key), boxesOf(picture.box), `${recordCode(entry.id)}-${sighting.id}-${position + 1}`)
       const link = document.createElement('a')
@@ -176,7 +177,7 @@
       link.download = file.name
       link.click()
       setTimeout(() => URL.revokeObjectURL(link.href), 1000)
-    } finally { preparing = null }
+    } finally { if (preparing === key) preparing = null }
   }
 </script>
 
@@ -299,10 +300,10 @@
       <article class="panel stack" id="sighting-{sighting.id}">
         {#if sighting.media.length}
           <div class="pictures" class:single={sighting.media.length === 1}>
-            {#each sighting.media as picture, position (picture.image_key)}
+            {#each sighting.media as picture, position (`${position}:${picture.image_key}`)}
               <figure>
                 <MarkedPicture {picture} alt={pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} />
-                <figcaption><button class="button small" type="button" title={t('sighting.evidenceHint')} disabled={preparing === picture.image_key} onclick={() => download(sighting, picture, position)}>{t('sighting.evidence')}</button></figcaption>
+                <figcaption><button class="button small" type="button" title={t('sighting.evidenceHint')} disabled={preparing === `${sighting.id}:${position}`} onclick={() => download(sighting, picture, position)}>{t('sighting.evidence')}</button></figcaption>
               </figure>
             {/each}
           </div>
