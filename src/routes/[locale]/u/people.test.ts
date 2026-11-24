@@ -75,12 +75,12 @@ test('the migration counts the changes already made', async () => {
   const migrations = join(import.meta.dir, '../../../../migrations')
   const names = readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()
   const raw = new Database(':memory:')
-  for (const name of names.filter(name => name < '0049')) raw.exec(readFileSync(join(migrations, name), 'utf8'))
+  for (const name of names.filter(name => name < '0050')) raw.exec(readFileSync(join(migrations, name), 'utf8'))
   raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('account', 'Account', '2026'), ('quiet', 'Quiet', '2026');
     INSERT INTO people(id, name, merged_into, created_at) VALUES ('anon', 'anon-1', 'account', '2026');
     INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES (1, 'han', 'anon', '2026', '2026');
     INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) VALUES (1, 'create', 1, '{}', 'anon', '2026'), (1, 'edit', 2, '{}', 'account', '2026')`)
-  for (const name of names.filter(name => name >= '0049')) raw.exec(readFileSync(join(migrations, name), 'utf8'))
+  for (const name of names.filter(name => name >= '0050')) raw.exec(readFileSync(join(migrations, name), 'utf8'))
   expect(raw.query('SELECT id, changes FROM people ORDER BY id').all()).toEqual([{ id: 'account', changes: 2 }, { id: 'anon', changes: 0 }, { id: 'quiet', changes: 0 }])
   expect(await shown(d1Over(raw) as any)).toEqual([['Account', 2]])
 })
