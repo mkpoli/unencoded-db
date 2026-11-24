@@ -1,4 +1,6 @@
 <script lang="ts">
+  import EvidenceDate from './EvidenceDate.svelte'
+  import { westernDate } from '$lib/dates'
   import Combobox, { type ComboOption } from './Combobox.svelte'
   import { media, t } from '$lib/t'
   import { kindName } from '$lib/source-kind'
@@ -73,7 +75,7 @@
             {#if source.container && source.title}<span>{t('field.container')} · {source.container}</span>{/if}
             {#if source.source_kind}<span>{kindName(source.source_kind)}</span>{/if}
             {#if source.publisher}<span>{t('field.publisher')} · {source.publisher}</span>{/if}
-            {#if source.report_date}<span>{t('field.reportDate')} · {source.report_date}</span>{/if}
+            {#if source.report_date}<span>{t('field.reportDate')} · <EvidenceDate text={source.report_date} reading={westernDate(source.report_date)} /></span>{/if}
             {#if source.url && source.title}<span>{source.url}</span>{/if}
             {#if evidence}
               <span class="evidence">{evidence.via ? t('source.foundVia') : t('entry.record', { id: recordCode(evidence.entry) })}{#if evidence.via} · {recordCode(evidence.entry)}{/if}{#if evidence.ids} · {evidence.ids}{/if}{#if !evidence.via && evidence.page} · {t('field.page')} {evidence.page}{/if}{#if !evidence.via && evidence.place && evidence.place !== option.label} · {evidence.place}{/if}</span>

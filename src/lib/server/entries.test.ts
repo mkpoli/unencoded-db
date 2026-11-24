@@ -12,6 +12,7 @@ import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTa
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
+import { decadeOf } from '$lib/dates'
 import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { PAGE, PAGE_SIZES, pageSizeOf } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
@@ -1852,6 +1853,47 @@ describe('chronology', () => {
     expect(end.later).toBe(`at=1983.${CHRONICLE_PAGE + 14}`)
   })
 
+  test('a record from before the common era comes first, under its own decade, and the reindex files it the same', async () => {
+    const made: number[] = []
+    for (const date of ['-168', '前1年', '前169年', '西元前160年', '206 BCE']) made.push(await createEntry(db, fields(), seen({ title: 'Silk text', report_date: '1997', original_date: date }), [], who))
+    const page = await chronology(db, chroniclePlace(null, null, null)!)
+    const order = [4, 2, 0, 3, 1].map(i => made[i])
+    expect(page.entries.slice(0, 6).map(entry => [entry.year, entry.tile.id])).toEqual([[-205, order[0]], [-168, order[1]], [-167, order[2]], [-159, order[3]], [0, order[4]], [1803, 1]])
+    expect(page.entries[2]).toMatchObject({ tile: { firstYear: '-167', firstYearKind: 'original' }, sighting: { date: '-168' } })
+    expect(page.decades.slice(0, 4)).toEqual([{ decade: -208, n: 1 }, { decade: -168, n: 3 }, { decade: -8, n: 1 }, { decade: 1800, n: 1 }])
+    expect((await chronology(db, chroniclePlace(null, null, '-168')!)).entries[0].tile.id).toBe(order[1])
+    const back = await chronology(db, chroniclePlace(null, `1803.1`, null)!)
+    expect(back.entries.map(entry => entry.tile.id)).toEqual(order)
+    expect(back.later).toBe('at=1803.1')
+    expect((await chronology(db, chroniclePlace(`-159.${order[3]}`, null, null)!)).earlier).toBe(`before=-159.${order[3]}`)
+    // The list read by year goes on from a year before the common era, and keeps to its decade.
+    const first = await list(db, { order: 'earliest', limit: 3 })
+    expect(first!.tiles.map(tile => tile.id)).toEqual(order.slice(0, 3))
+    expect(first!.next).toBe(`-167.${order[2]}`)
+    expect((await list(db, { order: 'earliest', limit: 2, after: first!.next }))!.tiles.map(tile => tile.id)).toEqual(order.slice(3))
+    expect((await list(db, { order: 'latest', decade: '-168' }))!.tiles.map(tile => tile.id)).toEqual([order[3], order[2], order[1]])
+    expect(cursorOf('most', '-1.5')).toBeNull()
+    // Sources published before the common era lead the gallery read by date.
+    for (const date of ['前168年', '前1年', '005年']) await createEntry(db, fields(), seen({ title: `Cast ${date}`, report_date: date }), [], who)
+    const titles = async (cursor: string | null) => (await sourceList(db, 'earliest', cursor === null ? null : parseSourceCursor('earliest', cursor)))!.sources.map(source => source.title)
+    expect((await titles(null)).slice(0, 4)).toEqual(['Cast 前168年', 'Cast 前1年', 'Cast 005年', 'Silk text'])
+    const held = raw.query("SELECT id FROM sources WHERE title = 'Cast 前168年'").get() as { id: number }
+    expect((await titles(`-167.${held.id}`))[0]).toBe('Cast 前1年')
+    expect((await chronology(db, chroniclePlace(null, null, '0')!)).entries[0]).toMatchObject({ year: 5 })
+    const filed = () => raw.query("SELECT tag, entry_id, year FROM entry_tags WHERE entry_id IN (SELECT value FROM json_each(?)) AND tag GLOB 'y:*' ORDER BY entry_id").all(JSON.stringify(made))
+    const years = () => raw.query('SELECT id, first_year, first_year_kind, first_sighting FROM entries WHERE id IN (SELECT value FROM json_each(?)) ORDER BY id').all(JSON.stringify(made))
+    const before = [filed(), years()]
+    raw.exec("UPDATE entries SET first_year = NULL, first_year_kind = NULL, first_sighting = NULL; UPDATE entry_tags SET year = NULL WHERE tag = 'all'; DELETE FROM entry_tags WHERE tag GLOB 'y:*'")
+    raw.exec(readFileSync(new URL('../../../scripts/reindex-dates.sql', import.meta.url), 'utf8'))
+    expect([filed(), years()]).toEqual(before)
+  })
+
+  test('the reindex counts decades as decadeOf does', () => {
+    const sql = /CASE WHEN year > 0 [^)]*\) \/ 10 \* 10 END/.exec(readFileSync(new URL('../../../scripts/reindex-dates.sql', import.meta.url), 'utf8'))![0]
+    const rows = raw.query(`WITH RECURSIVE y(year) AS (SELECT -2100 UNION ALL SELECT year + 1 FROM y WHERE year < 2100) SELECT year, ${sql} AS decade FROM y`).all() as { year: number; decade: number }[]
+    expect(rows.filter(row => row.decade !== decadeOf(row.year))).toEqual([])
+  })
+
   test('names the evidence that holds each year, with the date it was read from and the chain it came through', async () => {
     const id = await createEntry(db, fields(), seen({ title: 'Old print', author: 'Someone', report_date: '1999', original_date: '1935年5月', vias: [via({ title: 'A post', author: 'Poster', publisher: 'X', report_date: '2020', url: 'https://example.test/post' })] }), [], who)
     const page = await chronology(db, { at: [1935, 0] })
@@ -1862,8 +1904,12 @@ describe('chronology', () => {
     expect(chroniclePlace('1935.412', null, null)).toEqual({ at: [1935, 412] })
     expect(chroniclePlace(null, '1935.412', null)).toEqual({ before: [1935, 412] })
     expect(chroniclePlace(null, null, '1930')).toEqual({ at: [1930, 0] })
-    expect(chroniclePlace(null, null, null)).toEqual({ at: [-1, 0] })
-    for (const [at, before, from] of [['1935', null, null], ['1935.0', null, null], [null, 'x.1', null], [null, null, '1935'], [null, null, '05']]) expect(chroniclePlace(at, before, from)).toBeUndefined()
+    expect(chroniclePlace(null, null, null)).toEqual({ at: [-10000, 0] })
+    expect(chroniclePlace('-167.412', null, null)).toEqual({ at: [-167, 412] })
+    expect(chroniclePlace(null, '0.412', null)).toEqual({ before: [0, 412] })
+    expect(chroniclePlace(null, null, '-168')).toEqual({ at: [-168, 0] })
+    expect(chroniclePlace(null, null, '0')).toEqual({ at: [1, 0] })
+    for (const [at, before, from] of [['1935', null, null], ['1935.0', null, null], [null, 'x.1', null], [null, null, '1935'], [null, null, '05'], [null, null, '-160'], ['-0.1', null, null]]) expect(chroniclePlace(at, before, from)).toBeUndefined()
   })
 
   test('reads one range of the year index, and the counts by key', () => {

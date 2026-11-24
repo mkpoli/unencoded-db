@@ -1,4 +1,4 @@
-import { type DateReading, MAX_READING_LENGTH, westernDate } from '../dates'
+import { type DateReading, MAX_READING_LENGTH, westernDate, yearOfDay } from '../dates'
 import { convertDate } from './hutime'
 import reindexSql from '../../../scripts/reindex-dates.sql?raw'
 
@@ -54,6 +54,6 @@ export function datedYear(value: string | null, book: DateBook) {
   if (!value) return null
   const reading = book.has(value) ? book.get(value) : westernDate(value)
   if (!reading) return null
-  const n = Number(reading.start.slice(0, 4))
+  const n = yearOfDay(reading.start)
   return { text: String(n), n }
 }
