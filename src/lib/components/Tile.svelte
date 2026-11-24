@@ -6,14 +6,15 @@
   import type { SightingType } from '$lib/scripts'
   import { MARKED } from '$lib/registries'
 
-  let { tile, glyph = null }: { tile: Tile; glyph?: string | null } = $props()
+  // `to` is where the tile leads when that is not the record's page.
+  let { tile, glyph = null, to = null }: { tile: Tile; glyph?: string | null; to?: string | null } = $props()
   const label = (type: SightingType) => t(`evidence.type.${type}`)
   const shown = $derived(tile.types.slice(0, 1))
   const hidden = $derived(tile.types.length - shown.length)
   const works = $derived(MARKED.filter(registry => tile.marks.includes(registry.id)))
 </script>
 
-<a class="tile" href={href(`/entry/${tile.id}`)}>
+<a class="tile" href={to ?? href(`/entry/${tile.id}`)}>
   <span class="plate">
     {#if tile.ids}<IdsGlyph ids={tile.ids} layout={tile.layout} path={glyph} />
     {:else if tile.cover_key}<img src={media(tile.cover_key)} alt={t('entry.record', { id: recordCode(tile.id) })} loading="lazy" decoding="async" />

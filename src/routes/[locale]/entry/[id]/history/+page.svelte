@@ -28,7 +28,7 @@
       </ul>
     </section>
   {/if}
-  <HistoryList dates={data.dates} rows={data.rows} tags={data.tags} currentRev={data.rev} restore thanked={form && 'thanked' in form && form.thanked ? [...data.thanked, form.thanked] : data.thanked} viewer={data.person?.id ?? null} thank redact={Boolean(data.person?.moderator)} empty={t('history.empty')} next={data.next} />
+  <HistoryList dates={data.dates} rows={data.rows} tags={data.tags} currentRev={data.rev} duplicates={data.duplicates} restore thanked={form && 'thanked' in form && form.thanked ? [...data.thanked, form.thanked] : data.thanked} viewer={data.person?.id ?? null} thank redact={Boolean(data.person?.moderator)} empty={t('history.empty')} next={data.next} />
 </div>
 
 <style>

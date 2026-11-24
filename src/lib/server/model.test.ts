@@ -181,7 +181,7 @@ describe('the evidence a claim rests on', () => {
     expect((await getSighting(db, two))!.place).toBe('two')
   })
 
-  test('a merge moves the sightings and leaves each record its claims, which name them again once it is undone', async () => {
+  test('a merge moves the sightings and joins the claims, and undoing it gives each record its own again', async () => {
     const { db } = open()
     const kept = claim('reading', 'dong')
     const into = await createEntry(db, fields([kept]), seen({ place: 'three' }), [], who)
@@ -189,18 +189,17 @@ describe('the evidence a claim rests on', () => {
     const { id, one, two, claims } = await cited(db)
     expect((await mergeEntry(db, id, into, who, null)).ok).toBe(true)
     expect((await getEntry(db, id))!.claims).toEqual(claims)
-    expect((await getEntry(db, into))!.claims).toEqual([kept])
+    expect((await getEntry(db, into))!.claims).toEqual([kept, ...claims])
     expect((await getEntry(db, into))!.sightings.map(sighting => sighting.id)).toEqual([three, one, two])
     // The record the sightings moved to may rest its own claims on them.
-    const resting = [{ ...kept, sightings: [two, three] }]
-    expect(await editEntry(db, into, 1, fields(resting), who, null)).toEqual({ ok: true, rev: 2 })
-    expect(await sightingsOf(db, into)).toEqual([[three, two]])
+    const resting = [{ ...kept, sightings: [two, three] }, ...claims]
+    expect(await editEntry(db, into, 2, fields(resting), who, null)).toEqual({ ok: true, rev: 3 })
+    expect(await sightingsOf(db, into)).toEqual([[three, two], [two], [one, two], [one]])
     expect(await unmergeEntry(db, id, who)).toBe(true)
     expect((await getEntry(db, id))!.claims).toEqual(claims)
     expect((await getEntry(db, id))!.sightings.map(sighting => sighting.id)).toEqual([one, two])
-    // A sighting that went back is no longer the other record's; its next edit stops naming it.
-    expect(await editEntry(db, into, 2, fields((await getEntry(db, into))!.claims), who, null)).toEqual({ ok: true, rev: 3 })
-    expect(await sightingsOf(db, into)).toEqual([[three]])
+    // A sighting that went back is no longer the other record's, and what it alone supported went with it.
+    expect((await getEntry(db, into))!.claims).toEqual([{ ...kept, sightings: [three] }])
   })
 })
 
@@ -530,7 +529,7 @@ describe('part rows', () => {
     await mergeEntry(db, merged, a, who, null)
     await createEntry(db, fields(), seen(), [], who)
     const written = parts(raw)
-    expect(written).toHaveLength(8)
+    expect(written).toHaveLength(9)
     raw.exec("DELETE FROM entry_tags WHERE tag GLOB 'p:*'")
     raw.exec(migration('0020_part_tags.sql').slice(migration('0020_part_tags.sql').indexOf('WITH RECURSIVE')))
     expect(parts(raw)).toEqual(written)

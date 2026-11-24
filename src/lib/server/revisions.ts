@@ -48,7 +48,9 @@ export function sightingSnapshot(raw: string): SightingFields | null {
   } catch { return null }
 }
 
-const ENTRY_KINDS = ['create', 'edit', 'revert']
+// A merge and its undoing leave the record that stayed with new fields, and name the other record.
+const ENTRY_KINDS = ['create', 'edit', 'revert', 'merge', 'unmerge']
+const MERGE_KINDS = ['merge', 'unmerge']
 const SIGHTING_KINDS = ['sighting', 'sighting_edit']
 
 export type SnapshotRow = { sighting_id: number | null; kind: string; snapshot: string; redacted_at?: string | null }
@@ -62,7 +64,18 @@ export function revisionFields(row: SnapshotRow) {
     kind: removal(row) ? row.kind === 'hide' ? 'remove' : 'put_back' : row.kind,
     fields: !row.redacted_at && !row.sighting_id && ENTRY_KINDS.includes(row.kind) ? entrySnapshot(row.snapshot) : null,
     sightingFields: !row.redacted_at && row.sighting_id && SIGHTING_KINDS.includes(row.kind) ? sightingSnapshot(row.snapshot) : null,
+    merge: MERGE_KINDS.includes(row.kind) ? mergeSnapshot(row.snapshot) : null,
   }
+}
+
+// The other record of a merge: the duplicate a record took in (`from`), or the record a duplicate joined (`into`).
+function mergeSnapshot(raw: string): { from: number } | { into: number } | null {
+  try {
+    const value = JSON.parse(raw)
+    if (Number.isSafeInteger(value?.from) && value.from > 0) return { from: value.from }
+    if (Number.isSafeInteger(value?.into) && value.into > 0) return { into: value.into }
+    return null
+  } catch { return null }
 }
 
 export const revisionDates = (db: D1Database, rows: { sightingFields: SightingFields | null }[]) =>

@@ -19,6 +19,7 @@ export const SOCIAL_PAGES = {
   mcp: { path: '/mcp', title: 'mcp.title', detail: 'mcp.intro', publicTitle: true },
   chronology: { path: '/chronology', title: 'nav.chronology', source: 2837, publicTitle: true },
   'record-history': { path: '/entry/[id]/history', title: 'entry.history', publicTitle: true },
+  duplicate: { path: '/entry/[id]/duplicate', title: 'duplicate.title' },
   report: { path: '/entry/[id]/report', title: 'report.title' },
   'edit-evidence': { path: '/entry/[id]/sighting/[sighting]/edit', title: 'sighting.edit' },
   'remove-evidence': { path: '/entry/[id]/sighting/[sighting]/remove', title: 'sighting.removeLink' },
