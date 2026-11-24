@@ -112,8 +112,9 @@ export async function* jsonChunks(db: D1Database, metadata: unknown, revision: n
 
 const csvCell = (value: unknown) => {
   let text = value == null ? '' : String(value)
-  // Spreadsheet applications may interpret cells beginning with these characters as formulas.
-  if (/^[\s]*[=+\-@]/u.test(text)) text = "'" + text
+  // Spreadsheet applications may interpret cells beginning with these characters as formulas. A whole
+  // number is none: a year before the common era stays as it is.
+  if (/^[\s]*[=+\-@]/u.test(text) && !/^-\d+$/.test(text)) text = "'" + text
   return `"${text.replace(/"/g, '""')}"`
 }
 
