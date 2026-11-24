@@ -4,18 +4,19 @@
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
   import { recordCode } from '$lib/code'
-  import { href, media, t } from '$lib/t'
+  import { decadeNumber, decadeOf, decadeRuns } from '$lib/dates'
+  import { decadeName, href, media, t, yearName, yearsName } from '$lib/t'
   let { data } = $props()
   const decadeList = (decade: number) => href(`?decade=${decade}&sort=earliest`)
   const fromDecade = (decade: number) => href(`/chronology?from=${decade}#y${decade}`)
   const paged = (query: string) => href(`/chronology?${query}`)
-  // Every decade from the first to the last, empty ones too, so the gaps show on the bar chart.
-  const span = $derived.by(() => {
-    if (!data.decades.length) return []
-    const held = new Map(data.decades.map(row => [row.decade, row.n]))
-    const first = data.decades[0].decade, last = data.decades.at(-1)!.decade
-    return Array.from({ length: (last - first) / 10 + 1 }, (_, i) => ({ decade: first + i * 10, n: held.get(first + i * 10) ?? 0 }))
-  })
+  // Every decade from the first to the last, empty ones too, so the gaps show on the bar chart. A gap of more
+  // than four centuries is drawn as a break in the axis.
+  const runs = $derived(decadeRuns(data.decades.map(row => row.decade), 40))
+  // The decade a tick stands at names its first year: the start of a century, or of a run that has room before the next.
+  const century = (decade: number) => decade >= 0 ? decade % 100 === 0 : decadeNumber(decade) % 100 === 90
+  const ticked = (run: number[], i: number) => century(run[i]) || (i === 0 && !run.slice(1, 5).some(century))
+  const lastYear = (decade: number) => decade < 0 ? decade + (decade === -8 ? 8 : 9) : decade + 9
   const most = $derived(Math.max(1, ...data.decades.map(row => row.n)))
   const counts = $derived(new Map(data.decades.map(row => [row.decade, row.n])))
   // The table's decades, each its own group of rows, with the year written only where it changes.
@@ -23,7 +24,7 @@
     const out: { decade: number; rows: { entry: (typeof data.entries)[number]; showYear: boolean }[] }[] = []
     let year: number | null = null
     for (const entry of data.entries) {
-      const decade = Math.floor(entry.year / 10) * 10
+      const decade = decadeOf(entry.year)
       if (out.at(-1)?.decade !== decade) { out.push({ decade, rows: [] }); year = null }
       out.at(-1)!.rows.push({ entry, showYear: entry.year !== year })
       year = entry.year
@@ -40,12 +41,16 @@
   </div>
   {#if data.decades.length}
     <ol class="bars" aria-label={t('nav.chronology')}>
-      {#each span as row (row.decade)}
-        <li class:century={row.decade % 100 === 0}>
-          {#if row.n}<a href={fromDecade(row.decade)} title="{t('browse.decade', { n: row.decade })} · {row.n}"><span class="bar" style:height="{Math.max(6, (row.n / most) * 100)}%"></span><span class="sr-only">{t('browse.decade', { n: row.decade })} {row.n}</span></a>
-          {:else}<span class="gap" title={t('browse.decade', { n: row.decade })}></span>{/if}
-          {#if row.decade % 100 === 0 || (row.decade === span[0].decade && 100 - (row.decade % 100) >= 50)}<span class="tick" aria-hidden="true">{row.decade}</span>{/if}
-        </li>
+      {#each runs as run, r (run[0])}
+        {#if r}<li class="break" aria-hidden="true" title={yearsName(lastYear(runs[r - 1].at(-1)!) + 1, run[0] - 1)}>⋯</li>{/if}
+        {#each run as decade, i (decade)}
+          {@const n = counts.get(decade) ?? 0}
+          <li class:century={century(decade)}>
+            {#if n}<a href={fromDecade(decade)} title="{decadeName(decade)} · {n}"><span class="bar" style:height="{Math.max(6, (n / most) * 100)}%"></span><span class="sr-only">{decadeName(decade)} {n}</span></a>
+            {:else}<span class="gap" title={decadeName(decade)}></span>{/if}
+            {#if ticked(run, i)}<span class="tick" aria-hidden="true">{yearName(decade)}</span>{/if}
+          </li>
+        {/each}
       {/each}
     </ol>
     {#if data.earlier}<a class="more earlier" href={paged(data.earlier)}>↑ {t('chronology.earlier')}</a>{/if}
@@ -53,11 +58,11 @@
       <thead><tr><th scope="col" class="year">{t('chronology.year')}</th><th scope="col">{t('chronology.record')}</th></tr></thead>
       {#each groups as group (group.decade)}
         <tbody>
-          <tr class="decade" id="y{group.decade}"><th scope="rowgroup" colspan="2"><a href={decadeList(group.decade)}>{t('browse.decade', { n: group.decade })}</a><span class="n">{counts.get(group.decade) ?? 0}</span></th></tr>
+          <tr class="decade" id="y{group.decade}"><th scope="rowgroup" colspan="2"><a href={decadeList(group.decade)}>{decadeName(group.decade)}</a><span class="n">{counts.get(group.decade) ?? 0}</span></th></tr>
           {#each group.rows as row (row.entry.tile.id)}
             {@const entry = row.entry}
             <tr class="entry" class:first={row.showYear}>
-              <td class="year">{#if row.showYear}{entry.year}{/if}</td>
+              <td class="year">{#if row.showYear}{yearName(entry.year)}{/if}</td>
               <td class="what">
                 <a class="record" href={href(`/entry/${entry.tile.id}`)}>
                   <span class="glyph">{#if entry.tile.ids}<IdsGlyph ids={entry.tile.ids} layout={entry.tile.layout} path={data.glyphs[entry.tile.id]} />{:else if entry.tile.cover_key}<img src={media(entry.tile.cover_key)} alt="" loading="lazy" decoding="async" />{/if}</span>
@@ -85,6 +90,7 @@
   .bars { display:flex; align-items:flex-end; gap:2px; height:120px; margin:0; padding:6px 28px 22px 6px; list-style:none; overflow-x:auto }
   .bars li { position:relative; flex:1 0 6px; height:100%; display:flex; align-items:flex-end }
   .bars li.century { border-inline-start:1px solid var(--line) }
+  .bars .break { flex:0 0 64px; align-items:flex-end; justify-content:center; color:var(--muted); line-height:1; user-select:none }
   .bars a { display:flex; align-items:flex-end; width:100%; height:100% }
   .bar { display:block; width:100%; border-radius:2px 2px 0 0; background:var(--accent) }
   .bars a:hover .bar, .bars a:focus-visible .bar { background:var(--ink) }

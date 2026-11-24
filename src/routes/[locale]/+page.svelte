@@ -16,7 +16,8 @@
   import ChatLinks from '$lib/components/ChatLinks.svelte'
   import GlyphStyleTabs from '$lib/components/GlyphStyleTabs.svelte'
   import { GLYPH_STYLE_COOKIE, type GlyphStyle } from '$lib/composer'
-  import { href, locale, t } from '$lib/t'
+  import { decadeNumber } from '$lib/dates'
+  import { decadeName, href, locale, t, yearsName } from '$lib/t'
   import { TILE_SIZE_COOKIE, TILE_SIZES, pageColumns, tileSizeOf } from '$lib/tile-size'
   import type { Snapshot } from './$types'
   let { data } = $props()
@@ -192,10 +193,11 @@
     // The chosen decade stays an option when it holds no record now, so the form keeps it.
     const held = Object.keys(data.counts ?? {}).filter(key => key.startsWith('y:')).map(key => Number(key.slice(2)))
     const decades = [...new Set([...held, ...(data.decade ? [Number(data.decade)] : [])])].sort((a, b) => a - b)
-    const byCentury = new Map<number, number[]>()
+    const byCentury = new Map<string, number[]>()
     for (const decade of decades) {
-      const century = Math.floor(decade / 100) * 100
-      byCentury.set(century, [...(byCentury.get(century) ?? []), decade])
+      const century = Math.floor(decadeNumber(decade) / 100) * 100
+      const label = decade < 0 ? yearsName(-98 - century, century ? 1 - century : 0) : `${century}–${century + 99}`
+      byCentury.set(label, [...(byCentury.get(label) ?? []), decade])
     }
     return [...byCentury]
   })
@@ -271,7 +273,7 @@
     {/if}
     <div class="field decade"><label for="decade">{t('browse.decadeLabel')}</label><select class="input" id="decade" name="decade" value={data.decade ?? ''}>
       <option value="">{t('browse.all')}</option>
-      {#each centuries as [century, decades] (century)}<optgroup label="{century}–{century + 99}">{#each decades as decade (decade)}<option value={String(decade)}>{t('browse.decade', { n: decade })} ({count(`y:${decade}`)})</option>{/each}</optgroup>{/each}
+      {#each centuries as [century, decades] (century)}<optgroup label={century}>{#each decades as decade (decade)}<option value={String(decade)}>{decadeName(decade)} ({count(`y:${decade}`)})</option>{/each}</optgroup>{/each}
     </select></div>
     <div class="field radical"><span class="label" id="radical-label">{t('field.radical')}</span>{#if data.radical}{@const radical = [...data.radical].at(-1)}<input type="hidden" name="radical" value={data.radical} /><a class="pinned" href={unfiled} aria-label="{t('field.radical')} {radical} ×"><span class="glyph">{radical}</span> <span aria-hidden="true">×</span></a>{:else}<a class="input choose" id="radical-choice" href={href('/radicals')} aria-labelledby="radical-label radical-choice">{t('browse.all')}<span aria-hidden="true">›</span></a>{/if}</div>
     {#if data.order !== ORDER}<input type="hidden" name="sort" value={data.order} />{/if}

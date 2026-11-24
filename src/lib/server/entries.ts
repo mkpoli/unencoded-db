@@ -22,7 +22,7 @@ import { groupMates } from '$lib/similar'
 import { PART_RUN_MAX, PART_SPELLINGS_MAX } from '$lib/ids-variants'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
-import { dateText } from '$lib/dates'
+import { dateText, decadeOf, isDecade } from '$lib/dates'
 import { datedYear, prepareDates, readDates, sightingDates, type DateBook } from './date-readings'
 import { hashHex } from './image'
 import { ORDER, PAGE, PAGE_SIZES, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
@@ -209,7 +209,7 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   const filing = fileRecord(entry.ids, entry.radical)
   const filed = [...pathsOf(filing?.path ?? []).map(path => `b:${path}`), ...(filing?.stated ? [`b!${filing.stated}`] : [])]
   // A record with a year is listed under its decade.
-  const decade = entry.first_year === null ? [] : [`y:${Math.floor(Number(entry.first_year) / 10) * 10}`]
+  const decade = entry.first_year === null ? [] : [`y:${decadeOf(Number(entry.first_year))}`]
   return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks, ...filed, ...decade]
 }
 
@@ -867,10 +867,10 @@ export function radicalTag(radical?: string | null) {
   return path ? `b:${path}` : undefined
 }
 
-// A decade, written as its first year (`1930`), as the key its records are listed under.
+// A decade, written as its first year's number (`1930`, or `-168` for 169 BCE), as the key its records are listed under.
 export function decadeTag(decade?: string | null) {
   if (!decade) return null
-  return /^(0|[1-9]\d{0,2}0)$/.test(decade) ? `y:${decade}` : undefined
+  return isDecade(decade) ? `y:${decade}` : undefined
 }
 
 // The marked works a list keeps to (`r:`) and leaves out (`x:`), as the keys they are listed under, or
@@ -981,13 +981,15 @@ const ORDER_READS: Record<Exclude<Order, 'random'>, { by: string; past: string; 
   earliest: { by: 't.year, t.entry_id', past: `(t.year, t.entry_id) > (?, ?) AND t.year IS NOT NULL AND ${LISTED}`, counted: true, key: 't.year' },
   latest: { by: 't.year DESC, t.entry_id DESC', past: `(t.year, t.entry_id) < (?, ?) AND t.year IS NOT NULL AND ${LISTED}`, counted: true, key: 't.year' },
 }
-const ID = /^[1-9]\d{0,15}$/, COUNT = /^(0|[1-9]\d{0,8})$/
+// Before every year there is: a year is at most four digits on either side of the era.
+const YEAR_MIN = -10000
+const ID = /^[1-9]\d{0,15}$/, COUNT = /^(0|[1-9]\d{0,8})$/, YEAR = /^(0|-?[1-9]\d{0,8})$/
 export function cursorOf(order: Order, after: string | null | undefined): number[] | null | undefined {
   if (order === 'random') return after === null || after === undefined ? [] : seedOf(after) === null ? null : [Number(after)]
   const descending = order === 'new' || order === 'most' || order === 'latest'
-  if (after === null || after === undefined) return ORDER_READS[order].counted ? (descending ? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER] : [-1, 0]) : [descending ? Number.MAX_SAFE_INTEGER : 0]
+  if (after === null || after === undefined) return ORDER_READS[order].counted ? (descending ? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER] : [YEAR_MIN, 0]) : [descending ? Number.MAX_SAFE_INTEGER : 0]
   const parts = after.split('.')
-  if (ORDER_READS[order].counted ? parts.length !== 2 || !COUNT.test(parts[0]) || !ID.test(parts[1]) : parts.length !== 1 || !ID.test(parts[0])) return null
+  if (ORDER_READS[order].counted ? parts.length !== 2 || !(order === 'earliest' || order === 'latest' ? YEAR : COUNT).test(parts[0]) || !ID.test(parts[1]) : parts.length !== 1 || !ID.test(parts[0])) return null
   return parts.map(Number)
 }
 const cursorAt = (order: Order, row: { id: number; counted: number }) => order === 'random' || !ORDER_READS[order].counted ? String(order === 'random' ? row.counted : row.id) : `${row.counted}.${row.id}`
@@ -1211,11 +1213,11 @@ export async function chronology(db: D1Database, place: ChroniclePlace) {
 
 // A place in the chronology: from `year.record` on (?at=), the rows before one (?before=), or a decade's start.
 export function chroniclePlace(at: string | null, before: string | null, from: string | null): ChroniclePlace | undefined {
-  const parse = (text: string) => { const match = /^(0|[1-9]\d{0,8})\.([1-9]\d{0,15})$/.exec(text); return match ? [Number(match[1]), Number(match[2])] as [number, number] : undefined }
+  const parse = (text: string) => { const match = /^(0|-?[1-9]\d{0,8})\.([1-9]\d{0,15})$/.exec(text); return match ? [Number(match[1]), Number(match[2])] as [number, number] : undefined }
   if (at !== null) { const found = parse(at); return found && { at: found } }
   if (before !== null) { const found = parse(before); return found && { before: found } }
-  if (from !== null) return /^(0|[1-9]\d{0,2}0)$/.test(from) ? { at: [Number(from), 0] } : undefined
-  return { at: [-1, 0] }
+  if (from !== null) return isDecade(from) ? { at: [Number(from), 0] } : undefined
+  return { at: [YEAR_MIN, 0] }
 }
 
 // The counts a page shows beside its filters. Tags are counted too, and read where they are listed. The
@@ -1323,10 +1325,10 @@ export const SOURCE_CARD_RECORDS = 6
 export type SourceCursor = { key: number | null; id: number }
 export const sourceCursorText = (cursor: SourceCursor) => cursor.key === null ? `${cursor.id}` : `${cursor.key}.${cursor.id}`
 export function parseSourceCursor(sort: SourceSort, text: string): SourceCursor | null {
-  const match = /^(?:(\d{1,9})\.)?([1-9]\d{0,15})$/.exec(text)
+  const match = /^(?:(-?\d{1,9})\.)?([1-9]\d{0,15})$/.exec(text)
   if (!match || !Number.isSafeInteger(Number(match[2]))) return null
   const keyed = match[1] !== undefined
-  if (sort === 'new' ? keyed : sort === 'most' ? !keyed : false) return null
+  if (sort === 'new' ? keyed : sort === 'most' ? !keyed || match[1].startsWith('-') : false) return null
   return { key: keyed ? Number(match[1]) : null, id: Number(match[2]) }
 }
 

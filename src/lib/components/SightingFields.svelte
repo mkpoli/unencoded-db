@@ -11,7 +11,8 @@
   import { CONTEXTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, parseContexts, parseSightingTypes } from '$lib/scripts'
   import { cleanLinkInput } from '$lib/link-input'
   import { fetchPost, postId, type PostInfo } from '$lib/source-url'
-  import { t } from '$lib/t'
+  import { westernDate } from '$lib/dates'
+  import { eraRead, t } from '$lib/t'
   import type { Citation, SightingFields, Via } from '$lib/server/entries'
   import { VIAS_MAX } from '$lib/scripts'
 
@@ -25,6 +26,7 @@
   let url = $state(untrack(() => values.url ?? ''))
   let title = $state(untrack(() => values.title ?? ''))
   let reportDate = $state(untrack(() => values.report_date ?? ''))
+  let originalDate = $state(untrack(() => values.original_date ?? ''))
   let author = $state(untrack(() => values.author ?? ''))
   let open = $state(untrack(() => filled))
   let fetching = $state(false), failed = $state(false)
@@ -237,6 +239,8 @@
   })
 </script>
 
+{#snippet yearRead(text: string)}{@const years = eraRead(text, westernDate(text))}{#if years}<output class="read">{years}</output>{/if}{/snippet}
+
 {#snippet kindField(id: string, name: string, value: string, onpick: (value: string) => void)}
   <div class="field"><label for={id}>{t('field.sourceKind')}</label>
     <select {id} class="input" {name} {value} onchange={event => onpick(event.currentTarget.value)}><option value="">—</option>{#each SOURCE_KINDS as item}<option value={item}>{t(`sourceKind.${item}`)}</option>{/each}</select></div>
@@ -272,8 +276,8 @@
     <PublisherField id="{uid}-publisher" name="publisher" bind:value={publisher} />
     {@render kindField(`${uid}-source_kind`, 'source_kind', kind, value => kind = value)}
     <div class="field"><label for="{uid}-page">{t('field.page')}</label><input id="{uid}-page" class="input" name="page" bind:value={page} maxlength="80" /></div>
-    <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" bind:value={reportDate} aria-describedby="{uid}-report_date-hint" /><p class="hint" id="{uid}-report_date-hint">{t('field.reportDateHint')}</p></div>
-    <div class="field"><label for="{uid}-original_date">{t('field.originalDate')}</label><input id="{uid}-original_date" class="input" name="original_date" value={values.original_date ?? ''} aria-describedby="{uid}-original_date-hint" /><p class="hint" id="{uid}-original_date-hint">{t('field.originalDateHint')}</p></div>
+    <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" bind:value={reportDate} aria-describedby="{uid}-report_date-hint" /><p class="hint" id="{uid}-report_date-hint">{t('field.reportDateHint')}</p>{@render yearRead(reportDate)}</div>
+    <div class="field"><label for="{uid}-original_date">{t('field.originalDate')}</label><input id="{uid}-original_date" class="input" name="original_date" bind:value={originalDate} aria-describedby="{uid}-original_date-hint" /><p class="hint" id="{uid}-original_date-hint">{t('field.originalDateHint')}</p>{@render yearRead(originalDate)}</div>
     <div class="field"><label for="{uid}-style">{t('field.style')}</label>
       <select id="{uid}-style" class="input" name="style" value={values.style ?? ''}><option value="">{t('field.unset')}</option>{#each STYLES as item}<option value={item}>{t(`style.${item}`)}</option>{/each}</select></div>
   </div>
@@ -338,6 +342,7 @@
 </details>
 
 <style>
+  .read { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink) }
   .types { container: evidence-types / inline-size; display: flex; flex-direction: column; min-width: 0; margin: 0; padding: 0; border: 0 }
   .types legend { padding: 0 0 8px; font-weight: 500 }
   .type-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px }
