@@ -53,9 +53,13 @@ const SIGHTING_KINDS = ['sighting', 'sighting_edit']
 
 export type SnapshotRow = { sighting_id: number | null; kind: string; snapshot: string; redacted_at?: string | null }
 
+// Whether a hide or an unhide is a reader's: evidence taken off its record or put back on it.
+const removal = ({ kind, snapshot }: SnapshotRow) => (kind === 'hide' || kind === 'unhide') && snapshot === '{"removed":true}'
+
 // The old version a revision holds, or null for a change that changed no readable text.
 export function revisionFields(row: SnapshotRow) {
   return {
+    kind: removal(row) ? row.kind === 'hide' ? 'remove' : 'put_back' : row.kind,
     fields: !row.redacted_at && !row.sighting_id && ENTRY_KINDS.includes(row.kind) ? entrySnapshot(row.snapshot) : null,
     sightingFields: !row.redacted_at && row.sighting_id && SIGHTING_KINDS.includes(row.kind) ? sightingSnapshot(row.snapshot) : null,
   }

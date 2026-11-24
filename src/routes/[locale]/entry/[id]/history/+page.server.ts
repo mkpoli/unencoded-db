@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit'
-import { editEntry, hasLink, ENTRY_HISTORY_PAGE, getEntry, history, redactRevision, restoreSighting } from '$lib/server/entries'
+import { editEntry, hasLink, ENTRY_HISTORY_PAGE, getEntry, history, putBackSighting, redactRevision, restoreSighting } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { thank, thankable, thankedOf } from '$lib/server/notifications'
@@ -17,18 +17,23 @@ export const load: PageServerLoad = async (event) => {
   if (!found || found.entry.hidden_at) error(404)
   if (found.entry.merged_into) redirect(302, `/${event.params.locale}/entry/${found.entry.merged_into}`)
   const visibleSightings = new Map(found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => [sighting.id, sighting.rev]))
+  // Removed evidence keeps its history, with a way back; what a moderator hid shows nothing.
+  const removed = new Set(found.sightings.filter(sighting => sighting.hidden_at && sighting.removed_by).map(sighting => sighting.id))
   const before = event.url?.searchParams.get('before')
   if (before !== null && before !== undefined && !positiveId(before)) error(404)
   const viewer = event.locals?.person
   const [page, tags] = await Promise.all([history(db, id, before ? positiveId(before) : null), tagList(db)])
   const next = page.length > ENTRY_HISTORY_PAGE ? page[ENTRY_HISTORY_PAGE - 1].id : null
   const rows = page.slice(0, ENTRY_HISTORY_PAGE)
-    .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id))
+    .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id) || removed.has(row.sighting_id))
     .map(({ id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, snapshot, redacted_at }) => ({
-      id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, redacted: Boolean(redacted_at),
+      id, entry_id, sighting_id, rev, summary, at, by_id, by_name, redacted: Boolean(redacted_at),
       ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
       sightingRev: sighting_id ? visibleSightings.get(sighting_id) : null,
+      putBack: false,
     }))
+  // The removal in force is the newest one of its sighting.
+  for (const row of rows) if (row.kind === 'remove' && removed.delete(row.sighting_id!)) row.putBack = true
   const thanked = viewer ? await thankedOf(db, viewer.id, rows.map(row => row.id)) : []
   return { id, rev: found.entry.rev, updated_at: found.entry.updated_at, rows, thanked, dates: await revisionDates(db, rows), next, tags: tags.map(({ name, label, type }) => ({ name, label, type })) }
 }
@@ -72,6 +77,21 @@ export const actions: Actions = {
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })
     notifyIndexNow(event, { entries: [id] })
     redirect(303, `/${event.params.locale}/entry/${id}/history`)
+  },
+  // Anyone puts removed evidence back.
+  putBack: async event => {
+    await guardWrite(event, 'EDITS')
+    const id = positiveId(event.params.id)
+    const sightingId = positiveId(String((await event.request.formData()).get('sighting') ?? ''))
+    if (!id || !sightingId) error(404)
+    const db = env(event).DB
+    const found = await getEntry(db, id)
+    const sighting = found?.sightings.find(s => s.id === sightingId && s.hidden_at && s.removed_by)
+    if (!found || found.entry.hidden_at || found.entry.merged_into || !sighting) error(404)
+    const person = await writer(event, db)
+    if (await putBackSighting(db, id, sightingId, { actor: person.id, ip: await ipHash(event) }) !== 'done') error(404)
+    notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
+    redirect(303, `/${event.params.locale}/entry/${id}#sighting-${sightingId}`)
   },
   // Anyone thanks whoever made a change; that person is told.
   thank: async event => {
