@@ -101,7 +101,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
     categories: ['kokuji'], tags: ['signage'],
     sightings: [
       { ...sighting, pictures: [{ url: 'https://img.example/sign.png', marks: [[1, 1, 6, 6]] }] },
-      { place: 'A dictionary', title: 'Book', author: 'Someone', report_date: '1936', page: '12', types: ['definition', 'reading'], contexts: ['running_text', 'heading'], vias: [{ url: 'https://example.test/post/1', author: '@poster', publisher: 'X', report_date: '2026-11-14', container: null, quote: '書影 p. 3' }] },
+      { place: 'A dictionary', title: 'Book', author: 'Someone', report_date: '1936', page: '12', types: ['definition', 'reading'], contexts: ['running_text', 'heading'], vias: [{ url: 'https://example.test/post/1', author: '@poster', publisher: 'X', report_date: '2026-11-14', container: null, source_kind: null, quote: '書影 p. 3' }] },
     ],
   })
   expect(added).toEqual({ failed: false, value: { id: 1, code: 'R+0001', url: `${ORIGIN}/entry/1` } })

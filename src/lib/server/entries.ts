@@ -7,12 +7,12 @@ import { nameKey, nameLabel, sourceNameKey } from '../name-key'
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
-import { CONTEXTS, isScript, NEEDS, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
+import { CONTEXTS, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
 import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
-import { encodingsOf, mapSightings, parseClaims, primaryIdsOf, primaryLayoutOf, readClaims, valuesOf, type Claim, type ClaimError } from '$lib/claims'
+import { encodingsOf, joinClaims, mapSightings, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, valuesOf, type Claim, type ClaimError } from '$lib/claims'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { FILE_ROWS, ensureTags, filedUnder } from './tags'
@@ -22,33 +22,37 @@ import { groupMates } from '$lib/similar'
 import { PART_RUN_MAX, PART_SPELLINGS_MAX } from '$lib/ids-variants'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
-import { dateText } from '$lib/dates'
+import { dateText, decadeOf, decadeStart, isDecade } from '$lib/dates'
 import { datedYear, prepareDates, readDates, sightingDates, type DateBook } from './date-readings'
 import { hashHex } from './image'
-import { ORDER, PAGE, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
+import { ORDER, PAGE, PAGE_SIZES, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
 
 export type EntryFields = { script: string; script_other: string | null; description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
 // A source as its citation fields. A sighting's `vias` list them from the one nearest the cited work outward.
 export type Citation = Record<typeof CITATION_FIELDS[number], string | null>
 // A link in a sighting's chain: the source, and the words of it this sighting quotes.
 export type Via = Citation & { quote: string | null }
-export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; vias: Via[]; original_date: string | null; page: string | null; contexts: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
+export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; source_kind: string | null; vias: Via[]; original_date: string | null; page: string | null; contexts: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
 export type Entry = Omit<EntryFields, 'claims'> & { status: Status | null; id: number; rev: number; ids: string | null; layout: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
-export type Sighting = Omit<SightingFields, 'vias'> & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; vias: (Via & { id: number })[]; media: StoredImage[]; hidden_at: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
+export type Sighting = Omit<SightingFields, 'vias'> & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; vias: (Via & { id: number })[]; media: StoredImage[]; hidden_at: string | null; removed_by: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
 
 // What an entry has one of. What it has several of is in `claims`.
 export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical', 'strokes'] as const
+// The fields a record may take from a duplicate when it has none of its own.
+const FILLED_FIELDS = ['description', 'radical', 'strokes'] as const
 // A sighting's citation is its source; the other fields are the sighting's own. Its `vias` are the sources
 // it passed through, from the one nearest the cited work to the one the contributor saw: a post that shows
 // a page of the cited work, say. `container` is what the source appeared in: the journal of an article, the
 // site of a page, the group of a chat message. A message has an author, a date and a container, and no title.
-export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date', 'container'] as const
+// `source_kind` marks a personal communication, which has no container to look it up in.
+export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind'] as const
+const blankCitation = (citation: Citation) => CITATION_FIELDS.every(field => field === 'source_kind' || citation[field] === null)
 // The form sends each via as one value of each of these, repeated once per via and aligned by position.
-export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_container', 'via_quote'] as const
+export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_container', 'via_source_kind', 'via_quote'] as const
 export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
-export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'container', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
+export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
 export const IMAGE_FIELDS = ['image_key', 'image_type', 'image_w', 'image_h', 'thumb_key', 'box'] as const
 
 const clean = (raw: unknown, max: number) => {
@@ -71,7 +75,7 @@ export const tidyVias = (vias: readonly Via[]): Via[] => {
   const seen = new Set<string>()
   return vias.filter(via => {
     const key = citationKey(via) + '\u0000' + (via.quote ?? '')
-    if (CITATION_FIELDS.every(field => via[field] === null) || seen.has(key)) return false
+    if (blankCitation(via) || seen.has(key)) return false
     seen.add(key)
     return true
   }).slice(0, VIAS_MAX)
@@ -89,7 +93,8 @@ function readVias(form: FormData): Via[] {
     publisher: clean(columns[3][index], 300),
     report_date: dateText(columns[4][index]),
     container: clean(columns[5][index], 300),
-    quote: clean(columns[6][index], 5000),
+    source_kind: sourceKind(clean(columns[6][index], 20)),
+    quote: clean(columns[7][index], 5000),
   })))
 }
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
@@ -122,7 +127,7 @@ export function readSightingFields(form: FormData): SightingFields {
     return text ? [{ text, locator: clean(locators[i], 300) }] : []
   })
   const chosen = (name: string) => new Set(form.getAll(name).map(String))
-  return {
+  const fields: SightingFields = {
     // A link alone answers where it was found.
     place: text(form, 'place', 500) ?? safeUrl ?? '',
     url: safeUrl,
@@ -131,6 +136,7 @@ export function readSightingFields(form: FormData): SightingFields {
     publisher: text(form, 'publisher', 300),
     report_date: dateText(form.get('report_date')),
     container: text(form, 'container', 300),
+    source_kind: sourceKind(text(form, 'source_kind', 20)),
     vias: readVias(form),
     original_date: dateText(form.get('original_date')),
     page: text(form, 'page', 80),
@@ -140,6 +146,8 @@ export function readSightingFields(form: FormData): SightingFields {
     note: text(form, 'note', 5000),
     quotes: quotes.length ? JSON.stringify(quotes) : null,
   }
+  if (blankCitation(fields)) fields.source_kind = null
+  return fields
 }
 
 // The marks of one picture as the form sends them, a JSON array of [x, y, width, height]. Each is kept inside the image.
@@ -203,7 +211,7 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   const filing = fileRecord(entry.ids, entry.radical)
   const filed = [...pathsOf(filing?.path ?? []).map(path => `b:${path}`), ...(filing?.stated ? [`b!${filing.stated}`] : [])]
   // A record with a year is listed under its decade.
-  const decade = entry.first_year === null ? [] : [`y:${Math.floor(Number(entry.first_year) / 10) * 10}`]
+  const decade = entry.first_year === null ? [] : [`y:${decadeOf(Number(entry.first_year))}`]
   return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks, ...filed, ...decade]
 }
 
@@ -359,11 +367,15 @@ const CITED_BY_PLACE = `UPDATE claims SET sightings = (SELECT json_group_array((
 const CITED_IN_SNAPSHOT = `UPDATE revisions SET snapshot = json_set(snapshot, '$.claims', json((SELECT json_group_array(json(json_set(claim.value, '$.sightings', json((SELECT k.sightings FROM claims k WHERE k.entry_id = revisions.entry_id AND k.key = json_extract(claim.value, '$.key')))))) FROM json_each(revisions.snapshot, '$.claims') claim))) WHERE entry_id = ${ENTRY_SEQ} AND kind = 'create'`
 
 // The citation is the source's identity: the same fields are the same row, whether a sighting cites
-// it as its work or as where it was found. A citation without a container hashes as its first five fields,
-// which is how every source was keyed before sources had one.
-async function citationOf(db: D1Database, values: (string | null)[], dates: DateBook) {
-  if (values.every(value => value === null)) return { hash: null, statements: [] }
-  const hash = await hashHex(JSON.stringify(values.at(-1) === null ? values.slice(0, -1) : values))
+// it as its work or as where it was found. The fields after the fifth
+// count only up to the last one given, so a source is keyed the same before and after a field is added. A kind
+// alone names no source.
+const CITATION_KEY_MIN = 5
+async function citationOf(db: D1Database, citation: Citation, dates: DateBook) {
+  if (blankCitation(citation)) return { hash: null, statements: [] }
+  const values = CITATION_FIELDS.map(field => citation[field])
+  const keyed = Math.max(CITATION_KEY_MIN, values.findLastIndex(value => value !== null) + 1)
+  const hash = await hashHex(JSON.stringify(values.slice(0, keyed)))
   const year = datedYear(values[CITATION_FIELDS.indexOf('report_date')], dates)?.n ?? null
   const publisher = values[CITATION_FIELDS.indexOf('publisher')]
   const key = publisher && nameKey(publisher)
@@ -375,13 +387,13 @@ async function citationOf(db: D1Database, values: (string | null)[], dates: Date
   }
   const [url, title, author, imprint, date, container] = values
   const sourceName = sourceNameKey(title || url || author || imprint || date || container || '')
-  statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup, container_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName, container && nameKey(container) || null))
+  statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup, container_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName, container && nameKey(container) || null))
   return { hash, statements }
 }
 // The hash of the cited work, and the links of the chain with the words each quotes.
 async function sourceOf(db: D1Database, fields: SightingFields, dates: DateBook) {
   const chain = tidyVias(fields.vias)
-  const [work, ...vias] = await Promise.all([citationOf(db, CITATION_FIELDS.map(field => fields[field]), dates), ...chain.map(via => citationOf(db, CITATION_FIELDS.map(field => via[field]), dates))])
+  const [work, ...vias] = await Promise.all([citationOf(db, fields, dates), ...chain.map(via => citationOf(db, via, dates))])
   return { hash: work.hash, vias: vias.flatMap((via, index) => via.hash === null ? [] : [{ hash: via.hash, quote: chain[index].quote }]), statements: [...work.statements, ...vias.flatMap(via => via.statements)] }
 }
 const SOURCE_ID = '(SELECT id FROM sources WHERE hash = ?)'
@@ -652,7 +664,7 @@ export function entryFieldsOf(raw: string): EntryFields | null {
 
 // Any revision of a record's fields can be made current again; the journal gains a row and loses none.
 export async function revertEntry(db: D1Database, id: number, revisionId: number, who: Who) {
-  const old = await db.prepare(`SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id IS NULL AND redacted_at IS NULL AND kind IN ('create','edit','revert')`).bind(revisionId, id).first<{ snapshot: string; rev: number }>()
+  const old = await db.prepare(`SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id IS NULL AND redacted_at IS NULL AND kind IN ('create','edit','revert','merge','unmerge')`).bind(revisionId, id).first<{ snapshot: string; rev: number }>()
   const entry = await getEntryRow(db, id)
   const fields = old ? entryFieldsOf(old.snapshot) : null
   if (!old || !entry || !fields) return { ok: false as const, code: 'missing' as const }
@@ -662,68 +674,141 @@ export async function revertEntry(db: D1Database, id: number, revisionId: number
 // A redacted revision keeps its row, author and time, and no longer says what the record held. The
 // state a record or a sighting holds now is not a past one, and stays.
 export async function redactRevision(db: D1Database, entry: number, revisionId: number, who: Who, summary: string | null) {
-  const row = await db.prepare(`SELECT r.rev, r.sighting_id, CASE WHEN r.sighting_id IS NULL THEN e.rev ELSE s.rev END AS current FROM revisions r JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id WHERE r.id = ? AND r.entry_id = ? AND r.redacted_at IS NULL AND r.kind IN ('create','edit','revert','sighting','sighting_edit')`).bind(revisionId, entry).first<{ rev: number; sighting_id: number | null; current: number | null }>()
+  const row = await db.prepare(`SELECT r.rev, r.sighting_id, CASE WHEN r.sighting_id IS NULL THEN e.rev ELSE s.rev END AS current FROM revisions r JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id WHERE r.id = ? AND r.entry_id = ? AND r.redacted_at IS NULL AND (r.kind IN ('create','edit','revert','merge','unmerge','sighting','sighting_edit') OR (r.kind = 'hide' AND r.summary IS NOT NULL))`).bind(revisionId, entry).first<{ rev: number; sighting_id: number | null; current: number | null }>()
   if (!row || row.current === row.rev) return false
   await db.batch([
-    db.prepare(`UPDATE revisions SET snapshot = '{}', summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
+    // A redacted merge still says which record it joined and what it gave, by key, so it can be undone.
+    db.prepare(`UPDATE revisions SET snapshot = CASE WHEN kind = 'hide' THEN snapshot WHEN kind IN ('merge','unmerge') THEN json_object('from', json_extract(snapshot, '$.from'), 'into', json_extract(snapshot, '$.into'), 'added', json(json_extract(snapshot, '$.added')), 'scoped', json(json_extract(snapshot, '$.scoped')), 'filled', json(json_extract(snapshot, '$.filled'))) ELSE '{}' END, summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
     db.prepare('DELETE FROM date_readings WHERE transcription NOT IN (SELECT value FROM evidence_dates WHERE value IS NOT NULL)'),
     revision(db, who, { entry, sighting: row.sighting_id, kind: 'redact', rev: row.rev, snapshot: JSON.stringify({ revision: revisionId }), summary }),
   ])
   return true
 }
 
-export async function mergeEntry(db: D1Database, from: number, into: number, who: Who, summary: string | null) {
-  if (from === into) return { ok: false as const, code: 'self' as const }
-  const source = await getEntryRow(db, from), target = await getEntryRow(db, into)
-  if (!source || !target || target.merged_into || target.hidden_at) return { ok: false as const, code: 'missing' as const }
-  if (source.merged_into) return { ok: false as const, code: 'merged' as const }
-  await db.batch([
-    db.prepare('UPDATE sightings SET entry_id = ? WHERE entry_id = ?').bind(into, from),
-    db.prepare('UPDATE comments SET entry_id = ? WHERE entry_id = ?').bind(into, from),
-    db.prepare('UPDATE entries SET merged_into = ?, updated_at = ? WHERE id = ?').bind(into, now(), from),
-    db.prepare('UPDATE entries SET updated_at = ? WHERE id = ?').bind(now(), into),
-    revision(db, who, { entry: from, kind: 'merge', rev: source.rev, snapshot: JSON.stringify({ into }), summary }),
-    revision(db, who, { entry: into, kind: 'merge', rev: target.rev, snapshot: JSON.stringify({ from }), summary }),
-  ])
-  await refresh(db, from)
-  await refresh(db, into)
-  return { ok: true as const }
+export type MergeResult = { ok: true } | { ok: false; code: 'self' | 'missing' | 'merged' | 'full' }
+
+// A duplicate joins the record it repeats. Its sightings move there and its claims are joined to that
+// record's; the duplicate keeps its own claims as they were, so parting the two gives each back its own.
+export async function mergeEntry(db: D1Database, from: number, into: number, who: Who, summary: string | null): Promise<MergeResult> {
+  if (from === into) return { ok: false, code: 'self' }
+  for (let attempt = 0; ; attempt++) {
+    const marks = [await revisionMark(db, from), await revisionMark(db, into)]
+    const source = await getEntryRow(db, from), target = await getEntryRow(db, into)
+    if (!source || source.hidden_at || !target || target.merged_into || target.hidden_at) return { ok: false, code: 'missing' }
+    if (source.merged_into) return { ok: false, code: 'merged' }
+    const [moving, staying] = [await sightingRows(db, from), await sightingRows(db, into)]
+    if (moving.length + staying.length > SIGHTINGS_MAX) return { ok: false, code: 'full' }
+    const joined = joinClaims(await claimRows(db, into), await claimRows(db, from))
+    // What the record that stays leaves unsaid, the duplicate may say.
+    const filled = FILLED_FIELDS.filter(field => target[field] === null && source[field] !== null)
+    const fields = { ...snapshotOf(target, ENTRY_FIELDS), ...snapshotOf(source, filled), claims: joined.claims } as EntryFields
+    const rev = target.rev + 1, at = now()
+    try {
+      await db.batch([
+        checkMark(db, from, marks[0], who),
+        checkMark(db, into, marks[1], who),
+        db.prepare(`UPDATE entries SET ${ENTRY_FIELDS.map(field => `${field} = ?`).join(', ')}, rev = ?, updated_at = ? WHERE id = ? AND rev = ? AND merged_into IS NULL AND hidden_at IS NULL`)
+          .bind(...ENTRY_FIELDS.map(field => fields[field]), rev, at, into, target.rev),
+        checkChanged(db, into, who),
+        db.prepare('UPDATE entries SET merged_into = ?, updated_at = ? WHERE id = ? AND merged_into IS NULL AND hidden_at IS NULL').bind(into, at, from),
+        checkChanged(db, from, who),
+        db.prepare('UPDATE sightings SET entry_id = ? WHERE entry_id = ?').bind(into, from),
+        db.prepare('UPDATE comments SET entry_id = ? WHERE entry_id = ?').bind(into, from),
+        db.prepare('DELETE FROM claims WHERE entry_id = ?').bind(into),
+        insertClaims(db, into, joined.claims),
+        revision(db, who, { entry: from, kind: 'merge', rev: source.rev, snapshot: JSON.stringify({ into }), summary }),
+        revision(db, who, { entry: into, kind: 'merge', rev, snapshot: JSON.stringify({ ...JSON.parse(entrySnapshot(fields)), from, added: joined.added, scoped: joined.scoped, filled }), summary }),
+      ])
+    } catch (error) {
+      if (attempt < 4 && ((await revisionMark(db, from)) !== marks[0] || (await revisionMark(db, into)) !== marks[1])) continue
+      throw error
+    }
+    await refresh(db, from)
+    await refresh(db, into)
+    return { ok: true }
+  }
 }
 
+/** The duplicates that joined this record and can part from it. */
+export async function mergedInto(db: D1Database, id: number) {
+  const { results } = await db.prepare('SELECT id FROM entries WHERE merged_into = ? AND hidden_at IS NULL ORDER BY id LIMIT 200').bind(id).all<{ id: number }>()
+  return results.map(row => row.id)
+}
+
+// Every record that was merged into this one, however far back, and the record itself.
+const PARTS = 'WITH RECURSIVE part(id) AS (SELECT ?1 UNION SELECT e.id FROM entries e JOIN part ON e.merged_into = part.id)'
+
+// Parting a duplicate from the record it joined: the sightings it brought go back with it, and the record
+// that stayed loses what it held only by them.
 export async function unmergeEntry(db: D1Database, id: number, who: Who) {
-  const entry = await getEntryRow(db, id)
-  if (!entry?.merged_into) return false
-  const into = entry.merged_into
-  await db.batch([
-    // What was merged into this record before it was merged comes back with it.
-    db.prepare('UPDATE sightings SET entry_id = ? WHERE entry_id = ? AND (first_entry = ? OR first_entry IN (SELECT id FROM entries WHERE merged_into = ?))').bind(id, into, id, id),
-    db.prepare('UPDATE comments SET entry_id = ? WHERE entry_id = ? AND (first_entry = ? OR first_entry IN (SELECT id FROM entries WHERE merged_into = ?))').bind(id, into, id, id),
-    // A comment written after the merge about evidence that goes back goes back with it.
-    db.prepare('UPDATE comments SET entry_id = ?1 WHERE entry_id = ?2 AND sighting_id IN (SELECT id FROM sightings WHERE entry_id = ?1)').bind(id, into),
-    db.prepare('UPDATE entries SET merged_into = NULL, updated_at = ? WHERE id IN (?, ?)').bind(now(), id, into),
-    revision(db, who, { entry: id, kind: 'unmerge', rev: entry.rev, snapshot: JSON.stringify({ from: into }) }),
-    revision(db, who, { entry: into, kind: 'unmerge', rev: 0, snapshot: JSON.stringify({ from: id }) }),
-  ])
-  await refresh(db, id)
-  await refresh(db, into)
-  return true
+  for (let attempt = 0; ; attempt++) {
+    const entry = await getEntryRow(db, id)
+    if (!entry?.merged_into) return false
+    const into = entry.merged_into
+    const marks = [await revisionMark(db, id), await revisionMark(db, into)]
+    const target = await getEntryRow(db, into)
+    // A hidden record keeps what it holds out of sight, the duplicates that joined it too.
+    if (!target || target.merged_into || target.hidden_at || entry.hidden_at) return false
+    const { results: back } = await db.prepare(`${PARTS} SELECT id FROM sightings WHERE entry_id = ?2 AND first_entry IN (SELECT id FROM part)`).bind(id, into).all<{ id: number }>()
+    // Every merge into the record says what it gave; a claim two duplicates gave leaves with the last of them.
+    const { results: merges } = await db.prepare(`SELECT json_extract(snapshot, '$.from') AS source, json_extract(snapshot, '$.added') AS added, json_extract(snapshot, '$.scoped') AS scoped, json_extract(snapshot, '$.filled') AS filled FROM revisions WHERE entry_id = ? AND kind = 'merge' ORDER BY id DESC LIMIT ${SIGHTINGS_MAX}`).bind(into).all<{ source: number | null; added: string | null; scoped: string | null; filled: string | null }>()
+    const listed = (text: string | null): string[] => { try { const value: unknown = JSON.parse(text ?? '[]'); return Array.isArray(value) ? value.filter(item => typeof item === 'string') : [] } catch { return [] } }
+    const { results: others } = await db.prepare(`SELECT k.entry_id, ${CLAIM_COLUMNS.map(column => `k.${column}`).join(', ')} FROM entries e JOIN claims k ON k.entry_id = e.id WHERE e.merged_into = ?1 AND e.id != ?2 ORDER BY k.entry_id, k.position LIMIT 5000`).bind(into, id).all<ClaimRow & { entry_id: number }>()
+    const still = Object.values(Object.groupBy(others, row => row.entry_id)).map(rows => rows!.map(toClaim))
+    const claims = partClaims(await claimRows(db, into), new Set(back.map(row => row.id)), { added: merges.flatMap(row => listed(row.added)), scoped: merges.flatMap(row => listed(row.scoped)) }, still)
+    // A field the duplicate filled is emptied again unless it has been rewritten since.
+    const filled = listed(merges.find(row => row.source === id)?.filled ?? null)
+    const emptied = Object.fromEntries(FILLED_FIELDS.flatMap(field => filled.includes(field) && entry[field] === target[field] ? [[field, null]] : []))
+    const fields = { ...snapshotOf(target, ENTRY_FIELDS), ...emptied, claims } as EntryFields
+    const rev = target.rev + 1, at = now()
+    try {
+      await db.batch([
+        checkMark(db, id, marks[0], who),
+        checkMark(db, into, marks[1], who),
+        db.prepare(`UPDATE entries SET ${ENTRY_FIELDS.map(field => `${field} = ?`).join(', ')}, rev = ?, updated_at = ? WHERE id = ? AND rev = ? AND merged_into IS NULL`)
+          .bind(...ENTRY_FIELDS.map(field => fields[field]), rev, at, into, target.rev),
+        checkChanged(db, into, who),
+        db.prepare('UPDATE entries SET merged_into = NULL, updated_at = ? WHERE id = ? AND merged_into = ?').bind(at, id, into),
+        checkChanged(db, id, who),
+        db.prepare(`${PARTS} UPDATE sightings SET entry_id = ?1 WHERE entry_id = ?2 AND first_entry IN (SELECT id FROM part)`).bind(id, into),
+        db.prepare(`${PARTS} UPDATE comments SET entry_id = ?1 WHERE entry_id = ?2 AND first_entry IN (SELECT id FROM part)`).bind(id, into),
+        // A comment written after the merge about evidence that goes back goes back with it.
+        db.prepare('UPDATE comments SET entry_id = ?1 WHERE entry_id = ?2 AND sighting_id IN (SELECT id FROM sightings WHERE entry_id = ?1)').bind(id, into),
+        db.prepare('DELETE FROM claims WHERE entry_id = ?').bind(into),
+        insertClaims(db, into, claims),
+        revision(db, who, { entry: id, kind: 'unmerge', rev: entry.rev, snapshot: JSON.stringify({ into }) }),
+        revision(db, who, { entry: into, kind: 'unmerge', rev, snapshot: JSON.stringify({ ...JSON.parse(entrySnapshot(fields)), from: id }) }),
+      ])
+    } catch (error) {
+      if (attempt < 4 && ((await revisionMark(db, id)) !== marks[0] || (await revisionMark(db, into)) !== marks[1])) continue
+      throw error
+    }
+    await refresh(db, id)
+    await refresh(db, into)
+    return true
+  }
 }
 
-export async function setHidden(db: D1Database, target: { entry: number; sighting?: number | null }, hidden: boolean, who: Who, summary: string | null) {
+type Visibility = { hidden: boolean; removed?: boolean }
+export type RemoveResult = 'done' | 'missing' | 'merged' | 'conflict' | 'only'
+
+// Hides a record or a sighting, or shows it again. `refuse` reads what the change would be made to, and
+// its answer ends the change instead.
+async function setVisible<R>(db: D1Database, target: { entry: number; sighting?: number | null }, { hidden, removed = false }: Visibility, who: Who, summary: string | null,
+  refuse: (entry: Entry | null, sighting: Sighting | null, sightings: Sighting[]) => R | null): Promise<R | 'done'> {
   for (let attempt = 0; ; attempt++) {
     const mark = await revisionMark(db, target.entry)
     const entry = await getEntryRow(db, target.entry)
-    if (!entry) return false
     const sightings = await sightingRows(db, target.entry)
-    const sighting = target.sighting != null ? sightings.find(s => s.id === target.sighting) : null
-    if (target.sighting != null && !sighting) return false
-    if (Boolean(sighting ? sighting.hidden_at : entry.hidden_at) === hidden) return true
+    const sighting = target.sighting != null ? sightings.find(s => s.id === target.sighting) ?? null : null
+    const refused = refuse(entry, sighting, sightings)
+    if (refused !== null || !entry) return refused ?? 'done'
     const at = hidden ? now() : null
     const index = await reindex(db, target.entry,
       sighting ? entry : { ...entry, hidden_at: at }, await claimRows(db, target.entry),
       sighting ? sightings.map(s => s.id === sighting.id ? { ...s, hidden_at: at } : s) : sightings)
     const update = sighting
-      ? db.prepare('UPDATE sightings SET hidden_at = ? WHERE id = ? AND entry_id = ?').bind(at, sighting.id, target.entry)
+      ? db.prepare('UPDATE sightings SET hidden_at = ?, removed_by = ? WHERE id = ? AND entry_id = ?').bind(at, removed && hidden ? who.actor : null, sighting.id, target.entry)
       : db.prepare('UPDATE entries SET hidden_at = ? WHERE id = ?').bind(at, target.entry)
     try {
       await db.batch([
@@ -731,17 +816,42 @@ export async function setHidden(db: D1Database, target: { entry: number; sightin
         // What the record's page shows changed, so its time of change moves too.
         db.prepare('UPDATE entries SET updated_at = ? WHERE id = ?').bind(now(), target.entry),
         checkChanged(db, target.entry, who),
-        revision(db, who, { entry: target.entry, sighting: target.sighting, kind: hidden ? 'hide' : 'unhide', rev: 0, snapshot: '{}', summary }),
+        revision(db, who, { entry: target.entry, sighting: target.sighting, kind: hidden ? 'hide' : 'unhide', rev: 0, snapshot: removed ? '{"removed":true}' : '{}', summary }),
         ...index,
         recount(db, target.entry),
       ])
-      return true
+      return 'done'
     } catch (error) {
       if (attempt < 4 && await revisionMark(db, target.entry) !== mark) continue
       throw error
     }
   }
 }
+
+// A moderator's hide takes over a removal, so that only a moderator shows the sighting again.
+export async function setHidden(db: D1Database, target: { entry: number; sighting?: number | null }, hidden: boolean, who: Who, summary: string | null) {
+  return await setVisible(db, target, { hidden }, who, summary, (entry, sighting) => {
+    if (!entry || (target.sighting != null && !sighting)) return 'missing' as const
+    const now = sighting ? sighting.hidden_at : entry.hidden_at
+    return Boolean(now) === hidden && !(hidden && sighting?.removed_by) ? 'same' as const : null
+  }) !== 'missing'
+}
+
+// Takes a sighting off its record. A record keeps at least one, so its last is moved or edited instead.
+export const removeSighting = (db: D1Database, entryId: number, id: number, baseRev: number, who: Who, summary: string | null): Promise<RemoveResult> =>
+  setVisible(db, { entry: entryId, sighting: id }, { hidden: true, removed: true }, who, summary, (entry, sighting, sightings) => {
+    if (!entry || entry.hidden_at || !sighting || sighting.hidden_at) return 'missing' as const
+    if (entry.merged_into) return 'merged' as const
+    if (sighting.rev !== baseRev) return 'conflict' as const
+    return sightings.some(other => other.id !== id && !other.hidden_at) ? null : 'only' as const
+  })
+
+/** Puts a removed sighting back on its record. One a moderator hid stays hidden. */
+export const putBackSighting = (db: D1Database, entryId: number, id: number, who: Who): Promise<RemoveResult> =>
+  setVisible(db, { entry: entryId, sighting: id }, { hidden: false, removed: true }, who, null, (entry, sighting) => {
+    if (!entry || entry.hidden_at || !sighting?.hidden_at || !sighting.removed_by) return 'missing' as const
+    return entry.merged_into ? 'merged' as const : null
+  })
 
 /** Brings one record's tags, counts and summary up to date from what it holds. */
 export async function refresh(db: D1Database, id: number) {
@@ -857,10 +967,10 @@ export function radicalTag(radical?: string | null) {
   return path ? `b:${path}` : undefined
 }
 
-// A decade, written as its first year (`1930`), as the key its records are listed under.
+// A decade, written as its first year's number (`1930`, or `-168` for 169 BCE), as the key its records are listed under.
 export function decadeTag(decade?: string | null) {
   if (!decade) return null
-  return /^(0|[1-9]\d{0,2}0)$/.test(decade) ? `y:${decade}` : undefined
+  return isDecade(decade) ? `y:${decade}` : undefined
 }
 
 // The marked works a list keeps to (`r:`) and leaves out (`x:`), as the keys they are listed under, or
@@ -971,13 +1081,15 @@ const ORDER_READS: Record<Exclude<Order, 'random'>, { by: string; past: string; 
   earliest: { by: 't.year, t.entry_id', past: `(t.year, t.entry_id) > (?, ?) AND t.year IS NOT NULL AND ${LISTED}`, counted: true, key: 't.year' },
   latest: { by: 't.year DESC, t.entry_id DESC', past: `(t.year, t.entry_id) < (?, ?) AND t.year IS NOT NULL AND ${LISTED}`, counted: true, key: 't.year' },
 }
-const ID = /^[1-9]\d{0,15}$/, COUNT = /^(0|[1-9]\d{0,8})$/
+// Before every year there is: a year is at most four digits on either side of the era.
+const YEAR_MIN = -10000
+const ID = /^[1-9]\d{0,15}$/, COUNT = /^(0|[1-9]\d{0,8})$/, YEAR = /^(0|-?[1-9]\d{0,8})$/
 export function cursorOf(order: Order, after: string | null | undefined): number[] | null | undefined {
   if (order === 'random') return after === null || after === undefined ? [] : seedOf(after) === null ? null : [Number(after)]
   const descending = order === 'new' || order === 'most' || order === 'latest'
-  if (after === null || after === undefined) return ORDER_READS[order].counted ? (descending ? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER] : [-1, 0]) : [descending ? Number.MAX_SAFE_INTEGER : 0]
+  if (after === null || after === undefined) return ORDER_READS[order].counted ? (descending ? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER] : [YEAR_MIN, 0]) : [descending ? Number.MAX_SAFE_INTEGER : 0]
   const parts = after.split('.')
-  if (ORDER_READS[order].counted ? parts.length !== 2 || !COUNT.test(parts[0]) || !ID.test(parts[1]) : parts.length !== 1 || !ID.test(parts[0])) return null
+  if (ORDER_READS[order].counted ? parts.length !== 2 || !(order === 'earliest' || order === 'latest' ? YEAR : COUNT).test(parts[0]) || !ID.test(parts[1]) : parts.length !== 1 || !ID.test(parts[0])) return null
   return parts.map(Number)
 }
 const cursorAt = (order: Order, row: { id: number; counted: number }) => order === 'random' || !ORDER_READS[order].counted ? String(order === 'random' ? row.counted : row.id) : `${row.counted}.${row.id}`
@@ -1042,10 +1154,11 @@ export async function list(db: D1Database, listing: Listing) {
   return { tiles, next, partial: read.searching && next !== null && tiles.length < limit, read: consumed }
 }
 
-// A list read whole from one range has numbered pages: page n starts after row (n − 1) × PAGE of that
-// range. A search and a shuffled list have none. Finding a page counts the rows before it in the index,
-// so the pages that can be asked for are bounded.
-export const PAGES_MAX = 400
+// A list read whole from one range has numbered pages: page n starts after row (n − 1) × the page size of
+// that range. A search and a shuffled list have none. Finding a page counts the rows before it in the index,
+// so the records that pages reach are bounded, and with them the pages of the smallest size.
+export const PAGED_MAX = 19200
+export const PAGES_MAX = PAGED_MAX / PAGE_SIZES[0]
 export const pageOf = (value: string | null | undefined) => value && /^[1-9]\d{0,3}$/.test(value) && Number(value) <= PAGES_MAX ? Number(value) : null
 function pagedRange(listing: Listing) {
   const plan = listPlan(listing), order = listing.order ?? ORDER
@@ -1057,24 +1170,25 @@ function pagedRange(listing: Listing) {
 export async function pageCursor(db: D1Database, listing: Listing, number: number): Promise<string | null | undefined> {
   if (number === 1) return null
   const range = pagedRange(listing)
-  if (!range || !Number.isInteger(number) || number < 1 || number > PAGES_MAX) return undefined
+  const size = listing.limit ?? PAGE
+  if (!range || !Number.isInteger(number) || number < 1 || (number - 1) * size >= PAGED_MAX) return undefined
   // The row before the page and the page's first row: a page without a first row is no page.
   const { results } = await db.prepare(`SELECT t.entry_id AS id, ${range.key} AS counted FROM entry_tags t WHERE t.tag = ? AND ${range.past} ORDER BY ${range.by} LIMIT 2 OFFSET ?`)
-    .bind(range.tag, ...cursorOf(range.order, null)!, (number - 1) * PAGE - 1).all<{ id: number; counted: number }>()
+    .bind(range.tag, ...cursorOf(range.order, null)!, (number - 1) * size - 1).all<{ id: number; counted: number }>()
   return results.length === 2 ? cursorAt(range.order, results[0]) : undefined
 }
-/** How many pages a listing has, at most PAGES_MAX; null for a listing without numbered pages. */
+/** How many pages a listing has, over at most PAGED_MAX records; null for a listing without numbered pages. */
 export async function pageCount(db: D1Database, listing: Listing): Promise<{ records: number; pages: number; floor: boolean } | null> {
   const range = pagedRange(listing)
   if (!range) return null
   // The orders by year list only the dated records, which no kept count names.
   const dated = range.order === 'earliest' || range.order === 'latest'
   const row = await (dated
-    ? db.prepare(`SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags t WHERE t.tag = ? AND t.year IS NOT NULL AND ${LISTED} LIMIT ${PAGES_MAX * PAGE})`)
+    ? db.prepare(`SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags t WHERE t.tag = ? AND t.year IS NOT NULL AND ${LISTED} LIMIT ${PAGED_MAX})`)
     : db.prepare('SELECT n FROM tag_counts WHERE tag = ?')).bind(range.tag).first<{ n: number }>()
-  const records = Math.min(PAGES_MAX * PAGE, row?.n ?? 0)
+  const records = Math.min(PAGED_MAX, row?.n ?? 0)
   // A list that reaches the last page offered may run on past it.
-  return { records, pages: Math.ceil(records / PAGE), floor: records === PAGES_MAX * PAGE }
+  return { records, pages: Math.ceil(records / (listing.limit ?? PAGE)), floor: records === PAGED_MAX }
 }
 
 // A search is counted once, from the shortest range it is tested against: a key, a word or the exact
@@ -1199,11 +1313,11 @@ export async function chronology(db: D1Database, place: ChroniclePlace) {
 
 // A place in the chronology: from `year.record` on (?at=), the rows before one (?before=), or a decade's start.
 export function chroniclePlace(at: string | null, before: string | null, from: string | null): ChroniclePlace | undefined {
-  const parse = (text: string) => { const match = /^(0|[1-9]\d{0,8})\.([1-9]\d{0,15})$/.exec(text); return match ? [Number(match[1]), Number(match[2])] as [number, number] : undefined }
+  const parse = (text: string) => { const match = /^(0|-?[1-9]\d{0,8})\.([1-9]\d{0,15})$/.exec(text); return match ? [Number(match[1]), Number(match[2])] as [number, number] : undefined }
   if (at !== null) { const found = parse(at); return found && { at: found } }
   if (before !== null) { const found = parse(before); return found && { before: found } }
-  if (from !== null) return /^(0|[1-9]\d{0,2}0)$/.test(from) ? { at: [Number(from), 0] } : undefined
-  return { at: [-1, 0] }
+  if (from !== null) return isDecade(from) ? { at: [decadeStart(Number(from)), 0] } : undefined
+  return { at: [YEAR_MIN, 0] }
 }
 
 // The counts a page shows beside its filters. Tags are counted too, and read where they are listed. The
@@ -1311,10 +1425,10 @@ export const SOURCE_CARD_RECORDS = 6
 export type SourceCursor = { key: number | null; id: number }
 export const sourceCursorText = (cursor: SourceCursor) => cursor.key === null ? `${cursor.id}` : `${cursor.key}.${cursor.id}`
 export function parseSourceCursor(sort: SourceSort, text: string): SourceCursor | null {
-  const match = /^(?:(\d{1,9})\.)?([1-9]\d{0,15})$/.exec(text)
+  const match = /^(?:(-?\d{1,9})\.)?([1-9]\d{0,15})$/.exec(text)
   if (!match || !Number.isSafeInteger(Number(match[2]))) return null
   const keyed = match[1] !== undefined
-  if (sort === 'new' ? keyed : sort === 'most' ? !keyed : false) return null
+  if (sort === 'new' ? keyed : sort === 'most' ? !keyed || match[1].startsWith('-') : false) return null
   return { key: keyed ? Number(match[1]) : null, id: Number(match[2]) }
 }
 
@@ -1336,7 +1450,7 @@ type SourceRead = typeof SOURCE_READS[keyof typeof SOURCE_READS]
 function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | null, limit: number, publisher: number | null, query: string) {
   const seen = (via: boolean) => `(SELECT json_group_array(json_array(r.entry_id, x.thumb_key)) ${sampledSightings(via)})`
   const direction = order.descending ? 'DESC' : 'ASC', past = order.descending ? '<' : '>'
-  const start = order.descending ? Number.MAX_SAFE_INTEGER : 0
+  const start = order.descending ? Number.MAX_SAFE_INTEGER : YEAR_MIN
   const after = order.key ? `(c.${order.key}, c.id) ${past} (?, ?)` : `c.id ${past} ?`
   const bound = order.key ? [cursor?.key ?? start, cursor?.id ?? start] : [cursor?.id ?? start]
   type Row = Source & { year: number | null; records: number; direct: string; via: string }
@@ -1360,12 +1474,17 @@ export async function sourceList(db: D1Database, sort: SourceSort = 'new', curso
     return { ...source, cover: rows.find(([, thumb]) => thumb)?.[1] ?? null, ids: [...new Set(rows.map(([id]) => id))].slice(0, SOURCE_CARD_RECORDS) }
   })
   const drawn = [...new Set(cards.flatMap(card => card.ids))]
-  const tiles = new Map<number, Tile>()
-  if (drawn.length) {
-    const { results } = await db.prepare(`SELECT ${TILE_COLUMNS} FROM json_each(?) j CROSS JOIN entries e ON e.id = j.value WHERE e.hidden_at IS NULL AND e.merged_into IS NULL`).bind(JSON.stringify(drawn)).all<TileRow>()
-    for (const row of results) tiles.set(row.id, toTile(row))
-  }
+  const tiles = await tilesOf(db, drawn)
   return { sources: cards.map(({ ids, ...card }): SourceCard => ({ ...card, tiles: ids.flatMap(id => tiles.get(id) ?? []) })), next }
+}
+
+// The tiles of the live records among `ids`, by record.
+export async function tilesOf(db: D1Database, ids: readonly number[]) {
+  const tiles = new Map<number, Tile>()
+  if (!ids.length) return tiles
+  const { results } = await db.prepare(`SELECT ${TILE_COLUMNS} FROM json_each(?) j CROSS JOIN entries e ON e.id = j.value WHERE e.hidden_at IS NULL AND e.merged_into IS NULL`).bind(JSON.stringify(ids)).all<TileRow>()
+  for (const row of results) tiles.set(row.id, toTile(row))
+  return tiles
 }
 
 // The records that state this value: the ones described by a sequence, given a code, or related to a character.
@@ -1399,7 +1518,7 @@ export async function history(db: D1Database, entry: number, before?: number | n
   return results
 }
 
-const FEED_COLUMNS = `${REVISION_COLUMNS}, ${WHO_COLUMNS}, e.cover_key, e.ids, s.rev AS sighting_rev, (e.hidden_at IS NULL AND e.merged_into IS NULL AND (r.sighting_id IS NULL OR (s.id IS NOT NULL AND s.hidden_at IS NULL))) AS visible`
+const FEED_COLUMNS = `${REVISION_COLUMNS}, ${WHO_COLUMNS}, e.cover_key, e.ids, s.rev AS sighting_rev, s.removed_by IS NOT NULL AS removed, (e.hidden_at IS NULL AND e.merged_into IS NULL AND (r.sighting_id IS NULL OR (s.id IS NOT NULL AND (s.hidden_at IS NULL OR s.removed_by IS NOT NULL)))) AS visible`
 const FEED_JOINS = `CROSS JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id AND s.entry_id = r.entry_id ${WHO('r.actor')}`
 
 export function globalHistoryStatement(db: D1Database, before?: number | null) {
@@ -1432,7 +1551,7 @@ export async function ofPerson(db: D1Database, id: string, before?: number | nul
 export const REPORT_PAGE = 100
 
 export async function openReports(db: D1Database, after = 0) {
-  const { results } = await db.prepare(`SELECT x.id, x.entry_id, x.sighting_id, x.reason, x.at, ${WHO_COLUMNS}, e.cover_key, e.ids, e.hidden_at, CASE WHEN x.sighting_id IS NULL THEN e.hidden_at ELSE s.hidden_at END AS target_hidden_at FROM reports x ${WHO('x.reporter')} JOIN entries e ON e.id = x.entry_id LEFT JOIN sightings s ON s.id = x.sighting_id AND s.entry_id = x.entry_id WHERE x.resolved_at IS NULL AND x.id > ? ORDER BY x.id LIMIT ?`).bind(after, REPORT_PAGE + 1).all<{ id: number; entry_id: number; sighting_id: number | null; reason: string; at: string; by_id: string; by_name: string; cover_key: string | null; ids: string | null; hidden_at: string | null; target_hidden_at: string | null }>()
+  const { results } = await db.prepare(`SELECT x.id, x.entry_id, x.sighting_id, x.reason, x.at, ${WHO_COLUMNS}, e.cover_key, e.ids, e.hidden_at, CASE WHEN x.sighting_id IS NULL THEN e.hidden_at WHEN s.removed_by IS NULL THEN s.hidden_at END AS target_hidden_at FROM reports x ${WHO('x.reporter')} JOIN entries e ON e.id = x.entry_id LEFT JOIN sightings s ON s.id = x.sighting_id AND s.entry_id = x.entry_id WHERE x.resolved_at IS NULL AND x.id > ? ORDER BY x.id LIMIT ?`).bind(after, REPORT_PAGE + 1).all<{ id: number; entry_id: number; sighting_id: number | null; reason: string; at: string; by_id: string; by_name: string; cover_key: string | null; ids: string | null; hidden_at: string | null; target_hidden_at: string | null }>()
   return { reports: results.slice(0, REPORT_PAGE), next: results.length > REPORT_PAGE ? results[REPORT_PAGE - 1].id : null }
 }
 

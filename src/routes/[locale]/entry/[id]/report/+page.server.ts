@@ -17,7 +17,7 @@ async function target(event: RequestEvent) {
   const sighting = positiveId(sightings[0])
   if (!sighting) error(404)
   const found = await getSighting(db, sighting)
-  if (!found || found.entry_id !== id || found.hidden_at) error(404)
+  if (!found || found.entry_id !== id || (found.hidden_at && !found.removed_by)) error(404)
   return { entry: id, sighting }
 }
 

@@ -17,6 +17,7 @@ export const load: PageServerLoad = async (event) => {
   const notifications = found.notifications.map(({ change, change_sighting, snapshot, redacted_at, ...notice }) => ({
     ...notice,
     ...revisionFields({ sighting_id: change_sighting, kind: change ?? '', snapshot: snapshot ?? '{}', redacted_at }),
+    kind: notice.kind,
   }))
   return { notifications, next: found.next, latest, dates: await revisionDates(db, notifications), tags: tags.map(({ name, label, names, aliases, type }) => ({ name, label, names, aliases, type })) }
 }

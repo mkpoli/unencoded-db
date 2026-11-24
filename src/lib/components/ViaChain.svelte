@@ -5,12 +5,14 @@
   import EvidenceDate from './EvidenceDate.svelte'
   import type { DateReading } from '$lib/dates'
   import { href, t } from '$lib/t'
+  import { kindName } from '$lib/source-kind'
   import type { Via as StoredVia } from '$lib/server/entries'
 
   type Via = StoredVia & { id?: number }
   let { vias, label = true, dates }: { vias: readonly Via[]; label?: boolean; dates?: Map<string, DateReading | null> } = $props()
   // The container stands as the name of a source without a title, so it is not said twice.
-  const meta = (via: Via) => [via.author, via.title ? via.container : null, via.publisher].filter(Boolean)
+  // The same holds for a personal communication, which often has neither.
+  const meta = (via: Via) => [via.author, via.title ? via.container : null, via.title || via.container || via.url ? kindName(via.source_kind) : null, via.publisher].filter(Boolean)
   const web = (url: string | null) => Boolean(url && /^https?:\/\//i.test(url))
 </script>
 
@@ -24,12 +26,12 @@
           <div class="node">
             <span class="title">
               {#if via.id}
-                <a class="text-link" href={href(`/source/${via.id}`)}>{via.title || via.container || via.url || t('source.title')}</a>
+                <a class="text-link" href={href(`/source/${via.id}`)}>{via.title || via.container || via.url || kindName(via.source_kind) || t('source.title')}</a>
                 {#if web(via.url)} <a class="text-link url" href={via.url} target="_blank" rel="noopener noreferrer" aria-label={t('field.url')}>↗</a>{/if}
               {:else if web(via.url)}
                 <a class="text-link" href={via.url} target="_blank" rel="noopener noreferrer">{via.title || via.container || via.url}</a>
               {:else}
-                <span>{via.title || via.container || t('source.title')}</span>
+                <span>{via.title || via.container || kindName(via.source_kind) || t('source.title')}</span>
               {/if}
             </span>
             {#if meta(via).length || via.report_date}

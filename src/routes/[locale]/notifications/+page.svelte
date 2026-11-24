@@ -7,7 +7,7 @@
   let { data, form } = $props()
   // A comment opens at itself, a change to evidence at that evidence, any other change and a thank at the record's history.
   const target = (notice: { kind: string; entry_id: number; sighting_id: number | null; comment_id: number | null }) => notice.comment_id ? `${href(`/entry/${notice.entry_id}`)}#comment-${notice.comment_id}`
-    : notice.sighting_id && notice.kind !== 'thank' ? `${href(`/entry/${notice.entry_id}`)}#sighting-${notice.sighting_id}` : href(`/entry/${notice.entry_id}/history`)
+    : notice.sighting_id && notice.kind !== 'thank' && notice.kind !== 'remove' ? `${href(`/entry/${notice.entry_id}`)}#sighting-${notice.sighting_id}` : href(`/entry/${notice.entry_id}/history`)
   // Unread notices of hidden things are counted and not listed, so the count decides, not the list.
   const unread = $derived(!form?.read && data.unread > 0 && data.latest > 0)
   const labels = $derived(tagLabels(localized(data.tags, locale())))
