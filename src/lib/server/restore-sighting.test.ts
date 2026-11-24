@@ -4,7 +4,7 @@ import { createPerson } from './people'
 import { openTestDb } from './testdb'
 
 const entry: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] }
-const seen = (place: string): SightingFields => ({ place, url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null })
+const seen = (place: string): SightingFields => ({ place, url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null })
 const image: StoredImage = { image_key: 'current.webp', image_type: 'image/webp', image_w: 100, image_h: 80, thumb_key: 'thumb.webp', box: '[[1,2,10,10]]' }
 
 async function fixture() {
@@ -17,12 +17,13 @@ async function fixture() {
 
 test('restores fields while keeping the current image and indexing the restored state', async () => {
   const { db, who, id, sighting } = await fixture()
+  const original = { ...seen('original'), contexts: '["running_text","heading"]' }
   await editSighting(db, sighting, 1, seen('changed'), [image], who, null, id)
-  expect(await restoreSighting(db, id, sighting, 2, seen('original'), who, 1)).toEqual({ ok: true, rev: 3 })
-  expect((await getEntry(db, id))!.sightings[0]).toMatchObject({ ...seen('original'), media: [image], rev: 3 })
+  expect(await restoreSighting(db, id, sighting, 2, original, who, 1)).toEqual({ ok: true, rev: 3 })
+  expect((await getEntry(db, id))!.sightings[0]).toMatchObject({ ...original, media: [image], rev: 3 })
   const row = (await history(db, id))[0]
   expect(row).toMatchObject({ kind: 'sighting_edit', rev: 3, summary: 'r1', sighting_id: sighting })
-  expect(JSON.parse(row.snapshot)).toMatchObject({ ...seen('original'), media: [image] })
+  expect(JSON.parse(row.snapshot)).toMatchObject({ ...original, media: [image] })
   expect((await list(db, { query: 'original' }))!.tiles.map(tile => tile.id)).toEqual([id])
   expect((await list(db, { query: 'changed' }))!.tiles).toEqual([])
 })

@@ -84,6 +84,8 @@ describe('related characters', () => {
   })
 
   test('an empty character, unknown relationship, long text or too many rows are refused', () => {
+    // A record's code is kept in its one written form; four 千字文 digits stay the characters they are.
+    expect(read([['related_characters_present', '1'], ...row(' r+00a1 '), ...row('Ｒ＋00A2'), ...row('天天盈地')])).toEqual({ claims: [claim('relation', 'R+00A1', { relationship: 'variant' }), claim('relation', 'R+00A2', { relationship: 'variant' }), claim('relation', '天天盈地', { relationship: 'variant' })] })
     expect(read([['related_characters_present', '1'], ...row('  ')])).toEqual({ error: 'relatedCharacters' })
     expect(read([['related_characters_present', '1'], ...row('木', 'invented')])).toEqual({ error: 'relatedCharacters' })
     expect(read([['related_characters_present', '1'], ...row('木', 'variant', 'x'.repeat(5001))])).toEqual({ error: 'relatedCharacters' })

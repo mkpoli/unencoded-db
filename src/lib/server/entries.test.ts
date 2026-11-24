@@ -1,3 +1,5 @@
+import { containerSuggestions } from './containers'
+import { hashHex } from './image'
 import { copyOfSource, copyPage, matchingCopies } from './digitized-copies'
 import { editSourceAlias, sourceAliases, suggestSources } from './source-aliases'
 import { publicPublisher, publisherDirectory, publisherSuggestions } from './publishers'
@@ -5,13 +7,14 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { TAG_IMPLY_DEPTH_MAX, TAG_TYPES, arrangeTagsByType, canImply, cleanTag, implicationClosure, tagLabels } from '$lib/tags'
-import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, retypeTag, tagList, tagsStatement, undoTagChange, unimplyTag } from './tags'
+import { TAG_IMPLY_DEPTH_MAX, TAG_TYPES, arrangeTags, canImply, cleanTag, implicationClosure, localized, tagLabels } from '$lib/tags'
+import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement, mergeTag, aliasTag, unaliasTag, aliasesStatement, nameTier } from './tags'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
-import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, WORD_SIZE, exactSize, alsoSearchIds, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
-import { PAGE } from '$lib/order'
+import { decadeOf } from '$lib/dates'
+import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { PAGE, PAGE_SIZES, pageSizeOf } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -21,8 +24,8 @@ const described = (...sequences: string[]) => fields({ claims: sequences.map(seq
 const relation = (character: string, relationship: string, difference = '', evidence = ''): Claim => claim('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) })
 // A source is found among the sightings that passed through it by the index of the chain, never by a scan.
 const VIA_SEARCH = /SEARCH v USING (COVERING )?INDEX sighting_vias_by_source \(source_id=\?\)/
-const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, quote: null, ...over })
-const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null, ...over })
+const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, quote: null, ...over })
+const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
 const image: StoredImage = { image_key: 'a.webp', image_type: 'image/webp', image_w: 100, image_h: 100, thumb_key: 't.webp', box: null }
 
 let db: D1Database, raw: ReturnType<typeof openTestDb>['raw'], who: { actor: string; ip: null }
@@ -696,6 +699,13 @@ describe('the wiki', () => {
   })
 })
 
+test('a sighting keeps every context checked, in the order of the list', () => {
+  const form = new FormData()
+  for (const context of ['heading', 'running_text', 'heading', 'unknown']) form.append('contexts', context)
+  expect(readSightingFields(form).contexts).toBe(JSON.stringify(['running_text', 'heading']))
+  expect(readSightingFields(new FormData()).contexts).toBeNull()
+})
+
 describe('source types', () => {
   test('reads several checked types, ignores unknown values, and orders them for storage', () => {
     const form = new FormData()
@@ -1049,7 +1059,7 @@ describe('order', () => {
 // with no scan of a table and no sort.
 describe('query cost', () => {
   const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
-  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 't:hakka' }, { facet: 't:IRG' }, { radical: '口' }, { decade: '1930' }, { decade: '1930', order: 'earliest', after: '1935.4' }, { decade: '1930', script: 'han', query: '亻' }, { radical: '儿兄克', script: 'han', filter: 'variant', facet: 't:hakka', query: '亻' }, { radical: '儿兄克', order: 'most' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 't:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 't:hakka', without: ['zitools'], query: '亻' }, ...(['new', 'old', 'fewest', 'earliest', 'latest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'new' || order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
+  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { query: '艹時', also: ['艹日寺', '蒔'] }, { script: 'han', filter: 'ids', order: 'new', query: '艹時', also: ['艹日寺'] }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 't:hakka' }, { facet: 't:IRG' }, { radical: '口' }, { decade: '1930' }, { decade: '1930', order: 'earliest', after: '1935.4' }, { decade: '1930', script: 'han', query: '亻' }, { radical: '儿兄克', script: 'han', filter: 'variant', facet: 't:hakka', query: '亻' }, { radical: '儿兄克', order: 'most' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 't:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 't:hakka', without: ['zitools'], query: '亻' }, ...(['new', 'old', 'fewest', 'earliest', 'latest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'new' || order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
   for (const shape of shapes) test(`list ${JSON.stringify(shape)}`, () => {
     const statement = listStatement(db, shape) as unknown as { sql: string; values: unknown[] }
     const details = plan(statement.sql, statement.values)
@@ -1331,7 +1341,7 @@ describe('typed tags and implications', () => {
     expect((await getEntry(db, nomId))!.claims.map(c => c.value)).toEqual(['nom'])
 
     // Pure implicationClosure tracks diamond DAG paths cleanly.
-    const grouped = arrangeTagsByType(all)
+    const grouped = arrangeTags(all, [])
     expect(grouped.map(g => g.type)).toEqual(['region', 'language', 'form', 'domain'])
     const closure = implicationClosure(['nom', 'shinjitai'], all)
     expect(closure.direct).toEqual(['nom', 'shinjitai'])
@@ -1394,14 +1404,14 @@ describe('typed tags and implications', () => {
     expect(await implyTag(db, await listed(), { name: 't0', target: prev }, who)).toEqual({ ok: false, code: 'cycle' })
 
     // Retype and rename preserve implications and canonical names.
-    expect(await retypeTag(db, await listed(), { name: 'extra', type: 'meta' }, who)).toEqual({ ok: true })
+    expect(await moveTag(db, await listed(), [], { name: 'extra', type: 'meta' }, who)).toEqual({ ok: true })
     expect(await row('extra')).toMatchObject({ type: 'meta' })
     expect(await renameTag(db, await listed(), { name: 'extra', label: '別名' }, who)).toEqual({ ok: true })
     expect(tagLabels(await listed()).get('extra')).toBe('別名')
     expect(cleanTag('別名', await listed())).toBe('extra')
     // Duplicate label or name collision refused.
     expect(await renameTag(db, await listed(), { name: 't0', label: '別名' }, who)).toEqual({ ok: false, code: 'exists' })
-    expect(await retypeTag(db, await listed(), { name: 'extra', type: 'bogus' }, who)).toEqual({ ok: false, code: 'invalid' })
+    expect(await moveTag(db, await listed(), [], { name: 'extra', type: 'bogus' }, who)).toEqual({ ok: false, code: 'invalid' })
   })
 
   test('unused tags delete cleanly; tags used by records or upstream implications cannot be deleted', async () => {
@@ -1424,25 +1434,40 @@ describe('typed tags and implications', () => {
     await createTag(spy, await listed(), { name: '乙', type: 'form', implies: ['甲'] }, who)
     await ensureTags(spy, ['丙', '乙'], who)
     await renameTag(spy, await listed(), { name: '乙', label: '乙二' }, who)
-    await retypeTag(spy, await listed(), { name: '乙', type: 'meta' }, who)
+    await moveTag(spy, await listed(), [], { name: '乙', type: 'meta' }, who)
     await implyTag(spy, await listed(), { name: '乙', target: 'dialect' }, who)
     await unimplyTag(spy, await listed(), { name: '乙', target: '甲' }, who)
     await deleteTag(spy, await listed(), { name: '丙' }, who)
-    await undoTagChange(spy, await listed(), latest(), who)
+    await undoTagChange(spy, await taxonomy(db), latest(), who)
+    const grouped = await createGroup(spy, (await taxonomy(db)).groups, { type: 'form', label: '組' }, who)
+    if (!grouped.ok) throw new Error('group not made')
+    await moveTag(spy, await listed(), (await taxonomy(db)).groups, { name: 'nom', group: grouped.id, index: 0 }, who)
+    await renameGroup(spy, (await taxonomy(db)).groups, { id: grouped.id, label: '組二' }, who)
+    await moveGroup(spy, (await taxonomy(db)).groups, { id: grouped.id, type: 'meta' }, who)
+    await moveTag(spy, await listed(), (await taxonomy(db)).groups, { name: 'nom', type: 'form', group: null }, who)
+    await deleteGroup(spy, (await taxonomy(db)).groups, { id: grouped.id }, who)
+    await made('丁', 'meta', ['乙'])
+    await mergeTag(spy, await listed(), { name: '丁', into: '乙' }, who)
+    await undoTagChange(spy, await taxonomy(db), latest(), who)
+    await aliasTag(spy, await listed(), { name: '乙', alias: '乙別' }, who)
+    await unaliasTag(spy, await listed(), [], { alias: '乙別' }, who)
+    await nameTier(spy, await taxonomy(db), { subject: 'tag', name: '乙', locale: 'en', label: 'B' }, who)
     const filedRecord = await createEntry(spy, fields({ claims: [claim('tag', '乙')] }), seen(), [], who)
     await editEntry(spy, filedRecord, 1, fields({ claims: [claim('tag', 'music')] }), who, null)
     expect(sent.length).toBeGreaterThan(12)
-    for (const statement of sent.filter(statement => /tags|tag_implications|'t:'/.test(statement.sql))) {
-      expect(`${statement.sql}: ${plan(statement)}`).not.toMatch(/claims_by_value \(kind=\?\)|AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (tags|tag_implications|tag_counts|claims|entries|entry_tags|people|cl|e|t|c)\b/)
+    for (const statement of sent.filter(statement => /tags|tag_groups|tag_aliases|tag_implications|'t:'/.test(statement.sql))) {
+      expect(`${statement.sql}: ${plan(statement)}`).not.toMatch(/claims_by_value \(kind=\?\)|AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (tags|tag_groups|tag_aliases|tag_implications|tag_counts|claims|entries|entry_tags|people|cl|e|t|c)\b/)
     }
 
     const reads: [string, string, RegExp][] = [
       ['list', plan(tagsStatement(db)), /SCAN c USING INDEX tags_by_type[\s\S]*SEARCH t USING PRIMARY KEY \(tag=\?\)/],
       ['used', plan(tagsStatement(db, true)), /SEARCH t USING PRIMARY KEY \(tag=\?\)[\s\S]*SEARCH claims USING COVERING INDEX claims_by_value \(kind=\? AND value=\?\)/],
       ['implications', plan(implicationsStatement(db)), /: SCAN tag_implications$/],
+      ['groups', plan(groupsStatement(db)), /SCAN tag_groups USING INDEX tag_groups_by_type/],
+      ['aliases', plan(aliasesStatement(db)), /SCAN tag_aliases USING COVERING INDEX tag_aliases_by_tag/],
       ['move size', plan(moveSizeStatement(db, '甲')), /SEARCH tag_counts USING PRIMARY KEY \(tag=\?\)/],
       ['recent moves', plan(recentMovesStatement(db, who.actor, '2026')), /SEARCH tag_changes USING (COVERING )?INDEX tag_changes_by_actor \(actor=\?/],
-      ['latest change', plan(latestChangeStatement(db, '甲')), /SEARCH tag_changes USING COVERING INDEX tag_changes_by_name \(name=\?\)/],
+      ['latest change', plan(latestChangeStatement(db, '甲')), /SEARCH tag_changes USING COVERING INDEX tag_changes_by_name \(subject=\? AND name=\?\)/],
       ['changes', plan(changesStatement(db)), /SCAN c[\s\S]*SEARCH p USING INDEX sqlite_autoindex_people_1 \(id=\?\)/],
       ...refileStatements(db, '甲').map((statement, index): [string, string, RegExp] => [
         `refile ${index}`,
@@ -1470,7 +1495,7 @@ describe('typed tags and implications', () => {
     expect(await implyTag(db, stale, { name: 'C', target: 'P2' }, who)).toEqual({ ok: true })
     const after = everything()
     // Second write from stale snapshot is refused cleanly.
-    expect(await retypeTag(db, stale, { name: 'C', type: 'meta' }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(await moveTag(db, stale, [], { name: 'C', type: 'meta' }, who)).toEqual({ ok: false, code: 'conflict' })
     expect(everything()).toEqual(after)
 
     // Race between imply/unimply and editEntry leaves record filed under final tag graph.
@@ -1517,7 +1542,7 @@ describe('typed tags and implications', () => {
     expect(await implyTag(db, await listed(), { name: 'L1', target: 'L2' }, who)).toEqual({ ok: true })
     const implyId = latest()
     expect(await unimplyTag(db, await listed(), { name: 'L1', target: 'L2' }, who)).toEqual({ ok: false, code: 'slow' })
-    expect(await undoTagChange(db, await listed(), implyId, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), implyId, who)).toEqual({ ok: true })
     expect(await row('L1')).toMatchObject({ implies: [] })
   })
 
@@ -1527,28 +1552,28 @@ describe('typed tags and implications', () => {
     await createEntry(db, fields({ claims: [claim('tag', '乙')] }), seen({ report_date: '1850' }), [], who)
     const before = everything()
 
-    expect(await retypeTag(db, await listed(), { name: '乙', type: 'meta' }, who)).toEqual({ ok: true })
-    expect(await undoTagChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(await moveTag(db, await listed(), [], { name: '乙', type: 'meta' }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
     expect([tagsOf(1), countOf('t:甲')]).toEqual([['t:乙', 't:甲'], 1])
 
     expect(await unimplyTag(db, await listed(), { name: '乙', target: '甲' }, who)).toEqual({ ok: true })
     expect([tagsOf(1), countOf('t:甲')]).toEqual([['t:乙'], 0])
-    expect(await undoTagChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
     expect([tagsOf(1), countOf('t:甲')]).toEqual([['t:乙', 't:甲'], 1])
 
     // Only the latest change of a tag can be undone.
     await renameTag(db, await listed(), { name: '乙', label: '乙改' }, who)
     const staleId = latest() - 1
-    expect(await undoTagChange(db, await listed(), staleId, who)).toEqual({ ok: false, code: 'conflict' })
-    expect(await undoTagChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), staleId, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
     expect(await row('乙')).toMatchObject({ label: '乙', type: 'form', implies: ['甲'] })
 
     // Unused tag create/delete roundtrip.
     await made('丙', 'meta', ['乙'])
     const createId = latest()
-    expect(await undoTagChange(db, await listed(), createId, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), createId, who)).toEqual({ ok: true })
     expect(await row('丙')).toBeUndefined()
-    expect(await undoTagChange(db, await listed(), latest(), who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
     expect(await row('丙')).toMatchObject({ type: 'meta', implies: ['乙'] })
 
     // Deleting a tag log row cannot make a stale rev succeed.
@@ -1557,6 +1582,243 @@ describe('typed tags and implications', () => {
     raw.run('DELETE FROM tag_changes WHERE id = ?', [latest()])
     expect(await renameTag(db, zStale, { name: '丙', label: '丙錯' }, who)).toEqual({ ok: false, code: 'conflict' })
     expect(before[0]).toBeDefined()
+  })
+
+  test('groups hold tags in order within a type, carry them to another type, and every change undoes', async () => {
+    const state = () => taxonomy(db)
+    const shelfOf = async (type: string, group: number | null) => (await listed()).filter(tag => tag.type === type && tag.group === group).sort((a, b) => a.position - b.position).map(tag => tag.name)
+    const made1 = await createGroup(db, (await state()).groups, { type: 'form', label: '俗字' }, who)
+    const made2 = await createGroup(db, (await state()).groups, { type: 'form', label: '簡化字' }, who)
+    if (!made1.ok || !made2.ok) throw new Error('groups not made')
+    expect(await createGroup(db, (await state()).groups, { type: 'form', label: '俗字' }, who)).toEqual({ ok: false, code: 'exists' })
+    expect(await createGroup(db, (await state()).groups, { type: 'bogus', label: '甲' }, who)).toEqual({ ok: false, code: 'invalid' })
+    expect((await state()).groups.map(group => [group.label, group.position])).toEqual([['俗字', 0], ['簡化字', 1]])
+
+    // A tag made in a group takes the group's type; tags placed by index keep their neighbours in order.
+    const { tags, groups } = await state()
+    expect(await createTag(db, tags, { name: '方俗字', type: 'meta', group: made1.id }, who, groups)).toMatchObject({ ok: true })
+    expect(await row('方俗字')).toMatchObject({ type: 'form', group: made1.id })
+    expect(await moveTag(db, await listed(), groups, { name: 'abbreviation', group: made2.id }, who)).toEqual({ ok: true })
+    expect(await moveTag(db, await listed(), groups, { name: 'simplified-cn', group: made2.id, index: 0 }, who)).toEqual({ ok: true })
+    expect(await moveTag(db, await listed(), groups, { name: 'ryakuji', group: made2.id, index: 1 }, who)).toEqual({ ok: true })
+    expect(await shelfOf('form', made2.id)).toEqual(['simplified-cn', 'ryakuji', 'abbreviation'])
+    // A group of another type, or a missing one, is refused.
+    expect(await moveTag(db, await listed(), groups, { name: 'hakka', type: 'language', group: made2.id }, who)).toEqual({ ok: false, code: 'invalid' })
+    expect(await moveTag(db, await listed(), groups, { name: 'hakka', group: 999 }, who)).toEqual({ ok: false, code: 'target' })
+    // A stale read is refused and changes nothing.
+    const stale = await listed()
+    expect(await moveTag(db, stale, groups, { name: 'ryakuji', group: made2.id, index: 0 }, who)).toEqual({ ok: true })
+    const settled = everything()
+    expect(await moveTag(db, stale, groups, { name: 'ryakuji', group: null, type: 'meta' }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(everything()).toEqual(settled)
+    expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
+    expect(await shelfOf('form', made2.id)).toEqual(['simplified-cn', 'ryakuji', 'abbreviation'])
+
+    // Moving a group to another type takes its tags there, without touching how records are filed.
+    const id = await createEntry(db, fields({ claims: [claim('tag', 'simplified-cn')] }), seen(), [], who)
+    const filedBefore = tagsOf(id)
+    const moved = (await state()).groups.find(group => group.id === made2.id)!
+    expect(await moveGroup(db, (await state()).groups, { id: made2.id, type: 'meta', index: 0, rev: moved.rev }, who)).toEqual({ ok: true })
+    expect((await listed()).filter(tag => tag.group === made2.id).map(tag => tag.type)).toEqual(['meta', 'meta', 'meta'])
+    expect(tagsOf(id)).toEqual(filedBefore)
+    expect(await moveGroup(db, (await state()).groups, { id: made2.id, type: 'form', rev: moved.rev }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
+    expect((await listed()).filter(tag => tag.group === made2.id).map(tag => tag.type)).toEqual(['form', 'form', 'form'])
+    expect((await state()).groups.map(group => [group.label, group.type, group.position])).toEqual([['俗字', 'form', 0], ['簡化字', 'form', 1]])
+
+    // Renaming, deleting and their undoing; a group that holds tags stays.
+    expect(await renameGroup(db, (await state()).groups, { id: made1.id, label: '簡化字' }, who)).toEqual({ ok: false, code: 'exists' })
+    expect(await renameGroup(db, (await state()).groups, { id: made1.id, label: '方俗' }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
+    expect((await state()).groups.find(group => group.id === made1.id)?.label).toBe('俗字')
+    expect(await deleteGroup(db, (await state()).groups, { id: made1.id }, who)).toEqual({ ok: false, code: 'used' })
+    expect(await moveTag(db, await listed(), (await state()).groups, { name: '方俗字', type: 'form', group: null }, who)).toEqual({ ok: true })
+    expect(await deleteGroup(db, (await state()).groups, { id: made1.id }, who)).toEqual({ ok: true })
+    expect((await state()).groups.map(group => group.label)).toEqual(['簡化字'])
+    expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
+    expect((await state()).groups.map(group => [group.id, group.label, group.position])).toEqual([[made1.id, '俗字', 0], [made2.id, '簡化字', 1]])
+    // Two moves from one read cannot interleave; a deleted tag comes back to its place.
+    const read = await listed()
+    expect(await moveTag(db, read, (await state()).groups, { name: 'ryakuji', group: made2.id, index: 2 }, who)).toEqual({ ok: true })
+    const moved2 = everything()
+    expect(await moveTag(db, read, (await state()).groups, { name: 'simplified-cn', group: made2.id, index: 2 }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(everything()).toEqual(moved2)
+    expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
+    await made('臨字', 'form')
+    expect(await moveTag(db, await listed(), (await state()).groups, { name: '臨字', group: made2.id, index: 1 }, who)).toEqual({ ok: true })
+    const placed = await shelfOf('form', made2.id)
+    expect(await deleteTag(db, await listed(), { name: '臨字' }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await state(), latest(), who)).toEqual({ ok: true })
+    expect(await shelfOf('form', made2.id)).toEqual(placed)
+    expect(await deleteTag(db, await listed(), { name: '臨字' }, who)).toEqual({ ok: true })
+    // A deleted group's id is not handed out again, so undoing a move into it does not land in a newer group.
+    const spare = await createGroup(db, (await state()).groups, { type: 'region', label: '臨時' }, who)
+    if (!spare.ok) throw new Error('group not made')
+    expect(await moveTag(db, await listed(), (await state()).groups, { name: '臺灣', group: spare.id }, who)).toEqual({ ok: true })
+    expect(await moveTag(db, await listed(), (await state()).groups, { name: '臺灣', type: 'region', group: null }, who)).toEqual({ ok: true })
+    const movedOut = latest()
+    expect(await deleteGroup(db, (await state()).groups, { id: spare.id }, who)).toEqual({ ok: true })
+    const next = await createGroup(db, (await state()).groups, { type: 'meta', label: '新' }, who)
+    expect(next).toMatchObject({ ok: true })
+    expect(next.ok && next.id).not.toBe(spare.id)
+    expect(await undoTagChange(db, await state(), movedOut, who)).toEqual({ ok: true })
+    expect(await row('臺灣')).toMatchObject({ type: 'region', group: null })
+    const created = (raw.query("SELECT id FROM tag_changes WHERE subject = 'group' AND name = ? AND kind = 'create'").get(String(made2.id)) as { id: number }).id
+    expect(await undoTagChange(db, await state(), created, who)).toEqual({ ok: false, code: 'conflict' })
+
+    // The tiers read back in order: groups first, then the tags in none.
+    const form = arrangeTags(await listed(), (await state()).groups).find(section => section.type === 'form')!
+    expect(form.shelves.map(shelf => [shelf.group?.label ?? null, shelf.tags.length])).toEqual([['簡化字', 3], [null, form.shelves.at(-1)!.tags.length]])
+    expect(arrangeTags(await listed(), (await state()).groups, { every: true }).find(section => section.type === 'form')!.shelves.map(shelf => shelf.group?.label ?? null)).toEqual(['俗字', '簡化字', null])
+  })
+
+  test('merging files a tag\'s records under another, keeps its name as an alias, and undoes back to the tag it was', async () => {
+    await made('布依字', 'general', ['dialect'])
+    await made('布依方塊字', 'general')
+    await made('壯字', 'general', ['布依字'])
+    const direct = await createEntry(db, fields({ claims: [claim('tag', '布依字')] }), seen(), [], who)
+    const carried = await createEntry(db, fields({ claims: [claim('tag', '壯字')] }), seen(), [], who)
+    const other = await createEntry(db, fields({ claims: [claim('tag', '布依方塊字')] }), seen(), [], who)
+    const before = everything()
+    expect(tagsOf(direct)).toEqual(['t:dialect', 't:布依字'])
+
+    expect(await mergeTag(db, await listed(), { name: '布依字', into: '布依方塊字' }, who)).toEqual({ ok: true })
+    expect(await row('布依字')).toBeUndefined()
+    expect(await row('布依方塊字')).toMatchObject({ implies: ['dialect'], aliases: ['布依字'], n: 3 })
+    expect(await row('壯字')).toMatchObject({ implies: ['布依方塊字'] })
+    // Claims stay as written; the records are filed under the tag the alias stands for.
+    expect((await getEntry(db, direct))!.claims.map(c => c.value)).toEqual(['布依字'])
+    expect(tagsOf(direct)).toEqual(['t:dialect', 't:布依方塊字'])
+    expect(tagsOf(carried)).toEqual(['t:dialect', 't:壯字', 't:布依方塊字'])
+    expect(tagsOf(other)).toEqual(['t:dialect', 't:布依方塊字'])
+    expect(countOf('t:布依字')).toBe(0)
+    expect(raw.query("SELECT count(*) AS n FROM tag_counts WHERE tag = 't:布依字'").get()).toEqual({ n: 0 })
+    // The alias resolves wherever a name is typed or shown, and an edit or refresh files the same way.
+    expect(cleanTag('布依字', await listed())).toBe('布依方塊字')
+    expect(tagLabels(await listed()).get('布依字')).toBe('布依方塊字')
+    expect(implicationClosure(['布依字'], await listed()).all).toEqual(['布依方塊字', 'dialect'])
+    const merged = filed()
+    await refreshAll()
+    expect(filed()).toEqual(merged)
+    await ensureTags(db, ['布依字'], who)
+    expect(await row('布依字')).toBeUndefined()
+    // A name taken by an alias is refused as a label or a new alias; the tag holding aliases stays.
+    expect(await renameTag(db, await listed(), { name: '壯字', label: '布依字' }, who)).toEqual({ ok: false, code: 'aliased' })
+    expect(await aliasTag(db, await listed(), { name: '壯字', alias: '布依字' }, who)).toEqual({ ok: false, code: 'aliased' })
+    expect(await aliasTag(db, await listed(), { name: '壯字', alias: '布依方塊字' }, who)).toEqual({ ok: false, code: 'exists' })
+    expect(await deleteTag(db, await listed(), { name: '布依方塊字' }, who)).toEqual({ ok: false, code: 'used' })
+
+    // Undo brings the tag back with its implications, and every row as it was.
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    const undone = everything()
+    const shape = (rows: unknown[]) => (rows as { name: string; label: string; type: string; group_id: number | null; position: number }[]).map(({ name, label, type, group_id, position }) => ({ name, label, type, group_id, position }))
+    expect([shape(undone[0]), undone[1], undone[3], undone[4]]).toEqual([shape(before[0]), before[1], before[3], before[4]])
+    expect(await row('布依字')).toMatchObject({ implies: ['dialect'], aliases: [] })
+    expect(await row('布依方塊字')).toMatchObject({ implies: [], aliases: [] })
+    expect(await row('壯字')).toMatchObject({ implies: ['布依字'] })
+    // Undoing that split merges again.
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect(await row('布依方塊字')).toMatchObject({ aliases: ['布依字'] })
+  })
+
+  test('a merge refused for any reason changes nothing, refiles records whose implication could not move, and never closes a cycle', async () => {
+    // A stale read of the target is refused before anything is stamped.
+    await made('甲A'); await made('乙B')
+    const stale = await listed()
+    expect(await renameTag(db, await listed(), { name: '乙B', label: '乙B改' }, who)).toEqual({ ok: true })
+    const settled = everything()
+    expect(await mergeTag(db, stale, { name: '甲A', into: '乙B' }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(everything()).toEqual(settled)
+    expect(await renameTag(db, stale, { name: '甲A', label: '甲A改' }, who)).toEqual({ ok: true })
+    expect(await row('甲A')).toMatchObject({ label: '甲A改' })
+
+    // B → C → A: C's link to A cannot become C → B, yet C's records leave A.
+    await made('A'); await made('C', 'general', ['A']); await made('B', 'general', ['C'])
+    const id = await createEntry(db, fields({ claims: [claim('tag', 'C')] }), seen(), [], who)
+    expect(tagsOf(id)).toEqual(['t:A', 't:C'])
+    expect(await mergeTag(db, await listed(), { name: 'A', into: 'B' }, who)).toEqual({ ok: true })
+    expect(tagsOf(id)).toEqual(['t:C'])
+    expect(countOf('t:A')).toBe(0)
+    const merged = filed()
+    await refreshAll()
+    expect(filed()).toEqual(merged)
+
+    // A → X read before X → Y is added elsewhere: merging A into Y would close Y → X → Y, so it is refused.
+    await made('X'); await made('Y'); await made('Q', 'general', ['X'])
+    const read = await listed()
+    expect(await implyTag(db, await listed(), { name: 'X', target: 'Y' }, who)).toEqual({ ok: true })
+    const before = everything()
+    expect(await mergeTag(db, read, { name: 'Q', into: 'Y' }, who)).toEqual({ ok: false, code: 'conflict' })
+    expect(everything()).toEqual(before)
+  })
+
+  test('an alias given to a tag finds it, and taking it off leaves the records that name it a tag of their own', async () => {
+    await made('俗字', 'form')
+    expect(await aliasTag(db, await listed(), { name: '俗字', alias: '#俗體字' }, who)).toEqual({ ok: true })
+    expect(await row('俗字')).toMatchObject({ aliases: ['俗體字'] })
+    expect(cleanTag('俗體字', await listed())).toBe('俗字')
+    expect(await aliasTag(db, await listed(), { name: '俗字', alias: 'a b' }, who)).toEqual({ ok: false, code: 'invalid' })
+    // A record written through the API with the alias is filed under the tag.
+    const id = await createEntry(db, fields({ claims: [claim('tag', '俗體字')] }), seen(), [], who)
+    expect(tagsOf(id)).toEqual(['t:俗字'])
+    expect(await row('俗體字')).toBeUndefined()
+    // In use, taking the alias off makes it a tag again in the same place; unused, it just goes.
+    expect(await unaliasTag(db, await listed(), [], { alias: '俗體字' }, who)).toEqual({ ok: true })
+    expect(await row('俗體字')).toMatchObject({ type: 'form', aliases: [], n: 1 })
+    expect(tagsOf(id)).toEqual(['t:俗體字'])
+    expect(countOf('t:俗字')).toBe(0)
+    expect(await aliasTag(db, await listed(), { name: '俗字', alias: '俗書' }, who)).toEqual({ ok: true })
+    expect(await unaliasTag(db, await listed(), [], { alias: '俗書' }, who)).toEqual({ ok: true })
+    expect(await row('俗書')).toBeUndefined()
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect(await row('俗字')).toMatchObject({ aliases: ['俗書'] })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect(await row('俗字')).toMatchObject({ aliases: [] })
+    expect(await unaliasTag(db, await listed(), [], { alias: '俗書' }, who)).toEqual({ ok: false, code: 'missing' })
+  })
+
+  test('a tag or a group is named in each language, shown there, found by it, and kept through delete and merge', async () => {
+    await made('方俗字', 'form')
+    const name = async (locale: string, label: string, subject: 'tag' | 'group' = 'tag', key = '方俗字') => nameTier(db, await taxonomy(db), { subject, name: key, locale, label }, who)
+    expect(await name('en', 'Dialect vernacular characters')).toEqual({ ok: true })
+    expect(await name('ja', '方言俗字')).toEqual({ ok: true })
+    expect(await name('xx', '甲')).toEqual({ ok: false, code: 'invalid' })
+    expect(await row('方俗字')).toMatchObject({ label: '方俗字', names: { en: 'Dialect vernacular characters', ja: '方言俗字' } })
+    expect(localized(await listed(), 'ja').find(tag => tag.name === '方俗字')?.label).toBe('方言俗字')
+    expect(localized(await listed(), 'ko').find(tag => tag.name === '方俗字')?.label).toBe('方俗字')
+    expect(cleanTag('方言俗字', await listed())).toBe('方俗字')
+    // A name in a language never takes over another tag's alias.
+    await made('簡字', 'form')
+    expect(await aliasTag(db, await listed(), { name: '簡字', alias: 'jianzi' }, who)).toEqual({ ok: true })
+    await made('甲字', 'form')
+    expect(await name('en', 'jianzi', 'tag', '甲字')).toEqual({ ok: true })
+    expect(cleanTag('jianzi', await listed())).toBe('簡字')
+    // An empty name takes it off; undo puts it back.
+    expect(await name('ja', '')).toEqual({ ok: true })
+    expect((await row('方俗字'))?.names).toEqual({ en: 'Dialect vernacular characters' })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect((await row('方俗字'))?.names).toEqual({ en: 'Dialect vernacular characters', ja: '方言俗字' })
+    // A stale write is refused.
+    const stale = await taxonomy(db)
+    expect(await name('ko', '방속자')).toEqual({ ok: true })
+    expect(await nameTier(db, stale, { subject: 'tag', name: '方俗字', locale: 'vi', label: 'x', rev: stale.tags.find(tag => tag.name === '方俗字')!.rev }, who)).toEqual({ ok: false, code: 'conflict' })
+    // Delete and merge keep the names for undoing.
+    await made('土俗字', 'form')
+    expect(await name('en', 'Local vernacular', 'tag', '土俗字')).toEqual({ ok: true })
+    expect(await deleteTag(db, await listed(), { name: '土俗字' }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect((await row('土俗字'))?.names).toEqual({ en: 'Local vernacular' })
+    expect(await mergeTag(db, await listed(), { name: '土俗字', into: '方俗字' }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect((await row('土俗字'))?.names).toEqual({ en: 'Local vernacular' })
+    // Groups too.
+    const group = await createGroup(db, (await taxonomy(db)).groups, { type: 'form', label: '俗字' }, who)
+    if (!group.ok) throw new Error('group not made')
+    expect(await name('en', 'Vernacular forms', 'group', String(group.id))).toEqual({ ok: true })
+    expect((await taxonomy(db)).groups.find(item => item.id === group.id)?.names).toEqual({ en: 'Vernacular forms' })
+    expect(await deleteGroup(db, (await taxonomy(db)).groups, { id: group.id }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect((await taxonomy(db)).groups.find(item => item.id === group.id)?.names).toEqual({ en: 'Vernacular forms' })
   })
 
   test('every valid tag name is accepted as a t: facet', () => {
@@ -1679,6 +1941,47 @@ describe('chronology', () => {
     expect(end.later).toBe(`at=1983.${CHRONICLE_PAGE + 14}`)
   })
 
+  test('a record from before the common era comes first, under its own decade, and the reindex files it the same', async () => {
+    const made: number[] = []
+    for (const date of ['-168', '前1年', '前169年', '西元前160年', '206 BCE']) made.push(await createEntry(db, fields(), seen({ title: 'Silk text', report_date: '1997', original_date: date }), [], who))
+    const page = await chronology(db, chroniclePlace(null, null, null)!)
+    const order = [4, 2, 0, 3, 1].map(i => made[i])
+    expect(page.entries.slice(0, 6).map(entry => [entry.year, entry.tile.id])).toEqual([[-205, order[0]], [-168, order[1]], [-167, order[2]], [-159, order[3]], [0, order[4]], [1803, 1]])
+    expect(page.entries[2]).toMatchObject({ tile: { firstYear: '-167', firstYearKind: 'original' }, sighting: { date: '-168' } })
+    expect(page.decades.slice(0, 4)).toEqual([{ decade: -208, n: 1 }, { decade: -168, n: 3 }, { decade: -8, n: 1 }, { decade: 1800, n: 1 }])
+    expect((await chronology(db, chroniclePlace(null, null, '-168')!)).entries[0].tile.id).toBe(order[1])
+    const back = await chronology(db, chroniclePlace(null, `1803.1`, null)!)
+    expect(back.entries.map(entry => entry.tile.id)).toEqual(order)
+    expect(back.later).toBe('at=1803.1')
+    expect((await chronology(db, chroniclePlace(`-159.${order[3]}`, null, null)!)).earlier).toBe(`before=-159.${order[3]}`)
+    // The list read by year goes on from a year before the common era, and keeps to its decade.
+    const first = await list(db, { order: 'earliest', limit: 3 })
+    expect(first!.tiles.map(tile => tile.id)).toEqual(order.slice(0, 3))
+    expect(first!.next).toBe(`-167.${order[2]}`)
+    expect((await list(db, { order: 'earliest', limit: 2, after: first!.next }))!.tiles.map(tile => tile.id)).toEqual(order.slice(3))
+    expect((await list(db, { order: 'latest', decade: '-168' }))!.tiles.map(tile => tile.id)).toEqual([order[3], order[2], order[1]])
+    expect(cursorOf('most', '-1.5')).toBeNull()
+    // Sources published before the common era lead the gallery read by date.
+    for (const date of ['前168年', '前1年', '005年']) await createEntry(db, fields(), seen({ title: `Cast ${date}`, report_date: date }), [], who)
+    const titles = async (cursor: string | null) => (await sourceList(db, 'earliest', cursor === null ? null : parseSourceCursor('earliest', cursor)))!.sources.map(source => source.title)
+    expect((await titles(null)).slice(0, 4)).toEqual(['Cast 前168年', 'Cast 前1年', 'Cast 005年', 'Silk text'])
+    const held = raw.query("SELECT id FROM sources WHERE title = 'Cast 前168年'").get() as { id: number }
+    expect((await titles(`-167.${held.id}`))[0]).toBe('Cast 前1年')
+    expect((await chronology(db, chroniclePlace(null, null, '0')!)).entries[0]).toMatchObject({ year: 5 })
+    const filed = () => raw.query("SELECT tag, entry_id, year FROM entry_tags WHERE entry_id IN (SELECT value FROM json_each(?)) AND tag GLOB 'y:*' ORDER BY entry_id").all(JSON.stringify(made))
+    const years = () => raw.query('SELECT id, first_year, first_year_kind, first_sighting FROM entries WHERE id IN (SELECT value FROM json_each(?)) ORDER BY id').all(JSON.stringify(made))
+    const before = [filed(), years()]
+    raw.exec("UPDATE entries SET first_year = NULL, first_year_kind = NULL, first_sighting = NULL; UPDATE entry_tags SET year = NULL WHERE tag = 'all'; DELETE FROM entry_tags WHERE tag GLOB 'y:*'")
+    raw.exec(readFileSync(new URL('../../../scripts/reindex-dates.sql', import.meta.url), 'utf8'))
+    expect([filed(), years()]).toEqual(before)
+  })
+
+  test('the reindex counts decades as decadeOf does', () => {
+    const sql = /CASE WHEN year > 0 [^)]*\) \/ 10 \* 10 END/.exec(readFileSync(new URL('../../../scripts/reindex-dates.sql', import.meta.url), 'utf8'))![0]
+    const rows = raw.query(`WITH RECURSIVE y(year) AS (SELECT -2100 UNION ALL SELECT year + 1 FROM y WHERE year < 2100) SELECT year, ${sql} AS decade FROM y`).all() as { year: number; decade: number }[]
+    expect(rows.filter(row => row.decade !== decadeOf(row.year))).toEqual([])
+  })
+
   test('names the evidence that holds each year, with the date it was read from and the chain it came through', async () => {
     const id = await createEntry(db, fields(), seen({ title: 'Old print', author: 'Someone', report_date: '1999', original_date: '1935年5月', vias: [via({ title: 'A post', author: 'Poster', publisher: 'X', report_date: '2020', url: 'https://example.test/post' })] }), [], who)
     const page = await chronology(db, { at: [1935, 0] })
@@ -1689,8 +1992,12 @@ describe('chronology', () => {
     expect(chroniclePlace('1935.412', null, null)).toEqual({ at: [1935, 412] })
     expect(chroniclePlace(null, '1935.412', null)).toEqual({ before: [1935, 412] })
     expect(chroniclePlace(null, null, '1930')).toEqual({ at: [1930, 0] })
-    expect(chroniclePlace(null, null, null)).toEqual({ at: [-1, 0] })
-    for (const [at, before, from] of [['1935', null, null], ['1935.0', null, null], [null, 'x.1', null], [null, null, '1935'], [null, null, '05']]) expect(chroniclePlace(at, before, from)).toBeUndefined()
+    expect(chroniclePlace(null, null, null)).toEqual({ at: [-10000, 0] })
+    expect(chroniclePlace('-167.412', null, null)).toEqual({ at: [-167, 412] })
+    expect(chroniclePlace(null, '0.412', null)).toEqual({ before: [0, 412] })
+    expect(chroniclePlace(null, null, '-168')).toEqual({ at: [-168, 0] })
+    expect(chroniclePlace(null, null, '0')).toEqual({ at: [1, 0] })
+    for (const [at, before, from] of [['1935', null, null], ['1935.0', null, null], [null, 'x.1', null], [null, null, '1935'], [null, null, '05'], [null, null, '-160'], ['-0.1', null, null]]) expect(chroniclePlace(at, before, from)).toBeUndefined()
   })
 
   test('reads one range of the year index, and the counts by key', () => {
@@ -1736,6 +2043,42 @@ test('a record names the evidence that holds its earliest year through every wri
   const undated = await createEntry(db, fields(), seen(), [], who)
   expect(first(undated)).toBeNull()
 })
+test('parts typed with no structure find the records that spell them another way', async () => {
+  const typed = await createEntry(db, described('⿱艹時'), seen(), [], who)
+  const radical = await createEntry(db, described('⿱⺾時'), seen(), [], who)
+  const mate = await createEntry(db, described('⿱艸時'), seen(), [], who)
+  const written = await createEntry(db, described('⿱艹⿰日寺'), seen(), [], who)
+  const inside = await createEntry(db, described('⿰氵蒔'), seen(), [], who)
+  await createEntry(db, described('⿱艹新'), seen(), [], who)
+  await createEntry(db, described('⿰日寺'), seen(), [], who)
+  const found = async (listing: Parameters<typeof list>[1]) => (await list(db, { order: 'old', ...listing }))!.tiles.map(tile => tile.id)
+  // A part is found as its radical code point and as the parts counted as one with it.
+  expect(await found({ query: '艹時' })).toEqual([typed, radical, mate])
+  // The spellings the browser found are searched too: the parts written out, and the character they make.
+  expect(await found({ query: '艹時', also: ['艹日寺', '蒔'] })).toEqual([typed, radical, mate, written, inside])
+  expect(await searchTotal(db, { query: '艹時' })).toMatchObject({ n: 3, floor: false })
+  expect(await searchTotal(db, { query: '艹時', also: ['艹日寺', '蒔'] })).toMatchObject({ n: 5, floor: false })
+  expect(searchParts('艹時')).toEqual(['艹', '時'])
+  expect(searchParts('⿱艹時')).toBeNull()
+  expect(searchParts('艹 word')).toBeNull()
+  // Another spelling is parts alone, is not the query in another order, and is one of a few.
+  expect(alsoSearchParts('艹時', ['時艹', '艹日寺', '艹 日 寺', '⿱艹時', 'word', '日寺艹', '蒔', '一二三四五六'])).toEqual(['艹日寺', '蒔'])
+  expect(alsoSearchParts('艹時', ['一', '二', '三', '四', '五'])).toHaveLength(PART_ALSO_MAX)
+  expect(alsoSearchParts('word', ['艹日寺'])).toEqual([])
+  // The character the parts make finds the records that name it as a related character.
+  const variant = await createEntry(db, { ...described('⿱艹寺'), claims: [...described('⿱艹寺').claims, claim('relation', '蒔', { relationship: 'variant' })] }, seen(), [], who)
+  expect(await found({ query: '艹時', also: ['蒔'] })).toEqual([typed, radical, mate, inside, variant])
+  // A radical code point typed is the part it stands for, and a mate is read under the row its records are kept in.
+  expect(await found({ query: '⺾時' })).toEqual([typed, radical, mate])
+  const flesh = await createEntry(db, described('⿰⺼木'), seen(), [], who)
+  expect(await found({ query: '月木' })).toEqual([flesh])
+  // The widest search stays under the number of values one statement may bind.
+  const widest = { script: 'han', filter: 'variant', facet: 't:hakka', radical: '口', decade: '1930', within: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], without: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], query: '㔾七丸儿兔', also: ['兹冃冊凷刀', '叉友另囘堇', '夂奂尒彐擧'] }
+  const bound = (statement: unknown) => (statement as { values: unknown[] }).values.length
+  expect(bound(listStatement(db, widest))).toBeLessThanOrEqual(100)
+  expect(bound(totalStatement(db, widest, { words: Array(16).fill('p:一') }))).toBeLessThanOrEqual(100)
+})
+
 describe('search total', () => {
   test('a search counts every record it finds, from its shortest range', async () => {
     await createEntry(db, described('⿰木木'), seen(), [], who)
@@ -1766,12 +2109,14 @@ describe('search total', () => {
   test('each read is a range of an index', () => {
     const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
     const statements = [
-      totalStatement(db, { script: 'han', query: '亻 木' }, { tag: 'w:亻' }),
+      totalStatement(db, { script: 'han', query: '亻 木' }, { words: ['w:木', 'p:木'] }),
+      totalStatement(db, { script: 'han', query: 'word 木' }, { words: ['w:word'] }),
+      totalStatement(db, { script: 'han', query: '艹時', also: ['艹日寺', '蒔'] }, { words: ['w:時', 'p:時', 'p:寺', 'p:蒔'] }),
       totalStatement(db, { script: 'han', filter: 'variant', within: ['unicode'], query: '亻' }, { tag: 'r:unicode' }),
       totalStatement(db, { script: 'han', query: '⿰木木' }, { exact: ['⿰木木'] }),
       totalStatement(db, { script: 'han', query: '⿰木木', also: ['⿱木木', '⿰木水'] }, { exact: ['⿰木木', '⿱木木', '⿰木水'] }),
     ].map(statement => statement as unknown as { sql: string; values: unknown[] })
-    for (const { sql, values } of [...statements, { sql: WORD_SIZE, values: ['w:亻'] }, { sql: exactSize(1), values: ['⿰木木'] }, { sql: exactSize(3), values: ['⿰木木', '⿱木木', '⿰木水'] }]) {
+    for (const { sql, values } of [...statements, { sql: wordSize(1), values: ['w:word'] }, { sql: wordSize(3), values: ['w:艹', 'p:艹', 'p:艸'] }, { sql: exactSize(1), values: ['⿰木木'] }, { sql: exactSize(3), values: ['⿰木木', '⿱木木', '⿰木水'] }]) {
       const details = plan(sql, values)
       // Counting records once uses a temporary tree, over the capped range alone; nothing is sorted or grouped.
       expect(details.join('\n')).not.toMatch(/TEMP B-TREE FOR (ORDER BY|GROUP BY)/)
@@ -1862,6 +2207,50 @@ describe('digitized copy filter', () => {
   const slug = 'ntcu-848', title = '彙音字典'
   const prefix = 'http://ip194097.ntcu.edu.tw/memory/TGB/thak.asp?id=848&page='
 
+  test('shared readings find the book, its page citations and printed editions', async () => {
+    const book = await createEntry(db, fields(), seen({ title, url: prefix + '801' }), [], who)
+    const print = await createEntry(db, fields(), seen({ title, publisher: 'Print' }), [], who)
+    await createEntry(db, fields(), seen({ title: 'A chapter', url: prefix + '802' }), [], who)
+    await createEntry(db, fields(), seen({ title: 'Another book', author: title }), [], who)
+    const queries = [title, '汇音字典', 'Huiyinzidian', 'Huì-yīn Zìdiǎn', 'HUI4 YIN1 ZI4 DIAN3',
+      'Huiyin Dictionary', 'Ionjiten', 'ＩＯＮ　ＪＩＴＥＮ', 'いおんじてん', 'ｲｵﾝｼﾞﾃﾝ',
+      '휘음자전', '휘음자전'.normalize('NFD'), 'hwieumjajoen', 'Hwi-eum Jajeon', '《汇音字典》', 'huì yī']
+    for (const q of queries) {
+      const matches = await suggestSources(db, q)
+      expect(matches.map(row => row.title)).toEqual([title, title])
+      expect(new Set(matches.map(row => row.evidence?.entry))).toEqual(new Set([book, print]))
+      expect((await sourceList(db, 'new', null, null, q)).sources.map(row => row.title)).toEqual([title, title])
+      expect((await matchingCopies(db, q)).map(copy => copy.slug)).toEqual([slug])
+    }
+    const [edition] = await suggestSources(db, '汇音字典')
+    await editSourceAlias(db, edition.id, '汇音字典', false, who.actor)
+    await editSourceAlias(db, edition.id, '汇音字典', true, who.actor)
+    expect((await suggestSources(db, '汇音字典')).find(s => s.id === edition.id)).toMatchObject({
+      alias: null, reading: '汇音字典', title,
+    })
+    for (const q of ['-', 'No such reading']) expect(await suggestSources(db, q)).toEqual([])
+    await setHidden(db, { entry: book }, true, who, null)
+    expect(await matchingCopies(db, 'いおんじてん')).toEqual([])
+    expect((await suggestSources(db, 'ionjiten')).map(row => row.publisher)).toEqual(['Print'])
+  })
+
+  test('paging a reading keeps literal titles and returns each citation once', async () => {
+    const put = raw.prepare('INSERT INTO sources(hash, title, name_lookup, records) VALUES (?, ?, ?, 1)')
+    for (let i = 0; i < 30; i++) put.run(String(i), title, title)
+    put.run('other', 'Hui Yin studies', 'hui yin studies')
+    const all = []
+    let cursor: [string, number] | null = null
+    for (;;) {
+      const page = await suggestSources(db, 'Hui Yin', cursor)
+      all.push(...page.slice(0, 24))
+      if (page.length <= 24) break
+      cursor = [page[23].lookup, page[23].id]
+    }
+    expect(all).toHaveLength(31)
+    expect(new Set(all.map(row => row.id)).size).toBe(31)
+    expect(all.some(row => row.title === 'Hui Yin studies')).toBe(true)
+  })
+
   test('both spellings find the same copy, with separate scan and recorded page', async () => {
     const one = { title, url: prefix + '801' }
     const two = { title, url: prefix.replace('http:', 'https:') + '802' }
@@ -1886,6 +2275,34 @@ describe('digitized copy filter', () => {
     expect(await matchingCopies(db, title)).toEqual([])
   })
 
+  test('new Commons page citations inherit the book alias and keep their printed locator', async () => {
+    const editions = [
+      ['commons-nlc-40050', '大數小數命名標準研究意見書', '大数小数命名标准研究意见书', 'NLC416-08jh009205-40050_'],
+      ['commons-nlc-71313', '中等算術教科書', '中等算术教科书', 'NLC416-14jh005564-71313_'],
+    ]
+    for (const [slug, title, alias, file] of editions) {
+      const prefix = 'https://commons.wikimedia.org/wiki/File:' + file
+      const pageURL = (name: string) => prefix + name + '.pdf?page=121'
+      for (const name of [title, encodeURIComponent(title)]) {
+        await createEntry(db, fields(), seen({ title, url: pageURL(name), page: '104' }), [], who)
+      }
+      await createEntry(db, fields(), seen({ title, url: pageURL(title).replace(file, 'Other_') }), [], who)
+      await createEntry(db, fields(), seen({ title: 'A chapter', url: pageURL(title) }), [], who)
+      const page = (await copyPage(db, slug, 0))!
+      expect(page.totals).toEqual({ sightings: 3, records: 3 })
+      const matches = await suggestSources(db, alias)
+      expect(matches).toHaveLength(2)
+      for (const row of page.sightings.filter(row => row.page === '104')) {
+        expect(row.citations[0].scan).toBe('121')
+        expect(matches.some(source => source.id === row.citations[0].source)).toBe(true)
+      }
+      expect(await matchingCopies(db, alias)).toEqual([page.copy])
+      const first = matches[0].id
+      await editSourceAlias(db, first, alias, true, who.actor)
+      expect(await sourceAliases(db, first)).toEqual([])
+    }
+  })
+
   test('a copy used twice as an intermediary counts once and has no printed locator of its own', async () => {
     const intermediary = via({ title, url: prefix + '803' })
     const entry = await createEntry(db, fields(), seen({ title: 'Original', page: '葉五', vias: [intermediary] }), [], who)
@@ -1902,6 +2319,7 @@ describe('digitized copy filter', () => {
     expect(page.totals).toEqual({ sightings: 51, records: 1 })
     expect(page.sightings).toHaveLength(50)
     const next = (await copyPage(db, slug, page.next!))!
+    expect(next.cardVersion).toBe(page.cardVersion)
     expect(next.sightings).toHaveLength(1)
     expect(next.sightings[0].sighting).toBeGreaterThan(page.next!)
     expect(next.next).toBeNull()
@@ -1911,15 +2329,108 @@ describe('digitized copy filter', () => {
   })
 })
 
+describe('personal communications', () => {
+  const letter = (more: Partial<Via> = {}) => via({ author: '甲', publisher: 'QQ', report_date: '2026-11-14', source_kind: 'personal', quote: 'as told', ...more })
+
+  test('a private message is a source of its own, apart from the same citation without the kind', async () => {
+    const id = await createEntry(db, fields(), seen({ title: 'A book', vias: [letter(), letter({ source_kind: null })] }), [], who)
+    const { vias } = (await getEntry(db, id))!.sightings[0]
+    expect(vias.map(via => via.source_kind)).toEqual(['personal', null])
+    expect(vias[0].id).not.toBe(vias[1].id)
+  })
+
+  test('a citation is keyed by its fields up to the last one given', async () => {
+    const key = (author: string) => (raw.query('SELECT hash FROM sources WHERE author = ?').get(author) as { hash: string }).hash
+    await createEntry(db, fields(), seen({ title: 'A book', vias: [letter({ author: 'a' }), letter({ author: 'b', source_kind: null, container: 'group' })] }), [], who)
+    expect(key('a')).toBe(await hashHex(JSON.stringify([null, null, 'a', 'QQ', '2026-11-14', null, 'personal'])))
+    expect(key('b')).toBe(await hashHex(JSON.stringify([null, null, 'b', 'QQ', '2026-11-14', 'group'])))
+  })
+
+  test('the form sends a kind for the source and each via, and a kind alone names no source', () => {
+    const form = new FormData()
+    for (const [name, value] of [['place', 'A scan'], ['author', 'x'], ['source_kind', 'personal']]) form.append(name, value)
+    for (const [author, kind] of [['甲', ''], ['乙', 'personal'], ['丙', 'other'], ['', 'personal']]) { form.append('via_author', author); form.append('via_source_kind', kind) }
+    const read = readSightingFields(form)
+    expect(read.source_kind).toBe('personal')
+    expect(read.vias.map(via => [via.author, via.source_kind])).toEqual([['甲', null], ['乙', 'personal'], ['丙', null]])
+  })
+
+  test('a kind alone stores no source', async () => {
+    const form = new FormData()
+    for (const [name, value] of [['place', 'A scan'], ['source_kind', 'personal']]) form.append(name, value)
+    expect(readSightingFields(form).source_kind).toBeNull()
+    const id = await createEntry(db, fields(), seen({ url: null, title: null, source_kind: 'personal' }), [], who)
+    expect((await getEntry(db, id))!.sightings[0].source_id).toBeNull()
+  })
+})
+
+describe('containers', () => {
+  const message = (author: string, report_date: string, quote: string) => via({ author, report_date, container: 'zi.tools討論羣', publisher: 'QQ', quote })
+
+  test('each message in a group is its own source and the group is suggested once', async () => {
+    const first = await createEntry(db, fields(), seen({ title: 'A book', vias: [message('玄晖allen', '2026-11-18', 'one')] }), [], who)
+    await createEntry(db, fields(), seen({ title: 'Another book', vias: [message('雲九', '2026-11-17', 'two')] }), [], who)
+    await createEntry(db, fields(), seen({ title: 'An article', container: '中國語文 1955年第3期' }), [], who)
+    const [link] = (await getEntry(db, first))!.sightings[0].vias
+    expect(link).toMatchObject({ title: null, author: '玄晖allen', report_date: '2026-11-18', container: 'zi.tools討論羣', publisher: 'QQ', quote: 'one' })
+    const messages = raw.query("SELECT author, report_date FROM sources WHERE container_lookup = 'zi.tools討論羣' ORDER BY id").all()
+    expect(messages).toEqual([{ author: '玄晖allen', report_date: '2026-11-18' }, { author: '雲九', report_date: '2026-11-17' }])
+    expect(await containerSuggestions(db, '')).toEqual([{ label: 'zi.tools討論羣', publisher: 'QQ' }, { label: '中國語文 1955年第3期', publisher: null }])
+    expect(await containerSuggestions(db, 'ZI.')).toEqual([{ label: 'zi.tools討論羣', publisher: 'QQ' }])
+    expect(await containerSuggestions(db, '羣')).toEqual([])
+  })
+
+  test('a group named only by hidden records is not suggested', async () => {
+    const id = await createEntry(db, fields(), seen({ title: 'A book', vias: [message('貓村', '2026-11-14', 'one')] }), [], who)
+    expect(await containerSuggestions(db, 'zi')).toHaveLength(1)
+    raw.exec('UPDATE sources SET records = 0')
+    expect(await containerSuggestions(db, 'zi')).toEqual([])
+    expect(id).toBeGreaterThan(0)
+  })
+
+  test('two messages one person sent to a group on one day are two links', () => {
+    const form = new FormData()
+    for (const quote of ['first words', 'second words', 'second words']) for (const [name, value] of [['via_author', '貓村'], ['via_container', 'zi.tools討論羣'], ['via_report_date', '2026-11-14'], ['via_quote', quote]]) form.append(name, value)
+    form.append('place', 'A scan')
+    expect(readSightingFields(form).vias.map(via => via.quote)).toEqual(['first words', 'second words'])
+  })
+
+  test('both links are kept on the record and share one source', async () => {
+    const id = await createEntry(db, fields(), seen({ title: 'A book', vias: [message('貓村', '2026-11-14', 'first words'), message('貓村', '2026-11-14', 'second words')] }), [], who)
+    const { vias } = (await getEntry(db, id))!.sightings[0]
+    expect(vias.map(via => via.quote)).toEqual(['first words', 'second words'])
+    expect(vias[0].id).toBe(vias[1].id)
+  })
+
+  test('a citation without a container keeps the key it had before sources had one', async () => {
+    await createEntry(db, fields(), seen({ title: 'A book', author: 'Someone' }), [], who)
+    const { hash } = raw.query("SELECT hash FROM sources WHERE title = 'A book'").get() as { hash: string }
+    expect(hash).toBe(await hashHex(JSON.stringify([null, 'A book', 'Someone', null, null])))
+  })
+
+  test('the form sends a container for the source and for each via', () => {
+    const form = new FormData()
+    for (const [name, value] of [['place', 'A scan'], ['container', '集刊 第六本'], ['via_author', '貓村'], ['via_container', 'zi.tools討論羣'], ['via_publisher', 'QQ']]) form.append(name, value)
+    expect(readSightingFields(form)).toMatchObject({ container: '集刊 第六本', vias: [{ author: '貓村', container: 'zi.tools討論羣', publisher: 'QQ', title: null }] })
+  })
+})
+
 test('a numbered page starts where the pages before it end', async () => {
-  for (let i = 0; i < 100; i++) await createEntry(db, fields({ claims: [newClaim('ids', `⿰山${String.fromCodePoint(0x4e00 + i)}`)] }), seen(), [], who)
+  for (let i = 0; i < 200; i++) await createEntry(db, fields({ claims: [newClaim('ids', `⿰山${String.fromCodePoint(0x4e00 + i)}`)] }), seen(), [], who)
   for (const order of ['new', 'old', 'most', 'fewest'] as const) {
     const whole = (await list(db, { order, limit: 500 }))!.tiles.map(tile => tile.id)
     for (const number of [2, 3]) {
       const after = await pageCursor(db, { order }, number)
       expect((await list(db, { order, after }))!.tiles.map(tile => tile.id)).toEqual(whole.slice((number - 1) * PAGE, number * PAGE))
     }
-    expect(await pageCount(db, { order })).toBe(Math.ceil(whole.length / PAGE))
+    expect(await pageCount(db, { order })).toEqual({ records: whole.length, pages: Math.ceil(whole.length / PAGE), floor: false })
+    // A chosen page size moves where each page starts.
+    for (const limit of PAGE_SIZES) {
+      const after = await pageCursor(db, { order, limit }, 2)
+      if (limit < whole.length) expect((await list(db, { order, limit, after }))!.tiles.map(tile => tile.id)).toEqual(whole.slice(limit, 2 * limit))
+      else expect(after).toBeUndefined()
+      expect((await pageCount(db, { order, limit }))!.pages).toBe(Math.ceil(whole.length / limit))
+    }
     expect(await pageCursor(db, { order }, Math.ceil(whole.length / PAGE) + 1)).toBeUndefined()
   }
   expect(await pageCursor(db, {}, 1)).toBeNull()
@@ -1933,8 +2444,14 @@ test('a numbered page starts where the pages before it end', async () => {
   expect(await pageCursor(db, { query: 'x' }, 2)).toBeUndefined()
   expect(await pageCursor(db, { order: 'random', seed: 1 }, 2)).toBeUndefined()
   expect(await pageCount(db, { query: 'x' })).toBeNull()
-  expect(await pageCount(db, { order: 'earliest' })).toBe(0)
+  expect(await pageCount(db, { order: 'earliest' })).toEqual({ records: 0, pages: 0, floor: false })
   expect(pageOf('0')).toBeNull()
   expect(pageOf('2')).toBe(2)
   expect(pageOf(String(PAGES_MAX + 1))).toBeNull()
+  // A page past the bound is refused without a read.
+  const unread = { prepare() { throw new Error('read') } } as unknown as D1Database
+  for (const limit of PAGE_SIZES) expect(await pageCursor(unread, { limit }, Math.ceil(PAGED_MAX / limit) + 1)).toBeUndefined()
+  // Every size fits in one read of a search.
+  for (const limit of PAGE_SIZES) expect(limit).toBeLessThan(SEARCH_WINDOW)
+  expect([null, '24', '96', '192', '48', '25', '024', '193'].map(pageSizeOf)).toEqual([PAGE, 24, 96, 192, null, null, null, null])
 })

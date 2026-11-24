@@ -129,9 +129,10 @@ describe('write body limit', () => {
   test('maps each existing guarded action to its limiter', () => {
     const routes: [string, string, 'ADDS' | 'EDITS'][] = [
       ['/[locale]/new', '', 'ADDS'], ['/[locale]/batch', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/new', '', 'ADDS'],
-      ['/[locale]/entry/[id]', '?/edit', 'EDITS'], ['/[locale]/me', '', 'EDITS'], ['/api/tags', '', 'ADDS'],
-      ['/[locale]/entry/[id]/report', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/edit', '', 'EDITS'],
+      ['/[locale]/entry/[id]', '?/edit', 'EDITS'], ['/[locale]/entry/[id]', '?/comment', 'EDITS'], ['/[locale]/entry/[id]', '?/hideComment', 'EDITS'], ['/[locale]/entry/[id]', '?/unhideComment', 'EDITS'], ['/[locale]/me', '', 'EDITS'], ['/[locale]/notifications', '', 'EDITS'], ['/api/tags', '', 'EDITS'],
+      ['/[locale]/entry/[id]/report', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/edit', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/remove', '', 'EDITS'],
       ['/[locale]/entry/[id]/history', '?/restore', 'EDITS'],
+      ['/[locale]/entry/[id]/history', '?/thank', 'EDITS'], ['/[locale]/entry/[id]/history', '?/putBack', 'EDITS'],
       ...['restoreEntry', 'restoreSighting', 'hide', 'unhide', 'resolve'].map(action => ['/[locale]/moderate', `?/${action}`, 'EDITS'] as [string, string, 'ADDS' | 'EDITS']),
     ]
     for (const [id, search, expected] of routes) {
@@ -140,6 +141,15 @@ describe('write body limit', () => {
     }
     const request = new Request('https://example.test/en?/bogus&/sighting', { method: 'POST' })
     expect(writeLimitFor({ request, url: new URL(request.url), route: { id: '/[locale]/entry/[id]' } } as any)).toBeNull()
+  })
+
+  test('a moderator hides a comment while writes are paused, and nobody comments', async () => {
+    const db = (role: string) => ({ prepare: () => ({ bind: () => ({ first: async () => ({ id: '1', name: 'x', atlas_sub: null, role, banned_at: null, created_at: new Date().toISOString() }) }) }) })
+    const options = (role: string) => ({ route: { id: '/[locale]/entry/[id]' }, cookies: { get: () => 'token' }, platform: { env: { DB: db(role), WRITES_PAUSED: '1' } } })
+    const request = (path: string) => new Request(`https://example.test/en/${path}`, { method: 'POST', body: 'x' })
+    expect((await runHook(request('entry/1?/hideComment'), async () => new Response('ok'), options('moderator'))).status).toBe(200)
+    await expect(runHook(request('entry/1?/hideComment'), async () => new Response('ok'), options('member'))).rejects.toMatchObject({ status: 403 })
+    await expect(runHook(request('entry/1?/comment'), async () => new Response('ok'), options('moderator'))).rejects.toMatchObject({ status: 503 })
   })
 
   test('pause allows only authorized, rate-limited moderation actions through the hook', async () => {

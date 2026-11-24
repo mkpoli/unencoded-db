@@ -5,22 +5,23 @@
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
   import Tile from '$lib/components/Tile.svelte'
-  import { COLLECTIONS, arrangeTagsByType } from '$lib/tags'
+  import { COLLECTIONS, arrangeTags, localized } from '$lib/tags'
   import { MARKED } from '$lib/registries'
-  import { ORDER, PAGE, SORTS } from '$lib/order'
+  import { ORDER, PAGE, PAGE_SIZES, SORTS, pageSteps } from '$lib/order'
   import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
   import { describedTable } from '$lib/encoded'
   import { cleanIds } from '$lib/ids'
-  import { equivalentSpellings } from '$lib/ids-variants'
+  import { equivalentSpellings, isParts, partSpellings } from '$lib/ids-variants'
   import { isDescription } from 'ids-input'
   import ChatLinks from '$lib/components/ChatLinks.svelte'
   import GlyphStyleTabs from '$lib/components/GlyphStyleTabs.svelte'
   import { GLYPH_STYLE_COOKIE, type GlyphStyle } from '$lib/composer'
-  import { href, t } from '$lib/t'
-  import { TILE_SIZE_COOKIE, TILE_SIZES, tileSizeOf } from '$lib/tile-size'
+  import { decadeNumber } from '$lib/dates'
+  import { decadeName, href, locale, t, yearsName } from '$lib/t'
+  import { TILE_SIZE_COOKIE, TILE_SIZES, pageColumns, tileSizeOf } from '$lib/tile-size'
   import type { Snapshot } from './$types'
   let { data } = $props()
-  const tagGroups = $derived(arrangeTagsByType(data.tags))
+  const tagSections = $derived(arrangeTags(localized(data.tags, locale()), localized(data.groups, locale())))
   // Further pages are appended as the list nears its end. They belong to the listing they were read for,
   // and a new listing starts again from its own first page.
   type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: string | null; partial: boolean; total: typeof data.total; scanned: number }
@@ -80,7 +81,7 @@
   onMount(() => { mounted = true })
   const left = $derived(shown.total ? shown.total.n - shown.tiles.length : null)
   const done = $derived(shown.total !== null && !shown.total.floor && left !== null && left <= 0)
-  const pagesLeft = $derived(left !== null && left > 0 ? Math.ceil(left / PAGE) : null)
+  const pagesLeft = $derived(left !== null && left > 0 ? Math.ceil(left / data.per) : null)
   $effect(() => { if (mounted && (shown.partial || near) && !busy && failedFor !== data && !done && shown.next !== null) grow() })
   const appendOnClick = (event: MouseEvent) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
@@ -133,44 +134,70 @@
       if (ticket === switching) shownStyle = null
     }
   }
+  // The grid's columns divide a page, so each page read ends on a full row. Without scripts the grid fits as many as it can.
+  let grid = $state<HTMLElement>()
+  $effect(() => {
+    if (!grid) return
+    const node = grid, tile = tileSize
+    const fit = () => { node.style.gridTemplateColumns = `repeat(${pageColumns(node.clientWidth, Math.min(tile, node.clientWidth), parseFloat(getComputedStyle(node).columnGap) || 0, data.per)},minmax(0,1fr))` }
+    const watching = new ResizeObserver(fit)
+    watching.observe(node)
+    fit()
+    return () => watching.disconnect()
+  })
   function sizeTiles(index: number) {
     tileSize = TILE_SIZES[index] ?? tileSize
     document.cookie = `${TILE_SIZE_COOKIE}=${tileSize};path=/;max-age=31536000;samesite=lax`
     document.documentElement.dataset.tileSize = String(tileSize)
   }
-  // A whole description is also searched under its other spellings, which the table in the browser knows. Without
-  // the table, or without scripts, it is searched as typed.
+  // A whole description, or parts typed with no structure (艹時), is also searched under its other spellings,
+  // which the table in the browser knows. Without the table, or without scripts, it is searched as typed.
   async function search(event: SubmitEvent) {
     const form = event.currentTarget as HTMLFormElement
     const values = new FormData(form)
     const query = cleanIds(String(values.get('q') ?? ''))
-    if (!isDescription(query)) return
+    const whole = isDescription(query)
+    if (!whole && !isParts(query)) return
     event.preventDefault()
     const params = new URLSearchParams(values as unknown as Record<string, string>)
     let spellings: string[] = []
-    try { spellings = equivalentSpellings(query, await describedTable()).slice(1) } catch { /* searched as typed */ }
+    try { spellings = whole ? equivalentSpellings(query, await describedTable()).slice(1) : partSpellings(query, await describedTable()).slice(1) } catch { /* searched as typed */ }
     for (const spelling of spellings) params.append('also', spelling)
     await goto(`?${params}`)
   }
   const count = (key: string) => data.counts?.[key] ?? 0
   // The list's address without its place, which the page form keeps and adds a page to.
   const unplaced = $derived([...page.url.searchParams].filter(([name]) => name !== 'after' && name !== 'page'))
+  // Another page size starts the list again from its first page.
+  const sized = (size: number) => {
+    const params = new URLSearchParams(unplaced)
+    if (size === PAGE) params.delete('per'); else params.set('per', String(size))
+    return params.size ? `?${params}` : href()
+  }
+  const paged = (number: number) => {
+    const params = new URLSearchParams(unplaced)
+    if (number > 1) params.set('page', String(number))
+    return params.size ? `?${params}` : href()
+  }
   function turn(event: SubmitEvent) {
     event.preventDefault()
     const typed = Number(new FormData(event.currentTarget as HTMLFormElement).get('page'))
-    const params = new URLSearchParams(unplaced)
-    if (Number.isInteger(typed) && typed > 1) params.set('page', String(Math.min(typed, data.pages ?? typed)))
-    goto(params.size ? `?${params}` : href())
+    goto(paged(Number.isInteger(typed) && typed > 1 ? Math.min(typed, data.pages ?? typed) : 1))
   }
+  // The pages on screen: the one opened and those the list has grown by since.
+  const lastOpen = $derived(Math.min(data.pages ?? data.number, data.number + Math.max(1, Math.ceil(shown.tiles.length / data.per)) - 1))
+  const steps = $derived(pageSteps(data.number, lastOpen, data.pages ?? 1))
+  const firstShown = $derived((data.number - 1) * data.per + 1)
   // The decades records were first seen in, by century, oldest first.
   const centuries = $derived.by(() => {
     // The chosen decade stays an option when it holds no record now, so the form keeps it.
     const held = Object.keys(data.counts ?? {}).filter(key => key.startsWith('y:')).map(key => Number(key.slice(2)))
     const decades = [...new Set([...held, ...(data.decade ? [Number(data.decade)] : [])])].sort((a, b) => a - b)
-    const byCentury = new Map<number, number[]>()
+    const byCentury = new Map<string, number[]>()
     for (const decade of decades) {
-      const century = Math.floor(decade / 100) * 100
-      byCentury.set(century, [...(byCentury.get(century) ?? []), decade])
+      const century = Math.floor(decadeNumber(decade) / 100) * 100
+      const label = decade < 0 ? yearsName(-98 - century, century ? 1 - century : 0) : `${century}–${century + 99}`
+      byCentury.set(label, [...(byCentury.get(label) ?? []), decade])
     }
     return [...byCentury]
   })
@@ -206,6 +233,26 @@
   })
 </script>
 
+{#snippet sizes()}
+  <nav class="sizes" aria-label={t('browse.perPage')} data-sveltekit-preload-data="tap"><span aria-hidden="true">{t('browse.perPage')}</span>{#each PAGE_SIZES as size}<a class="chip" class:on={data.per === size} aria-current={data.per === size ? 'true' : undefined} href={sized(size)}>{size}</a>{/each}</nav>
+{/snippet}
+{#snippet turner(id: string)}
+  {@const last = data.pages ?? 1}
+  <nav class="pages" aria-label={t('browse.page')} data-sveltekit-preload-data="tap">
+    {#if data.number > 1}<a class="chip" rel="prev" href={paged(data.number - 1)} aria-label={t('browse.previousPage')} title={t('browse.previousPage')}><span aria-hidden="true">‹</span></a>{:else}<span class="chip off" aria-hidden="true">‹</span>{/if}
+    {#each steps as step, index (step ?? `gap${index}`)}
+      {#if step === null}<span class="gap" aria-hidden="true">…</span>{:else}<a class="chip" class:on={step >= data.number && step <= lastOpen} class:far={(step === data.number - 2 && steps[index - 1] === null) || (step === lastOpen + 2 && steps[index + 1] === null)} aria-current={step === data.number ? 'page' : undefined} href={paged(step)}>{step}</a>{/if}
+    {/each}
+    {#if lastOpen < last}<a class="chip" rel="next" href={paged(lastOpen + 1)} aria-label={t('browse.nextPage')} title={t('browse.nextPage')}><span aria-hidden="true">›</span></a>{:else}<span class="chip off" aria-hidden="true">›</span>{/if}
+  </nav>
+  <form class="jump" method="GET" onsubmit={turn}>
+    {#each unplaced as [name, value]}<input type="hidden" {name} {value} />{/each}
+    <label for={id}>{t('browse.page')}</label>
+    {#key data.number}<input class="input" {id} name="page" inputmode="numeric" pattern="[1-9][0-9]*" autocomplete="off" value={data.number} />{/key}
+    <span aria-hidden="true">/</span><span>{last}</span>
+    <button class="button" type="submit">{t('browse.go')}</button>
+  </form>
+{/snippet}
 <Seo />
 <div class="page stack">
   <div class="heading">
@@ -221,16 +268,17 @@
     {:else}
       <div class="field"><label for="tag">{t('field.tags')}</label><select class="input" id="tag" name="tag" value={data.tag ?? ''}>
         <option value="">{t('browse.all')}</option>
-        {#each tagGroups as group (group.type)}<optgroup label={t(`tagType.${group.type}`)}>{#each group.tags as item (item.name)}<option value={item.name}>{item.label} ({item.n})</option>{/each}</optgroup>{/each}
+        {#each tagSections as section (section.type)}{#each section.shelves as shelf (shelf.group?.id ?? 0)}<optgroup label={shelf.group ? `${t(`tagType.${section.type}`)} › ${shelf.group.label}` : t(`tagType.${section.type}`)}>{#each shelf.tags as item (item.name)}<option value={item.name}>{item.label} ({item.n})</option>{/each}</optgroup>{/each}{/each}
       </select></div>
     {/if}
     <div class="field decade"><label for="decade">{t('browse.decadeLabel')}</label><select class="input" id="decade" name="decade" value={data.decade ?? ''}>
       <option value="">{t('browse.all')}</option>
-      {#each centuries as [century, decades] (century)}<optgroup label="{century}–{century + 99}">{#each decades as decade (decade)}<option value={String(decade)}>{t('browse.decade', { n: decade })} ({count(`y:${decade}`)})</option>{/each}</optgroup>{/each}
+      {#each centuries as [century, decades] (century)}<optgroup label={century}>{#each decades as decade (decade)}<option value={String(decade)}>{decadeName(decade)} ({count(`y:${decade}`)})</option>{/each}</optgroup>{/each}
     </select></div>
     <div class="field radical"><span class="label" id="radical-label">{t('field.radical')}</span>{#if data.radical}{@const radical = [...data.radical].at(-1)}<input type="hidden" name="radical" value={data.radical} /><a class="pinned" href={unfiled} aria-label="{t('field.radical')} {radical} ×"><span class="glyph">{radical}</span> <span aria-hidden="true">×</span></a>{:else}<a class="input choose" id="radical-choice" href={href('/radicals')} aria-labelledby="radical-label radical-choice">{t('browse.all')}<span aria-hidden="true">›</span></a>{/if}</div>
     {#if data.order !== ORDER}<input type="hidden" name="sort" value={data.order} />{/if}
     {#if data.seed !== null}<input type="hidden" name="seed" value={data.seed} />{/if}
+    {#if data.per !== PAGE}<input type="hidden" name="per" value={data.per} />{/if}
     {#each data.within as id}<input type="hidden" name="in" value={id} />{/each}{#each data.without as id}<input type="hidden" name="out" value={id} />{/each}
     <button class="button" type="submit">{t('browse.filter')}</button>
   </form>
@@ -265,17 +313,18 @@
     <p class="muted" role="alert">{t(`browse.${data.searchError}`)}</p>
   {:else}
     {#if shown.total}<p class="found">{t('browse.found', { n: `${shown.total.n}${shown.total.floor ? '+' : ''}` })}</p>{/if}
-    {#if data.pages && data.pages > 1}
-      <form class="pager" method="GET" onsubmit={turn}>
-        {#each unplaced as [name, value]}<input type="hidden" {name} {value} />{/each}
-        <label for="page">{t('browse.page')}</label>
-        {#key data.number}<input class="input" id="page" name="page" inputmode="numeric" pattern="[1-9][0-9]*" autocomplete="off" value={data.number} />{/key}
-        <span aria-hidden="true">/</span><span>{data.pages}</span>
-      </form>
+    {#if data.pages && data.records && shown.tiles.length}
+      <div class="pager">
+        <p class="range">{t('browse.shown', { from: firstShown, to: firstShown + shown.tiles.length - 1, n: `${data.records}${data.recordsFloor ? '+' : ''}` })}</p>
+        {#if data.records > PAGE_SIZES[0]}{@render sizes()}{/if}
+        {#if data.pages > 1}{@render turner('page')}{/if}
+      </div>
+    {:else if data.per !== PAGE}
+      <div class="pager">{@render sizes()}</div>
     {/if}
     {#if data.also.length}<details class="found also"><summary>{t('browse.alsoSearched', { n: data.also.length })}</summary><ul>{#each data.also as spelling}<li class="ids">{spelling}</li>{/each}</ul></details>{/if}
     {#if shown.tiles.length}
-      <div class="tiles">{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
+      <div class="tiles" bind:this={grid}>{#each shown.tiles as tile (tile.id)}<Tile {tile} glyph={shown.glyphs[tile.id]} />{/each}</div>
     {:else if !shown.partial || done}
       <div class="empty"><p>{data.continued ? t('browse.searchSegmentEmpty') : data.query || data.script || data.filter || data.collection || data.tag || data.radical || data.decade || data.within.length || data.without.length ? t('browse.empty') : t('browse.emptyAll')}</p><a class="text-link" href={href('/new')}>{t('browse.addOne')}</a></div>
     {/if}
@@ -294,6 +343,7 @@
       {/if}
     </div>
   {/if}
+  {#if !data.searchError && data.pages && data.pages > 1 && shown.tiles.length}<div class="pager foot">{@render turner('page-foot')}</div>{/if}
 </div>
 <style>
   /* The list loads on as it scrolls, so its footer is out of reach; the chats sit under the heading. */
@@ -320,14 +370,22 @@
   .size input { width:96px; padding:0; border:0; background:none; accent-color:var(--accent) }
   .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(var(--tile-size),100%),1fr)); gap:22px 16px }
   :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .tiles { gap:8px }
-  .pager { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
-  .pager .input { width:6ch; min-height:0; height:28px; padding:0 4px; font-size:13px; text-align:center }
+  .pager { display:flex; flex-wrap:wrap; align-items:center; gap:8px 20px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
+  .foot { justify-content:flex-end }
+  .sizes { display:flex; flex-wrap:wrap; align-items:center; gap:2px } .sizes span { margin-inline-end:6px } .sizes .chip { justify-content:center; min-inline-size:34px; padding-inline:8px }
+  .range { margin:0; margin-inline-end:auto }
+  .pages { display:flex; flex-wrap:wrap; align-items:center; gap:2px }
+  .pages .chip { justify-content:center; min-inline-size:34px; padding-inline:8px } .pages .off { opacity:.35; cursor:default } .pages .off:hover { color:var(--muted) } .gap { padding-inline:4px }
+  .jump { display:flex; align-items:center; gap:6px }
+  .jump .input { width:6ch; min-height:0; height:30px; padding:0 4px; font-size:13px; text-align:center }
+  .jump .button { min-block-size:0; height:30px; padding:0 12px; font-size:13px }
   .found { margin-bottom:-8px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
   .also { margin-top:0 }
   .also summary { cursor:pointer; color:var(--muted) }
   .also ul { display:flex; flex-wrap:wrap; gap:4px 12px; margin:6px 0 0; padding:0; list-style:none; overflow-wrap:anywhere }
   .ahead { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px }
   @media (max-width: 38rem) {
+    .pages .far { display:none }
     .filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,7rem),1fr)) }
     .filters .search { grid-column:1 / -1 }
   }

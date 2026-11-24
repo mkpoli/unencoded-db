@@ -1,32 +1,58 @@
-import { sourceNameKey } from '../name-key'
+import { sourceNameKey, titleReadingKey } from '../name-key'
 import { sampledSightings } from './source-sightings'
 import type { Source } from './entries'
 
+// Read both indexed prefix ranges. A source may match several readings and its literal name.
 const prefix = "lookup >= ? AND lookup < CAST(? || X'FF' AS TEXT)"
-export const sourceMatches = `SELECT source_id FROM source_search_names WHERE ${prefix}`
+const readingMatches = `SELECT r.lookup, c.id AS source_id FROM source_title_readings r
+  CROSS JOIN sources c ON c.title = r.title AND c.records > 0 WHERE ${prefix}`
+export const sourceMatches = `SELECT source_id FROM source_search_names WHERE ${prefix}
+  UNION ALL SELECT source_id FROM (${readingMatches})`
+
+export function sourceMatchParams(text: string) {
+  const literal = sourceNameKey(text), reading = titleReadingKey(text) || null
+  return [literal, literal, reading, reading]
+}
+
 export const SOURCE_SUGGESTIONS = 24
 export type NameCursor = [string, number]
 
 type EvidenceSample = { thumb: string | null; entry: number; ids: string | null; page: string | null; place: string | null; via: number }
-export type SourceMatch = Source & { lookup: string; alias: string | null; records: number; evidence: EvidenceSample | null }
+export type SourceMatch = Source & { lookup: string; alias: string | null; reading: string | null; records: number; evidence: EvidenceSample | null }
 const sample = (via: boolean) => `SELECT x.thumb_key AS thumb, r.entry_id AS entry, e.ids, r.page, r.place, r.id AS sighting, ${via ? 1 : 0} AS via ${sampledSightings(via)}`
 
 export async function suggestSources(db: D1Database, text: string, cursor: NameCursor | null = null) {
-  const key = sourceNameKey(text)
-  if (!key || (cursor && !cursor[0].startsWith(key))) return []
-  const { results } = await db.prepare(`SELECT c.id, c.title, c.url, c.author, c.publisher, c.report_date, c.records,
+  const key = sourceNameKey(text), reading = titleReadingKey(text) || null
+  if (!key || (cursor && !cursor[0].startsWith(key) && !(reading && cursor[0].startsWith(reading)))) return []
+  const [after, id] = cursor ?? ['', 0]
+  // Each source has one winning name across cursor pages. Prefer a matching shared reading.
+  const { results } = await db.prepare(`WITH titles AS MATERIALIZED (
+    SELECT title, coalesce(min(lookup) FILTER (WHERE generated = 0), min(lookup)) AS lookup FROM source_title_readings WHERE ${prefix} GROUP BY title
+  )
+  SELECT c.id, c.title, c.url, c.author, c.publisher, c.report_date, c.container, c.source_kind, c.records,
     (SELECT json_object('thumb', thumb, 'entry', entry, 'ids', ids, 'place', place, 'page', page, 'via', via)
       FROM (${sample(false)} UNION ALL ${sample(true)}) ORDER BY thumb IS NULL, via, sighting LIMIT 1) AS evidence,
-    n.lookup, a.spelling AS alias FROM (
+    n.lookup, CASE WHEN r.generated = 1 THEN (
+      SELECT spelling FROM source_aliases WHERE source_id = n.source_id AND lookup >= ?3
+        AND lookup < CAST(?3 || X'FF' AS TEXT) ORDER BY lookup LIMIT 1) ELSE a.spelling END AS alias,
+    CASE WHEN r.generated = 0 THEN r.spelling END AS reading FROM (
       SELECT lookup, source_id FROM source_search_names candidate
-      WHERE lookup < CAST(? || X'FF' AS TEXT) AND (lookup, source_id) > (?, ?)
-      AND NOT EXISTS (SELECT 1 FROM source_search_names earlier WHERE earlier.source_id = candidate.source_id
-        AND earlier.lookup >= ? AND earlier.lookup < candidate.lookup)
-      ORDER BY lookup, source_id LIMIT ?
+      WHERE lookup < CAST(?3 || X'FF' AS TEXT)
+        AND (lookup, source_id) > (max(?3, ?4), CASE WHEN ?4 >= ?3 THEN ?5 ELSE 0 END)
+        AND NOT EXISTS (SELECT 1 FROM titles t WHERE t.lookup <> candidate.lookup
+          AND t.title = (SELECT title FROM sources WHERE id = candidate.source_id))
+        AND NOT EXISTS (SELECT 1 FROM source_search_names earlier WHERE earlier.source_id = candidate.source_id
+          AND earlier.lookup >= ?3 AND earlier.lookup < candidate.lookup)
+      UNION SELECT t.lookup, c.id FROM titles t CROSS JOIN sources c
+        ON c.id IN (SELECT id FROM sources WHERE title = t.title AND records > 0
+          AND id > CASE WHEN t.lookup = ?4 THEN ?5 ELSE 0 END ORDER BY id LIMIT ?6)
+        WHERE t.lookup >= ?4
+      ORDER BY lookup, source_id LIMIT ?6
     ) n CROSS JOIN sources c ON c.id = n.source_id
     LEFT JOIN source_aliases a ON a.source_id = n.source_id AND a.lookup = n.lookup
+    LEFT JOIN source_title_readings r ON r.title = c.title AND r.lookup = n.lookup
     ORDER BY n.lookup, n.source_id`)
-    .bind(key, cursor?.[0] ?? key, cursor?.[1] ?? 0, key, SOURCE_SUGGESTIONS + 1).all<Omit<SourceMatch, 'evidence'> & { evidence: string | null }>()
+    .bind(reading, reading, key, after, id, SOURCE_SUGGESTIONS + 1).all<Omit<SourceMatch, 'evidence'> & { evidence: string | null }>()
   return results.map(({ evidence, ...row }): SourceMatch => ({ ...row, evidence: evidence ? JSON.parse(evidence) : null }))
 }
 

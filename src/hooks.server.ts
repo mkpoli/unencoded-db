@@ -4,7 +4,7 @@ import { isLocale, LOCALE_COOKIE, negotiate } from '$lib/i18n'
 import { agentToken, loopback, personOf, sessionName } from '$lib/server/people'
 import { bearerOf, tokenPerson } from '$lib/server/agents'
 import { limitWriteBody, MAX_AGENT_BODY, MAX_PICTURES_BODY } from '$lib/server/body-limit'
-import { guardWrite, writeLimitFor } from '$lib/server/guard'
+import { guardWrite, moderationAction, writeLimitFor } from '$lib/server/guard'
 import { TILE_SIZE_COOKIE, tileSizeOf } from '$lib/tile-size'
 
 const UNPREFIXED = /^\/(media|api|auth|mcp|oauth\/(register|token|revoke)$|\.well-known\/|_app|robots\.txt|favicon|sitemap(?:-[\w-]+)?\.xml$)/
@@ -52,7 +52,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     if (!agent) {
       const limit = writeLimitFor(event)
       if (!limit) return new Response('Not Found', { status: 404 })
-      await guardWrite(event, limit, event.route.id === '/[locale]/moderate')
+      await guardWrite(event, limit, moderationAction(event))
     }
     const request = await limitWriteBody(event.request, agent || event.route.id?.startsWith('/oauth/') ? MAX_AGENT_BODY : event.route.id === '/[locale]/batch' || event.route.id === '/[locale]/new' ? MAX_PICTURES_BODY : undefined)
     if (!request) return new Response('Payload Too Large', { status: 413 })

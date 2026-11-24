@@ -6,11 +6,12 @@
   import { LOCALES, LOCALE_NAMES, LOCALE_COOKIE } from '$lib/i18n'
   import { href, locale, t } from '$lib/t'
   import { syncFavourites } from '$lib/favourites.svelte'
+  import { UNREAD_SHOWN } from '$lib/notifications'
   import ChatLinks from '$lib/components/ChatLinks.svelte'
   let { data, children } = $props()
 
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
-  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
+  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path === '/u' || path.startsWith('/u/') ? 'people' : path.startsWith('/mcp') ? 'mcp' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
   $effect(() => { syncFavourites(data.person?.id ?? null, data.favourites) })
   type NavMode = 'full' | 'priority' | 'compact'
   let navMode = $state<NavMode>()
@@ -19,6 +20,9 @@
   let navToggle = $state<HTMLButtonElement>()
   let menu = $state<HTMLDetailsElement>()
   let moreToggle = $state<HTMLElement>()
+  // The notices open on their own page count as read there.
+  const unread = $derived(path.startsWith('/notifications') ? 0 : data.unread)
+  const unreadText = $derived(unread > UNREAD_SHOWN ? `${UNREAD_SHOWN}+` : String(unread))
   const showSignIn = $derived(!data.person && data.signIn)
   const account = $derived(data.person?.name ?? (showSignIn ? t('nav.signIn') : t('me.name')))
 
@@ -122,6 +126,13 @@
   </nav>
   <div class="actions">
     <a class="button primary add" href={href('/new')}>{t('nav.add')}</a>
+    {#if data.person}
+      <!-- Bell: Lucide (ISC license), https://lucide.dev/icons/bell -->
+      <a class="button bell" class:on={path.startsWith('/notifications')} href={href('/notifications')} aria-label={unread ? `${t('notifications.title')} ${unreadText}` : t('notifications.title')} title={t('notifications.title')} data-sveltekit-preload-data="off">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></svg>
+        {#if unread}<span class="unread" aria-hidden="true">{unreadText}</span>{/if}
+      </a>
+    {/if}
     <a class="button who" class:sign-in={showSignIn} href={href('/me')} aria-label={account}>
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.8 3.4-5.5 7-5.5s6.2 1.700 7 5.500"/></svg>
       <span class="who-name">{account}</span>
@@ -131,7 +142,9 @@
       <div class="menu-body">
         <div class="menu-group">
           <a href={href('/favourites')} class:on={section === 'favourites'} onclick={() => { if (menu) menu.open = false }}>{t('favourites.title')}</a>
+          <a href={href('/u')} class:on={section === 'people'} aria-current={path === '/u' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('people.title')}</a>
           <a href={href('/data')} class:on={section === 'data'} aria-current={section === 'data' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('data.title')}</a>
+          <a href={href('/mcp')} class:on={section === 'mcp'} aria-current={section === 'mcp' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('mcp.title')}</a>
         </div>
         <div class="menu-group">
           <span class="menu-label">{t('nav.language')}</span>
@@ -155,6 +168,7 @@
     · {t('footer.images')} · {t('footer.code')}
     · <a class="text-link" href="https://glyphatlas.org/" target="_blank" rel="noopener">Glyph Atlas</a>
     · <a class="text-link" href={href('/data')}>{t('footer.data')}</a>
+    · <a class="text-link" href={href('/mcp')}>{t('footer.mcp')}</a>
   </p>
   <p><ChatLinks /></p>
 </footer>
@@ -174,6 +188,9 @@
   .site-nav a:hover { color: var(--ink) }
   .site-nav a.active { color: var(--ink); border-bottom-color: var(--ink) }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-inline-size: 0; margin-inline-start: auto }
+  .bell { position: relative; flex: none; padding-inline: 10px }
+  .bell.on { border-color: var(--line-strong) }
+  .unread { position: absolute; inset-block-start: -6px; inset-inline-end: -6px; min-inline-size: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: var(--on-accent, #fff); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums }
   .who-name { max-inline-size: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .menu { position: relative; flex: none }
   .nav-toggle, .menu summary { inline-size: max(40px, var(--target-size)); padding: 0 }

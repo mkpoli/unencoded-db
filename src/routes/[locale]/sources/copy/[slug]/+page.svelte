@@ -4,9 +4,11 @@
   import { href, media, t } from '$lib/t'
   import { recordCode } from '$lib/code'
   let { data } = $props()
+  const heading = $derived(`${data.copy.title} · ${data.copy.collection}`)
 </script>
 
-<Seo title={`${data.copy.title} · ${data.copy.collection}`} />
+<Seo title={heading} description={`${t('sources.digitizedCopy')} · ${heading} · ${t(data.totals.records === 1 ? 'source.record' : 'source.records', { n: data.totals.records })}`}
+  image={href(`/sources/copy/${data.copy.slug}/card.png?v=${data.cardVersion}`)} imageAlt={heading} />
 <div class="page narrow stack">
   <a class="text-link" href={href('/sources')}>← {t('nav.sources')}</a>
   <header class="stack">
@@ -19,11 +21,13 @@
     {#each data.sightings as row (row.sighting)}
       <li>
         <a class="record" href={href(`/entry/${row.entry_id}#sighting-${row.sighting}`)}>
-          <span class="plate" aria-hidden="true">
-            {#if row.thumb}<img src={media(row.thumb)} alt="" loading="lazy" decoding="async" />
-            {:else if row.ids}<IdsGlyph ids={row.ids} layout={row.layout} path={data.glyphs[row.entry_id]} />{/if}
-          </span>
-          <span>{#if row.ids}<strong>{row.ids}</strong>{/if}<span>{t('entry.record', { id: recordCode(row.entry_id) })}<span class="sr-only"> · {t('entry.sightings')} {row.sighting}</span></span></span>
+          {#if row.ids}
+            <span class="plate"><IdsGlyph ids={row.ids} layout={row.layout} path={data.glyphs[row.entry_id]} /></span>
+          {/if}
+          {#if row.thumb}
+            <img class="plate scan" src={media(row.thumb)} alt="" loading="lazy" decoding="async" />
+          {/if}
+          <span class="label">{#if row.ids}<strong>{row.ids}</strong>{/if}<span>{t('entry.record', { id: recordCode(row.entry_id) })}<span class="sr-only"> · {t('entry.sightings')} {row.sighting}</span></span></span>
         </a>
         <div class="links">
           {#if row.page}<span>{t('field.page')} · {row.page}</span>{/if}
@@ -46,9 +50,10 @@
   li { display:flex; flex-wrap:wrap; gap:12px 24px; align-items:center; padding:12px 0; border-top:1px solid var(--line) }
   .record { display:flex; align-items:center; gap:12px; flex:1 1 15rem; min-width:0; overflow-wrap:anywhere }
   .record:hover strong { text-decoration:underline }
-  .record strong, .record > span > span { display:block }
+  .label { min-width:0 }
+  .label strong, .label > span { display:block }
   .plate { display:grid; place-items:center; width:54px; height:54px; flex:none; overflow:hidden; background:var(--surface-tile); border-radius:6px }
-  .plate img { width:100%; height:100%; object-fit:contain }
+  .scan { object-fit:contain }
   .links { flex:1 1 14rem; min-width:0; font-size:.875rem; overflow-wrap:anywhere }
   .more { align-self:start }
 </style>

@@ -8,7 +8,7 @@ type Row = { id: number; hash: string; name: string; name_lookup: string | null 
 const literal = (value: string) => `CAST(X'${Buffer.from(value).toString('hex')}' AS TEXT)`
 let after = 0, corrected = 0
 for (;;) {
-  const query = `SELECT id, hash, coalesce(title, url, author, publisher, report_date, '') AS name, name_lookup
+  const query = `SELECT id, hash, coalesce(title, url, author, publisher, report_date, container, '') AS name, name_lookup
     FROM sources WHERE id > ${after} ORDER BY id LIMIT 500`
   const rows: Row[] = JSON.parse(executeD1(where, '--json', '--command', query))[0].results
   if (!rows.length) break

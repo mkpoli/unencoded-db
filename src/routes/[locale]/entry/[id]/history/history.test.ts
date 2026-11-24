@@ -7,7 +7,7 @@ import { openTestDb } from '$lib/server/testdb'
 import { actions, load } from './+page.server'
 
 const fields: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] }
-const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null }
+const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
 
 test('malformed sighting types are ignored', async () => {
   const { db } = openTestDb()
@@ -134,7 +134,7 @@ test('snapshots expose only entry fields and ignore malformed snapshots', async 
   expect(rows.find((row: any) => row.kind === 'create').fields).toEqual(fields)
   await db.prepare("UPDATE revisions SET snapshot = ? WHERE entry_id = ? AND kind = 'create'").bind('{broken', id).run()
   expect((await load(event) as any).rows.find((row: any) => row.kind === 'create').fields).toBeNull()
-  await db.prepare("UPDATE revisions SET snapshot = ? WHERE entry_id = ? AND kind = 'sighting'").bind(JSON.stringify({ ...sighting, context: 'invalid' }), id).run()
+  await db.prepare("UPDATE revisions SET snapshot = ? WHERE entry_id = ? AND kind = 'sighting'").bind(JSON.stringify({ ...sighting, contexts: '["invalid"]' }), id).run()
   expect((await load(event) as any).rows.find((row: any) => row.kind === 'sighting').sightingFields).toBeNull()
 })
 
@@ -192,4 +192,21 @@ test('a restore that would leave evidence with no picture, link or place is refu
   const data = new FormData(); data.set('rev', '2'); data.set('revision', String(first.id)); data.set('sighting', String(seen.id))
   const restore = actions.restore as (event: any) => Promise<any>
   expect(await restore({ ...loadEvent, locals: { person }, request: new Request('http://localhost', { method: 'POST', body: data }) })).toMatchObject({ status: 400, data: { error: 'evidence' } })
+})
+
+test('thanking for a change tells its writer and marks it thanked for the reader', async () => {
+  const { db } = openTestDb()
+  const writer = await createPerson(db), reader = await createPerson(db)
+  const id = await createEntry(db, fields, sighting, [], { actor: writer.id, ip: null })
+  const post = (revision: string, person: unknown) => ({
+    params: { locale: 'en', id: String(id) }, platform: { env: { DB: db } }, locals: { person }, url: new URL(`http://localhost/en/entry/${id}/history?/thank`),
+    request: new Request('http://localhost/', { method: 'POST', body: new URLSearchParams({ revision }) }), getClientAddress: () => '127.0.0.1',
+  }) as any
+  expect(await actions.thank(post('1', reader))).toEqual({ thanked: 1 })
+  await expect(actions.thank(post('1', writer))).rejects.toMatchObject({ status: 404 })
+  await expect(actions.thank(post('999', reader))).rejects.toMatchObject({ status: 404 })
+  const seen = (person: unknown) => load({ params: { locale: 'en', id: String(id) }, platform: { env: { DB: db } }, locals: { person } } as any) as any
+  expect((await seen(reader)).thanked).toEqual([1])
+  expect((await seen(writer)).thanked).toEqual([])
+  expect((await db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE person = ? AND thank_id IS NOT NULL').bind(writer.id).first<{ n: number }>())!.n).toBe(1)
 })

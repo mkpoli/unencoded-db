@@ -3,15 +3,16 @@ import { readDates, sightingDates } from '$lib/server/date-readings'
 import { error, json } from '@sveltejs/kit'
 import { CLAIM_KINDS, claimsOf, primaryLayoutOf, scopesOf, type Claim } from '$lib/claims'
 import { parseMarks, SIGHTING_FIELDS, EXPORT_PAGE_MAX, exportPage } from '$lib/server/entries'
-import { parseSightingTypes } from '$lib/scripts'
+import { parseContexts, parseSightingTypes } from '$lib/scripts'
 import { env } from '$lib/server/guard'
 import { positiveId } from '../../_submission.server'
 import type { RequestHandler } from './$types'
 
 const csvCell = (value: unknown) => {
   let text = value == null ? '' : String(value)
-  // Spreadsheet applications may interpret cells beginning with these characters as formulas.
-  if (/^[\s]*[=+\-@]/u.test(text)) text = "'" + text
+  // Spreadsheet applications may interpret cells beginning with these characters as formulas. A whole
+  // number is none: a year before the common era stays as it is.
+  if (/^[\s]*[=+\-@]/u.test(text) && !/^-\d+$/.test(text)) text = "'" + text
   return `"${text.replace(/"/g, '""')}"`
 }
 
@@ -43,7 +44,7 @@ export const GET: RequestHandler = async (event) => {
       types: parseSightingTypes(entry.types),
       marks: parseMarks(entry.marks),
       layout: primaryLayoutOf(entry.claims),
-      evidence: entry.evidence.map(sighting => ({ ...sighting, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types) })),
+      evidence: entry.evidence.map(sighting => ({ ...sighting, quotes: quotations(sighting.quotes), contexts: parseContexts(sighting.contexts), types: parseSightingTypes(sighting.types) })),
     })),
   }, { headers })
   // One column for each kind of claim, its values in order. A claim that holds under others names them
@@ -59,7 +60,7 @@ export const GET: RequestHandler = async (event) => {
       ...(claim.under.length ? [`[under: ${scopesOf(claims, claim).map(said).join(' | ')}]`] : []),
       ...(claim.sightings.length ? [`[evidence: ${claim.sightings.map(id => `#${id}`).join(' ')}]`] : []),
     ].join(' ')).join('; '))
-    return sightings.map(sighting => [entry.id, ...entryColumns.map(field => entry[field]), ...stated, sighting?.id, ...SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : sighting?.[field]), sighting ? JSON.stringify(sighting.vias) : '', sighting?.media.map(image => image.image_key).join('; '), sighting ? JSON.stringify(Object.fromEntries(sightingDates([sighting]).filter((v): v is string => !!v).map(v => [v, dates.get(v) ?? null]))) : ''])
+    return sightings.map(sighting => [entry.id, ...entryColumns.map(field => entry[field]), ...stated, sighting?.id, ...SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : field === 'contexts' ? parseContexts(sighting?.contexts).join(', ') : sighting?.[field]), sighting ? JSON.stringify(sighting.vias) : '', sighting?.media.map(image => image.image_key).join('; '), sighting ? JSON.stringify(Object.fromEntries(sightingDates([sighting]).filter((v): v is string => !!v).map(v => [v, dates.get(v) ?? null]))) : ''])
   })
   headers.set('Content-Type', 'text/csv; charset=utf-8')
   return new Response([columns.map(csvCell).join(','), ...rows.map(row => row.map(csvCell).join(','))].join('\r\n') + '\r\n', { headers })

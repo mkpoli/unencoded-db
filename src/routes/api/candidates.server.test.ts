@@ -127,3 +127,13 @@ async function tracedSame(db: D1Database, raw: ReturnType<typeof openTestDb>['ra
   await sameIds(traced, '⿰亻木')
   return plans
 }
+
+test('a record that names a character the parts make comes back as naming it, whatever its own parts', async () => {
+  const { event, raw } = fixture()
+  raw.exec("INSERT INTO entry_tags(tag, entry_id) VALUES ('w:休', 3), ('w:休', 4)")
+  const found = await ask(event, `${q('⿰亻木')}&made=${encodeURIComponent('休')}`) as { id: number; named?: boolean }[]
+  expect(found.map(record => record.id)).toEqual([1, 5, 2, 3])
+  expect(found.map(record => record.named ?? false)).toEqual([false, false, false, true])
+  const statement = raw.query("EXPLAIN QUERY PLAN SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id DESC LIMIT ?").all('w:休', 8) as { detail: string }[]
+  expect(statement.map(row => row.detail).join('\n')).toMatch(/^SEARCH entry_tags USING PRIMARY KEY \(tag=\?\)$/)
+})

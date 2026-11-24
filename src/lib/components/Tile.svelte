@@ -1,6 +1,6 @@
 <script lang="ts">
   import IdsGlyph from './IdsGlyph.svelte'
-  import { href, media, t } from '$lib/t'
+  import { href, media, t, yearName } from '$lib/t'
   import { recordCode } from '$lib/code'
   import type { Tile } from '$lib/server/entries'
   import type { SightingType } from '$lib/scripts'
@@ -32,7 +32,7 @@
     <span class="tags works">{#each works as registry (registry.id)}{@const phrase = t('registry.in', { name: t(`registry.${registry.id}`) })}<span class="tag work" title={phrase}><span aria-hidden="true">{registry.mark}</span><span class="sr-only">{phrase}</span></span>{/each}</span>
   {/if}
   <span class="meta">
-    {#if tile.firstYear}<time datetime={tile.firstYear} title={t(tile.firstYearKind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{tile.firstYear}</time><span aria-hidden="true">·</span>{/if}
+    {#if tile.firstYear}<svelte:element this={Number(tile.firstYear) > 0 ? 'time' : 'span'} datetime={Number(tile.firstYear) > 0 ? tile.firstYear : undefined} title={t(tile.firstYearKind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{yearName(Number(tile.firstYear))}</svelte:element><span aria-hidden="true">·</span>{/if}
     <span class="sightings">{t(tile.sightings === 1 ? 'browse.sighting' : 'browse.sightings', { n: tile.sightings })}</span>
   </span>
 </a>

@@ -1,13 +1,13 @@
 import { error } from '@sveltejs/kit'
 import { quotations, QUOTATIONS_MAX } from '../quotations'
 import { sampledSightings } from './source-sightings'
-import { sourceMatches } from './source-aliases'
+import { sourceMatches, sourceMatchParams } from './source-aliases'
 import { nameKey, nameLabel, sourceNameKey } from '../name-key'
 // The store of records: an entry is a character, a claim is one thing the record states about it, a
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
-import { CONTEXTS, isScript, NEEDS, resolveScript, parseSightingTypes, SIGHTING_TYPES, STATUSES, STYLES, VIAS_MAX, type Need, type SightingType, type Status } from '$lib/scripts'
+import { CONTEXTS, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
 import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
@@ -18,23 +18,25 @@ import { MARKED, registeredIn } from '$lib/registries'
 import { FILE_ROWS, ensureTags, filedUnder } from './tags'
 import type { Tag } from '$lib/tags'
 import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
+import { groupMates } from '$lib/similar'
+import { PART_RUN_MAX, PART_SPELLINGS_MAX } from '$lib/ids-variants'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
-import { dateText } from '$lib/dates'
+import { dateText, decadeOf, decadeStart, isDecade } from '$lib/dates'
 import { datedYear, prepareDates, readDates, sightingDates, type DateBook } from './date-readings'
 import { hashHex } from './image'
-import { ORDER, PAGE, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
+import { ORDER, PAGE, PAGE_SIZES, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
 
 export type EntryFields = { script: string; script_other: string | null; description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
-// A source as its five citation fields. A sighting's `vias` list them from the one nearest the cited work outward.
+// A source as its citation fields. A sighting's `vias` list them from the one nearest the cited work outward.
 export type Citation = Record<typeof CITATION_FIELDS[number], string | null>
 // A link in a sighting's chain: the source, and the words of it this sighting quotes.
 export type Via = Citation & { quote: string | null }
-export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; vias: Via[]; original_date: string | null; page: string | null; context: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
+export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; source_kind: string | null; vias: Via[]; original_date: string | null; page: string | null; contexts: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
 export type Entry = Omit<EntryFields, 'claims'> & { status: Status | null; id: number; rev: number; ids: string | null; layout: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
-export type Sighting = Omit<SightingFields, 'vias'> & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; vias: (Via & { id: number })[]; media: StoredImage[]; hidden_at: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
+export type Sighting = Omit<SightingFields, 'vias'> & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; vias: (Via & { id: number })[]; media: StoredImage[]; hidden_at: string | null; removed_by: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
 
 // What an entry has one of. What it has several of is in `claims`.
 export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical', 'strokes'] as const
@@ -42,12 +44,15 @@ export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical',
 const FILLED_FIELDS = ['description', 'radical', 'strokes'] as const
 // A sighting's citation is its source; the other fields are the sighting's own. Its `vias` are the sources
 // it passed through, from the one nearest the cited work to the one the contributor saw: a post that shows
-// a page of the cited work, say.
-export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date'] as const
+// a page of the cited work, say. `container` is what the source appeared in: the journal of an article, the
+// site of a page, the group of a chat message. A message has an author, a date and a container, and no title.
+// `source_kind` marks a personal communication, which has no container to look it up in.
+export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind'] as const
+const blankCitation = (citation: Citation) => CITATION_FIELDS.every(field => field === 'source_kind' || citation[field] === null)
 // The form sends each via as one value of each of these, repeated once per via and aligned by position.
-export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_quote'] as const
-export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'context', 'style', 'types', 'note', 'quotes'] as const
-export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'original_date', 'page', 'context', 'style', 'types', 'note', 'quotes'] as const
+export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_container', 'via_source_kind', 'via_quote'] as const
+export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
+export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
 export const IMAGE_FIELDS = ['image_key', 'image_type', 'image_w', 'image_h', 'thumb_key', 'box'] as const
 
 const clean = (raw: unknown, max: number) => {
@@ -64,12 +69,13 @@ const link = (form: FormData, name: string) => cleanLink(form.get(name))
 
 const citationKey = (citation: Citation) => JSON.stringify(CITATION_FIELDS.map(field => citation[field]))
 // The vias of a chain: rows with no field are dropped, a row that repeats an earlier one is dropped, and
-// at most VIAS_MAX are kept. The quote stays with the link that carries it.
+// at most VIAS_MAX are kept. The quote stays with the link that carries it, and two links to one source
+// that quote different words are two links: two messages one person sent to a group on one day.
 export const tidyVias = (vias: readonly Via[]): Via[] => {
   const seen = new Set<string>()
   return vias.filter(via => {
-    const key = citationKey(via)
-    if (CITATION_FIELDS.every(field => via[field] === null) || seen.has(key)) return false
+    const key = citationKey(via) + '\u0000' + (via.quote ?? '')
+    if (blankCitation(via) || seen.has(key)) return false
     seen.add(key)
     return true
   }).slice(0, VIAS_MAX)
@@ -86,7 +92,9 @@ function readVias(form: FormData): Via[] {
     author: clean(columns[2][index], 300),
     publisher: clean(columns[3][index], 300),
     report_date: dateText(columns[4][index]),
-    quote: clean(columns[5][index], 5000),
+    container: clean(columns[5][index], 300),
+    source_kind: sourceKind(clean(columns[6][index], 20)),
+    quote: clean(columns[7][index], 5000),
   })))
 }
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
@@ -118,9 +126,8 @@ export function readSightingFields(form: FormData): SightingFields {
     const text = clean(value, 5000)?.replace(/[\uD800-\uDBFF]$/, '')
     return text ? [{ text, locator: clean(locators[i], 300) }] : []
   })
-  const chosen = new Set(form.getAll('types').map(String))
-  const types = SIGHTING_TYPES.filter(type => chosen.has(type))
-  return {
+  const chosen = (name: string) => new Set(form.getAll(name).map(String))
+  const fields: SightingFields = {
     // A link alone answers where it was found.
     place: text(form, 'place', 500) ?? safeUrl ?? '',
     url: safeUrl,
@@ -128,15 +135,19 @@ export function readSightingFields(form: FormData): SightingFields {
     author: text(form, 'author', 300),
     publisher: text(form, 'publisher', 300),
     report_date: dateText(form.get('report_date')),
+    container: text(form, 'container', 300),
+    source_kind: sourceKind(text(form, 'source_kind', 20)),
     vias: readVias(form),
     original_date: dateText(form.get('original_date')),
     page: text(form, 'page', 80),
-    context: oneOf(text(form, 'context', 20), CONTEXTS),
+    contexts: storeChosen(CONTEXTS, chosen('contexts')),
     style: oneOf(text(form, 'style', 20), STYLES),
-    types: types.length ? JSON.stringify(types) : null,
+    types: storeChosen(SIGHTING_TYPES, chosen('types')),
     note: text(form, 'note', 5000),
     quotes: quotes.length ? JSON.stringify(quotes) : null,
   }
+  if (blankCitation(fields)) fields.source_kind = null
+  return fields
 }
 
 // The marks of one picture as the form sends them, a JSON array of [x, y, width, height]. Each is kept inside the image.
@@ -166,7 +177,8 @@ export const SEARCH_LENGTH_MAX = 200
 // Letters are words and every other character is a term of its own, which finds a part inside a description
 // sequence and needs no word breaking for CJK text.
 export function terms(value: string) {
-  return (value.normalize('NFKC').toLowerCase().match(WORD) ?? []).filter(term => !/^[⿰-⿿]$/.test(term))
+  // A radical code point is a symbol to Unicode and a part here: it is read as the ideograph it stands for.
+  return ([...value.normalize('NFKC').toLowerCase()].map(radicalEquivalent).join('').match(WORD) ?? []).filter(term => !/^[⿰-⿿]$/.test(term))
 }
 
 /** The marked works a record is in, in the order of the list. */
@@ -199,7 +211,7 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   const filing = fileRecord(entry.ids, entry.radical)
   const filed = [...pathsOf(filing?.path ?? []).map(path => `b:${path}`), ...(filing?.stated ? [`b!${filing.stated}`] : [])]
   // A record with a year is listed under its decade.
-  const decade = entry.first_year === null ? [] : [`y:${Math.floor(Number(entry.first_year) / 10) * 10}`]
+  const decade = entry.first_year === null ? [] : [`y:${decadeOf(Number(entry.first_year))}`]
   return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks, ...filed, ...decade]
 }
 
@@ -211,9 +223,9 @@ function wordTags(entry: TagInput, claims: readonly Claim[], sightings: Sighting
   for (const claim of claims) if (WORD_KINDS.includes(claim.kind)) { add(claim.value); add(claim.data?.difference); add(claim.data?.evidence) }
   // A Unicode code is found by the character it names, which is what another site links with.
   for (const claim of claims) if (claim.kind === 'encoding' && claim.data?.charset === 'unicode') add(encodedCharacter(claim.value))
-  for (const sighting of sightings) for (const field of ['place', 'title', 'author', 'publisher', 'note'] as const) add(sighting[field])
+  for (const sighting of sightings) for (const field of ['place', 'title', 'author', 'publisher', 'container', 'note'] as const) add(sighting[field])
   for (const sighting of sightings) for (const quote of quotations(sighting.quotes)) { add(quote.text); add(quote.locator) }
-  for (const sighting of sightings) for (const via of sighting.vias) for (const field of ['title', 'quote', 'author', 'publisher'] as const) add(via[field])
+  for (const sighting of sightings) for (const via of sighting.vias) for (const field of ['title', 'quote', 'author', 'publisher', 'container'] as const) add(via[field])
   return [...words].slice(0, WORDS_MAX).map(word => `w:${word}`)
 }
 
@@ -354,11 +366,16 @@ function ownClaims(claims: readonly Claim[], sightings: { id: number }[]) {
 const CITED_BY_PLACE = `UPDATE claims SET sightings = (SELECT json_group_array((SELECT s.id FROM (SELECT id, row_number() OVER (ORDER BY id) AS place FROM sightings WHERE entry_id = claims.entry_id) s WHERE s.place = named.value)) FROM json_each(claims.sightings) named) WHERE entry_id = ${ENTRY_SEQ} AND sightings != '[]'`
 const CITED_IN_SNAPSHOT = `UPDATE revisions SET snapshot = json_set(snapshot, '$.claims', json((SELECT json_group_array(json(json_set(claim.value, '$.sightings', json((SELECT k.sightings FROM claims k WHERE k.entry_id = revisions.entry_id AND k.key = json_extract(claim.value, '$.key')))))) FROM json_each(revisions.snapshot, '$.claims') claim))) WHERE entry_id = ${ENTRY_SEQ} AND kind = 'create'`
 
-// The citation is the source's identity: the same five fields are the same row, whether a sighting cites
-// it as its work or as where it was found.
-async function citationOf(db: D1Database, values: (string | null)[], dates: DateBook) {
-  if (values.every(value => value === null)) return { hash: null, statements: [] }
-  const hash = await hashHex(JSON.stringify(values))
+// The citation is the source's identity: the same fields are the same row, whether a sighting cites
+// it as its work or as where it was found. The fields after the fifth
+// count only up to the last one given, so a source is keyed the same before and after a field is added. A kind
+// alone names no source.
+const CITATION_KEY_MIN = 5
+async function citationOf(db: D1Database, citation: Citation, dates: DateBook) {
+  if (blankCitation(citation)) return { hash: null, statements: [] }
+  const values = CITATION_FIELDS.map(field => citation[field])
+  const keyed = Math.max(CITATION_KEY_MIN, values.findLastIndex(value => value !== null) + 1)
+  const hash = await hashHex(JSON.stringify(values.slice(0, keyed)))
   const year = datedYear(values[CITATION_FIELDS.indexOf('report_date')], dates)?.n ?? null
   const publisher = values[CITATION_FIELDS.indexOf('publisher')]
   const key = publisher && nameKey(publisher)
@@ -368,15 +385,15 @@ async function citationOf(db: D1Database, values: (string | null)[], dates: Date
       WHERE NOT EXISTS (SELECT 1 FROM publisher_aliases WHERE lookup = ?2) ON CONFLICT(lookup) DO NOTHING`)
       .bind(nameLabel(publisher), key))
   }
-  const [url, title, author, imprint, date] = values
-  const sourceName = sourceNameKey(title || url || author || imprint || date || '')
-  statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName))
+  const [url, title, author, imprint, date, container] = values
+  const sourceName = sourceNameKey(title || url || author || imprint || date || container || '')
+  statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup, container_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName, container && nameKey(container) || null))
   return { hash, statements }
 }
 // The hash of the cited work, and the links of the chain with the words each quotes.
 async function sourceOf(db: D1Database, fields: SightingFields, dates: DateBook) {
   const chain = tidyVias(fields.vias)
-  const [work, ...vias] = await Promise.all([citationOf(db, CITATION_FIELDS.map(field => fields[field]), dates), ...chain.map(via => citationOf(db, CITATION_FIELDS.map(field => via[field]), dates))])
+  const [work, ...vias] = await Promise.all([citationOf(db, fields, dates), ...chain.map(via => citationOf(db, via, dates))])
   return { hash: work.hash, vias: vias.flatMap((via, index) => via.hash === null ? [] : [{ hash: via.hash, quote: chain[index].quote }]), statements: [...work.statements, ...vias.flatMap(via => via.statements)] }
 }
 const SOURCE_ID = '(SELECT id FROM sources WHERE hash = ?)'
@@ -657,11 +674,11 @@ export async function revertEntry(db: D1Database, id: number, revisionId: number
 // A redacted revision keeps its row, author and time, and no longer says what the record held. The
 // state a record or a sighting holds now is not a past one, and stays.
 export async function redactRevision(db: D1Database, entry: number, revisionId: number, who: Who, summary: string | null) {
-  const row = await db.prepare(`SELECT r.rev, r.sighting_id, CASE WHEN r.sighting_id IS NULL THEN e.rev ELSE s.rev END AS current FROM revisions r JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id WHERE r.id = ? AND r.entry_id = ? AND r.redacted_at IS NULL AND r.kind IN ('create','edit','revert','merge','unmerge','sighting','sighting_edit')`).bind(revisionId, entry).first<{ rev: number; sighting_id: number | null; current: number | null }>()
+  const row = await db.prepare(`SELECT r.rev, r.sighting_id, CASE WHEN r.sighting_id IS NULL THEN e.rev ELSE s.rev END AS current FROM revisions r JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id WHERE r.id = ? AND r.entry_id = ? AND r.redacted_at IS NULL AND (r.kind IN ('create','edit','revert','merge','unmerge','sighting','sighting_edit') OR (r.kind = 'hide' AND r.summary IS NOT NULL))`).bind(revisionId, entry).first<{ rev: number; sighting_id: number | null; current: number | null }>()
   if (!row || row.current === row.rev) return false
   await db.batch([
     // A redacted merge still says which record it joined and what it gave, by key, so it can be undone.
-    db.prepare(`UPDATE revisions SET snapshot = CASE WHEN kind IN ('merge','unmerge') THEN json_object('from', json_extract(snapshot, '$.from'), 'into', json_extract(snapshot, '$.into'), 'added', json(json_extract(snapshot, '$.added')), 'scoped', json(json_extract(snapshot, '$.scoped')), 'filled', json(json_extract(snapshot, '$.filled'))) ELSE '{}' END, summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
+    db.prepare(`UPDATE revisions SET snapshot = CASE WHEN kind = 'hide' THEN snapshot WHEN kind IN ('merge','unmerge') THEN json_object('from', json_extract(snapshot, '$.from'), 'into', json_extract(snapshot, '$.into'), 'added', json(json_extract(snapshot, '$.added')), 'scoped', json(json_extract(snapshot, '$.scoped')), 'filled', json(json_extract(snapshot, '$.filled'))) ELSE '{}' END, summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
     db.prepare('DELETE FROM date_readings WHERE transcription NOT IN (SELECT value FROM evidence_dates WHERE value IS NOT NULL)'),
     revision(db, who, { entry, sighting: row.sighting_id, kind: 'redact', rev: row.rev, snapshot: JSON.stringify({ revision: revisionId }), summary }),
   ])
@@ -696,6 +713,7 @@ export async function mergeEntry(db: D1Database, from: number, into: number, who
         db.prepare('UPDATE entries SET merged_into = ?, updated_at = ? WHERE id = ? AND merged_into IS NULL AND hidden_at IS NULL').bind(into, at, from),
         checkChanged(db, from, who),
         db.prepare('UPDATE sightings SET entry_id = ? WHERE entry_id = ?').bind(into, from),
+        db.prepare('UPDATE comments SET entry_id = ? WHERE entry_id = ?').bind(into, from),
         db.prepare('DELETE FROM claims WHERE entry_id = ?').bind(into),
         insertClaims(db, into, joined.claims),
         revision(db, who, { entry: from, kind: 'merge', rev: source.rev, snapshot: JSON.stringify({ into }), summary }),
@@ -753,6 +771,9 @@ export async function unmergeEntry(db: D1Database, id: number, who: Who) {
         db.prepare('UPDATE entries SET merged_into = NULL, updated_at = ? WHERE id = ? AND merged_into = ?').bind(at, id, into),
         checkChanged(db, id, who),
         db.prepare(`${PARTS} UPDATE sightings SET entry_id = ?1 WHERE entry_id = ?2 AND first_entry IN (SELECT id FROM part)`).bind(id, into),
+        db.prepare(`${PARTS} UPDATE comments SET entry_id = ?1 WHERE entry_id = ?2 AND first_entry IN (SELECT id FROM part)`).bind(id, into),
+        // A comment written after the merge about evidence that goes back goes back with it.
+        db.prepare('UPDATE comments SET entry_id = ?1 WHERE entry_id = ?2 AND sighting_id IN (SELECT id FROM sightings WHERE entry_id = ?1)').bind(id, into),
         db.prepare('DELETE FROM claims WHERE entry_id = ?').bind(into),
         insertClaims(db, into, claims),
         revision(db, who, { entry: id, kind: 'unmerge', rev: entry.rev, snapshot: JSON.stringify({ into }) }),
@@ -768,21 +789,26 @@ export async function unmergeEntry(db: D1Database, id: number, who: Who) {
   }
 }
 
-export async function setHidden(db: D1Database, target: { entry: number; sighting?: number | null }, hidden: boolean, who: Who, summary: string | null) {
+type Visibility = { hidden: boolean; removed?: boolean }
+export type RemoveResult = 'done' | 'missing' | 'merged' | 'conflict' | 'only'
+
+// Hides a record or a sighting, or shows it again. `refuse` reads what the change would be made to, and
+// its answer ends the change instead.
+async function setVisible<R>(db: D1Database, target: { entry: number; sighting?: number | null }, { hidden, removed = false }: Visibility, who: Who, summary: string | null,
+  refuse: (entry: Entry | null, sighting: Sighting | null, sightings: Sighting[]) => R | null): Promise<R | 'done'> {
   for (let attempt = 0; ; attempt++) {
     const mark = await revisionMark(db, target.entry)
     const entry = await getEntryRow(db, target.entry)
-    if (!entry) return false
     const sightings = await sightingRows(db, target.entry)
-    const sighting = target.sighting != null ? sightings.find(s => s.id === target.sighting) : null
-    if (target.sighting != null && !sighting) return false
-    if (Boolean(sighting ? sighting.hidden_at : entry.hidden_at) === hidden) return true
+    const sighting = target.sighting != null ? sightings.find(s => s.id === target.sighting) ?? null : null
+    const refused = refuse(entry, sighting, sightings)
+    if (refused !== null || !entry) return refused ?? 'done'
     const at = hidden ? now() : null
     const index = await reindex(db, target.entry,
       sighting ? entry : { ...entry, hidden_at: at }, await claimRows(db, target.entry),
       sighting ? sightings.map(s => s.id === sighting.id ? { ...s, hidden_at: at } : s) : sightings)
     const update = sighting
-      ? db.prepare('UPDATE sightings SET hidden_at = ? WHERE id = ? AND entry_id = ?').bind(at, sighting.id, target.entry)
+      ? db.prepare('UPDATE sightings SET hidden_at = ?, removed_by = ? WHERE id = ? AND entry_id = ?').bind(at, removed && hidden ? who.actor : null, sighting.id, target.entry)
       : db.prepare('UPDATE entries SET hidden_at = ? WHERE id = ?').bind(at, target.entry)
     try {
       await db.batch([
@@ -790,17 +816,42 @@ export async function setHidden(db: D1Database, target: { entry: number; sightin
         // What the record's page shows changed, so its time of change moves too.
         db.prepare('UPDATE entries SET updated_at = ? WHERE id = ?').bind(now(), target.entry),
         checkChanged(db, target.entry, who),
-        revision(db, who, { entry: target.entry, sighting: target.sighting, kind: hidden ? 'hide' : 'unhide', rev: 0, snapshot: '{}', summary }),
+        revision(db, who, { entry: target.entry, sighting: target.sighting, kind: hidden ? 'hide' : 'unhide', rev: 0, snapshot: removed ? '{"removed":true}' : '{}', summary }),
         ...index,
         recount(db, target.entry),
       ])
-      return true
+      return 'done'
     } catch (error) {
       if (attempt < 4 && await revisionMark(db, target.entry) !== mark) continue
       throw error
     }
   }
 }
+
+// A moderator's hide takes over a removal, so that only a moderator shows the sighting again.
+export async function setHidden(db: D1Database, target: { entry: number; sighting?: number | null }, hidden: boolean, who: Who, summary: string | null) {
+  return await setVisible(db, target, { hidden }, who, summary, (entry, sighting) => {
+    if (!entry || (target.sighting != null && !sighting)) return 'missing' as const
+    const now = sighting ? sighting.hidden_at : entry.hidden_at
+    return Boolean(now) === hidden && !(hidden && sighting?.removed_by) ? 'same' as const : null
+  }) !== 'missing'
+}
+
+// Takes a sighting off its record. A record keeps at least one, so its last is moved or edited instead.
+export const removeSighting = (db: D1Database, entryId: number, id: number, baseRev: number, who: Who, summary: string | null): Promise<RemoveResult> =>
+  setVisible(db, { entry: entryId, sighting: id }, { hidden: true, removed: true }, who, summary, (entry, sighting, sightings) => {
+    if (!entry || entry.hidden_at || !sighting || sighting.hidden_at) return 'missing' as const
+    if (entry.merged_into) return 'merged' as const
+    if (sighting.rev !== baseRev) return 'conflict' as const
+    return sightings.some(other => other.id !== id && !other.hidden_at) ? null : 'only' as const
+  })
+
+/** Puts a removed sighting back on its record. One a moderator hid stays hidden. */
+export const putBackSighting = (db: D1Database, entryId: number, id: number, who: Who): Promise<RemoveResult> =>
+  setVisible(db, { entry: entryId, sighting: id }, { hidden: false, removed: true }, who, null, (entry, sighting) => {
+    if (!entry || entry.hidden_at || !sighting?.hidden_at || !sighting.removed_by) return 'missing' as const
+    return entry.merged_into ? 'merged' as const : null
+  })
 
 /** Brings one record's tags, counts and summary up to date from what it holds. */
 export async function refresh(db: D1Database, id: number) {
@@ -916,10 +967,10 @@ export function radicalTag(radical?: string | null) {
   return path ? `b:${path}` : undefined
 }
 
-// A decade, written as its first year (`1930`), as the key its records are listed under.
+// A decade, written as its first year's number (`1930`, or `-168` for 169 BCE), as the key its records are listed under.
 export function decadeTag(decade?: string | null) {
   if (!decade) return null
-  return /^(0|[1-9]\d{0,2}0)$/.test(decade) ? `y:${decade}` : undefined
+  return isDecade(decade) ? `y:${decade}` : undefined
 }
 
 // The marked works a list keeps to (`r:`) and leaves out (`x:`), as the keys they are listed under, or
@@ -943,7 +994,41 @@ export function alsoSearchIds(query: string, values: readonly string[] = []) {
   return [...new Set(values.map(exactSearchIds).filter((ids): ids is string => ids !== null && ids !== exact))].slice(0, ALSO_MAX)
 }
 
-// The keys every row of a listing holds and the words it is searched for. Null names a listing that is not one.
+// A word that is one character may be a part of a description, and is found under the spellings of that part too.
+const isPart = (term: string) => [...term].length === 1 && !/[\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Hangul}\p{N}]/u.test(term)
+/** Parts IWDS counts as one with a part that are searched with it, at most. */
+export const MATES_MAX = 2
+// The part rows a part is found under: the ideograph its radical code point stands for, then the parts IWDS counts as one with it.
+const partRows = (part: string) => { const own = radicalEquivalent(part); return [...new Set([own, ...groupMates(own).slice(0, MATES_MAX).map(radicalEquivalent)])].map(spelling => `p:${spelling}`) }
+
+/** The parts of a query that is parts alone, such as 艹時, or null for a description or a query with a longer word. */
+export function searchParts(query: string) {
+  if (exactSearchIds(query)) return null
+  const parts = [...new Set(terms(query))]
+  return parts.length && parts.length <= SEARCH_TERMS_MAX && parts.every(isPart) ? parts : null
+}
+
+// Other spellings of the parts searched for, found in the browser, are searched with them: at most
+// PART_ALSO_MAX runs of at most PART_RUN_MAX parts, none the parts of the query itself.
+export const PART_ALSO_MAX = PART_SPELLINGS_MAX - 1
+export function alsoSearchParts(query: string, values: readonly string[] = []) {
+  const typed = searchParts(query)
+  if (!typed) return []
+  const seen = new Set([[...typed].sort().join('')]), runs: string[] = []
+  for (const value of values) {
+    const parts = [...new Set(terms(value))], key = [...parts].sort().join('')
+    if (!parts.length || parts.length > PART_RUN_MAX || !parts.every(isPart) || parts.join('') !== [...new Set([...value.normalize('NFKC')].map(radicalEquivalent))].join('') || seen.has(key)) continue
+    seen.add(key)
+    runs.push(parts.join(''))
+  }
+  return runs.slice(0, PART_ALSO_MAX)
+}
+
+/** The other spellings a search is made under: of a whole description, or of a query that is parts alone. */
+export const alsoSearch = (query: string, values: readonly string[] = []) => exactSearchIds(query) ? alsoSearchIds(query, values) : alsoSearchParts(query, values)
+
+// The keys every row of a listing holds and the words it is searched for. Each word is the rows any of which
+// holds it; `spelt` are the other spellings of a query of parts, each the rows of its parts. Null names a listing that is not one.
 function listPlan({ script, filter, facet, radical, decade, within, without, query, also }: Listing) {
   const base = listTag(script, filter), own = facetTag(facet), filed = radicalTag(radical), period = decadeTag(decade), marks = markTags(within, without)
   if (!base || own === undefined || filed === undefined || period === undefined || !marks) return null
@@ -953,13 +1038,27 @@ function listPlan({ script, filter, facet, radical, decade, within, without, que
   const words = exact ? [] : [...new Set(terms(query ?? ''))]
   if (!exact && (words.length > SEARCH_TERMS_MAX || (query?.trim() && !words.length))) return null
   const keys = [...(own ? [own] : []), ...(filed ? [filed] : []), ...(period ? [period] : []), ...marks, ...(base !== 'all' ? [base] : [])]
-  return { keys, exact, words: words.map(word => `w:${word}`) }
+  // A spelling that is one character, the one the parts make, is found wherever a record names it: as a
+  // part, a related character, a code, or a word of its notes and sources.
+  const spelt = exact ? [] : alsoSearchParts(query ?? '', also).map(run => [...run]).map(run => run.map(part => run.length === 1 ? [`w:${part}`, ...partRows(part)] : partRows(part)))
+  return { keys, exact, words: words.map(word => [`w:${word}`, ...(isPart(word) ? partRows(word) : [])]), spelt }
+}
+type Plan = NonNullable<ReturnType<typeof listPlan>>
+
+// Whether a row of `from` holds the words: every word of the query, or every part of another spelling of it.
+// `given` is a word the rows read are known to hold.
+function wordsTest(plan: Plan, from: 't' | 'd', given?: readonly string[]) {
+  const held = (rows: readonly string[]) => `EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag ${rows.length === 1 ? '= ?' : `IN (${rows.map(() => '?')})`} AND w.entry_id = ${from}.entry_id)`
+  const spellings = [plan.words.filter(rows => rows !== given), ...plan.spelt].filter(words => words.length)
+  const tests = spellings.map(words => words.map(held).join(' AND '))
+  return { tests: tests.length > 1 ? [`(${tests.map(test => `(${test})`).join(' OR ')})`] : tests, values: spellings.flat(2) }
 }
 
 // One key is the range read and the others are tested on each row of it, with the words.
-function listRead(plan: NonNullable<ReturnType<typeof listPlan>>, range = plan.keys[0] ?? 'all') {
-  const tests = [...plan.words, ...plan.keys.filter(key => key !== range)]
-  return { tag: range, tests, searching: plan.exact !== null || tests.length > 0 }
+function listRead(plan: Plan, range = plan.keys[0] ?? 'all') {
+  const words = wordsTest(plan, 't'), keys = plan.keys.filter(key => key !== range)
+  const tests = [...words.tests, ...keys.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = t.entry_id)')]
+  return { tag: range, tests, values: [...words.values, ...keys], searching: plan.exact !== null || tests.length > 0 }
 }
 
 export const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind, e.marks'
@@ -982,13 +1081,15 @@ const ORDER_READS: Record<Exclude<Order, 'random'>, { by: string; past: string; 
   earliest: { by: 't.year, t.entry_id', past: `(t.year, t.entry_id) > (?, ?) AND t.year IS NOT NULL AND ${LISTED}`, counted: true, key: 't.year' },
   latest: { by: 't.year DESC, t.entry_id DESC', past: `(t.year, t.entry_id) < (?, ?) AND t.year IS NOT NULL AND ${LISTED}`, counted: true, key: 't.year' },
 }
-const ID = /^[1-9]\d{0,15}$/, COUNT = /^(0|[1-9]\d{0,8})$/
+// Before every year there is: a year is at most four digits on either side of the era.
+const YEAR_MIN = -10000
+const ID = /^[1-9]\d{0,15}$/, COUNT = /^(0|[1-9]\d{0,8})$/, YEAR = /^(0|-?[1-9]\d{0,8})$/
 export function cursorOf(order: Order, after: string | null | undefined): number[] | null | undefined {
   if (order === 'random') return after === null || after === undefined ? [] : seedOf(after) === null ? null : [Number(after)]
   const descending = order === 'new' || order === 'most' || order === 'latest'
-  if (after === null || after === undefined) return ORDER_READS[order].counted ? (descending ? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER] : [-1, 0]) : [descending ? Number.MAX_SAFE_INTEGER : 0]
+  if (after === null || after === undefined) return ORDER_READS[order].counted ? (descending ? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER] : [YEAR_MIN, 0]) : [descending ? Number.MAX_SAFE_INTEGER : 0]
   const parts = after.split('.')
-  if (ORDER_READS[order].counted ? parts.length !== 2 || !COUNT.test(parts[0]) || !ID.test(parts[1]) : parts.length !== 1 || !ID.test(parts[0])) return null
+  if (ORDER_READS[order].counted ? parts.length !== 2 || !(order === 'earliest' || order === 'latest' ? YEAR : COUNT).test(parts[0]) || !ID.test(parts[1]) : parts.length !== 1 || !ID.test(parts[0])) return null
   return parts.map(Number)
 }
 const cursorAt = (order: Order, row: { id: number; counted: number }) => order === 'random' || !ORDER_READS[order].counted ? String(order === 'random' ? row.counted : row.id) : `${row.counted}.${row.id}`
@@ -1012,11 +1113,11 @@ export function listStatement(db: D1Database, listing: Listing, range?: string, 
   // LIMIT therefore bounds candidates read even when no row passes.
   const tests = [
     ...(plan.exact ? [`EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value IN (${plan.exact.map(() => '?')}) AND k.entry_id = t.entry_id)`] : []),
-    ...read.tests.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = t.entry_id)'),
+    ...read.tests,
   ].join(' AND ') || '1'
   const { by, past, key } = order === 'random' ? { by: RANK, past: `${RANK} >= ? AND ${RANK} < ? AND ${LISTED}`, key: RANK } : ORDER_READS[order]
   return db.prepare(`SELECT ${TILE_COLUMNS}, ${key} AS counted, (${tests}) AS matches FROM entry_tags t CROSS JOIN entries e ON e.id = t.entry_id WHERE t.tag = ? AND ${past} ORDER BY ${by} LIMIT ?`)
-    .bind(...(plan.exact ?? []), ...read.tests, read.tag, ...(ranks ?? cursor), (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1 - taken)
+    .bind(...(plan.exact ?? []), ...read.values, read.tag, ...(ranks ?? cursor), (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1 - taken)
 }
 
 export type TileRow = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind' | 'marks'>
@@ -1053,10 +1154,11 @@ export async function list(db: D1Database, listing: Listing) {
   return { tiles, next, partial: read.searching && next !== null && tiles.length < limit, read: consumed }
 }
 
-// A list read whole from one range has numbered pages: page n starts after row (n − 1) × PAGE of that
-// range. A search and a shuffled list have none. Finding a page counts the rows before it in the index,
-// so the pages that can be asked for are bounded.
-export const PAGES_MAX = 400
+// A list read whole from one range has numbered pages: page n starts after row (n − 1) × the page size of
+// that range. A search and a shuffled list have none. Finding a page counts the rows before it in the index,
+// so the records that pages reach are bounded, and with them the pages of the smallest size.
+export const PAGED_MAX = 19200
+export const PAGES_MAX = PAGED_MAX / PAGE_SIZES[0]
 export const pageOf = (value: string | null | undefined) => value && /^[1-9]\d{0,3}$/.test(value) && Number(value) <= PAGES_MAX ? Number(value) : null
 function pagedRange(listing: Listing) {
   const plan = listPlan(listing), order = listing.order ?? ORDER
@@ -1068,46 +1170,58 @@ function pagedRange(listing: Listing) {
 export async function pageCursor(db: D1Database, listing: Listing, number: number): Promise<string | null | undefined> {
   if (number === 1) return null
   const range = pagedRange(listing)
-  if (!range || !Number.isInteger(number) || number < 1 || number > PAGES_MAX) return undefined
+  const size = listing.limit ?? PAGE
+  if (!range || !Number.isInteger(number) || number < 1 || (number - 1) * size >= PAGED_MAX) return undefined
   // The row before the page and the page's first row: a page without a first row is no page.
   const { results } = await db.prepare(`SELECT t.entry_id AS id, ${range.key} AS counted FROM entry_tags t WHERE t.tag = ? AND ${range.past} ORDER BY ${range.by} LIMIT 2 OFFSET ?`)
-    .bind(range.tag, ...cursorOf(range.order, null)!, (number - 1) * PAGE - 1).all<{ id: number; counted: number }>()
+    .bind(range.tag, ...cursorOf(range.order, null)!, (number - 1) * size - 1).all<{ id: number; counted: number }>()
   return results.length === 2 ? cursorAt(range.order, results[0]) : undefined
 }
-/** How many pages a listing has, at most PAGES_MAX; null for a listing without numbered pages. */
-export async function pageCount(db: D1Database, listing: Listing): Promise<number | null> {
+/** How many pages a listing has, over at most PAGED_MAX records; null for a listing without numbered pages. */
+export async function pageCount(db: D1Database, listing: Listing): Promise<{ records: number; pages: number; floor: boolean } | null> {
   const range = pagedRange(listing)
   if (!range) return null
   // The orders by year list only the dated records, which no kept count names.
   const dated = range.order === 'earliest' || range.order === 'latest'
   const row = await (dated
-    ? db.prepare(`SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags t WHERE t.tag = ? AND t.year IS NOT NULL AND ${LISTED} LIMIT ${PAGES_MAX * PAGE})`)
+    ? db.prepare(`SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags t WHERE t.tag = ? AND t.year IS NOT NULL AND ${LISTED} LIMIT ${PAGED_MAX})`)
     : db.prepare('SELECT n FROM tag_counts WHERE tag = ?')).bind(range.tag).first<{ n: number }>()
-  return Math.min(PAGES_MAX, Math.ceil((row?.n ?? 0) / PAGE))
+  const records = Math.min(PAGED_MAX, row?.n ?? 0)
+  // A list that reaches the last page offered may run on past it.
+  return { records, pages: Math.ceil(records / (listing.limit ?? PAGE)), floor: records === PAGED_MAX }
 }
 
 // A search is counted once, from the shortest range it is tested against: a key, a word or the exact
-// description. At most TOTAL_READ records of that range are read; past that the count is a floor.
+// description. A query of parts with other spellings is counted from one word of each spelling, since a
+// record found holds every word of one of them. At most TOTAL_READ records of that range are read; past
+// that the count is a floor.
 export const TOTAL_READ = 1000
-type TotalRange = { tag: string; exact?: undefined } | { tag?: undefined; exact: readonly string[] }
-export const WORD_SIZE = `SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags WHERE tag = ? LIMIT ${TOTAL_READ + 1})`
+type TotalRange = { tag: string; exact?: undefined; words?: undefined } | { tag?: undefined; exact: readonly string[]; words?: undefined } | { tag?: undefined; exact?: undefined; words: readonly string[] }
+const rowsIn = (rows: number) => rows === 1 ? '= ?' : `IN (${Array(rows).fill('?')})`
+export const wordSize = (rows: number) => `SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags WHERE tag ${rowsIn(rows)} LIMIT ${TOTAL_READ + 1})`
 export const exactSize = (spellings: number) => `SELECT count(*) AS n FROM (SELECT entry_id FROM claims WHERE kind = 'ids' AND value IN (${Array(spellings).fill('?')}) LIMIT ${TOTAL_READ + 1})`
 export function totalStatement(db: D1Database, listing: Listing, from: TotalRange) {
   const plan = listPlan(listing)
   if (!plan) return null
-  const tags = [...(plan.keys.length ? plan.keys : ['all']), ...plan.words].filter(tag => tag !== from.tag)
+  const tags = (plan.keys.length ? plan.keys : ['all']).filter(tag => tag !== from.tag)
   const exact = from.exact ? null : plan.exact
+  // The rows of one word read alone are known to hold it, unless another spelling could do without it.
+  const read = from.exact ?? from.words ?? [from.tag]
+  const given = from.words && !plan.spelt.length ? plan.words.find(rows => rows.length === read.length && rows.every((row, i) => row === read[i])) : undefined
+  const words = wordsTest(plan, 'd', given)
   const tests = [
     ...(exact ? [`EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value IN (${exact.map(() => '?')}) AND k.entry_id = d.entry_id)`] : []),
+    ...words.tests,
     ...tags.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = d.entry_id)'),
   ].join(' AND ') || '1'
-  // Several spellings are read unordered and each record counted once, since none of them is one range of the index.
+  // Several spellings or rows are read unordered and each record counted once, since none of them is one range of the index.
   const range = from.exact
     ? `SELECT entry_id FROM claims WHERE kind = 'ids' AND value IN (${from.exact.map(() => '?')}) LIMIT ${TOTAL_READ}`
+    : read.length > 1 ? `SELECT entry_id FROM entry_tags WHERE tag ${rowsIn(read.length)} LIMIT ${TOTAL_READ}`
     : `SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id LIMIT ${TOTAL_READ}`
-  // A tag range holds each record once; only several spellings can name one record twice.
-  return db.prepare(`SELECT ${from.exact && from.exact.length > 1 ? 'count(DISTINCT d.entry_id)' : 'count(*)'} AS n FROM (${range}) d WHERE ${tests}`)
-    .bind(...(from.exact ?? [from.tag]), ...(exact ?? []), ...tags)
+  // A tag range holds each record once; only several spellings or rows can name one record twice.
+  return db.prepare(`SELECT ${read.length > 1 ? 'count(DISTINCT d.entry_id)' : 'count(*)'} AS n FROM (${range}) d WHERE ${tests}`)
+    .bind(...read, ...(exact ?? []), ...words.values, ...tags)
 }
 
 // How many records a search finds, and how many it looks through: the shortest of its keys, which `list`
@@ -1116,16 +1230,20 @@ export async function searchTotal(db: D1Database, listing: Listing): Promise<{ n
   const plan = listPlan(listing)
   const keys = plan?.keys.length ? plan.keys : ['all']
   if (!plan || (!plan.exact && !plan.words.length && keys.length < 2)) return null
+  const spellings = [plan.words, ...plan.spelt].filter(spelling => spelling.length), words = spellings.flat()
   const [known, ...read] = await db.batch<{ tag: string; n: number }>([
     db.prepare('SELECT tag, n FROM tag_counts WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(keys)),
-    ...plan.words.map(word => db.prepare(WORD_SIZE).bind(word)),
+    ...words.map(rows => db.prepare(wordSize(rows.length)).bind(...rows)),
     ...(plan.exact ? [db.prepare(exactSize(plan.exact.length)).bind(...plan.exact)] : []),
   ])
   const sizes = new Map(known.results.map(row => [row.tag, row.n]))
+  const sized = new Map(words.map((rows, i) => [rows, read[i].results[0]?.n ?? 0]))
+  // The least word of each spelling: together they hold every record the words find.
+  const least = spellings.map(spelling => spelling.reduce((least, rows) => sized.get(rows)! < sized.get(least)! ? rows : least))
   const ranges: (TotalRange & { size: number })[] = [
     ...keys.map(tag => ({ tag, size: sizes.get(tag) ?? 0 })),
-    ...plan.words.map((tag, i) => ({ tag, size: read[i].results[0]?.n ?? 0 })),
-    ...(plan.exact ? [{ exact: plan.exact, size: read[plan.words.length].results[0]?.n ?? 0 }] : []),
+    ...(spellings.length > 1 ? [{ words: [...new Set(least.flat())], size: least.reduce((sum, rows) => sum + sized.get(rows)!, 0) }] : plan.words.map(rows => ({ words: rows, size: sized.get(rows)! }))),
+    ...(plan.exact ? [{ exact: plan.exact, size: read[words.length].results[0]?.n ?? 0 }] : []),
   ]
   const from = ranges.reduce((least, range) => range.size < least.size ? range : least)
   const pool = Math.min(...keys.map(tag => sizes.get(tag) ?? 0))
@@ -1195,11 +1313,11 @@ export async function chronology(db: D1Database, place: ChroniclePlace) {
 
 // A place in the chronology: from `year.record` on (?at=), the rows before one (?before=), or a decade's start.
 export function chroniclePlace(at: string | null, before: string | null, from: string | null): ChroniclePlace | undefined {
-  const parse = (text: string) => { const match = /^(0|[1-9]\d{0,8})\.([1-9]\d{0,15})$/.exec(text); return match ? [Number(match[1]), Number(match[2])] as [number, number] : undefined }
+  const parse = (text: string) => { const match = /^(0|-?[1-9]\d{0,8})\.([1-9]\d{0,15})$/.exec(text); return match ? [Number(match[1]), Number(match[2])] as [number, number] : undefined }
   if (at !== null) { const found = parse(at); return found && { at: found } }
   if (before !== null) { const found = parse(before); return found && { before: found } }
-  if (from !== null) return /^(0|[1-9]\d{0,2}0)$/.test(from) ? { at: [Number(from), 0] } : undefined
-  return { at: [-1, 0] }
+  if (from !== null) return isDecade(from) ? { at: [decadeStart(Number(from)), 0] } : undefined
+  return { at: [YEAR_MIN, 0] }
 }
 
 // The counts a page shows beside its filters. Tags are counted too, and read where they are listed. The
@@ -1234,7 +1352,7 @@ export async function tagCounts(db: D1Database) {
   return results
 }
 
-export type Source = { id: number; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null }
+export type Source = { id: number } & Citation
 
 export const getVisibleSource = (db: D1Database, id: number) => db.prepare(`
   SELECT id, ${CITATION_FIELDS.join(', ')} FROM sources
@@ -1266,8 +1384,8 @@ export const getSourceArtwork = (db: D1Database, id: number) => db.prepare(`
 export const SOURCE_PAGE = 200
 
 // A source and the records seen in it, each once, with the pages it was seen on.
-export type SourceSighting = Pick<Sighting, 'id' | 'entry_id' | 'place' | 'original_date' | 'page' | 'context' | 'style' | 'note' | 'quotes' | 'media'> & { types: SightingType[]; tile: Tile; via: boolean; vias: (Via & { id: number })[] }
-const SOURCE_SIGHTING = ['place', 'original_date', 'page', 'context', 'style', 'types', 'note', 'quotes'].map(field => `s.${field} AS s_${field}`).join(', ')
+export type SourceSighting = Pick<Sighting, 'id' | 'entry_id' | 'place' | 'original_date' | 'page' | 'style' | 'note' | 'quotes' | 'media'> & { contexts: Context[]; types: SightingType[]; tile: Tile; via: boolean; vias: (Via & { id: number })[] }
+const SOURCE_SIGHTING = ['place', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'].map(field => `s.${field} AS s_${field}`).join(', ')
 
 // A source with the visible sightings that cite it, each with its pictures and the record it belongs to:
 // first those that cite it as their work, then those found through it. A sighting that cites one source
@@ -1287,9 +1405,9 @@ export async function sourcePage(db: D1Database, id: number) {
     ]),
   ])
   const source = found.results[0] as Source | undefined
-  type Row = TileRow & { s_id: number; s_place: string; s_original_date: string | null; s_page: string | null; s_context: string | null; s_style: string | null; s_types: string | null; s_note: string | null; s_quotes: string | null }
-  const listed = [false, true].flatMap((isVia, way) => withMedia((queries[way * 2].results as Row[]).map(({ s_id, s_place, s_original_date, s_page, s_context, s_style, s_types, s_note, s_quotes, ...tile }) => ({
-    id: s_id, entry_id: tile.id, place: s_place, original_date: s_original_date, page: s_page, context: s_context, style: s_style, note: s_note, quotes: s_quotes, types: parseSightingTypes(s_types), tile: toTile(tile), via: isVia,
+  type Row = TileRow & { s_id: number; s_place: string; s_original_date: string | null; s_page: string | null; s_contexts: string | null; s_style: string | null; s_types: string | null; s_note: string | null; s_quotes: string | null }
+  const listed = [false, true].flatMap((isVia, way) => withMedia((queries[way * 2].results as Row[]).map(({ s_id, s_place, s_original_date, s_page, s_contexts, s_style, s_types, s_note, s_quotes, ...tile }) => ({
+    id: s_id, entry_id: tile.id, place: s_place, original_date: s_original_date, page: s_page, contexts: parseContexts(s_contexts), style: s_style, note: s_note, quotes: s_quotes, types: parseSightingTypes(s_types), tile: toTile(tile), via: isVia,
   })), (queries[way * 2 + 1].results as (MediaRow & { position: number })[]).sort((a, b) => a.sighting_id - b.sighting_id || a.position - b.position).map(({ position: _, ...image }) => image)) as Omit<SourceSighting, 'vias'>[]).slice(0, SOURCE_PAGE)
   // A citation is shown only while a visible sighting gives it.
   if (!source || !listed.length) return null
@@ -1307,10 +1425,10 @@ export const SOURCE_CARD_RECORDS = 6
 export type SourceCursor = { key: number | null; id: number }
 export const sourceCursorText = (cursor: SourceCursor) => cursor.key === null ? `${cursor.id}` : `${cursor.key}.${cursor.id}`
 export function parseSourceCursor(sort: SourceSort, text: string): SourceCursor | null {
-  const match = /^(?:(\d{1,9})\.)?([1-9]\d{0,15})$/.exec(text)
+  const match = /^(?:(-?\d{1,9})\.)?([1-9]\d{0,15})$/.exec(text)
   if (!match || !Number.isSafeInteger(Number(match[2]))) return null
   const keyed = match[1] !== undefined
-  if (sort === 'new' ? keyed : sort === 'most' ? !keyed : false) return null
+  if (sort === 'new' ? keyed : sort === 'most' ? !keyed || match[1].startsWith('-') : false) return null
   return { key: keyed ? Number(match[1]) : null, id: Number(match[2]) }
 }
 
@@ -1332,12 +1450,12 @@ type SourceRead = typeof SOURCE_READS[keyof typeof SOURCE_READS]
 function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | null, limit: number, publisher: number | null, query: string) {
   const seen = (via: boolean) => `(SELECT json_group_array(json_array(r.entry_id, x.thumb_key)) ${sampledSightings(via)})`
   const direction = order.descending ? 'DESC' : 'ASC', past = order.descending ? '<' : '>'
-  const start = order.descending ? Number.MAX_SAFE_INTEGER : 0
+  const start = order.descending ? Number.MAX_SAFE_INTEGER : YEAR_MIN
   const after = order.key ? `(c.${order.key}, c.id) ${past} (?, ?)` : `c.id ${past} ?`
   const bound = order.key ? [cursor?.key ?? start, cursor?.id ?? start] : [cursor?.id ?? start]
   type Row = Source & { year: number | null; records: number; direct: string; via: string }
   return db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(false)} AS direct, ${seen(true)} AS via FROM ${query ? `(SELECT DISTINCT source_id FROM (${sourceMatches})) m CROSS JOIN sources c ON c.id = m.source_id` : `sources c INDEXED BY ${order.index}${publisher !== null ? '_publisher' : ''}`} WHERE ${order.where} ${publisher !== null ? 'AND c.publisher_id = ?' : ''} AND ${after} ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction} LIMIT ?`)
-    .bind(...(query ? [sourceNameKey(query), sourceNameKey(query)] : []), ...(publisher !== null ? [publisher] : []), ...bound, limit).all<Row>().then(({ results }) => results)
+    .bind(...(query ? sourceMatchParams(query) : []), ...(publisher !== null ? [publisher] : []), ...bound, limit).all<Row>().then(({ results }) => results)
 }
 
 // A page of the source gallery in one order: its sources, each with the records seen in it, and the cursor
@@ -1400,7 +1518,7 @@ export async function history(db: D1Database, entry: number, before?: number | n
   return results
 }
 
-const FEED_COLUMNS = `${REVISION_COLUMNS}, ${WHO_COLUMNS}, e.cover_key, e.ids, s.rev AS sighting_rev, (e.hidden_at IS NULL AND e.merged_into IS NULL AND (r.sighting_id IS NULL OR (s.id IS NOT NULL AND s.hidden_at IS NULL))) AS visible`
+const FEED_COLUMNS = `${REVISION_COLUMNS}, ${WHO_COLUMNS}, e.cover_key, e.ids, s.rev AS sighting_rev, s.removed_by IS NOT NULL AS removed, (e.hidden_at IS NULL AND e.merged_into IS NULL AND (r.sighting_id IS NULL OR (s.id IS NOT NULL AND (s.hidden_at IS NULL OR s.removed_by IS NOT NULL)))) AS visible`
 const FEED_JOINS = `CROSS JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id AND s.entry_id = r.entry_id ${WHO('r.actor')}`
 
 export function globalHistoryStatement(db: D1Database, before?: number | null) {
@@ -1433,7 +1551,7 @@ export async function ofPerson(db: D1Database, id: string, before?: number | nul
 export const REPORT_PAGE = 100
 
 export async function openReports(db: D1Database, after = 0) {
-  const { results } = await db.prepare(`SELECT x.id, x.entry_id, x.sighting_id, x.reason, x.at, ${WHO_COLUMNS}, e.cover_key, e.ids, e.hidden_at, CASE WHEN x.sighting_id IS NULL THEN e.hidden_at ELSE s.hidden_at END AS target_hidden_at FROM reports x ${WHO('x.reporter')} JOIN entries e ON e.id = x.entry_id LEFT JOIN sightings s ON s.id = x.sighting_id AND s.entry_id = x.entry_id WHERE x.resolved_at IS NULL AND x.id > ? ORDER BY x.id LIMIT ?`).bind(after, REPORT_PAGE + 1).all<{ id: number; entry_id: number; sighting_id: number | null; reason: string; at: string; by_id: string; by_name: string; cover_key: string | null; ids: string | null; hidden_at: string | null; target_hidden_at: string | null }>()
+  const { results } = await db.prepare(`SELECT x.id, x.entry_id, x.sighting_id, x.reason, x.at, ${WHO_COLUMNS}, e.cover_key, e.ids, e.hidden_at, CASE WHEN x.sighting_id IS NULL THEN e.hidden_at WHEN s.removed_by IS NULL THEN s.hidden_at END AS target_hidden_at FROM reports x ${WHO('x.reporter')} JOIN entries e ON e.id = x.entry_id LEFT JOIN sightings s ON s.id = x.sighting_id AND s.entry_id = x.entry_id WHERE x.resolved_at IS NULL AND x.id > ? ORDER BY x.id LIMIT ?`).bind(after, REPORT_PAGE + 1).all<{ id: number; entry_id: number; sighting_id: number | null; reason: string; at: string; by_id: string; by_name: string; cover_key: string | null; ids: string | null; hidden_at: string | null; target_hidden_at: string | null }>()
   return { reports: results.slice(0, REPORT_PAGE), next: results.length > REPORT_PAGE ? results[REPORT_PAGE - 1].id : null }
 }
 

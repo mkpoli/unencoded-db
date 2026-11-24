@@ -1,14 +1,14 @@
-import { sourceNameKey } from '../name-key'
-import { sourceMatches } from './source-aliases'
+import { sourceMatches, sourceMatchParams } from './source-aliases'
+import { hashHex } from './image'
+import type { CardPicture } from './entries'
 
 type Copy = { slug: string; title: string; collection: string }
 
 export async function matchingCopies(db: D1Database, query: string) {
-  const key = sourceNameKey(query)
-  if (!key) return []
+  if (!query.trim()) return []
   const { results } = await db.prepare(`SELECT d.* FROM digitized_copies d
     WHERE EXISTS (SELECT 1 FROM digitized_copy_pages p WHERE p.copy_slug = d.slug
-      AND p.source_id IN (${sourceMatches})) ORDER BY d.title, d.slug`).bind(key, key).all<Copy>()
+      AND p.source_id IN (${sourceMatches})) ORDER BY d.title, d.slug`).bind(...sourceMatchParams(query)).all<Copy>()
   return results
 }
 
@@ -32,11 +32,30 @@ const citations = (paged: boolean) => `WITH pages AS MATERIALIZED (
 )`
 type Citation = { source: number; scan: string; url: string; via: number }
 type Sighting = { sighting: number; entry_id: number; page: string | null; ids: string | null; layout: string | null; thumb: string | null }
+
+// Pick artwork from the whole copy regardless of which page of sightings was shared.
+// A via-only sighting can supply its record glyph, but its scan belongs to the direct citation.
+function specimenQuery(db: D1Database, slug: string) {
+  return db.prepare(`${citations(false)} SELECT d.title, d.collection, v.entry_id, v.ids, v.layout,
+      x.thumb_key, x.image_key, x.image_w, x.image_h, x.box
+    FROM visible v JOIN digitized_copies d ON d.slug = ?1
+    LEFT JOIN sighting_media x ON v.via = 0 AND x.sighting_id = v.sighting AND x.position = 0
+    ORDER BY x.image_key IS NULL, nullif(v.ids, '') IS NULL, v.via, v.sighting LIMIT 1`)
+    .bind(slug)
+}
+
+type Specimen = Pick<Copy, 'title' | 'collection'> & Pick<Sighting, 'entry_id' | 'ids' | 'layout'> &
+  (CardPicture | Record<keyof CardPicture, null>)
+
+export function copyCardSpecimen(db: D1Database, slug: string) {
+  return specimenQuery(db, slug).first<Specimen>()
+}
+
 const PAGE_SIZE = 50
 
 export async function copyPage(db: D1Database, slug: string, after: number) {
   const [metadata, counts, rows] = await db.batch([
-    db.prepare('SELECT * FROM digitized_copies WHERE slug = ?').bind(slug),
+    specimenQuery(db, slug),
     db.prepare(`${citations(false)} SELECT count(DISTINCT sighting) AS sightings, count(DISTINCT entry_id) AS records
       FROM visible`).bind(slug),
     db.prepare(`${citations(true)} SELECT sighting, entry_id, CASE WHEN min(via) = 0 THEN page END AS page, ids, layout,
@@ -44,10 +63,12 @@ export async function copyPage(db: D1Database, slug: string, after: number) {
       json_group_array(json_object('source',source_id,'scan',scan,'url',url,'via',via)) AS links
       FROM visible GROUP BY sighting ORDER BY sighting LIMIT ?`).bind(slug, after, PAGE_SIZE + 1),
   ])
-  const copy = metadata.results[0] as Copy | undefined
+  const specimen = metadata.results[0] as Specimen | undefined
   const totals = counts.results[0] as { sightings: number; records: number }
-  if (!copy || !rows.results.length) return null
+  if (!specimen || !rows.results.length) return null
+  const copy = { slug, title: specimen.title, collection: specimen.collection }
+  const cardVersion = (await hashHex(JSON.stringify(specimen))).slice(0, 16)
   const sightings = (rows.results as (Sighting & { links: string })[]).slice(0, PAGE_SIZE)
     .map(({ links, ...row }) => ({ ...row, citations: (JSON.parse(links) as Citation[]).sort((a, b) => a.via - b.via || a.source - b.source) }))
-  return { copy, totals, sightings, next: rows.results.length > PAGE_SIZE ? sightings[PAGE_SIZE - 1].sighting : null }
+  return { copy, cardVersion, totals, sightings, next: rows.results.length > PAGE_SIZE ? sightings[PAGE_SIZE - 1].sighting : null }
 }

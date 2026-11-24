@@ -6,16 +6,19 @@
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
   import { href, locale, t, when } from '$lib/t'
+  import { kindName } from '$lib/source-kind'
   import { recordCode } from '$lib/code'
   import { pictureAlt } from '$lib/picture'
   import { sourceData } from '$lib/structured-data'
   let { data, form } = $props()
   const source = $derived(data.source)
-  const heading = $derived(source.title || source.url || t('source.title'))
+  const heading = $derived(source.title || (source.container && [source.author, source.container].filter(Boolean).join(' · ')) || source.url || [source.author, kindName(source.source_kind)].filter(Boolean).join(' · ') || t('source.title'))
   const structured = $derived(sourceData({ locale: locale(), source, name: heading, siteName: t('app.name'), sourcesName: t('nav.sources') }))
   const facts = [
     { key: 'title', label: 'field.title' },
     { key: 'author', label: 'field.author' },
+    { key: 'container', label: 'field.container' },
+    { key: 'source_kind', label: 'field.sourceKind' },
     { key: 'publisher', label: 'field.publisher' },
     { key: 'report_date', label: 'field.reportDate' },
   ] as const
@@ -36,7 +39,7 @@
     <span class="badge">{t('source.title')}</span>
     <h1>{heading}</h1>
     {#if source.url && /^https?:\/\//i.test(source.url)}<a class="text-link url" href={source.url} target="_blank" rel="noopener noreferrer">{source.url} ↗</a>{/if}
-    <dl class="facts">{#each facts as fact}{#if source[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{#if fact.key === 'report_date'}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} />{:else}{source[fact.key]}{/if}</dd></div>{/if}{/each}</dl>
+    <dl class="facts">{#each facts as fact}{#if source[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{#if fact.key === 'report_date'}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} />{:else if fact.key === 'source_kind'}{kindName(source.source_kind)}{:else}{source[fact.key]}{/if}</dd></div>{/if}{/each}</dl>
     {#if data.copy}<a class="text-link" href={href(`/sources/copy/${data.copy.slug}`)}>{t('sources.digitizedCopy')} · {data.copy.title} · {data.copy.collection}</a>{/if}
     <details class="aliases" open={form != null || data.aliases.length > 0 || data.before !== null}>
       <summary>{t('source.aliases')}{#if data.aliases.length} ({data.aliases.length}){/if}</summary>
@@ -83,7 +86,7 @@
           {#if sighting.place}<h3>{sighting.place}</h3>{/if}
           {#if sighting.types.length}<div class="row badges">{#each sighting.types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
           <dl class="facts">{#each seenFacts as fact}{#if sighting[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{#if fact.key === 'original_date'}<EvidenceDate text={sighting.original_date} reading={data.dates.get(sighting.original_date ?? '')} />{:else}{sighting[fact.key]}{/if}</dd></div>{/if}{/each}
-            {#if sighting.context}<div><dt>{t('field.context')}</dt><dd>{t(`context.${sighting.context}`)}</dd></div>{/if}
+            {#if sighting.contexts.length}<div><dt>{t('field.context')}</dt><dd>{sighting.contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
             {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
           </dl>
           {#if !sighting.via}<SourceQuotations quotes={sighting.quotes} url={source.url} />{/if}

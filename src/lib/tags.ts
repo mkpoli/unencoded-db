@@ -1,6 +1,6 @@
-// Typed tags with DAG implications. Every tag has a type (which determines its color) and may
-// automatically carry other tags via `implies`. A record carrying a tag is also listed under every
-// tag it transitively implies.
+// Typed tags with DAG implications, in three tiers: a type (which determines its color), an optional
+// group within the type, and the tag. A tag may automatically carry other tags via `implies`, and a
+// record carrying a tag is also listed under every tag it transitively implies.
 export const TAG_TYPES = ['region', 'language', 'form', 'domain', 'meta', 'general'] as const
 export type TagType = (typeof TAG_TYPES)[number]
 export const isTagType = (value: unknown): value is TagType => TAG_TYPES.includes(value as TagType)
@@ -13,8 +13,21 @@ export type Tag = {
   rev: number
   n: number
   implies: string[]
+  group: number | null
+  /** Other names that resolve to this tag: ones given to it, and the names of tags merged into it. */
+  aliases: string[]
+  /** The tag's name in each interface language that has one, by locale. */
+  names: Names
   used?: boolean
 }
+export type Names = Partial<Record<string, string>>
+/** A group of tags within one type: the middle tier. */
+export type TagGroup = { id: number; type: TagType; label: string; names: Names; position: number; rev: number }
+
+/** What a tag or a group is called in a language: its name there, or its label. */
+export const shownLabel = (item: { label: string; names?: Names }, locale: string) => item.names?.[locale] || item.label
+/** Tags or groups with each label as a language shows it. */
+export const localized = <T extends { label: string; names?: Names }>(items: readonly T[], locale: string): T[] => items.map(item => ({ ...item, label: shownLabel(item, locale) }))
 export type TagRef = Pick<Tag, 'name' | 'label' | 'type' | 'position' | 'implies'>
 
 export const COLLECTIONS = [{ slug: 'extension-e', label: 'Extension E' }] as const
@@ -24,42 +37,79 @@ export const TAG_LENGTH_MAX = 40
 export const TAG_IMPLIES_MAX = 20
 export const TAG_IMPLY_DEPTH_MAX = 8
 export const TAG_CLOSURE_MAX = 64
+export const TAG_ALIASES_MAX = 20
+export const GROUP_LABEL_MAX = 40
+export const GROUPS_MAX = 300
+
+/** Whether a value can name a group: trimmed, NFC, short, with no control characters. */
+export function validGroupLabel(value: string) {
+  return Boolean(value) && value.length <= GROUP_LABEL_MAX && value === value.normalize('NFC').trim() && !/\p{Cc}/u.test(value)
+}
 
 /** Whether a value has the shape of a tag's canonical name or display label. */
 export function validTagName(value: string) {
   return Boolean(value) && value.length <= TAG_LENGTH_MAX && value === value.normalize('NFC').trim() && !/^#/u.test(value) && !/[\s|,，、\p{Cc}]/u.test(value)
 }
 
+type Named = Pick<Tag, 'name' | 'label'> & { aliases?: readonly string[]; names?: Names }
+
 /**
- * The canonical name a typed tag is stored as, or null when invalid. Matches an existing tag by name
- * or by display label, stripping a leading `#`; anything else valid is kept as a new tag name.
+ * The canonical name a typed tag is stored as, or null when invalid. Matches an existing tag by name,
+ * display label, alias or its name in a language, stripping a leading `#`; anything else valid is kept as a new tag name.
  */
-export function cleanTag(value: string, tags: readonly Pick<Tag, 'name' | 'label'>[]): string | null {
+export function cleanTag(value: string, tags: readonly Named[]): string | null {
   const typed = value.normalize('NFC').trim().replace(/^#+/, '').trim()
   if (!typed || typed.length > TAG_LENGTH_MAX) return null
   const byName = tags.find(tag => tag.name === typed)
   if (byName) return byName.name
   const byLabel = tags.find(tag => tag.label === typed)
   if (byLabel) return byLabel.name
+  // An alias names one tag for good; a name in another language only shows it, so the alias wins.
+  const byAlias = tags.find(tag => tag.aliases?.includes(typed))
+  if (byAlias) return byAlias.name
+  const byLanguage = tags.find(tag => Object.values(tag.names ?? {}).includes(typed))
+  if (byLanguage) return byLanguage.name
   return validTagName(typed) ? typed : null
 }
 
-/** Each tag's display label by its canonical name; an unknown name shows as written. */
-export const tagLabels = (tags: readonly Pick<Tag, 'name' | 'label'>[]) => new Map(tags.map(tag => [tag.name, tag.label]))
+/** The tag a name stands for: the tag of that name, or the one it is an alias of. */
+export const canonicalName = (name: string, tags: readonly Pick<Named, 'name' | 'aliases'>[]) => tags.find(tag => tag.aliases?.includes(name))?.name ?? name
 
-export const tagLookup = <T extends Pick<Tag, 'name'>>(tags: readonly T[]) => new Map(tags.map(tag => [tag.name, tag]))
+/** Each tag's display label by its canonical name and by its aliases; an unknown name shows as written. */
+export const tagLabels = (tags: readonly Named[]) => new Map(tags.flatMap(tag => [tag.name, ...(tag.aliases ?? [])].map(name => [name, tag.label] as const)))
 
-const byOrder = (a: Pick<Tag, 'position' | 'name'>, b: Pick<Tag, 'position' | 'name'>) => a.position - b.position || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+/** Each tag by its canonical name and by its aliases. */
+export const tagLookup = <T extends Pick<Tag, 'name'> & { aliases?: readonly string[] }>(tags: readonly T[]) => new Map(tags.flatMap(tag => [tag.name, ...(tag.aliases ?? [])].map(name => [name, tag] as const)))
 
-/** Tags grouped by tag type, sorted by position and name within each type. */
-export function arrangeTagsByType<T extends Pick<Tag, 'name' | 'label' | 'type' | 'position'>>(tags: readonly T[]): { type: TagType; tags: T[] }[] {
-  const grouped = new Map<TagType, T[]>(TAG_TYPES.map(type => [type, []]))
-  for (const tag of [...tags].sort(byOrder)) {
-    const bucket = grouped.get(isTagType(tag.type) ? tag.type : 'general')!
-    bucket.push(tag)
-  }
-  return TAG_TYPES.map(type => ({ type, tags: grouped.get(type)! })).filter(group => group.tags.length > 0)
+export const byTagOrder = (a: Pick<Tag, 'position' | 'name'>, b: Pick<Tag, 'position' | 'name'>) => a.position - b.position || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+
+export const byGroupOrder = (a: Pick<TagGroup, 'position' | 'id'>, b: Pick<TagGroup, 'position' | 'id'>) => a.position - b.position || a.id - b.id
+
+export type TagShelf<T> = { group: TagGroup | null; tags: T[] }
+export type TagSection<T> = { type: TagType; shelves: TagShelf<T>[] }
+
+/**
+ * Tags by type, and by group within each type: the groups in their order, then the tags in no group.
+ * Sorted by position and name within each shelf. With `every`, every type and every group is listed,
+ * empty ones too, so that there is somewhere to put a tag.
+ */
+export function arrangeTags<T extends Pick<Tag, 'name' | 'type' | 'position' | 'group'>>(tags: readonly T[], groups: readonly TagGroup[], { every = false } = {}): TagSection<T>[] {
+  const sorted = [...groups].sort(byGroupOrder)
+  const known = new Map(sorted.map(group => [group.id, group]))
+  return TAG_TYPES.map(type => {
+    const own = [...tags].sort(byTagOrder).filter(tag => (isTagType(tag.type) ? tag.type : 'general') === type)
+    const grouped = (group: TagGroup) => own.filter(tag => tag.group === group.id)
+    const loose = own.filter(tag => tag.group === null || known.get(tag.group)?.type !== type)
+    const shelves: TagShelf<T>[] = [
+      ...sorted.filter(group => group.type === type).map(group => ({ group, tags: grouped(group) })),
+      { group: null, tags: loose },
+    ]
+    return { type, shelves: every ? shelves : shelves.filter(shelf => shelf.tags.length > 0) }
+  }).filter(section => every || section.shelves.length > 0)
 }
+
+/** The tags of a section in shelf order, for a flat list such as a select's options. */
+export const sectionTags = <T>(section: TagSection<T>) => section.shelves.flatMap(shelf => shelf.tags)
 
 export type ImpliedTag = { name: string; via: string[] }
 
@@ -68,11 +118,11 @@ export type ImpliedTag = { name: string; via: string[] }
  * Returns the deduplicated `direct` tags, the automatically carried `implied` tags (each with the
  * immediate carrying tag names in `via`), and `all` (`direct` followed by `implied`).
  */
-export function implicationClosure(direct: readonly string[], tags: readonly Pick<TagRef, 'name' | 'implies'>[]): { direct: string[]; implied: ImpliedTag[]; all: string[] } {
+export function implicationClosure(direct: readonly string[], tags: readonly (Pick<TagRef, 'name' | 'implies'> & { aliases?: readonly string[] })[]): { direct: string[]; implied: ImpliedTag[]; all: string[] } {
   const byName = new Map(tags.map(tag => [tag.name, tag]))
   const directList: string[] = []
   const directSet = new Set<string>()
-  for (const name of direct) {
+  for (const name of direct.map(item => canonicalName(item, tags))) {
     if (!name || directSet.has(name)) continue
     directSet.add(name)
     directList.push(name)
@@ -155,10 +205,11 @@ export function canImply(tags: readonly Pick<TagRef, 'name' | 'implies'>[], tag:
 }
 
 /**
- * Reads a new tag request from a form submission (`tag_new`, `tag_new_type`, `tag_new_implies`),
- * falling back to legacy `genre_new` / `genre_new_parent`. Returns null when none was typed, or `'invalid'`.
+ * Reads a new tag request from a form submission (`tag_new`, `tag_new_type`, `tag_new_group`,
+ * `tag_new_implies`), falling back to legacy `genre_new` / `genre_new_parent`. Returns null when none
+ * was typed, or `'invalid'`.
  */
-export function readNewTag(form: FormData, tags: readonly Pick<Tag, 'name' | 'label'>[]): { name: string; type: TagType; implies: string[] } | null | 'invalid' {
+export function readNewTag(form: FormData, tags: readonly Pick<Tag, 'name' | 'label'>[]): { name: string; type: TagType; group: number | null; implies: string[] } | null | 'invalid' {
   const typed = String(form.get('tag_new') ?? form.get('genre_new') ?? '').trim()
   if (!typed) return null
   const name = cleanTag(typed, tags)
@@ -166,15 +217,19 @@ export function readNewTag(form: FormData, tags: readonly Pick<Tag, 'name' | 'la
   const rawType = String(form.get('tag_new_type') ?? '').trim()
   if (rawType && !isTagType(rawType)) return 'invalid'
   const type: TagType = isTagType(rawType) ? rawType : 'general'
+  const rawGroup = String(form.get('tag_new_group') ?? '').trim()
+  const group = rawGroup ? Number(rawGroup) : null
+  if (group !== null && !(Number.isSafeInteger(group) && group > 0)) return 'invalid'
   const rawImplies = [...form.getAll('tag_new_implies'), ...form.getAll('genre_new_parent')]
     .map(value => String(value).trim().normalize('NFC'))
     .filter(Boolean)
   const implies = [...new Set(rawImplies)]
-  return { name, type, implies }
+  return { name, type, group, implies }
 }
 
 const TAG_ERROR_KEYS = {
   exists: 'error.tagExists',
+  aliased: 'error.tagAliased',
   conflict: 'error.tagConflict',
   cycle: 'error.tagCycle',
   depth: 'error.tagDepth',

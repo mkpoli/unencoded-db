@@ -3,10 +3,10 @@ import { quotations } from '$lib/quotations'
 // module walks every cursor, shapes the rows as JSON or CSV, and names the licence and the counts once.
 import { CLAIM_KINDS, claimsOf, primaryLayoutOf, scopesOf, type Claim } from '$lib/claims'
 import { recordCode } from '$lib/code'
-import { parseSightingTypes } from '$lib/scripts'
+import { parseContexts, parseSightingTypes } from '$lib/scripts'
 import { exportPage, parseMarks, SIGHTING_FIELDS, type ExportEntry, type Sighting } from './entries'
 
-export const DATASET_VERSION = 1
+export const DATASET_VERSION = 2
 export const DATASET_NAME = 'Rare Character Compendium'
 export const DATASET_LICENSE = 'CC BY-SA 4.0'
 export const DATASET_LICENSE_URL = 'https://creativecommons.org/licenses/by-sa/4.0/'
@@ -80,7 +80,7 @@ export async function* exportBatches(db: D1Database, size = EXPORT_BATCH_MAX): A
   }
 }
 
-const exportedSighting = (sighting: Sighting) => ({ ...sighting, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types) })
+const exportedSighting = (sighting: Sighting) => ({ ...sighting, quotes: quotations(sighting.quotes), contexts: parseContexts(sighting.contexts), types: parseSightingTypes(sighting.types) })
 
 /** The JSON file, one record at a time and one piece of evidence at a time. A record split across the
  * export pages keeps its first page's metadata and claims, and its evidence continues without a break. */
@@ -112,8 +112,9 @@ export async function* jsonChunks(db: D1Database, metadata: unknown, revision: n
 
 const csvCell = (value: unknown) => {
   let text = value == null ? '' : String(value)
-  // Spreadsheet applications may interpret cells beginning with these characters as formulas.
-  if (/^[\s]*[=+\-@]/u.test(text)) text = "'" + text
+  // Spreadsheet applications may interpret cells beginning with these characters as formulas. A whole
+  // number is none: a year before the common era stays as it is.
+  if (/^[\s]*[=+\-@]/u.test(text) && !/^-\d+$/.test(text)) text = "'" + text
   return `"${text.replace(/"/g, '""')}"`
 }
 
@@ -151,7 +152,7 @@ export function csvRows(entries: readonly ExportEntry[], bulk = true) {
       ...entryColumns.map(field => entry[field]),
       ...stated,
       sighting?.id,
-      ...SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : sighting?.[field]),
+      ...SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : field === 'contexts' ? parseContexts(sighting?.contexts).join(', ') : sighting?.[field]),
       sighting ? JSON.stringify(sighting.vias) : '',
       sighting?.media.map(image => image.image_key).join('; '),
     ]).map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n'
@@ -174,9 +175,11 @@ export type MediaRow = {
   source_author: string | null
   source_publisher: string | null
   source_report_date: string | null
+  source_container: string | null
+  source_kind: string | null
 }
 
-const MEDIA_COLUMNS = ['record_code', 'entry_id', 'sighting_id', 'image_key', 'image_url', 'thumb_key', 'thumb_url', 'image_type', 'image_w', 'image_h', 'box', 'source_id', 'source_title', 'source_author', 'source_publisher', 'source_report_date', 'source_url'] as const
+const MEDIA_COLUMNS = ['record_code', 'entry_id', 'sighting_id', 'image_key', 'image_url', 'thumb_key', 'thumb_url', 'image_type', 'image_w', 'image_h', 'box', 'source_id', 'source_title', 'source_author', 'source_publisher', 'source_report_date', 'source_container', 'source_kind', 'source_url'] as const
 
 const mediaUrl = (origin: string, key: string) => new URL(`/media/v2/${key}`, origin).href
 
@@ -201,13 +204,15 @@ export function mediaCsvRows(rows: readonly MediaRow[], origin: string) {
     row.source_author,
     row.source_publisher,
     row.source_report_date,
+    row.source_container,
+    row.source_kind,
     row.source_url,
   ].map(csvCell).join(',')).join('\r\n') + (rows.length ? '\r\n' : '')
 }
 
 const MEDIA_QUERY = `SELECT m.position, m.image_key, m.image_type, m.image_w, m.image_h, m.thumb_key, m.box,
   s.id AS sighting_id, s.entry_id,
-  c.id AS source_id, c.url AS source_url, c.title AS source_title, c.author AS source_author, c.publisher AS source_publisher, c.report_date AS source_report_date
+  c.id AS source_id, c.url AS source_url, c.title AS source_title, c.author AS source_author, c.publisher AS source_publisher, c.report_date AS source_report_date, c.container AS source_container, c.source_kind
   FROM sighting_media m
   JOIN sightings s ON s.id = m.sighting_id
   JOIN entries e ON e.id = s.entry_id

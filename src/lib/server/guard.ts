@@ -23,24 +23,34 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
   switch (event.route?.id) {
     case '/[locale]/new':
     case '/[locale]/batch': return action === 'default' ? 'ADDS' : null
-    case '/[locale]/entry/[id]': return action === 'edit' ? 'EDITS' : null
+    case '/[locale]/entry/[id]': return ['edit', 'comment', 'hideComment', 'unhideComment'].includes(action) ? 'EDITS' : null
     case '/[locale]/entry/[id]/sighting/new': return action === 'default' ? 'ADDS' : null
     case '/[locale]/source/[id]': return action === 'addAlias' || action === 'removeAlias' ? 'EDITS' : null
-    case '/api/tags': return action === 'default' ? 'ADDS' : null
+    case '/api/tags': return action === 'default' ? 'EDITS' : null
     case '/oauth/register':
     case '/oauth/token':
     case '/oauth/revoke':
     case '/[locale]/oauth/authorize':
     case '/[locale]/me':
+    case '/[locale]/notifications':
     case '/api/favourites':
     case '/api/report':
     case '/[locale]/entry/[id]/report':
     case '/[locale]/entry/[id]/duplicate':
+    case '/[locale]/entry/[id]/sighting/[sighting]/remove':
     case '/[locale]/entry/[id]/sighting/[sighting]/edit': return action === 'default' ? 'EDITS' : null
-    case '/[locale]/entry/[id]/history': return ['restore', 'redact', 'unmerge'].includes(action) ? 'EDITS' : null
+    case '/[locale]/entry/[id]/history': return ['restore', 'redact', 'thank', 'putBack', 'unmerge'].includes(action) ? 'EDITS' : null
     case '/[locale]/moderate': return ['restoreEntry', 'restoreSighting', 'hide', 'unhide', 'resolve'].includes(action) ? 'EDITS' : null
     default: return null
   }
+}
+
+// The actions only a moderator takes. Keep this in step with the actions that guard themselves as moderation.
+export function moderationAction(event: RequestEvent) {
+  if (event.route?.id === '/[locale]/moderate') return true
+  if (event.route?.id !== '/[locale]/entry/[id]') return false
+  for (const [key] of event.url.searchParams) if (key.startsWith('/')) return key === '/hideComment' || key === '/unhideComment'
+  return false
 }
 
 // Moderation writes remain available during a freeze, subject to authorization and limits.

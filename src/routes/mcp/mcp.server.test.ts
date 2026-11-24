@@ -101,7 +101,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
     categories: ['kokuji'], tags: ['signage'],
     sightings: [
       { ...sighting, pictures: [{ url: 'https://img.example/sign.png', marks: [[1, 1, 6, 6]] }] },
-      { place: 'A dictionary', title: 'Book', author: 'Someone', report_date: '1936', page: '12', types: ['definition', 'reading'], context: 'running_text', vias: [{ url: 'https://example.test/post/1', author: '@poster', publisher: 'X', report_date: '2026-11-14', quote: '書影 p. 3' }] },
+      { place: 'A dictionary', title: 'Book', author: 'Someone', report_date: '1936', page: '12', types: ['definition', 'reading'], contexts: ['running_text', 'heading'], vias: [{ url: 'https://example.test/post/1', author: '@poster', publisher: 'X', report_date: '2026-11-14', container: null, source_kind: null, quote: '書影 p. 3' }] },
     ],
   })
   expect(added).toEqual({ failed: false, value: { id: 1, code: 'R+0001', url: `${ORIGIN}/entry/1` } })
@@ -125,7 +125,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
     id: 1, script: 'han', status: 'encoded', description: 'On a shop sign.',
     sightings: [
       { id: 1, place: 'A shop sign', pictures: [{ url: expect.stringMatching(/^https:\/\/example\.test\/media\/v2\/[a-f0-9]{64}\.png$/), width: 10, height: 10, marks: [[1, 1, 6, 6]] }] },
-      { id: 2, title: 'Book', types: ['definition', 'reading'], vias: [{ url: 'https://example.test/post/1', author: '@poster', quote: '書影 p. 3' }] },
+      { id: 2, title: 'Book', contexts: ['running_text', 'heading'], types: ['definition', 'reading'], vias: [{ url: 'https://example.test/post/1', author: '@poster', quote: '書影 p. 3' }] },
     ],
   })
   expect(read.value.claims.find((claim: { kind: string }) => claim.kind === 'reading')).toMatchObject({ value: 'tōge', data: { doculect: 'ja' }, evidence: [1, 2] })
@@ -185,7 +185,7 @@ test('what cannot be saved is refused whole', async () => {
   expect(await refused({ ids: ['⿰山'] })).toContain('Not an ideographic description sequence')
   expect(await refused({ ids: ['峠'] })).toContain('Not an ideographic description sequence')
   expect(await refused({ sightings: [{ ...sighting, url: 'javascript:alert(1)' }] })).toContain('http')
-  expect(await refused({ sightings: [{ ...sighting, context: 'billboard' }] })).toContain('context is one of')
+  expect(await refused({ sightings: [{ ...sighting, contexts: ['billboard'] }] })).toContain('contexts is one of')
   expect(await refused({ sightings: [{ ...sighting, types: ['proof'] }] })).toContain('types is one of')
   expect(await refused({ meanings: [{ text: 'pass', evidence: [2] }] })).toContain('from 1 to 1')
   expect(await refused({ readings: [{ text: 'tōge', meanings: [1] }] })).toContain('from 1 to 0')

@@ -15,7 +15,7 @@ import { cleanIds, IDS_LENGTH_MAX } from '$lib/ids'
 import { ADD_SIGHTINGS_MAX, BOXES_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
 import { REGISTRIES } from '$lib/registries'
 import { RELATION_KINDS } from '$lib/related'
-import { CONTEXTS, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, STYLES, VIAS_MAX } from '$lib/scripts'
+import { CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
 import { tagList } from '$lib/server/tags'
 import { addSighting, CITATION_FIELDS, createEntry, getEntry, hasLink, list, mediaVisible, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX } from '$lib/server/entries'
@@ -172,9 +172,10 @@ function sightingForm(input: Json) {
   const form = new FormData()
   const put = (name: string, value: string) => { if (value.trim()) form.set(name, value) }
   put('url', link(input.url, 'url'))
-  for (const name of ['place', 'title', 'author', 'publisher', 'report_date', 'original_date', 'page', 'note']) put(name, text(input[name]))
-  put('context', choice(input.context, CONTEXTS, 'context'))
+  for (const name of ['place', 'title', 'author', 'publisher', 'report_date', 'container', 'original_date', 'page', 'note']) put(name, text(input[name]))
+  put('source_kind', choice(input.source_kind, SOURCE_KINDS, 'source_kind'))
   put('style', choice(input.style, STYLES, 'style'))
+  for (const context of items(input.contexts)) form.append('contexts', choice(context, CONTEXTS, 'contexts'))
   for (const type of items(input.types)) form.append('types', choice(type, SIGHTING_TYPES, 'types'))
   const quotes = items(input.quotes)
   if (quotes.length > QUOTATIONS_MAX) throw new Refusal(`A sighting quotes up to ${QUOTATIONS_MAX} passages.`)
@@ -186,7 +187,7 @@ function sightingForm(input: Json) {
   const vias = items(input.vias).map(record)
   if (vias.length > VIAS_MAX) throw new Refusal(`A sighting names up to ${VIAS_MAX} vias.`)
   for (const via of vias) {
-    for (const field of CITATION_FIELDS) form.append(`via_${field}`, field === 'url' ? link(via.url, 'A via url') : text(via[field]))
+    for (const field of CITATION_FIELDS) form.append(`via_${field}`, field === 'url' ? link(via.url, 'A via url') : field === 'source_kind' ? choice(via.source_kind, SOURCE_KINDS, 'A via source_kind') : text(via[field]))
     form.append('via_quote', text(via.quote))
   }
   return form
@@ -336,7 +337,7 @@ async function getRecord(event: RequestEvent, input: Json) {
     sightings: sightings.map(sighting => ({
       id: sighting.id, place: sighting.place,
       ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
-      original_date: sighting.original_date, page: sighting.page, context: sighting.context, style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note,
+      original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note,
       vias: sighting.vias.map(({ id: _, ...via }) => via),
       pictures: sighting.media.map(picture => ({ url: `${event.url.origin}/media/v2/${picture.image_key}`, width: picture.image_w, height: picture.image_h, marks: picture.box ? JSON.parse(picture.box) as number[][] : [] })),
     })),
@@ -351,6 +352,7 @@ To add a character:
 1. Read the form from the evidence picture and write it as an ideographic description sequence (IDS), such as ⿰山東. A code point or a description given by whoever reported the character is a claim to check against the picture.
 2. Call find_similar_records with the IDS and compare the pictures of what comes back. When a record shows the same form, call add_sighting on it. Otherwise call add_record.
 3. Cite the work the character appears in as the sighting's source, with author, title, publisher, date and page. Cite where you found it, such as a post or a chat message that shows the page, as a via, with its author, date, link and the words you quote.
+4. A chat message, a forum post or a personal communication is evidence and is cited as one: the author as they sign, the date of that message, the words quoted, the group or channel as container, the service as publisher, and no title. A private message, a letter or a conversation has no container and takes source_kind personal. Each message is its own citation; never reuse another message's author or date.
 
 Record every attested form, whether or not Unicode encodes it; an encoded character takes an encoding with charset "unicode". State only the readings, meanings and relations the evidence gives.`
 
@@ -358,16 +360,18 @@ const CITATION = {
   url: { type: 'string', description: 'Web address, http or https.' },
   title: { type: 'string' },
   author: { type: 'string', description: 'The author as they sign: a name or a handle.' },
-  publisher: { type: 'string', description: 'The publisher, or the service a post is on, such as X.' },
-  report_date: { type: 'string', description: 'Publication date as written in the source, e.g. 明萬曆34年, 1936 or 2026-11-14.' },
+  publisher: { type: 'string', description: 'The publisher, or the service a post or message is on, such as X or QQ.' },
+  report_date: { type: 'string', description: 'Publication date as written in the source, e.g. 明萬曆34年, 1936, 168 BCE or 2026-11-14. A year with a minus sign counts as BCE: -168 is 168 BCE.' },
+  container: { type: 'string', description: 'What the source appeared in: the journal and issue of an article, the site of a page, the group or channel of a chat message.' },
+  source_kind: { type: 'string', enum: SOURCE_KINDS, description: 'personal for a personal communication: a letter, a private message, a conversation. Omit for anything published or sent to a group.' },
 }
 
 const SIGHTING = {
   place: { type: 'string', description: 'Where the character was found, in words that help someone find it again: a book and page, a street, a website.' },
   ...CITATION,
-  original_date: { type: 'string', description: 'The date of an older work shown in the picture, when the cited publication reproduces one.' },
+  original_date: { type: 'string', description: 'The date of an older work shown in the picture, when the cited publication reproduces one. Written as report_date is.' },
   page: { type: 'string', description: 'Page, folio or volume within the work.' },
-  context: { type: 'string', enum: CONTEXTS, description: 'How the character appears.' },
+  contexts: { type: 'array', items: { type: 'string', enum: CONTEXTS }, description: 'How the character appears, in every way the source shows it.' },
   style: { type: 'string', enum: STYLES, description: 'The writing style.' },
   types: { type: 'array', items: { type: 'string', enum: SIGHTING_TYPES }, description: 'What the source provides: mention (discusses the character), attestation (uses it in a text), description (says how it is written), definition (gives a meaning), reading (gives a pronunciation), relation (names a variant or the same character).' },
   quotes: { type: 'array', maxItems: QUOTATIONS_MAX, items: { type: 'object', required: ['text'], properties: { text: { type: 'string' }, locator: { type: 'string' } } }, description: 'Quoted passages, each with an optional attribution or location in the source.' },
@@ -400,7 +404,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'search_records', title: 'Search records', annotations: READS, run: searchRecords,
-    description: 'Records found by a description sequence, an encoded character, or words from their readings, meanings, tags and sources. Without a query, every record, those with the most evidence first.',
+    description: 'Records found by a description sequence, an encoded character, or words from their readings, meanings, tags and sources. Without a query, every record, those with the most evidence first. first_year numbers years as ISO 8601 does: 168 BCE is -167.',
     inputSchema: { type: 'object', properties: {
       query: { type: 'string' },
       limit: { type: 'integer', minimum: 1, maximum: SEARCH_PAGE_MAX, default: SEARCH_PAGE },
@@ -454,6 +458,9 @@ const TOOLS: Tool[] = [
     inputSchema: { type: 'object', required: ['record'], properties: { record: RECORD, ...SIGHTING } },
   },
 ]
+
+/** Public tool names and whether each writes, in server order. */
+export const MCP_TOOLS = TOOLS.map(({ name, annotations }) => ({ name, write: annotations.readOnlyHint !== true }))
 
 /** The tools, known tag names listed on `add_record`'s `categories` alias schema. */
 export const toolList = (tags: readonly string[]) => TOOLS.map(({ run: _, ...tool }) => tool.name !== 'add_record' ? tool : {

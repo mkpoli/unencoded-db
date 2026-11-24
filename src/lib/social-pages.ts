@@ -1,7 +1,7 @@
 import { translate, type Locale, type MessageKey } from '$lib/i18n'
 
 type SocialPage = {
-  path: string
+  path: string | null
   title: MessageKey
   detail?: MessageKey
   specimen?: number
@@ -16,14 +16,18 @@ export const SOCIAL_PAGES = {
   about: { path: '/about', title: 'about.title', specimen: 1734, publicTitle: true },
   batch: { path: '/batch', title: 'batch.title' },
   data: { path: '/data', title: 'data.title', detail: 'data.intro', publicTitle: true },
+  mcp: { path: '/mcp', title: 'mcp.title', detail: 'mcp.intro', publicTitle: true },
   chronology: { path: '/chronology', title: 'nav.chronology', source: 2837, publicTitle: true },
   'record-history': { path: '/entry/[id]/history', title: 'entry.history', publicTitle: true },
+  duplicate: { path: '/entry/[id]/duplicate', title: 'duplicate.title' },
   report: { path: '/entry/[id]/report', title: 'report.title' },
   'edit-evidence': { path: '/entry/[id]/sighting/[sighting]/edit', title: 'sighting.edit' },
+  'remove-evidence': { path: '/entry/[id]/sighting/[sighting]/remove', title: 'sighting.removeLink' },
   'add-evidence': { path: '/entry/[id]/sighting/new', title: 'social.addEvidence' },
   favourites: { path: '/favourites', title: 'favourites.title' },
   fonts: { path: '/fonts', title: 'nav.fonts', specimen: 1734, glyphOnly: true, publicTitle: true },
   history: { path: '/history', title: 'history.globalTitle', publicTitle: true },
+  notifications: { path: '/notifications', title: 'notifications.title' },
   account: { path: '/me', title: 'me.account' },
   moderation: { path: '/moderate', title: 'moderate.title' },
   new: { path: '/new', title: 'add.title' },
@@ -31,10 +35,11 @@ export const SOCIAL_PAGES = {
   radicals: { path: '/radicals', title: 'nav.radicals', specimen: 3, publicTitle: true },
   sources: { path: '/sources', title: 'nav.sources', source: 2837, publicTitle: true },
   tags: { path: '/tags', title: 'nav.tags', specimen: 3, publicTitle: true },
+  contributors: { path: '/u', title: 'people.title', publicTitle: true },
   contributor: { path: '/u/[id]', title: 'social.contributor' },
-  fallback: { path: '/+fallback', title: 'app.name', detail: 'app.tagline' },
-  unavailable: { path: '/+error', title: 'error.title' },
-  missing: { path: '/+404', title: 'error.notFound' },
+  fallback: { path: null, title: 'app.name', detail: 'app.tagline' },
+  unavailable: { path: null, title: 'error.title' },
+  missing: { path: null, title: 'error.notFound' },
 } as const satisfies Record<string, SocialPage>
 
 export type SocialPageName = keyof typeof SOCIAL_PAGES
@@ -43,12 +48,15 @@ export function getSocialPage(name: string): SocialPage | undefined {
   return Object.hasOwn(SOCIAL_PAGES, name) ? SOCIAL_PAGES[name as SocialPageName] : undefined
 }
 
-const ROUTES = new Map(Object.entries(SOCIAL_PAGES).map(([name, card]) => [`/[locale]${card.path}`, name as SocialPageName]))
+const ROUTES = new Map<string, SocialPageName>()
+for (const [name, card] of Object.entries(SOCIAL_PAGES)) {
+  if (card.path !== null) ROUTES.set(`/[locale]${card.path}`, name as SocialPageName)
+}
 
-export function socialPageFor(route: string | null, status: number): SocialPageName {
-  if (status === 404) return 'missing'
-  if (status >= 500) return 'unavailable'
-  return ROUTES.get(route ?? '') ?? 'unavailable'
+export function socialPageFor(route: string | null, errorStatus: number | null): SocialPageName {
+  if (errorStatus === 404) return 'missing'
+  if (errorStatus !== null) return 'unavailable'
+  return ROUTES.get(route ?? '') ?? 'fallback'
 }
 
 export function socialPageTitle(locale: Locale, title: MessageKey) {

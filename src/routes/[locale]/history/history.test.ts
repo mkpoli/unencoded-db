@@ -50,7 +50,7 @@ test('global history carries the old version of every readable revision', async 
   const { db } = openTestDb()
   const person = await createPerson(db)
   const fields: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', '⿰木木')] }
-  const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, vias: [], original_date: null, page: null, context: null, style: null, types: null, quotes: null, note: null }
+  const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
   const id = await createEntry(db, fields, sighting, [], { actor: person.id, ip: null })
   await editEntry(db, id, 1, { ...fields, description: 'Later' }, { actor: person.id, ip: null }, 'Corrected')
   const result = await load(event(db)) as any

@@ -1,9 +1,28 @@
 import { expect, test } from 'bun:test'
+import { getSocialPage, socialPageFor } from '$lib/social-pages'
 import { encode } from 'fast-png'
 import { openTestDb } from '$lib/server/testdb'
 import { getSourceArtwork, getVisibleSource } from '$lib/server/entries'
 import { lines, panelView, recordArtwork } from '$lib/server/social-card'
 import { GET } from './[locale]/[kind]/[id]/card.png/+server'
+import { copyCardSpecimen, copyPage } from '$lib/server/digitized-copies'
+import { GET as copyCard } from './[locale]/sources/copy/[slug]/card.png/+server'
+
+test('successful routes use their registered card or a generic site preview', () => {
+  expect(socialPageFor('/[locale]', null)).toBe('home')
+  const notifications = socialPageFor('/[locale]/notifications', null)
+  expect(getSocialPage(notifications)).toEqual({ path: '/notifications', title: 'notifications.title' })
+  for (const route of [null, '/[locale]/future/[id]']) {
+    const name = socialPageFor(route, null)
+    expect(name).toBe('fallback')
+    expect(getSocialPage(name)?.path).toBeNull()
+  }
+  // A failed form action renders the same page with a 4xx status and no page.error.
+  expect(socialPageFor('/[locale]/new', null)).toBe('new')
+  for (const status of [400, 403, 404, 500]) {
+    expect(socialPageFor('/[locale]/notifications', status)).toBe(status === 404 ? 'missing' : 'unavailable')
+  }
+})
 
 test('card requests reject hidden or merged records and sources without visible evidence', async () => {
   const { db, raw } = openTestDb()
@@ -32,6 +51,36 @@ test('card requests reject hidden or merged records and sources without visible 
   expect(await getSourceArtwork(db, 2)).toBeNull()
   raw.exec('UPDATE sightings SET source_id = 2 WHERE id = 2')
   expect(await getSourceArtwork(db, 2)).toEqual({ image_key: 'public.png', thumb_key: 'public-thumb.png', image_w: 1, image_h: 1, box: null })
+})
+
+test('a copy preview uses public evidence from that copy and checks visibility before rendering', async () => {
+  const { raw, db } = openTestDb()
+  const slug = 'ntcu-848'
+  raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026');
+    INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES
+      (1, 'han', '永', 'p', '2026', '2026'), (2, 'han', '木', 'p', '2026', '2026');
+    INSERT INTO sources(id, hash, url) VALUES
+      (1, 'page', 'https://ip194097.ntcu.edu.tw/memory/TGB/thak.asp?id=848&page=7');
+    INSERT INTO sightings(id, entry_id, first_entry, source_id, place, created_by, created_at, updated_at) VALUES
+      (1, 1, 1, NULL, 'Via the book', 'p', '2026', '2026'),
+      (2, 2, 2, 1, 'In the book', 'p', '2026', '2026');
+    INSERT INTO sighting_vias(sighting_id, position, source_id) VALUES (1, 0, 1);
+    INSERT INTO sighting_media(sighting_id, position, image_key, image_type, image_w, image_h, thumb_key) VALUES
+      (1, 0, 'other.png', 'image/png', 1, 1, 'shared-thumb.png'),
+      (2, 0, 'book.png', 'image/png', 1, 1, 'shared-thumb.png');`)
+  expect(await copyCardSpecimen(db, slug)).toMatchObject({ title: '彙音字典', collection: 'NTCU', entry_id: 2, thumb_key: 'shared-thumb.png', image_key: 'book.png' })
+  const initialVersion = (await copyPage(db, slug, 0))!.cardVersion
+  raw.exec("DELETE FROM sighting_media WHERE sighting_id = 2; UPDATE entries SET ids = NULL WHERE id = 2")
+  expect(await copyCardSpecimen(db, slug)).toMatchObject({ entry_id: 1, ids: '永', image_key: null })
+  expect((await copyPage(db, slug, 0))!.cardVersion).not.toBe(initialVersion)
+  raw.exec("UPDATE sightings SET hidden_at = 'now' WHERE id = 2")
+  expect(await copyCardSpecimen(db, slug)).toMatchObject({ entry_id: 1, ids: '永', image_key: null, thumb_key: null })
+  raw.exec('UPDATE entries SET merged_into = 2 WHERE id = 1')
+  for (const name of [slug, 'unknown-copy']) {
+    await expect(Promise.resolve(copyCard({
+      params: { locale: 'en', slug: name }, platform: { env: { DB: db } },
+    } as Parameters<typeof copyCard>[0]))).rejects.toMatchObject({ status: 404 })
+  }
 })
 
 test('record artwork draws every style beside the evidence panel', async () => {
