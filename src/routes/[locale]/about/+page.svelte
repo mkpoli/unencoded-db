@@ -21,6 +21,13 @@
     </div>
   </section>
   <section class="stack">
+    <h2>{t('mcp.title')}</h2>
+    <p>{t('mcp.intro')}</p>
+    <div class="row">
+      <a class="text-link" href={href('/mcp')}>{t('mcp.setupLink')}</a>
+    </div>
+  </section>
+  <section class="stack">
     <h2>{t('footer.community')}</h2>
     <p><ChatLinks /></p>
   </section>

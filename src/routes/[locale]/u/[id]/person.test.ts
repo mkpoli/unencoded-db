@@ -6,7 +6,7 @@ import { openTestDb } from '$lib/server/testdb'
 import { load } from './+page.server'
 
 const fields: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', '⿰木木')] }
-const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
+const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
 const event = (db: D1Database, person: string, before?: string) => ({
   params: { locale: 'en', id: person },
   url: new URL(`http://localhost/en/u/${person}${before === undefined ? '' : `?before=${before}`}`),
@@ -91,4 +91,12 @@ test('a merged person\'s contributions join the account they signed in to', asyn
   const result = await load(event(db, account.id)) as any
   expect(result.rows).toHaveLength(2)
   expect(result.rows.every((row: any) => row.entry_id === id && row.by_id === account.id && row.by_name === account.name)).toBe(true)
+})
+
+test('a person recorded under a UUID has a page', async () => {
+  const { db, raw } = openTestDb()
+  const id = '0a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d'
+  raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('${id}', 'Early', '2026-11-08T15:00:16.227Z')`)
+  expect((await load(event(db, id)) as any).person).toMatchObject({ id, name: 'Early' })
+  await expect(load(event(db, '0a1b2c3d-4e5f-4a6b-8c7d'))).rejects.toMatchObject({ status: 404 })
 })

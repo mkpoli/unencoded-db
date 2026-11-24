@@ -1,6 +1,9 @@
 <script lang="ts">
+  import EvidenceDate from './EvidenceDate.svelte'
+  import { westernDate } from '$lib/dates'
   import Combobox, { type ComboOption } from './Combobox.svelte'
   import { media, t } from '$lib/t'
+  import { kindName } from '$lib/source-kind'
   import { recordCode } from '$lib/code'
   import type { SourceMatch } from '$lib/server/source-aliases'
   import type { Source } from '$lib/server/entries'
@@ -16,7 +19,7 @@
   let page = $state<{ cursor: Cursor | null }>({ cursor: null }), next = $state<Cursor | null>(null)
   const options = $derived<ComboOption[]>([...matches.map(source => ({
     key: String(source.id),
-    label: source.title || (source.container && [source.author, source.container].filter(Boolean).join(' · ')) || source.url || source.author || source.publisher || source.report_date || `#${source.id}`,
+    label: source.title || (source.container && [source.author, source.container].filter(Boolean).join(' · ')) || source.url || [source.author, kindName(source.source_kind)].filter(Boolean).join(' · ') || source.publisher || source.report_date || `#${source.id}`,
   })), ...(next !== null ? [{ key: 'more', more: true, label: t('browse.more') }] : [])])
 
   function search(text: string) {
@@ -70,8 +73,9 @@
             {:else if source.alias && source.alias !== option.label}<span>{t('source.alias')} · {source.alias}</span>{/if}
             {#if source.author}<span>{t('field.author')} · {source.author}</span>{/if}
             {#if source.container && source.title}<span>{t('field.container')} · {source.container}</span>{/if}
+            {#if source.source_kind}<span>{kindName(source.source_kind)}</span>{/if}
             {#if source.publisher}<span>{t('field.publisher')} · {source.publisher}</span>{/if}
-            {#if source.report_date}<span>{t('field.reportDate')} · {source.report_date}</span>{/if}
+            {#if source.report_date}<span>{t('field.reportDate')} · <EvidenceDate text={source.report_date} reading={westernDate(source.report_date)} /></span>{/if}
             {#if source.url && source.title}<span>{source.url}</span>{/if}
             {#if evidence}
               <span class="evidence">{evidence.via ? t('source.foundVia') : t('entry.record', { id: recordCode(evidence.entry) })}{#if evidence.via} · {recordCode(evidence.entry)}{/if}{#if evidence.ids} · {evidence.ids}{/if}{#if !evidence.via && evidence.page} · {t('field.page')} {evidence.page}{/if}{#if !evidence.via && evidence.place && evidence.place !== option.label} · {evidence.place}{/if}</span>

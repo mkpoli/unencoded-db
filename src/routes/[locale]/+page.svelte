@@ -7,7 +7,7 @@
   import Tile from '$lib/components/Tile.svelte'
   import { COLLECTIONS, arrangeTags, localized } from '$lib/tags'
   import { MARKED } from '$lib/registries'
-  import { ORDER, PAGE, SORTS, pageSteps } from '$lib/order'
+  import { ORDER, PAGE, PAGE_SIZES, SORTS, pageSteps } from '$lib/order'
   import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
   import { describedTable } from '$lib/encoded'
   import { cleanIds } from '$lib/ids'
@@ -16,7 +16,8 @@
   import ChatLinks from '$lib/components/ChatLinks.svelte'
   import GlyphStyleTabs from '$lib/components/GlyphStyleTabs.svelte'
   import { GLYPH_STYLE_COOKIE, type GlyphStyle } from '$lib/composer'
-  import { href, locale, t } from '$lib/t'
+  import { decadeNumber } from '$lib/dates'
+  import { decadeName, href, locale, t, yearsName } from '$lib/t'
   import { TILE_SIZE_COOKIE, TILE_SIZES, pageColumns, tileSizeOf } from '$lib/tile-size'
   import type { Snapshot } from './$types'
   let { data } = $props()
@@ -80,7 +81,7 @@
   onMount(() => { mounted = true })
   const left = $derived(shown.total ? shown.total.n - shown.tiles.length : null)
   const done = $derived(shown.total !== null && !shown.total.floor && left !== null && left <= 0)
-  const pagesLeft = $derived(left !== null && left > 0 ? Math.ceil(left / PAGE) : null)
+  const pagesLeft = $derived(left !== null && left > 0 ? Math.ceil(left / data.per) : null)
   $effect(() => { if (mounted && (shown.partial || near) && !busy && failedFor !== data && !done && shown.next !== null) grow() })
   const appendOnClick = (event: MouseEvent) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
@@ -138,7 +139,7 @@
   $effect(() => {
     if (!grid) return
     const node = grid, tile = tileSize
-    const fit = () => { node.style.gridTemplateColumns = `repeat(${pageColumns(node.clientWidth, Math.min(tile, node.clientWidth), parseFloat(getComputedStyle(node).columnGap) || 0, PAGE)},minmax(0,1fr))` }
+    const fit = () => { node.style.gridTemplateColumns = `repeat(${pageColumns(node.clientWidth, Math.min(tile, node.clientWidth), parseFloat(getComputedStyle(node).columnGap) || 0, data.per)},minmax(0,1fr))` }
     const watching = new ResizeObserver(fit)
     watching.observe(node)
     fit()
@@ -167,6 +168,12 @@
   const count = (key: string) => data.counts?.[key] ?? 0
   // The list's address without its place, which the page form keeps and adds a page to.
   const unplaced = $derived([...page.url.searchParams].filter(([name]) => name !== 'after' && name !== 'page'))
+  // Another page size starts the list again from its first page.
+  const sized = (size: number) => {
+    const params = new URLSearchParams(unplaced)
+    if (size === PAGE) params.delete('per'); else params.set('per', String(size))
+    return params.size ? `?${params}` : href()
+  }
   const paged = (number: number) => {
     const params = new URLSearchParams(unplaced)
     if (number > 1) params.set('page', String(number))
@@ -178,18 +185,19 @@
     goto(paged(Number.isInteger(typed) && typed > 1 ? Math.min(typed, data.pages ?? typed) : 1))
   }
   // The pages on screen: the one opened and those the list has grown by since.
-  const lastOpen = $derived(Math.min(data.pages ?? data.number, data.number + Math.max(1, Math.ceil(shown.tiles.length / PAGE)) - 1))
+  const lastOpen = $derived(Math.min(data.pages ?? data.number, data.number + Math.max(1, Math.ceil(shown.tiles.length / data.per)) - 1))
   const steps = $derived(pageSteps(data.number, lastOpen, data.pages ?? 1))
-  const firstShown = $derived((data.number - 1) * PAGE + 1)
+  const firstShown = $derived((data.number - 1) * data.per + 1)
   // The decades records were first seen in, by century, oldest first.
   const centuries = $derived.by(() => {
     // The chosen decade stays an option when it holds no record now, so the form keeps it.
     const held = Object.keys(data.counts ?? {}).filter(key => key.startsWith('y:')).map(key => Number(key.slice(2)))
     const decades = [...new Set([...held, ...(data.decade ? [Number(data.decade)] : [])])].sort((a, b) => a - b)
-    const byCentury = new Map<number, number[]>()
+    const byCentury = new Map<string, number[]>()
     for (const decade of decades) {
-      const century = Math.floor(decade / 100) * 100
-      byCentury.set(century, [...(byCentury.get(century) ?? []), decade])
+      const century = Math.floor(decadeNumber(decade) / 100) * 100
+      const label = decade < 0 ? yearsName(-98 - century, century ? 1 - century : 0) : `${century}–${century + 99}`
+      byCentury.set(label, [...(byCentury.get(label) ?? []), decade])
     }
     return [...byCentury]
   })
@@ -225,6 +233,9 @@
   })
 </script>
 
+{#snippet sizes()}
+  <nav class="sizes" aria-label={t('browse.perPage')} data-sveltekit-preload-data="tap"><span aria-hidden="true">{t('browse.perPage')}</span>{#each PAGE_SIZES as size}<a class="chip" class:on={data.per === size} aria-current={data.per === size ? 'true' : undefined} href={sized(size)}>{size}</a>{/each}</nav>
+{/snippet}
 {#snippet turner(id: string)}
   {@const last = data.pages ?? 1}
   <nav class="pages" aria-label={t('browse.page')} data-sveltekit-preload-data="tap">
@@ -262,11 +273,12 @@
     {/if}
     <div class="field decade"><label for="decade">{t('browse.decadeLabel')}</label><select class="input" id="decade" name="decade" value={data.decade ?? ''}>
       <option value="">{t('browse.all')}</option>
-      {#each centuries as [century, decades] (century)}<optgroup label="{century}–{century + 99}">{#each decades as decade (decade)}<option value={String(decade)}>{t('browse.decade', { n: decade })} ({count(`y:${decade}`)})</option>{/each}</optgroup>{/each}
+      {#each centuries as [century, decades] (century)}<optgroup label={century}>{#each decades as decade (decade)}<option value={String(decade)}>{decadeName(decade)} ({count(`y:${decade}`)})</option>{/each}</optgroup>{/each}
     </select></div>
     <div class="field radical"><span class="label" id="radical-label">{t('field.radical')}</span>{#if data.radical}{@const radical = [...data.radical].at(-1)}<input type="hidden" name="radical" value={data.radical} /><a class="pinned" href={unfiled} aria-label="{t('field.radical')} {radical} ×"><span class="glyph">{radical}</span> <span aria-hidden="true">×</span></a>{:else}<a class="input choose" id="radical-choice" href={href('/radicals')} aria-labelledby="radical-label radical-choice">{t('browse.all')}<span aria-hidden="true">›</span></a>{/if}</div>
     {#if data.order !== ORDER}<input type="hidden" name="sort" value={data.order} />{/if}
     {#if data.seed !== null}<input type="hidden" name="seed" value={data.seed} />{/if}
+    {#if data.per !== PAGE}<input type="hidden" name="per" value={data.per} />{/if}
     {#each data.within as id}<input type="hidden" name="in" value={id} />{/each}{#each data.without as id}<input type="hidden" name="out" value={id} />{/each}
     <button class="button" type="submit">{t('browse.filter')}</button>
   </form>
@@ -304,8 +316,11 @@
     {#if data.pages && data.records && shown.tiles.length}
       <div class="pager">
         <p class="range">{t('browse.shown', { from: firstShown, to: firstShown + shown.tiles.length - 1, n: `${data.records}${data.recordsFloor ? '+' : ''}` })}</p>
+        {#if data.records > PAGE_SIZES[0]}{@render sizes()}{/if}
         {#if data.pages > 1}{@render turner('page')}{/if}
       </div>
+    {:else if data.per !== PAGE}
+      <div class="pager">{@render sizes()}</div>
     {/if}
     {#if data.also.length}<details class="found also"><summary>{t('browse.alsoSearched', { n: data.also.length })}</summary><ul>{#each data.also as spelling}<li class="ids">{spelling}</li>{/each}</ul></details>{/if}
     {#if shown.tiles.length}
@@ -357,6 +372,7 @@
   :global(:root:is([data-tile-size="48"], [data-tile-size="64"], [data-tile-size="80"])) .tiles { gap:8px }
   .pager { display:flex; flex-wrap:wrap; align-items:center; gap:8px 20px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
   .foot { justify-content:flex-end }
+  .sizes { display:flex; flex-wrap:wrap; align-items:center; gap:2px } .sizes span { margin-inline-end:6px } .sizes .chip { justify-content:center; min-inline-size:34px; padding-inline:8px }
   .range { margin:0; margin-inline-end:auto }
   .pages { display:flex; flex-wrap:wrap; align-items:center; gap:2px }
   .pages .chip { justify-content:center; min-inline-size:34px; padding-inline:8px } .pages .off { opacity:.35; cursor:default } .pages .off:hover { color:var(--muted) } .gap { padding-inline:4px }
