@@ -13,7 +13,7 @@ import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
 import { decadeOf } from '$lib/dates'
-import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { PAGE, PAGE_SIZES, pageSizeOf } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
@@ -450,20 +450,20 @@ describe('the wiki', () => {
     expect((await list(db, {}))!.tiles.map(tile => tile.id)).toEqual([b, a])
   })
 
-  test('merging and undoing keep every claim and picture where it was written', async () => {
+  test('merging joins the claims, and undoing gives each record back its own claims and pictures', async () => {
     const a = await createEntry(db, fields({ claims: [claim('ids', '⿰木木'), claim('reading', 'tung'), relation('林', 'variant', 'a stroke')] }), seen({ place: 'one' }), [{ ...image, image_key: 'a.jpg', thumb_key: 'a-t.jpg', box: '[[1,2,10,10]]' }], who)
     const b = await createEntry(db, fields({ claims: [claim('ids', '⿱木木'), claim('encoding', 'U+5D20', { charset: 'unicode' })] }), seen({ place: 'two' }), [], who)
     const claimsOf = async (id: number) => (await getEntry(db, id))!.claims
     const [aClaims, bClaims] = [await claimsOf(a), await claimsOf(b)]
     await mergeEntry(db, a, b, who, null)
     expect(await claimsOf(a)).toEqual(aClaims)
-    expect(await claimsOf(b)).toEqual(bClaims)
+    expect(await claimsOf(b)).toEqual([...bClaims, ...aClaims])
     const merged = (await getEntry(db, b))!
     expect(merged.sightings.map(item => item.media.map(picture => picture.image_key))).toEqual([['a.jpg'], []])
     expect(merged.entry).toMatchObject({ cover_key: 'a-t.jpg', cover_place: 'one', sightings: 2 })
     expect(merged.sightings[0].media[0].box).toBe('[[1,2,10,10]]')
-    expect((await claimedBy(db, 'ids', '⿰木木')).map(row => row.id)).toEqual([])
-    expect((await list(db, { query: 'tung' }))!.tiles).toEqual([])
+    expect((await claimedBy(db, 'ids', '⿰木木')).map(row => row.id)).toEqual([b])
+    expect((await list(db, { query: 'tung' }))!.tiles.map(tile => tile.id)).toEqual([b])
     expect(await mediaVisible(db, 'a.jpg')).toBe(true)
     expect(await unmergeEntry(db, a, who)).toBe(true)
     expect(await claimsOf(a)).toEqual(aClaims)
@@ -475,6 +475,94 @@ describe('the wiki', () => {
     expect((await claimedBy(db, 'ids', '⿰木木')).map(row => row.id)).toEqual([a])
     expect((await list(db, { query: 'tung' }))!.tiles.map(tile => tile.id)).toEqual([a])
     expect((await list(db, { query: '⿰木木' }))!.tiles.map(tile => tile.id)).toEqual([a])
+  })
+
+  test('a duplicate saved twice merges into one record whose claims rest on both sightings', async () => {
+    const meaning = claim('meaning', 'a fish'), reading = claim('reading', 'sou', { doculect: 'ja' }, { under: [meaning.key] })
+    const twice = () => fields({ radical: null, claims: [claim('ids', '⿱赤相'), { ...reading, sightings: [1] }, { ...meaning, sightings: [1] }] })
+    const a = await createEntry(db, { ...twice(), radical: '赤' }, seen({ place: 'post' }), [], who)
+    const b = await createEntry(db, twice(), seen({ place: 'post' }), [image], who)
+    const [first, second] = [(await getEntry(db, a))!.sightings[0].id, (await getEntry(db, b))!.sightings[0].id]
+    expect(await mergeEntry(db, b, a, who, 'saved twice')).toEqual({ ok: true })
+    const merged = (await getEntry(db, a))!
+    expect(merged.entry).toMatchObject({ rev: 2, sightings: 2, cover_key: 't.webp', radical: '赤' })
+    expect(merged.claims.map(({ kind, value, sightings, under }) => ({ kind, value, sightings, under }))).toEqual([
+      { kind: 'ids', value: '⿱赤相', sightings: [], under: [] },
+      { kind: 'reading', value: 'sou', sightings: [first, second], under: [meaning.key] },
+      { kind: 'meaning', value: 'a fish', sightings: [first, second], under: [] },
+    ])
+    const [row] = await history(db, a)
+    expect(row).toMatchObject({ kind: 'merge', rev: 2, summary: 'saved twice' })
+    expect(JSON.parse(row.snapshot)).toMatchObject({ from: b, added: [], scoped: [], filled: [] })
+    expect(entryFieldsOf(row.snapshot)!.claims).toEqual(merged.claims)
+    expect(await unmergeEntry(db, b, who)).toBe(true)
+    const parted = (await getEntry(db, a))!
+    expect(parted.entry).toMatchObject({ rev: 3, sightings: 1, cover_key: null })
+    expect(parted.claims.map(item => item.sightings)).toEqual([[], [first], [first]])
+    expect((await getEntry(db, b))!.claims.map(item => item.sightings)).toEqual([[], [second], [second]])
+  })
+
+  test('undoing a merge takes back what the duplicate filled in and leaves later work', async () => {
+    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰木木')] }), seen({ place: 'one' }), [], who)
+    const b = await createEntry(db, fields({ radical: '木', strokes: 8, claims: [claim('ids', '⿰木木'), claim('reading', 'rin')] }), seen({ place: 'two' }), [], who)
+    await mergeEntry(db, b, a, who, null)
+    const merged = (await getEntry(db, a))!
+    expect(merged.entry).toMatchObject({ radical: '木', strokes: 8 })
+    const kept = merged.sightings.find(sighting => sighting.place === 'one')!.id
+    await editEntry(db, a, merged.entry.rev, { ...fields(), radical: '木', strokes: 9, claims: [...merged.claims.map(item => item.kind === 'reading' ? { ...item, sightings: [kept] } : item), claim('meaning', 'grove')] }, who, null)
+    expect(await unmergeEntry(db, b, who)).toBe(true)
+    const parted = (await getEntry(db, a))!
+    expect(parted.entry).toMatchObject({ radical: null, strokes: 9 })
+    expect(parted.claims.map(item => [item.kind, item.value])).toEqual([['ids', '⿰木木'], ['reading', 'rin'], ['meaning', 'grove']])
+    expect((await getEntry(db, b))!.entry).toMatchObject({ radical: '木', strokes: 8, merged_into: null })
+  })
+
+  test('a hidden record keeps its duplicates, and a redacted merge can still be undone', async () => {
+    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰木木')] }), seen({ place: 'one' }), [], who)
+    const b = await createEntry(db, fields({ radical: '木', claims: [claim('ids', '⿰木木'), claim('reading', 'rin')] }), seen({ place: 'two' }), [image], who)
+    await mergeEntry(db, b, a, who, null)
+    await setHidden(db, { entry: a }, true, who, null)
+    expect(await unmergeEntry(db, b, who)).toBe(false)
+    expect(await mediaVisible(db, 'a.webp')).toBe(false)
+    await setHidden(db, { entry: a }, false, who, null)
+    const merged = (await getEntry(db, a))!
+    await editEntry(db, a, merged.entry.rev, { ...fields(), radical: '木', claims: merged.claims }, who, null)
+    const merge = (await history(db, a)).find(row => row.kind === 'merge')!
+    expect(await redactRevision(db, a, merge.id, who, null)).toBe(true)
+    const redacted = (await history(db, a)).find(row => row.id === merge.id)!
+    expect(JSON.parse(redacted.snapshot)).toMatchObject({ from: b, filled: ['radical'] })
+    expect(entryFieldsOf(redacted.snapshot)).toBeNull()
+    expect(await unmergeEntry(db, b, who)).toBe(true)
+    const parted = (await getEntry(db, a))!
+    expect(parted.entry.radical).toBeNull()
+    expect(parted.claims.map(item => item.kind)).toEqual(['ids'])
+  })
+
+  test('a claim two duplicates gave stays until the last of them parts', async () => {
+    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰木木')] }), seen({ place: 'a' }), [], who)
+    const b = await createEntry(db, fields({ claims: [claim('reading', 'rin')] }), seen({ place: 'b' }), [], who)
+    const c = await createEntry(db, fields({ claims: [claim('reading', 'rin')] }), seen({ place: 'c' }), [], who)
+    await mergeEntry(db, b, a, who, null)
+    await mergeEntry(db, c, a, who, null)
+    const kinds = async () => (await getEntry(db, a))!.claims.map(item => item.kind)
+    expect(await unmergeEntry(db, b, who)).toBe(true)
+    expect(await kinds()).toEqual(['ids', 'reading'])
+    expect(await unmergeEntry(db, c, who)).toBe(true)
+    expect(await kinds()).toEqual(['ids'])
+  })
+
+  test('a chain of merges parts one link at a time with everything that link brought', async () => {
+    const [a, b, c] = [await createEntry(db, fields(), seen({ place: 'a' }), [], who), await createEntry(db, fields(), seen({ place: 'b' }), [], who), await createEntry(db, fields(), seen({ place: 'c' }), [], who)]
+    await mergeEntry(db, c, b, who, null)
+    await mergeEntry(db, b, a, who, null)
+    expect((await getEntry(db, a))!.sightings.map(sighting => sighting.place)).toEqual(['a', 'b', 'c'])
+    expect(await mergedInto(db, a)).toEqual([b])
+    expect(await unmergeEntry(db, c, who)).toBe(false)
+    expect(await unmergeEntry(db, b, who)).toBe(true)
+    expect((await getEntry(db, a))!.sightings.map(sighting => sighting.place)).toEqual(['a'])
+    expect((await getEntry(db, b))!.sightings.map(sighting => sighting.place)).toEqual(['b', 'c'])
+    expect(await unmergeEntry(db, c, who)).toBe(true)
+    expect((await getEntry(db, c))!.sightings.map(sighting => sighting.place)).toEqual(['c'])
   })
 
   test('a record cannot merge into itself or into a merged record', async () => {
