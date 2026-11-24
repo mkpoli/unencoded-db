@@ -15,7 +15,7 @@ import { cleanIds, IDS_LENGTH_MAX } from '$lib/ids'
 import { ADD_SIGHTINGS_MAX, BOXES_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
 import { REGISTRIES } from '$lib/registries'
 import { RELATION_KINDS } from '$lib/related'
-import { CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, STYLES, VIAS_MAX } from '$lib/scripts'
+import { CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
 import { tagList } from '$lib/server/tags'
 import { addSighting, CITATION_FIELDS, createEntry, getEntry, hasLink, list, mediaVisible, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX } from '$lib/server/entries'
@@ -173,6 +173,7 @@ function sightingForm(input: Json) {
   const put = (name: string, value: string) => { if (value.trim()) form.set(name, value) }
   put('url', link(input.url, 'url'))
   for (const name of ['place', 'title', 'author', 'publisher', 'report_date', 'container', 'original_date', 'page', 'note']) put(name, text(input[name]))
+  put('source_kind', choice(input.source_kind, SOURCE_KINDS, 'source_kind'))
   put('style', choice(input.style, STYLES, 'style'))
   for (const context of items(input.contexts)) form.append('contexts', choice(context, CONTEXTS, 'contexts'))
   for (const type of items(input.types)) form.append('types', choice(type, SIGHTING_TYPES, 'types'))
@@ -186,7 +187,7 @@ function sightingForm(input: Json) {
   const vias = items(input.vias).map(record)
   if (vias.length > VIAS_MAX) throw new Refusal(`A sighting names up to ${VIAS_MAX} vias.`)
   for (const via of vias) {
-    for (const field of CITATION_FIELDS) form.append(`via_${field}`, field === 'url' ? link(via.url, 'A via url') : text(via[field]))
+    for (const field of CITATION_FIELDS) form.append(`via_${field}`, field === 'url' ? link(via.url, 'A via url') : field === 'source_kind' ? choice(via.source_kind, SOURCE_KINDS, 'A via source_kind') : text(via[field]))
     form.append('via_quote', text(via.quote))
   }
   return form
@@ -351,7 +352,7 @@ To add a character:
 1. Read the form from the evidence picture and write it as an ideographic description sequence (IDS), such as ⿰山東. A code point or a description given by whoever reported the character is a claim to check against the picture.
 2. Call find_similar_records with the IDS and compare the pictures of what comes back. When a record shows the same form, call add_sighting on it. Otherwise call add_record.
 3. Cite the work the character appears in as the sighting's source, with author, title, publisher, date and page. Cite where you found it, such as a post or a chat message that shows the page, as a via, with its author, date, link and the words you quote.
-4. A chat message, a forum post or a personal communication is evidence and is cited as one: the author as they sign, the date of that message, the words quoted, the group or channel as container, the service as publisher, and no title. A private message has no container. Each message is its own citation; never reuse another message's author or date.
+4. A chat message, a forum post or a personal communication is evidence and is cited as one: the author as they sign, the date of that message, the words quoted, the group or channel as container, the service as publisher, and no title. A private message, a letter or a conversation has no container and takes source_kind personal. Each message is its own citation; never reuse another message's author or date.
 
 Record every attested form, whether or not Unicode encodes it; an encoded character takes an encoding with charset "unicode". State only the readings, meanings and relations the evidence gives.`
 
@@ -362,6 +363,7 @@ const CITATION = {
   publisher: { type: 'string', description: 'The publisher, or the service a post or message is on, such as X or QQ.' },
   report_date: { type: 'string', description: 'Publication date as written in the source, e.g. 明萬曆34年, 1936 or 2026-11-14.' },
   container: { type: 'string', description: 'What the source appeared in: the journal and issue of an article, the site of a page, the group or channel of a chat message.' },
+  source_kind: { type: 'string', enum: SOURCE_KINDS, description: 'personal for a personal communication: a letter, a private message, a conversation. Omit for anything published or sent to a group.' },
 }
 
 const SIGHTING = {

@@ -189,6 +189,8 @@
   "field.author": "저자",
   "field.publisher": "출판사",
   "field.container": "수록처",
+  "field.sourceKind": "자료 유형",
+  "sourceKind.personal": "개인 교신",
   "field.reportDate": "공개일",
   "field.reportDateHint": "게시물, 책 또는 페이지가 공개된 날.",
   "field.originalDate": "원본 연대",

@@ -4,6 +4,7 @@
   import Seo from '$lib/components/Seo.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { href, media, t } from '$lib/t'
+  import { kindName } from '$lib/source-kind'
   import { recordCode } from '$lib/code'
   import { SOURCE_SORTS } from '$lib/order'
   let { data } = $props()
@@ -45,8 +46,9 @@
   {#if data.sources.length}
     <div class="cards">
       {#each data.sources as source (source.id)}
-        {@const name = source.title || source.container || host(source.url) || source.url || t('source.title')}
-        {@const byline = [source.author, source.title ? source.container : null, source.publisher].filter(Boolean).join(' · ')}
+        {@const name = source.title || source.container || host(source.url) || source.url || kindName(source.source_kind) || t('source.title')}
+        {@const kind = kindName(source.source_kind)}
+        {@const byline = [source.author, source.title ? source.container : null, name === kind ? null : kind, source.publisher].filter(Boolean).join(' · ')}
         <article class="card">
           <a class="cover" href={href(`/source/${source.id}`)} tabindex="-1" aria-hidden="true">
             {#if source.cover}<img src={media(source.cover)} alt="" loading="lazy" decoding="async" />{:else}<span class="blank">{t('browse.noImage')}</span>{/if}

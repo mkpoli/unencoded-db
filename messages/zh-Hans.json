@@ -189,6 +189,8 @@
   "field.author": "作者",
   "field.publisher": "出版者",
   "field.container": "所载刊物或群组",
+  "field.sourceKind": "资料类别",
+  "sourceKind.personal": "个人通信",
   "field.reportDate": "发布日期",
   "field.reportDateHint": "帖子、书籍或页面发布的日期。",
   "field.originalDate": "原始年代",

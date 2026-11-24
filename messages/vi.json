@@ -189,6 +189,8 @@
   "field.author": "Tác giả",
   "field.publisher": "Nhà xuất bản",
   "field.container": "Đăng trong",
+  "field.sourceKind": "Loại tài liệu",
+  "sourceKind.personal": "Trao đổi cá nhân",
   "field.reportDate": "Ngày công bố",
   "field.reportDateHint": "Ngày bài đăng, sách hoặc trang được công bố.",
   "field.originalDate": "Niên đại bản gốc",

@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { d1Over } from './testdb'
 
 const fields = (ids: string): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', ids)] })
-const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
+const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
 
 async function scene() {
   const { db, raw } = openTestDb()
@@ -86,7 +86,7 @@ test('changes made before notices existed are queued for the recorder', async ()
   const migrations = join(import.meta.dir, '../../../migrations')
   const names = readdirSync(migrations).sort()
   // The code under test writes the source and sighting columns and reads the tag aliases of today, so their migrations run first.
-  const early = (name: string) => name < '0035' || name === '0041_source_container.sql' || name === '0045_tag_aliases.sql' || name === '0047_sighting_contexts.sql'
+  const early = (name: string) => name < '0035' || name === '0041_source_container.sql' || name === '0045_tag_aliases.sql' || name === '0047_sighting_contexts.sql' || name === '0048_source_kind.sql'
   for (const name of names.filter(early)) raw.exec(readFileSync(join(migrations, name), 'utf8'))
   const db = d1Over(raw)
   const recorder = await createPerson(db), second = await createPerson(db), maintenance = await createPerson(db, null, 'Catalogue maintenance')
