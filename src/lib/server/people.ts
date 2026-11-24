@@ -152,6 +152,9 @@ export async function joinAtlas(db: D1Database, current: Person | null, sub: str
   return id
 }
 
+/** A person's id is twelve hex digits; the first people of the catalogue hold a UUID. */
+export const PERSON_ID = /^(?:[0-9a-f]{12}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/
+
 /** The Glyph Atlas account a person signed in with, if they may be shown. */
 export async function atlasSubOf(db: D1Database, id: string) {
   const row = await db.prepare('SELECT atlas_sub FROM people WHERE id = ? AND merged_into IS NULL AND banned_at IS NULL').bind(id).first<{ atlas_sub: string | null }>()

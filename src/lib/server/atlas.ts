@@ -66,8 +66,8 @@ const PICTURE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const PICTURE_MAX = 1024 * 1024
 const PICTURE_WAIT = 5000
 
-/** The picture an account has now, or null when it has none or it cannot be had in time. */
-export async function atlasPicture(event: RequestEvent, sub: string): Promise<{ body: Blob; type: string } | null> {
+/** The picture an account has now, null when it has none to show, and undefined when that cannot be told. */
+export async function atlasPicture(event: RequestEvent, sub: string): Promise<{ body: Blob; type: string } | null | undefined> {
   const issuer = event.platform?.env.ATLAS_ISSUER
   if (!issuer) return null
   try {
@@ -75,9 +75,9 @@ export async function atlasPicture(event: RequestEvent, sub: string): Promise<{ 
     const type = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase() ?? ''
     if (!response.ok || !response.body || !PICTURE_TYPES.includes(type)) {
       void response.body?.cancel().catch(() => {})
-      return null
+      return response.ok || response.status === 404 ? null : undefined
     }
     const body = await boundedBody(response.body, PICTURE_MAX)
     return body && { body, type }
-  } catch { return null }
+  } catch { return undefined }
 }

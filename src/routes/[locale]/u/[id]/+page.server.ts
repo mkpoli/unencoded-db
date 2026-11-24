@@ -1,6 +1,7 @@
 import { error, redirect } from '@sveltejs/kit'
 import { ofPerson } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
+import { PERSON_ID } from '$lib/server/people'
 import { tagList } from '$lib/server/tags'
 import { revisionDates, revisionFields } from '$lib/server/revisions'
 import { positiveId } from '../../../_submission.server'
@@ -8,8 +9,7 @@ import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async (event) => {
   const id = event.params.id
-  // A person's id is twelve hex digits; the first people of the catalogue hold a UUID.
-  if (!/^(?:[0-9a-f]{12}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/.test(id)) error(404)
+  if (!PERSON_ID.test(id)) error(404)
   const cursor = event.url.searchParams.get('before')
   const before = cursor === null ? null : positiveId(cursor)
   if (cursor !== null && before === null) error(404)

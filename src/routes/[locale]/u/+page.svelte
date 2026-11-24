@@ -21,7 +21,7 @@
           <span class="place">{number.format(data.first + i)}</span>
           <span class="avatar" class:unnamed={!letter} aria-hidden="true">
             {#if !loaded.has(person.id)}{letter ?? '?'}{/if}
-            {#if person.atlas}<img class:shown={loaded.has(person.id)} src="/api/people/{person.id}/picture" alt="" width="30" height="30" decoding="async" onload={() => loaded.add(person.id)} {@attach arrived(person.id)} />{/if}
+            {#if person.atlas}<img class:shown={loaded.has(person.id)} src="/api/people/{person.id}/picture" alt="" width="30" height="30" loading="lazy" decoding="async" onload={() => loaded.add(person.id)} {@attach arrived(person.id)} />{/if}
           </span>
           <a class="name" aria-current={person.id === data.person?.id ? 'true' : undefined} href={href(`/u/${person.id}`)}>{person.name}</a>
           <span class="total">{t(person.changes === 1 ? 'people.change' : 'people.changes', { n: number.format(person.changes) })}</span>
