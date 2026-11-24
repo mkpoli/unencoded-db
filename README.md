@@ -8,7 +8,7 @@ When two records are the same character, and how to merge them, is set out in [d
 
 ## Local development
 
-Install [Bun](https://bun.sh/) and run:
+Install [Bun](https://bun.sh/) and the ICU command-line tools (`icu-devtools` on Ubuntu), then run:
 
 ```sh
 bun install
@@ -40,6 +40,8 @@ The local setup and production release run the date sweep after applying migrati
 ## Source names
 
 On a source page, open **Alternate names** to add a spelling or abbreviation for that citation. The Sources page and the title fields for direct and intermediate citations accept the start of a title or alternate name. Picking an edition fills its citation details. A new title can be entered freely. URL-only sources also match their hostname. The release runs `scripts/sweep-source-names.ts` to normalize existing names.
+
+Local setup and each release run `bun scripts/sweep-title-readings.ts` with `--local` or `--remote` to index every public source title. For example, both `Dai Nam nhat thong chi` and `Da Nan Yi Tong Zhi` find 大南一統志. The picker shows the recorded title and citation evidence. Only curated title variants appear with a variant label. A newly cited title is searchable as entered immediately and gains its generated spellings at the next sweep.
 
 ## Publishers
 
