@@ -55,5 +55,5 @@ export function datedYear(value: string | null, book: DateBook) {
   const reading = book.has(value) ? book.get(value) : westernDate(value)
   if (!reading) return null
   const n = yearOfDay(reading.start)
-  return { text: String(n), n }
+  return { text: String(n), n, end: reading.end }
 }
