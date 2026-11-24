@@ -13,7 +13,7 @@
 <div class="page narrow stack">
   <a class="text-link back" href={href(`/entry/${data.id}#sighting-${data.sighting.id}`)}>← {t('history.back')}</a>
   <h1>{title}</h1>
-  {#if only}<p class="notice" role="alert">{t('error.only')}</p>
+  {#if only}<p class="notice bad" role="alert">{t('error.only')}</p>
   {:else if form?.error}<p class="notice bad" role="alert">{t(`error.${form.error}`)}</p>{/if}
   <div class="evidence">
     {#if data.sighting.picture}<img src={media(data.sighting.picture.thumb_key)} alt="" />{/if}

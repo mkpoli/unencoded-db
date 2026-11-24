@@ -21,6 +21,7 @@ export const SOCIAL_PAGES = {
   'record-history': { path: '/entry/[id]/history', title: 'entry.history', publicTitle: true },
   report: { path: '/entry/[id]/report', title: 'report.title' },
   'edit-evidence': { path: '/entry/[id]/sighting/[sighting]/edit', title: 'sighting.edit' },
+  'remove-evidence': { path: '/entry/[id]/sighting/[sighting]/remove', title: 'sighting.removeLink' },
   'add-evidence': { path: '/entry/[id]/sighting/new', title: 'social.addEvidence' },
   favourites: { path: '/favourites', title: 'favourites.title' },
   fonts: { path: '/fonts', title: 'nav.fonts', specimen: 1734, glyphOnly: true, publicTitle: true },

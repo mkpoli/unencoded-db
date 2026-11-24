@@ -18,24 +18,23 @@ export const load: PageServerLoad = async (event) => {
   if (found.entry.merged_into) redirect(302, `/${event.params.locale}/entry/${found.entry.merged_into}`)
   const visibleSightings = new Map(found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => [sighting.id, sighting.rev]))
   // Removed evidence keeps its history, with a way back; what a moderator hid shows nothing.
-  const removed = new Set(found.sightings.filter(sighting => sighting.hidden_at && sighting.removed_by).map(sighting => sighting.id))
+  const removed = found.sightings.filter(sighting => sighting.hidden_at && sighting.removed_by)
+  const removedRevs = new Map(removed.map(sighting => [sighting.id, sighting.rev]))
   const before = event.url?.searchParams.get('before')
   if (before !== null && before !== undefined && !positiveId(before)) error(404)
   const viewer = event.locals?.person
   const [page, tags] = await Promise.all([history(db, id, before ? positiveId(before) : null), tagList(db)])
   const next = page.length > ENTRY_HISTORY_PAGE ? page[ENTRY_HISTORY_PAGE - 1].id : null
   const rows = page.slice(0, ENTRY_HISTORY_PAGE)
-    .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id) || removed.has(row.sighting_id))
+    .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id) || removedRevs.has(row.sighting_id))
     .map(({ id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, snapshot, redacted_at }) => ({
       id, entry_id, sighting_id, rev, summary, at, by_id, by_name, redacted: Boolean(redacted_at),
       ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
-      sightingRev: sighting_id ? visibleSightings.get(sighting_id) : null,
-      putBack: false,
+      sightingRev: sighting_id ? visibleSightings.get(sighting_id) ?? removedRevs.get(sighting_id) : null,
+      removed: sighting_id !== null && removedRevs.has(sighting_id),
     }))
-  // The removal in force is the newest one of its sighting.
-  for (const row of rows) if (row.kind === 'remove' && removed.delete(row.sighting_id!)) row.putBack = true
   const thanked = viewer ? await thankedOf(db, viewer.id, rows.map(row => row.id)) : []
-  return { id, rev: found.entry.rev, updated_at: found.entry.updated_at, rows, thanked, dates: await revisionDates(db, rows), next, tags: tags.map(({ name, label, type }) => ({ name, label, type })) }
+  return { id, rev: found.entry.rev, updated_at: found.entry.updated_at, rows, removed: removed.map(({ id, title, place }) => ({ id, name: title || place })), thanked, dates: await revisionDates(db, rows), next, tags: tags.map(({ name, label, type }) => ({ name, label, type })) }
 }
 
 export const actions: Actions = {
