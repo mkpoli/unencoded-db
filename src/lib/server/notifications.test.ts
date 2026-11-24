@@ -2,8 +2,8 @@ import { expect, test } from 'bun:test'
 import { newClaim } from '$lib/claims'
 import { addComment, setCommentHidden } from './comments'
 import { addSighting, createEntry, editEntry, editSighting, getEntry, getSighting, mergeEntry, setHidden, type EntryFields, type SightingFields } from './entries'
-import { latestNotice, markRead, notificationsOf, unreadCount } from './notifications'
-import { createPerson } from './people'
+import { latestNotice, markRead, notificationsOf, thank, thankedOf, unreadCount } from './notifications'
+import { createPerson, joinAtlas, startSession } from './people'
 import { openTestDb } from './testdb'
 import { Database } from 'bun:sqlite'
 import { readdirSync, readFileSync } from 'node:fs'
@@ -123,4 +123,54 @@ test('an edit of evidence since hidden is not listed', async () => {
   expect(await kinds(recorder)).toEqual(['sighting_edit'])
   await setHidden(db, { entry, sighting: 2 }, true, who(second), null)
   expect(await kinds(recorder)).toEqual([])
+})
+
+test('a thank tells whoever made the change, once, and never for one of their own changes', async () => {
+  const { db, raw, recorder, second, reader, who, entry, kinds } = await scene()
+  const found = (await getEntry(db, entry))!
+  expect((await editEntry(db, entry, found.entry.rev, { ...fields('⿰山東'), description: 'checked' }, who(second), 'gloss corrected')).ok).toBe(true)
+  const edit = (raw.query("SELECT id FROM revisions WHERE kind = 'edit'").get() as { id: number }).id
+  expect(await thank(db, entry, edit, who(second))).toBe(false)
+  expect(await thank(db, entry + 1, edit, who(recorder))).toBe(false)
+  expect(await thank(db, entry, edit, who(recorder))).toBe(true)
+  expect(await thank(db, entry, edit, who(recorder))).toBe(true)
+  expect(await kinds(second)).toEqual(['thank'])
+  expect((await notificationsOf(db, second.id)).notifications[0]).toMatchObject({ entry_id: entry, by_id: recorder.id, text: 'gloss corrected', read_at: null })
+  expect(await thankedOf(db, recorder.id, [edit, edit + 1])).toEqual([edit])
+  expect(await thankedOf(db, second.id, [edit])).toEqual([])
+  expect(await thank(db, entry, edit, { actor: reader.id, ip: 'address' })).toBe(true)
+  expect(await thank(db, entry, edit, { actor: (await createPerson(db)).id, ip: 'address' })).toBe(true)
+  expect(await unreadCount(db, second.id)).toBe(2)
+})
+
+test('the rebuilt table keeps the notices it held', async () => {
+  const { raw } = openTestDb()
+  const migrations = join(import.meta.dir, '../../../migrations')
+  const names = readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()
+  const old = new Database(':memory:')
+  for (const name of names.filter(name => name < '0049')) old.exec(readFileSync(join(migrations, name), 'utf8'))
+  const db = d1Over(old)
+  const recorder = await createPerson(db), second = await createPerson(db)
+  const entry = await createEntry(db, fields('⿰山東'), sighting, [], { actor: recorder.id, ip: null })
+  await addSighting(db, entry, { ...sighting, place: 'Another book' }, [], { actor: second.id, ip: null })
+  await markRead(db, recorder.id, 1)
+  const before = old.query('SELECT id, person, comment_id, revision_id, at, read_at FROM notifications').all()
+  for (const name of names.filter(name => name >= '0049')) old.exec(readFileSync(join(migrations, name), 'utf8'))
+  expect(before.length).toBe(1)
+  expect(old.query('SELECT id, person, comment_id, revision_id, at, read_at FROM notifications').all()).toEqual(before)
+  expect(old.query("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all()).toEqual(raw.query("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all())
+})
+
+test('thanks said before signing in join the account, except those for its own changes', async () => {
+  const { db, raw, recorder, who, entry } = await scene()
+  const account = await createPerson(db, 'atlas-1', 'Named'), anon = await createPerson(db)
+  const found = (await getEntry(db, entry))!
+  expect((await editEntry(db, entry, found.entry.rev, { ...fields('⿰山東'), description: 'checked' }, who(account), null)).ok).toBe(true)
+  const edit = (raw.query("SELECT id FROM revisions WHERE kind = 'edit'").get() as { id: number }).id
+  expect(await thank(db, entry, edit, who(anon))).toBe(true)
+  expect(await thank(db, entry, 1, who(anon))).toBe(true)
+  expect(await joinAtlas(db, anon, 'atlas-1', 'Named', await startSession(db, anon.id))).toBe(account.id)
+  expect(await thankedOf(db, account.id, [1, edit])).toEqual([1])
+  expect((await notificationsOf(db, account.id)).notifications.map(notice => notice.kind)).toEqual([])
+  expect((await notificationsOf(db, recorder.id)).notifications.map(notice => [notice.kind, notice.by_id])).toEqual([['thank', account.id], ['edit', account.id]])
 })
