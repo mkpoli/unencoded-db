@@ -46,6 +46,15 @@ message, a letter or a conversation is cited the same way without a group, and m
 communication. A partner's material is added once the partner agrees, and
 shown with the name they ask for.
 
+## Permanent record codes
+
+Each record receives a sequential number, written `R+0001` (and in 千字文 digits) and mapped to a
+fixed private-use code point starting at `U+E000`. Once assigned, a record code is permanent: records
+are never deleted, their numbers never change, and hidden or merged numbers are never reused.
+
+Duplicate records merge the later number into the earlier one. The later number retires and redirects
+to the earlier record; both the server and the database refuse a merge in the opposite direction.
+
 ## Open
 
 Anyone can add or correct a record without an account, every change stays in the history, and the

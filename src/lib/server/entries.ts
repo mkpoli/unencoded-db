@@ -684,6 +684,7 @@ export async function redactRevision(db: D1Database, entry: number, revisionId: 
 
 export async function mergeEntry(db: D1Database, from: number, into: number, who: Who, summary: string | null) {
   if (from === into) return { ok: false as const, code: 'self' as const }
+  if (from < into) return { ok: false as const, code: 'order' as const }
   const source = await getEntryRow(db, from), target = await getEntryRow(db, into)
   if (!source || !target || target.merged_into || target.hidden_at) return { ok: false as const, code: 'missing' as const }
   if (source.merged_into) return { ok: false as const, code: 'merged' as const }

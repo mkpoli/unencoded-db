@@ -67,9 +67,12 @@ test('a record keeps its last evidence, and a removal of an edited or a missing 
   expect(await actions.default(event({ rev: '1' }, left))).toMatchObject({ status: 409, data: { error: 'only' } })
   expect(await visible()).toEqual([left])
   // A merged record takes no removal.
-  raw.exec(`UPDATE entries SET merged_into = ${other} WHERE id = ${id}`)
-  await expect(load(event({}, left))).rejects.toMatchObject({ status: 404 })
-  expect(await putBackSighting(db, id, second, who)).toBe('merged')
+  const duplicate = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, seen('Dup 1'), [], who)
+  const dupSecond = (await addSighting(db, duplicate, seen('Dup 2'), [], who))!
+  expect(await removeSighting(db, duplicate, dupSecond, 1, who, null)).toBe('done')
+  raw.exec(`UPDATE entries SET merged_into = ${id} WHERE id = ${duplicate}`)
+  await expect(load(event({}, dupSecond, duplicate))).rejects.toMatchObject({ status: 404 })
+  expect(await putBackSighting(db, duplicate, dupSecond, who)).toBe('merged')
 })
 
 test('what a moderator hid is not put back by a reader, and its history stays closed', async () => {
@@ -141,17 +144,18 @@ test('what people are counted for agrees with what the history shows through a r
 })
 
 test('evidence removed before or after a merge can be put back from the record that holds it', async () => {
-  const { db, id, second, event, who, gone } = await fixture()
-  const other = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, seen('Other'), [], who)
+  const { db, id: kept, event, who } = await fixture()
+  const dup = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, seen('Dup 1'), [], who)
+  const second = (await addSighting(db, dup, seen('Dup 2'), [], who))!
   const lost = async (entry: number) => ((await loadHistory(event({}, second, entry))) as any).removed.map((s: { id: number }) => s.id)
-  await removeSighting(db, id, second, 1, who, null)
-  await mergeEntry(db, id, other, who, null)
-  expect(await lost(other)).toEqual([second])
+  await removeSighting(db, dup, second, 1, who, null)
+  await mergeEntry(db, dup, kept, who, null)
+  expect(await lost(kept)).toEqual([second])
   // Removed as one of the other record's, and left alone on its own after the merge is undone.
-  const first = (await getEntry(db, other))!.sightings.find(s => s.first_entry === id && !s.hidden_at)!
-  await removeSighting(db, other, first.id, 1, who, null)
-  await unmergeEntry(db, id, who)
-  expect((await gone()).map(s => s.id).sort()).toEqual([first.id, second].sort())
-  expect(await putBackSighting(db, id, first.id, who)).toBe('done')
-  expect((await gone()).map(s => s.id)).toEqual([second])
+  const first = (await getEntry(db, kept))!.sightings.find(s => s.first_entry === dup && !s.hidden_at)!
+  await removeSighting(db, kept, first.id, 1, who, null)
+  await unmergeEntry(db, dup, who)
+  expect((await lost(dup)).sort()).toEqual([first.id, second].sort())
+  expect(await putBackSighting(db, dup, first.id, who)).toBe('done')
+  expect(await lost(dup)).toEqual([second])
 })

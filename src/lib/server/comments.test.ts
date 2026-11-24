@@ -36,12 +36,12 @@ test('comments follow a merged record and return when it is taken apart', async 
   const a = await createEntry(db, fields('⿰山東'), sighting, [], who), b = await createEntry(db, fields('⿰山西'), sighting, [], who)
   await addComment(db, { entry: a }, 'on a', who)
   await addComment(db, { entry: b }, 'on b', who)
-  await mergeEntry(db, a, b, who, null)
-  expect((await commentsOf(db, b)).map(comment => comment.body)).toEqual(['on a', 'on b'])
-  await addComment(db, { entry: b, sighting: 1 }, 'on the evidence a brought', who)
-  await unmergeEntry(db, a, who)
-  expect((await commentsOf(db, a)).map(comment => comment.body)).toEqual(['on a', 'on the evidence a brought'])
-  expect((await commentsOf(db, b)).map(comment => comment.body)).toEqual(['on b'])
+  await mergeEntry(db, b, a, who, null)
+  expect((await commentsOf(db, a)).map(comment => comment.body)).toEqual(['on a', 'on b'])
+  await addComment(db, { entry: a, sighting: 2 }, 'on the evidence b brought', who)
+  await unmergeEntry(db, b, who)
+  expect((await commentsOf(db, b)).map(comment => comment.body)).toEqual(['on b', 'on the evidence b brought'])
+  expect((await commentsOf(db, a)).map(comment => comment.body)).toEqual(['on a'])
 })
 
 test('a record reads its comments through the index', () => {
