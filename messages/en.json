@@ -76,6 +76,7 @@
   "date.bce": "{n} BCE",
   "date.bceYear": "{n} BCE",
   "date.bceYears": "{from}–{to} BCE",
+  "date.bceCe": "{from} BCE–{to} CE",
   "chronology.dated": "{n} dated",
   "chronology.undated": "{n} undated",
   "chronology.year": "Year",

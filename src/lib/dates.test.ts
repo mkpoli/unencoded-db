@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
-import { bceOf, compareDays, decadeNumber, decadeOf, decadeRuns, isDecade, namesEra, westernDate, yearOfDay } from './dates'
+import { LOCALES, translate } from './i18n'
+import { bceOf, compareDays, decadeNumber, decadeOf, decadeRuns, decadeStart, isDecade, namesEra, westernDate, yearOfDay } from './dates'
 
 test('a year before the common era is read in each way it is written, and 168 BCE is year -167', () => {
   const year = { start: '-0167-01-01', end: '-0167-12-31', precision: 'year' as const }
@@ -9,6 +10,9 @@ test('a year before the common era is read in each way it is written, and 168 BC
   expect(westernDate('c. 168 BCE')).toEqual({ ...year, approximate: true })
   expect(westernDate('前1年')).toMatchObject({ start: '0000-01-01', end: '0000-12-31' })
   expect(westernDate('前16年')).toMatchObject({ start: '-0015-01-01' })
+  expect(westernDate('前168/2/3')).toEqual(westernDate('前168年2月3日'))
+  expect(westernDate('AD 9')).toMatchObject({ start: '0009-01-01', end: '0009-12-31' })
+  expect(westernDate('公元9年')).toEqual(westernDate('AD 9'))
   expect(westernDate('前168年2月')).toEqual({ start: '-0167-02-01', end: '-0167-02-28', precision: 'month' })
   // 1 BCE is year 0, a leap year of the Julian calendar, as 5 BCE is.
   expect(westernDate('前1年2月')).toMatchObject({ end: '0000-02-29' })
@@ -22,12 +26,19 @@ test('a signed year numbered as ISO 8601 pads it, a year 0 and a bare short numb
 
 test('a range before the common era runs forward, and the era after its last year covers both', () => {
   const range = { start: '-0205-01-01', end: '-0167-12-31', precision: 'range' as const }
-  for (const text of ['前206–前168年', '前206年～前168年', '前206-前168', '206–168 BCE', '206-168 BC', '206 BCE – 168 BCE', 'BC 206 - BC 168', '-206–-168', '206 to 168 BCE']) expect([text, westernDate(text)]).toEqual([text, range])
+  for (const text of ['前206–前168年', '前206年～前168年', '前206-前168', '206–168 BCE', '206-168 BC', '206 BCE – 168 BCE', 'BC 206 - BC 168', '-206–-168', '206 to 168 BCE', '206 BC-168 BC', '前206年-前168年', '기원전 206년–기원전 168년']) expect([text, westernDate(text)]).toEqual([text, range])
   expect(westernDate('前206–220年')).toEqual(westernDate('206 BCE – 220'))
+  for (const text of ['206 BCE – 220 CE', '206 BCE-220 CE', '前206年-220年', '前206年–公元220年', '前206年–紀元後220年', '206 TCN–220 SCN', '기원전 206년–기원후 220년', '206 BC – AD 220']) expect([text, westernDate(text)]).toEqual([text, westernDate('206 BCE – 220')])
+  expect(westernDate('202 BC – AD 9')).toMatchObject({ start: '-0201-01-01', end: '0009-12-31' })
+  expect(westernDate('206 BCE – 168 CE')).toMatchObject({ end: '0168-12-31' })
+  expect(westernDate('前202年–8年')).toBeNull()
   expect(westernDate('206 BCE – 220')).toMatchObject({ start: '-0205-01-01', end: '0220-12-31' })
   expect(westernDate('30-10 BCE')).toMatchObject({ start: '-0029-01-01', end: '-0009-12-31', precision: 'range' })
   expect(westernDate('前160年代')).toEqual({ start: '-0168-01-01', end: '-0159-12-31', precision: 'range' })
   expect(westernDate('160s BCE')).toEqual(westernDate('前160年代'))
+  // The decades on either side of the turn of the era stay on their own side: no year 0 lies between.
+  expect(westernDate('前00年代')).toMatchObject({ start: '-0008-01-01', end: '0000-12-31' })
+  expect(westernDate('000年代')).toMatchObject({ start: '0001-01-01', end: '0009-12-31' })
   // Reversed, or with a last year that either era could hold.
   for (const text of ['前168–前206年', '168–206 BCE', '前206–168年', '206 BCE – 168', '-206–168']) expect([text, westernDate(text)]).toEqual([text, null])
 })
@@ -46,6 +57,7 @@ test('days compare by year before text on both sides of the era', () => {
 
 test('every year falls in one decade, named as decades before the common era are', () => {
   expect([-167, -168, -159, -158, -8, 0, 1, 9, 10, 1921].map(decadeOf)).toEqual([-168, -168, -168, -158, -8, -8, 0, 0, 10, 1920])
+  expect([-168, -8, 0, 1920].map(decadeStart)).toEqual([-168, -8, 1, 1920])
   expect([-168, -158, -8, 0, 1920].map(decadeNumber)).toEqual([160, 150, 0, 0, 1920])
   for (let year = -9998, last = decadeOf(-9999); year <= 9999; year++) {
     const decade = decadeOf(year)
@@ -63,4 +75,14 @@ test('decades run on from one another until a gap is wide', () => {
   expect(decadeRuns([-168, 1340, 1360], 40)).toEqual([[-168], [1340, 1350, 1360]])
   expect(decadeRuns([1340, 1390], 4)).toEqual([[1340, 1350, 1360, 1370, 1380, 1390]])
   expect(decadeRuns([1340, 1400], 4)).toEqual([[1340], [1400]])
+})
+
+test('what each interface language writes for a year before the common era is read back as that year', () => {
+  for (const locale of LOCALES) {
+    expect([locale, westernDate(translate(locale, 'date.bceYear', { n: 168 }))]).toEqual([locale, westernDate('-168')])
+    expect([locale, westernDate(translate(locale, 'date.bce', { n: 168 }))]).toEqual([locale, westernDate('-168')])
+    expect([locale, westernDate(translate(locale, 'date.bceYears', { from: 206, to: 168 }))]).toEqual([locale, westernDate('-206–-168')])
+    expect([locale, westernDate(translate(locale, 'date.bceCe', { from: 206, to: 220 }))]).toEqual([locale, westernDate('-206–220')])
+    expect([locale, namesEra(translate(locale, 'date.bceYear', { n: 168 }))]).toEqual([locale, true])
+  }
 })

@@ -4,7 +4,7 @@
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
   import { recordCode } from '$lib/code'
-  import { decadeNumber, decadeOf, decadeRuns } from '$lib/dates'
+  import { decadeNumber, decadeOf, decadeRuns, decadeStart } from '$lib/dates'
   import { decadeName, href, media, t, yearName, yearsName } from '$lib/t'
   let { data } = $props()
   const decadeList = (decade: number) => href(`?decade=${decade}&sort=earliest`)
@@ -42,13 +42,13 @@
   {#if data.decades.length}
     <ol class="bars" aria-label={t('nav.chronology')}>
       {#each runs as run, r (run[0])}
-        {#if r}<li class="break" aria-hidden="true" title={yearsName(lastYear(runs[r - 1].at(-1)!) + 1, run[0] - 1)}>⋯</li>{/if}
+        {#if r}<li class="break" aria-hidden="true" title={yearsName(lastYear(runs[r - 1].at(-1)!) + 1, decadeStart(run[0]) - 1)}>⋯</li>{/if}
         {#each run as decade, i (decade)}
           {@const n = counts.get(decade) ?? 0}
           <li class:century={century(decade)}>
             {#if n}<a href={fromDecade(decade)} title="{decadeName(decade)} · {n}"><span class="bar" style:height="{Math.max(6, (n / most) * 100)}%"></span><span class="sr-only">{decadeName(decade)} {n}</span></a>
             {:else}<span class="gap" title={decadeName(decade)}></span>{/if}
-            {#if ticked(run, i)}<span class="tick" aria-hidden="true">{yearName(decade)}</span>{/if}
+            {#if ticked(run, i)}<span class="tick" aria-hidden="true">{yearName(decadeStart(decade))}</span>{/if}
           </li>
         {/each}
       {/each}

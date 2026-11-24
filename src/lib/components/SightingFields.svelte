@@ -239,7 +239,7 @@
   })
 </script>
 
-{#snippet yearRead(text: string)}{@const years = eraRead(text, westernDate(text))}{#if years}<output class="read">{years}</output>{/if}{/snippet}
+{#snippet yearRead(id: string, text: string)}<output class="read" id="{id}-read" for={id}>{eraRead(text, westernDate(text)) ?? ''}</output>{/snippet}
 
 {#snippet kindField(id: string, name: string, value: string, onpick: (value: string) => void)}
   <div class="field"><label for={id}>{t('field.sourceKind')}</label>
@@ -276,8 +276,8 @@
     <PublisherField id="{uid}-publisher" name="publisher" bind:value={publisher} />
     {@render kindField(`${uid}-source_kind`, 'source_kind', kind, value => kind = value)}
     <div class="field"><label for="{uid}-page">{t('field.page')}</label><input id="{uid}-page" class="input" name="page" bind:value={page} maxlength="80" /></div>
-    <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" bind:value={reportDate} aria-describedby="{uid}-report_date-hint" /><p class="hint" id="{uid}-report_date-hint">{t('field.reportDateHint')}</p>{@render yearRead(reportDate)}</div>
-    <div class="field"><label for="{uid}-original_date">{t('field.originalDate')}</label><input id="{uid}-original_date" class="input" name="original_date" bind:value={originalDate} aria-describedby="{uid}-original_date-hint" /><p class="hint" id="{uid}-original_date-hint">{t('field.originalDateHint')}</p>{@render yearRead(originalDate)}</div>
+    <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" bind:value={reportDate} aria-describedby="{uid}-report_date-hint {uid}-report_date-read" /><p class="hint" id="{uid}-report_date-hint">{t('field.reportDateHint')}</p>{@render yearRead(`${uid}-report_date`, reportDate)}</div>
+    <div class="field"><label for="{uid}-original_date">{t('field.originalDate')}</label><input id="{uid}-original_date" class="input" name="original_date" bind:value={originalDate} aria-describedby="{uid}-original_date-hint {uid}-original_date-read" /><p class="hint" id="{uid}-original_date-hint">{t('field.originalDateHint')}</p>{@render yearRead(`${uid}-original_date`, originalDate)}</div>
     <div class="field"><label for="{uid}-style">{t('field.style')}</label>
       <select id="{uid}-style" class="input" name="style" value={values.style ?? ''}><option value="">{t('field.unset')}</option>{#each STYLES as item}<option value={item}>{t(`style.${item}`)}</option>{/each}</select></div>
   </div>
@@ -310,7 +310,7 @@
         <ContainerField id="{uid}-via_container-{row.key}" name="via_container" bind:value={row.container} bind:publisher={row.publisher} />
         <PublisherField id="{uid}-via_publisher-{row.key}" name="via_publisher" bind:value={row.publisher} />
         {@render kindField(`${uid}-via_source_kind-${row.key}`, 'via_source_kind', row.kind, value => row.kind = value)}
-        <div class="field"><label for="{uid}-via_report_date-{row.key}">{t('field.reportDate')}</label><input id="{uid}-via_report_date-{row.key}" class="input" name="via_report_date" bind:value={row.date} /></div>
+        <div class="field"><label for="{uid}-via_report_date-{row.key}">{t('field.reportDate')}</label><input id="{uid}-via_report_date-{row.key}" class="input" name="via_report_date" bind:value={row.date} aria-describedby="{uid}-via_report_date-{row.key}-read" />{@render yearRead(`${uid}-via_report_date-${row.key}`, row.date)}</div>
       </div>
       <div class="field"><label for="{uid}-via_quote-{row.key}">{t('field.quote')}</label><textarea id="{uid}-via_quote-{row.key}" class="input" name="via_quote" rows="2" maxlength="5000" bind:value={row.quote}></textarea></div>
       <div class="via-actions">
@@ -342,6 +342,7 @@
 </details>
 
 <style>
+  .read:empty { position: absolute }
   .read { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink) }
   .types { container: evidence-types / inline-size; display: flex; flex-direction: column; min-width: 0; margin: 0; padding: 0; border: 0 }
   .types legend { padding: 0 0 8px; font-weight: 500 }

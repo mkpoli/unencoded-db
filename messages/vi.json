@@ -76,6 +76,7 @@
   "date.bce": "{n} TCN",
   "date.bceYear": "{n} TCN",
   "date.bceYears": "{from}–{to} TCN",
+  "date.bceCe": "{from} TCN–{to} SCN",
   "chronology.dated": "{n} có niên đại",
   "chronology.undated": "{n} chưa có niên đại",
   "chronology.year": "Năm",

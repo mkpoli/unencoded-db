@@ -27,6 +27,8 @@ export const bceOf = (year: number) => year > 0 ? null : 1 - year
 // Decades are counted away from the turn of the era on both sides, as they are named: the 160s BCE run from 169 to
 // 160 BCE, and 9 to 1 BCE are the decade before the years 1 to 9. A decade is known by its first year's number.
 export const decadeOf = (year: number) => year > 0 ? Math.floor(year / 10) * 10 : -8 - Math.floor((1 - year) / 10) * 10
+/** A decade's first year: there is no year between 1 BCE and 1, so the first decade of the era starts at 1. */
+export const decadeStart = (decade: number) => decade || 1
 /** A decade's number: 1930 in the 1930s, 160 in the 160s BCE. */
 export const decadeNumber = (decade: number) => decade < 0 ? 1 - decade - 9 : decade
 export const isDecade = (text: string) => /^(0|[1-9]\d{0,2}0|-(?:[1-9]\d{0,2})?8)$/.test(text)
@@ -56,17 +58,19 @@ function unmarked(value: string) {
   if (named !== value) return named
   return /^-[1-9]\d{0,3}年?$/.test(value) ? value.slice(1) : null
 }
+// The mark of the common era, in words.
+const common = /^(?:公元|西元|(?:紀元|纪元)?[後后]|西暦|기원후|서기|a\.\s?d\.|ad|c\.\s?e\.|ce)\s*(?=\d)|(?<=\d年?)\s*(?:c\.\s?e\.|ce|a\.\s?d\.|ad|scn)$/i
 /** Whether an expression names the era before the common one in words. */
 export const namesEra = (text: string) => new RegExp(`${BEFORE}\\d|\\d(?:年代?|s)?${AFTER}(?![a-z])`, 'i').test(text.normalize('NFKC'))
 
 function westernPeriod(value: string): DateReading | null {
   const bce = unmarked(value)
-  if (bce !== null) value = bce.replace('년', '年')
-  if (/^\d{3,4}\/\d{1,2}(?:\/\d{1,2})?$/.test(value)) value = value.replaceAll('/', '-')
+  const named = bce !== null || common.test(value)
+  value = (bce ?? value.replace(common, '')).replace('년', '年').replace(/^(\d{1,4})\/(\d{1,2})(?:\/(\d{1,2}))?$/, (_, y, m, d) => `${y}年${m}月${d ? `${d}日` : ''}`)
   const match = /^(\d{1,4})(?:年(?:([0-9]{1,2})月(?:([0-9]{1,2})日)?)?|(?:-([0-9]{1,2})(?:-([0-9]{1,2}))?)?)$/.exec(value)
   // A number of one or two digits is a year only when its era is named.
   // Joined by hyphens, a year and a number before the common era are the ends of a range.
-  if (!match || !Number(match[1]) || (bce === null ? match[1].length < 3 : match[4])) return null
+  if (!match || !Number(match[1]) || (!named && match[1].length < 3) || (bce !== null && match[4])) return null
   const year = bce === null ? Number(match[1]) : 1 - Number(match[1]), month = Number(match[2] ?? match[4] ?? 1), day = Number(match[3] ?? match[5] ?? 1)
   const leap = year % 4 === 0 && (year < 1582 || year % 100 !== 0 || year % 400 === 0)
   const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
@@ -82,7 +86,7 @@ function westernPeriod(value: string): DateReading | null {
 function westernDecade(value: string): DateReading | null {
   const bce = unmarked(value), match = /^(\d{1,3}0)(?:年代|s)$/.exec(bce ?? value)
   if (!match || (bce === null && match[1].length < 3)) return null
-  const n = Number(match[1]), [first, last] = bce === null ? [n, n + 9] : [1 - (n + 9), 1 - n]
+  const n = Number(match[1]), [first, last] = bce === null ? [Math.max(n, 1), n + 9] : [1 - (n + 9), 1 - Math.max(n, 1)]
   return { start: `${yearText(first)}-01-01`, end: `${yearText(last)}-12-31`, precision: 'range' }
 }
 
@@ -96,13 +100,13 @@ export function westernDate(raw: string): DateReading | null {
   value = value.replace(approx, '').replace(suffix, '').trim().replace(/^\[(.+)\]$/, '$1')
   const single = westernDecade(value) ?? westernPeriod(value)
   if (single) return approximate ? { ...single, approximate } : single
-  const range = /^(.*?)\s*(?:[–—〜～~至]|\s+(?:to|-)\s+)\s*(.*?)$/i.exec(value) ?? /^(\d{1,4})\s*-\s*(\d{1,4}(?:\D.*)?)$/.exec(value) ?? /^(\D+\d{1,4}年?)\s*-\s*(\D+\d{1,4}年?)$/.exec(value)
+  const range = /^(.*?)\s*(?:[–—〜～~至]|\s+(?:to|-)\s+)\s*(.*?)$/i.exec(value) ?? /^(\d{1,4})\s*-\s*(\d{1,4}(?:\D.*)?)$/.exec(value) ?? /^(\D*\d{1,4}[^\d-]*)-(\D*\d{1,4}\D*)$/.exec(value)
   if (!range) return null
   // 206–168 BCE: the era named after the last year covers the first one too.
   const shared = /^\d{1,4}$/.test(range[1]) && after.test(range[2])
-  const first = westernPeriod(shared ? `${range[1]} BCE` : range[1]), last = westernPeriod(range[2])
+  const first = westernPeriod(shared ? `${range[1]} BCE` : range[1].trim()), last = westernPeriod(range[2].trim())
   // 前206–168年 leaves open which era 168 is in; 前206–220年 can only end in the common era.
   const from = first && bceOf(yearOfDay(first.start)), to = last && yearOfDay(last.start)
-  if (from && to && to > 0 && to < from) return null
+  if (from && to && to > 0 && to < from && !common.test(range[2].trim())) return null
   return first && last && compareDays(first.start, last.end) <= 0 ? { start: first.start, end: last.end, precision: 'range', ...(approximate && { approximate }) } : null
 }

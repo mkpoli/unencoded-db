@@ -7,10 +7,10 @@ export const t = (key: MessageKey | `${string}.${string}`, values?: Record<strin
 export const href = (path = '') => `/${locale()}${path}`
 /** A year as it stands by itself: 1921, or 前168年 for -167. `bare` leaves out 年, for a sentence that adds its own. */
 export const yearName = (year: number, bare = false) => { const n = bceOf(year); return n === null ? String(year) : t(bare ? 'date.bce' : 'date.bceYear', { n }) }
-/** The years from one to another: 前206–前168年, 前206年–220. */
+/** The years from one to another: 前206–前168年, 前206年–公元220年. */
 export function yearsName(from: number, to: number) {
   const first = bceOf(from), last = bceOf(to)
-  return from === to ? yearName(from) : first !== null && last !== null ? t('date.bceYears', { from: first, to: last }) : `${yearName(from)}–${yearName(to)}`
+  return from === to ? yearName(from) : first === null ? `${from}–${to}` : t(last === null ? 'date.bceCe' : 'date.bceYears', { from: first, to: last ?? to })
 }
 /** The years a date before the common era is read as, when its wording leaves the era unsaid, as -168 does. */
 export function eraRead(text: string, reading: DateReading | null | undefined) {

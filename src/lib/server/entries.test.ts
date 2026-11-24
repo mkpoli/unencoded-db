@@ -1873,6 +1873,13 @@ describe('chronology', () => {
     expect((await list(db, { order: 'earliest', limit: 2, after: first!.next }))!.tiles.map(tile => tile.id)).toEqual(order.slice(3))
     expect((await list(db, { order: 'latest', decade: '-168' }))!.tiles.map(tile => tile.id)).toEqual([order[3], order[2], order[1]])
     expect(cursorOf('most', '-1.5')).toBeNull()
+    // Sources published before the common era lead the gallery read by date.
+    for (const date of ['前168年', '前1年', '005年']) await createEntry(db, fields(), seen({ title: `Cast ${date}`, report_date: date }), [], who)
+    const titles = async (cursor: string | null) => (await sourceList(db, 'earliest', cursor === null ? null : parseSourceCursor('earliest', cursor)))!.sources.map(source => source.title)
+    expect((await titles(null)).slice(0, 4)).toEqual(['Cast 前168年', 'Cast 前1年', 'Cast 005年', 'Silk text'])
+    const held = raw.query("SELECT id FROM sources WHERE title = 'Cast 前168年'").get() as { id: number }
+    expect((await titles(`-167.${held.id}`))[0]).toBe('Cast 前1年')
+    expect((await chronology(db, chroniclePlace(null, null, '0')!)).entries[0]).toMatchObject({ year: 5 })
     const filed = () => raw.query("SELECT tag, entry_id, year FROM entry_tags WHERE entry_id IN (SELECT value FROM json_each(?)) AND tag GLOB 'y:*' ORDER BY entry_id").all(JSON.stringify(made))
     const years = () => raw.query('SELECT id, first_year, first_year_kind, first_sighting FROM entries WHERE id IN (SELECT value FROM json_each(?)) ORDER BY id').all(JSON.stringify(made))
     const before = [filed(), years()]
@@ -1901,6 +1908,7 @@ describe('chronology', () => {
     expect(chroniclePlace('-167.412', null, null)).toEqual({ at: [-167, 412] })
     expect(chroniclePlace(null, '0.412', null)).toEqual({ before: [0, 412] })
     expect(chroniclePlace(null, null, '-168')).toEqual({ at: [-168, 0] })
+    expect(chroniclePlace(null, null, '0')).toEqual({ at: [1, 0] })
     for (const [at, before, from] of [['1935', null, null], ['1935.0', null, null], [null, 'x.1', null], [null, null, '1935'], [null, null, '05'], [null, null, '-160'], ['-0.1', null, null]]) expect(chroniclePlace(at, before, from)).toBeUndefined()
   })
 

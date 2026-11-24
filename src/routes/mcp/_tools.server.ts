@@ -361,7 +361,7 @@ const CITATION = {
   title: { type: 'string' },
   author: { type: 'string', description: 'The author as they sign: a name or a handle.' },
   publisher: { type: 'string', description: 'The publisher, or the service a post or message is on, such as X or QQ.' },
-  report_date: { type: 'string', description: 'Publication date as written in the source, e.g. 明萬曆34年, 1936 or 2026-11-14.' },
+  report_date: { type: 'string', description: 'Publication date as written in the source, e.g. 明萬曆34年, 1936, 168 BCE or 2026-11-14. A year with a minus sign counts as BCE: -168 is 168 BCE.' },
   container: { type: 'string', description: 'What the source appeared in: the journal and issue of an article, the site of a page, the group or channel of a chat message.' },
   source_kind: { type: 'string', enum: SOURCE_KINDS, description: 'personal for a personal communication: a letter, a private message, a conversation. Omit for anything published or sent to a group.' },
 }
@@ -369,7 +369,7 @@ const CITATION = {
 const SIGHTING = {
   place: { type: 'string', description: 'Where the character was found, in words that help someone find it again: a book and page, a street, a website.' },
   ...CITATION,
-  original_date: { type: 'string', description: 'The date of an older work shown in the picture, when the cited publication reproduces one.' },
+  original_date: { type: 'string', description: 'The date of an older work shown in the picture, when the cited publication reproduces one. Written as report_date is.' },
   page: { type: 'string', description: 'Page, folio or volume within the work.' },
   contexts: { type: 'array', items: { type: 'string', enum: CONTEXTS }, description: 'How the character appears, in every way the source shows it.' },
   style: { type: 'string', enum: STYLES, description: 'The writing style.' },
@@ -404,7 +404,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'search_records', title: 'Search records', annotations: READS, run: searchRecords,
-    description: 'Records found by a description sequence, an encoded character, or words from their readings, meanings, tags and sources. Without a query, every record, those with the most evidence first.',
+    description: 'Records found by a description sequence, an encoded character, or words from their readings, meanings, tags and sources. Without a query, every record, those with the most evidence first. first_year numbers years as ISO 8601 does: 168 BCE is -167.',
     inputSchema: { type: 'object', properties: {
       query: { type: 'string' },
       limit: { type: 'integer', minimum: 1, maximum: SEARCH_PAGE_MAX, default: SEARCH_PAGE },

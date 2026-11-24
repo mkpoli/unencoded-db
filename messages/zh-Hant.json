@@ -76,6 +76,7 @@
   "date.bce": "前{n}",
   "date.bceYear": "前{n}年",
   "date.bceYears": "前{from}–前{to}年",
+  "date.bceCe": "前{from}年–公元{to}年",
   "chronology.dated": "{n}筆有年代",
   "chronology.undated": "{n}筆未有年代",
   "chronology.year": "年",

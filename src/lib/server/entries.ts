@@ -22,7 +22,7 @@ import { groupMates } from '$lib/similar'
 import { PART_RUN_MAX, PART_SPELLINGS_MAX } from '$lib/ids-variants'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
-import { dateText, decadeOf, isDecade } from '$lib/dates'
+import { dateText, decadeOf, decadeStart, isDecade } from '$lib/dates'
 import { datedYear, prepareDates, readDates, sightingDates, type DateBook } from './date-readings'
 import { hashHex } from './image'
 import { ORDER, PAGE, PAGE_SIZES, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
@@ -1216,7 +1216,7 @@ export function chroniclePlace(at: string | null, before: string | null, from: s
   const parse = (text: string) => { const match = /^(0|-?[1-9]\d{0,8})\.([1-9]\d{0,15})$/.exec(text); return match ? [Number(match[1]), Number(match[2])] as [number, number] : undefined }
   if (at !== null) { const found = parse(at); return found && { at: found } }
   if (before !== null) { const found = parse(before); return found && { before: found } }
-  if (from !== null) return isDecade(from) ? { at: [Number(from), 0] } : undefined
+  if (from !== null) return isDecade(from) ? { at: [decadeStart(Number(from)), 0] } : undefined
   return { at: [YEAR_MIN, 0] }
 }
 
@@ -1350,7 +1350,7 @@ type SourceRead = typeof SOURCE_READS[keyof typeof SOURCE_READS]
 function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | null, limit: number, publisher: number | null, query: string) {
   const seen = (via: boolean) => `(SELECT json_group_array(json_array(r.entry_id, x.thumb_key)) ${sampledSightings(via)})`
   const direction = order.descending ? 'DESC' : 'ASC', past = order.descending ? '<' : '>'
-  const start = order.descending ? Number.MAX_SAFE_INTEGER : 0
+  const start = order.descending ? Number.MAX_SAFE_INTEGER : YEAR_MIN
   const after = order.key ? `(c.${order.key}, c.id) ${past} (?, ?)` : `c.id ${past} ?`
   const bound = order.key ? [cursor?.key ?? start, cursor?.id ?? start] : [cursor?.id ?? start]
   type Row = Source & { year: number | null; records: number; direct: string; via: string }
