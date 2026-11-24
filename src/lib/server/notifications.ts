@@ -13,11 +13,11 @@ export async function unreadCount(db: D1Database, person: string) {
 }
 
 export async function notificationsOf(db: D1Database, person: string, before: number | null = null) {
-  const { results } = await db.prepare(`SELECT n.id, n.read_at, CASE WHEN k.id IS NOT NULL THEN 'thank' ELSE COALESCE(r.kind, 'comment') END AS kind, e.id AS entry_id, COALESCE(c.sighting_id, r.sighting_id) AS sighting_id, c.id AS comment_id, e.ids,
+  const { results } = await db.prepare(`SELECT n.id, n.read_at, CASE WHEN k.id IS NOT NULL THEN 'thank' WHEN r.kind IN ('hide', 'unhide') THEN CASE r.kind WHEN 'hide' THEN 'remove' ELSE 'put_back' END ELSE COALESCE(r.kind, 'comment') END AS kind, e.id AS entry_id, COALESCE(c.sighting_id, r.sighting_id) AS sighting_id, c.id AS comment_id, e.ids,
       CASE WHEN c.id IS NOT NULL THEN substr(c.body, 1, 280) WHEN r.redacted_at IS NULL THEN r.summary END AS text, n.at, COALESCE(m.id, p.id) AS by_id, COALESCE(m.name, p.name) AS by_name
     FROM notifications n LEFT JOIN comments c ON c.id = n.comment_id LEFT JOIN thanks k ON k.id = n.thank_id LEFT JOIN revisions r ON r.id = COALESCE(n.revision_id, k.revision_id) JOIN entries e ON e.id = COALESCE(c.entry_id, r.entry_id)
       LEFT JOIN sightings s ON s.id = r.sighting_id LEFT JOIN people p ON p.id = COALESCE(c.author, k.person, r.actor) LEFT JOIN people m ON m.id = p.merged_into
-    WHERE n.person = ? AND n.id < ? AND c.hidden_at IS NULL AND e.hidden_at IS NULL AND s.hidden_at IS NULL ORDER BY n.id DESC LIMIT ?`)
+    WHERE n.person = ? AND n.id < ? AND c.hidden_at IS NULL AND e.hidden_at IS NULL AND (s.hidden_at IS NULL OR s.removed_by IS NOT NULL) ORDER BY n.id DESC LIMIT ?`)
     .bind(person, before ?? Number.MAX_SAFE_INTEGER, NOTIFICATIONS_PAGE + 1).all<Notification>()
   return { notifications: results.slice(0, NOTIFICATIONS_PAGE), next: results.length > NOTIFICATIONS_PAGE ? results[NOTIFICATIONS_PAGE - 1].id : null }
 }

@@ -36,7 +36,7 @@ export type SightingFields = { place: string; url: string | null; title: string 
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
 export type Entry = Omit<EntryFields, 'claims'> & { status: Status | null; id: number; rev: number; ids: string | null; layout: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
-export type Sighting = Omit<SightingFields, 'vias'> & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; vias: (Via & { id: number })[]; media: StoredImage[]; hidden_at: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
+export type Sighting = Omit<SightingFields, 'vias'> & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; vias: (Via & { id: number })[]; media: StoredImage[]; hidden_at: string | null; removed_by: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
 
 // What an entry has one of. What it has several of is in `claims`.
 export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical', 'strokes'] as const
@@ -672,10 +672,10 @@ export async function revertEntry(db: D1Database, id: number, revisionId: number
 // A redacted revision keeps its row, author and time, and no longer says what the record held. The
 // state a record or a sighting holds now is not a past one, and stays.
 export async function redactRevision(db: D1Database, entry: number, revisionId: number, who: Who, summary: string | null) {
-  const row = await db.prepare(`SELECT r.rev, r.sighting_id, CASE WHEN r.sighting_id IS NULL THEN e.rev ELSE s.rev END AS current FROM revisions r JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id WHERE r.id = ? AND r.entry_id = ? AND r.redacted_at IS NULL AND r.kind IN ('create','edit','revert','sighting','sighting_edit')`).bind(revisionId, entry).first<{ rev: number; sighting_id: number | null; current: number | null }>()
+  const row = await db.prepare(`SELECT r.rev, r.sighting_id, CASE WHEN r.sighting_id IS NULL THEN e.rev ELSE s.rev END AS current FROM revisions r JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id WHERE r.id = ? AND r.entry_id = ? AND r.redacted_at IS NULL AND (r.kind IN ('create','edit','revert','sighting','sighting_edit') OR (r.kind = 'hide' AND r.summary IS NOT NULL))`).bind(revisionId, entry).first<{ rev: number; sighting_id: number | null; current: number | null }>()
   if (!row || row.current === row.rev) return false
   await db.batch([
-    db.prepare(`UPDATE revisions SET snapshot = '{}', summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
+    db.prepare(`UPDATE revisions SET snapshot = CASE kind WHEN 'hide' THEN snapshot ELSE '{}' END, summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
     db.prepare('DELETE FROM date_readings WHERE transcription NOT IN (SELECT value FROM evidence_dates WHERE value IS NOT NULL)'),
     revision(db, who, { entry, sighting: row.sighting_id, kind: 'redact', rev: row.rev, snapshot: JSON.stringify({ revision: revisionId }), summary }),
   ])
@@ -719,21 +719,26 @@ export async function unmergeEntry(db: D1Database, id: number, who: Who) {
   return true
 }
 
-export async function setHidden(db: D1Database, target: { entry: number; sighting?: number | null }, hidden: boolean, who: Who, summary: string | null) {
+type Visibility = { hidden: boolean; removed?: boolean }
+export type RemoveResult = 'done' | 'missing' | 'merged' | 'conflict' | 'only'
+
+// Hides a record or a sighting, or shows it again. `refuse` reads what the change would be made to, and
+// its answer ends the change instead.
+async function setVisible<R>(db: D1Database, target: { entry: number; sighting?: number | null }, { hidden, removed = false }: Visibility, who: Who, summary: string | null,
+  refuse: (entry: Entry | null, sighting: Sighting | null, sightings: Sighting[]) => R | null): Promise<R | 'done'> {
   for (let attempt = 0; ; attempt++) {
     const mark = await revisionMark(db, target.entry)
     const entry = await getEntryRow(db, target.entry)
-    if (!entry) return false
     const sightings = await sightingRows(db, target.entry)
-    const sighting = target.sighting != null ? sightings.find(s => s.id === target.sighting) : null
-    if (target.sighting != null && !sighting) return false
-    if (Boolean(sighting ? sighting.hidden_at : entry.hidden_at) === hidden) return true
+    const sighting = target.sighting != null ? sightings.find(s => s.id === target.sighting) ?? null : null
+    const refused = refuse(entry, sighting, sightings)
+    if (refused !== null || !entry) return refused ?? 'done'
     const at = hidden ? now() : null
     const index = await reindex(db, target.entry,
       sighting ? entry : { ...entry, hidden_at: at }, await claimRows(db, target.entry),
       sighting ? sightings.map(s => s.id === sighting.id ? { ...s, hidden_at: at } : s) : sightings)
     const update = sighting
-      ? db.prepare('UPDATE sightings SET hidden_at = ? WHERE id = ? AND entry_id = ?').bind(at, sighting.id, target.entry)
+      ? db.prepare('UPDATE sightings SET hidden_at = ?, removed_by = ? WHERE id = ? AND entry_id = ?').bind(at, removed && hidden ? who.actor : null, sighting.id, target.entry)
       : db.prepare('UPDATE entries SET hidden_at = ? WHERE id = ?').bind(at, target.entry)
     try {
       await db.batch([
@@ -741,17 +746,42 @@ export async function setHidden(db: D1Database, target: { entry: number; sightin
         // What the record's page shows changed, so its time of change moves too.
         db.prepare('UPDATE entries SET updated_at = ? WHERE id = ?').bind(now(), target.entry),
         checkChanged(db, target.entry, who),
-        revision(db, who, { entry: target.entry, sighting: target.sighting, kind: hidden ? 'hide' : 'unhide', rev: 0, snapshot: '{}', summary }),
+        revision(db, who, { entry: target.entry, sighting: target.sighting, kind: hidden ? 'hide' : 'unhide', rev: 0, snapshot: removed ? '{"removed":true}' : '{}', summary }),
         ...index,
         recount(db, target.entry),
       ])
-      return true
+      return 'done'
     } catch (error) {
       if (attempt < 4 && await revisionMark(db, target.entry) !== mark) continue
       throw error
     }
   }
 }
+
+// A moderator's hide takes over a removal, so that only a moderator shows the sighting again.
+export async function setHidden(db: D1Database, target: { entry: number; sighting?: number | null }, hidden: boolean, who: Who, summary: string | null) {
+  return await setVisible(db, target, { hidden }, who, summary, (entry, sighting) => {
+    if (!entry || (target.sighting != null && !sighting)) return 'missing' as const
+    const now = sighting ? sighting.hidden_at : entry.hidden_at
+    return Boolean(now) === hidden && !(hidden && sighting?.removed_by) ? 'same' as const : null
+  }) !== 'missing'
+}
+
+// Takes a sighting off its record. A record keeps at least one, so its last is moved or edited instead.
+export const removeSighting = (db: D1Database, entryId: number, id: number, baseRev: number, who: Who, summary: string | null): Promise<RemoveResult> =>
+  setVisible(db, { entry: entryId, sighting: id }, { hidden: true, removed: true }, who, summary, (entry, sighting, sightings) => {
+    if (!entry || entry.hidden_at || !sighting || sighting.hidden_at) return 'missing' as const
+    if (entry.merged_into) return 'merged' as const
+    if (sighting.rev !== baseRev) return 'conflict' as const
+    return sightings.some(other => other.id !== id && !other.hidden_at) ? null : 'only' as const
+  })
+
+/** Puts a removed sighting back on its record. One a moderator hid stays hidden. */
+export const putBackSighting = (db: D1Database, entryId: number, id: number, who: Who): Promise<RemoveResult> =>
+  setVisible(db, { entry: entryId, sighting: id }, { hidden: false, removed: true }, who, null, (entry, sighting) => {
+    if (!entry || entry.hidden_at || !sighting?.hidden_at || !sighting.removed_by) return 'missing' as const
+    return entry.merged_into ? 'merged' as const : null
+  })
 
 /** Brings one record's tags, counts and summary up to date from what it holds. */
 export async function refresh(db: D1Database, id: number) {
@@ -1413,7 +1443,7 @@ export async function history(db: D1Database, entry: number, before?: number | n
   return results
 }
 
-const FEED_COLUMNS = `${REVISION_COLUMNS}, ${WHO_COLUMNS}, e.cover_key, e.ids, s.rev AS sighting_rev, (e.hidden_at IS NULL AND e.merged_into IS NULL AND (r.sighting_id IS NULL OR (s.id IS NOT NULL AND s.hidden_at IS NULL))) AS visible`
+const FEED_COLUMNS = `${REVISION_COLUMNS}, ${WHO_COLUMNS}, e.cover_key, e.ids, s.rev AS sighting_rev, s.removed_by IS NOT NULL AS removed, (e.hidden_at IS NULL AND e.merged_into IS NULL AND (r.sighting_id IS NULL OR (s.id IS NOT NULL AND (s.hidden_at IS NULL OR s.removed_by IS NOT NULL)))) AS visible`
 const FEED_JOINS = `CROSS JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id AND s.entry_id = r.entry_id ${WHO('r.actor')}`
 
 export function globalHistoryStatement(db: D1Database, before?: number | null) {
@@ -1446,7 +1476,7 @@ export async function ofPerson(db: D1Database, id: string, before?: number | nul
 export const REPORT_PAGE = 100
 
 export async function openReports(db: D1Database, after = 0) {
-  const { results } = await db.prepare(`SELECT x.id, x.entry_id, x.sighting_id, x.reason, x.at, ${WHO_COLUMNS}, e.cover_key, e.ids, e.hidden_at, CASE WHEN x.sighting_id IS NULL THEN e.hidden_at ELSE s.hidden_at END AS target_hidden_at FROM reports x ${WHO('x.reporter')} JOIN entries e ON e.id = x.entry_id LEFT JOIN sightings s ON s.id = x.sighting_id AND s.entry_id = x.entry_id WHERE x.resolved_at IS NULL AND x.id > ? ORDER BY x.id LIMIT ?`).bind(after, REPORT_PAGE + 1).all<{ id: number; entry_id: number; sighting_id: number | null; reason: string; at: string; by_id: string; by_name: string; cover_key: string | null; ids: string | null; hidden_at: string | null; target_hidden_at: string | null }>()
+  const { results } = await db.prepare(`SELECT x.id, x.entry_id, x.sighting_id, x.reason, x.at, ${WHO_COLUMNS}, e.cover_key, e.ids, e.hidden_at, CASE WHEN x.sighting_id IS NULL THEN e.hidden_at WHEN s.removed_by IS NULL THEN s.hidden_at END AS target_hidden_at FROM reports x ${WHO('x.reporter')} JOIN entries e ON e.id = x.entry_id LEFT JOIN sightings s ON s.id = x.sighting_id AND s.entry_id = x.entry_id WHERE x.resolved_at IS NULL AND x.id > ? ORDER BY x.id LIMIT ?`).bind(after, REPORT_PAGE + 1).all<{ id: number; entry_id: number; sighting_id: number | null; reason: string; at: string; by_id: string; by_name: string; cover_key: string | null; ids: string | null; hidden_at: string | null; target_hidden_at: string | null }>()
   return { reports: results.slice(0, REPORT_PAGE), next: results.length > REPORT_PAGE ? results[REPORT_PAGE - 1].id : null }
 }
 
