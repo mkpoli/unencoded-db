@@ -12,8 +12,8 @@ import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTa
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
-import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
-import { PAGE } from '$lib/order'
+import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { PAGE, PAGE_SIZES, pageSizeOf } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -2247,7 +2247,7 @@ describe('containers', () => {
 })
 
 test('a numbered page starts where the pages before it end', async () => {
-  for (let i = 0; i < 100; i++) await createEntry(db, fields({ claims: [newClaim('ids', `⿰山${String.fromCodePoint(0x4e00 + i)}`)] }), seen(), [], who)
+  for (let i = 0; i < 200; i++) await createEntry(db, fields({ claims: [newClaim('ids', `⿰山${String.fromCodePoint(0x4e00 + i)}`)] }), seen(), [], who)
   for (const order of ['new', 'old', 'most', 'fewest'] as const) {
     const whole = (await list(db, { order, limit: 500 }))!.tiles.map(tile => tile.id)
     for (const number of [2, 3]) {
@@ -2255,6 +2255,13 @@ test('a numbered page starts where the pages before it end', async () => {
       expect((await list(db, { order, after }))!.tiles.map(tile => tile.id)).toEqual(whole.slice((number - 1) * PAGE, number * PAGE))
     }
     expect(await pageCount(db, { order })).toEqual({ records: whole.length, pages: Math.ceil(whole.length / PAGE), floor: false })
+    // A chosen page size moves where each page starts.
+    for (const limit of PAGE_SIZES) {
+      const after = await pageCursor(db, { order, limit }, 2)
+      if (limit < whole.length) expect((await list(db, { order, limit, after }))!.tiles.map(tile => tile.id)).toEqual(whole.slice(limit, 2 * limit))
+      else expect(after).toBeUndefined()
+      expect((await pageCount(db, { order, limit }))!.pages).toBe(Math.ceil(whole.length / limit))
+    }
     expect(await pageCursor(db, { order }, Math.ceil(whole.length / PAGE) + 1)).toBeUndefined()
   }
   expect(await pageCursor(db, {}, 1)).toBeNull()
@@ -2272,4 +2279,10 @@ test('a numbered page starts where the pages before it end', async () => {
   expect(pageOf('0')).toBeNull()
   expect(pageOf('2')).toBe(2)
   expect(pageOf(String(PAGES_MAX + 1))).toBeNull()
+  // A page past the bound is refused without a read.
+  const unread = { prepare() { throw new Error('read') } } as unknown as D1Database
+  for (const limit of PAGE_SIZES) expect(await pageCursor(unread, { limit }, Math.ceil(PAGED_MAX / limit) + 1)).toBeUndefined()
+  // Every size fits in one read of a search.
+  for (const limit of PAGE_SIZES) expect(limit).toBeLessThan(SEARCH_WINDOW)
+  expect([null, '24', '96', '192', '48', '25', '024', '193'].map(pageSizeOf)).toEqual([PAGE, 24, 96, 192, null, null, null, null])
 })

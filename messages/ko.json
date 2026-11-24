@@ -376,6 +376,7 @@
   "browse.searchSegmentEmpty": "이 범위에 일치하는 기록이 없습니다.",
   "browse.searched": "{of}건 중 {n}건 검색함",
   "browse.page": "페이지",
+  "browse.perPage": "페이지당",
   "browse.shown": "{n}건 중 {from}–{to}",
   "browse.previousPage": "이전 페이지",
   "browse.nextPage": "다음 페이지",
