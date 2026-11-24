@@ -16,6 +16,7 @@ export const SOCIAL_PAGES = {
   about: { path: '/about', title: 'about.title', specimen: 1734, publicTitle: true },
   batch: { path: '/batch', title: 'batch.title' },
   data: { path: '/data', title: 'data.title', detail: 'data.intro', publicTitle: true },
+  mcp: { path: '/mcp', title: 'mcp.title', detail: 'mcp.intro', publicTitle: true },
   chronology: { path: '/chronology', title: 'nav.chronology', source: 2837, publicTitle: true },
   'record-history': { path: '/entry/[id]/history', title: 'entry.history', publicTitle: true },
   report: { path: '/entry/[id]/report', title: 'report.title' },

@@ -459,6 +459,9 @@ const TOOLS: Tool[] = [
   },
 ]
 
+/** Public tool names and whether each writes, in server order. */
+export const MCP_TOOLS = TOOLS.map(({ name, annotations }) => ({ name, write: annotations.readOnlyHint !== true }))
+
 /** The tools, known tag names listed on `add_record`'s `categories` alias schema. */
 export const toolList = (tags: readonly string[]) => TOOLS.map(({ run: _, ...tool }) => tool.name !== 'add_record' ? tool : {
   ...tool, inputSchema: { ...tool.inputSchema, properties: { ...record(tool.inputSchema.properties), categories: { type: 'array', items: { type: 'string', enum: tags } } } },

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
-  import { t } from '$lib/t'
+  import { href, t } from '$lib/t'
   let { data } = $props()
   const n = (count: number) => new Intl.NumberFormat(page.params.locale).format(count)
 </script>
@@ -48,7 +48,10 @@
   <section class="stack section">
     <h2>{t('data.apiTitle')}</h2>
     <p>{t('data.api')}</p>
-    <div class="row"><a class="text-link" href="/api/entries?limit=200">{t('data.paged')}</a></div>
+    <div class="row">
+      <a class="text-link" href="/api/entries?limit=200">{t('data.paged')}</a>
+      <a class="text-link" href={href('/mcp')}>{t('mcp.title')}</a>
+    </div>
   </section>
 </div>
 
