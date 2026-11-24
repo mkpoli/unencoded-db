@@ -15,7 +15,7 @@
   const runs = $derived(decadeRuns(data.decades.map(row => row.decade), 40))
   // The decade a tick stands at names its first year: the start of a century, or of a run that has room before the next.
   const century = (decade: number) => decade >= 0 ? decade % 100 === 0 : decadeNumber(decade) % 100 === 90
-  const ticked = (run: number[], i: number) => century(run[i]) || (i === 0 && !run.slice(1, 5).some(century))
+  const ticked = (run: number[], i: number) => century(run[i]) || (i === 0 && !run.slice(1, run[0] < 0 ? 9 : 5).some(century))
   const lastYear = (decade: number) => decade < 0 ? decade + (decade === -8 ? 8 : 9) : decade + 9
   const most = $derived(Math.max(1, ...data.decades.map(row => row.n)))
   const counts = $derived(new Map(data.decades.map(row => [row.decade, row.n])))
@@ -99,7 +99,7 @@
   /* The 年表: one axis down the page, the year in a shaded gutter beside what was first seen in it. */
   .chronicle { width:100%; table-layout:fixed; border-collapse:collapse; border:1px solid var(--line-strong); font-size:14px; line-height:1.5 }
   .chronicle thead th { padding:10px 12px; border-bottom:1px solid var(--line-strong); font-size:13px; font-weight:500; color:var(--muted); text-align:start }
-  .chronicle th.year, .chronicle td.year { width:72px; padding:8px 10px; background:var(--surface-sunken); color:var(--muted); font-size:12.5px; font-variant-numeric:tabular-nums; text-align:end; vertical-align:top; white-space:nowrap }
+  .chronicle th.year, .chronicle td.year { width:72px; padding:8px 10px; background:var(--surface-sunken); color:var(--muted); font-size:12.5px; font-variant-numeric:tabular-nums; text-align:end; vertical-align:top; word-break:keep-all }
   .chronicle thead th.year { text-align:end }
   .decade th { padding:14px 12px 6px; border-top:1px solid var(--line-strong); background:var(--surface); text-align:start; font-size:13px; font-weight:600 }
   .decade a:hover { text-decoration:underline }
