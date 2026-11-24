@@ -12,8 +12,8 @@ import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTa
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
-import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
-import { PAGE } from '$lib/order'
+import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, readBoxes, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { PAGE, PAGE_SIZES, pageSizeOf } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
@@ -23,8 +23,8 @@ const described = (...sequences: string[]) => fields({ claims: sequences.map(seq
 const relation = (character: string, relationship: string, difference = '', evidence = ''): Claim => claim('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) })
 // A source is found among the sightings that passed through it by the index of the chain, never by a scan.
 const VIA_SEARCH = /SEARCH v USING (COVERING )?INDEX sighting_vias_by_source \(source_id=\?\)/
-const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, container: null, quote: null, ...over })
-const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
+const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, quote: null, ...over })
+const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
 const image: StoredImage = { image_key: 'a.webp', image_type: 'image/webp', image_w: 100, image_h: 100, thumb_key: 't.webp', box: null }
 
 let db: D1Database, raw: ReturnType<typeof openTestDb>['raw'], who: { actor: string; ip: null }
@@ -2195,6 +2195,41 @@ describe('digitized copy filter', () => {
   })
 })
 
+describe('personal communications', () => {
+  const letter = (more: Partial<Via> = {}) => via({ author: '甲', publisher: 'QQ', report_date: '2026-11-14', source_kind: 'personal', quote: 'as told', ...more })
+
+  test('a private message is a source of its own, apart from the same citation without the kind', async () => {
+    const id = await createEntry(db, fields(), seen({ title: 'A book', vias: [letter(), letter({ source_kind: null })] }), [], who)
+    const { vias } = (await getEntry(db, id))!.sightings[0]
+    expect(vias.map(via => via.source_kind)).toEqual(['personal', null])
+    expect(vias[0].id).not.toBe(vias[1].id)
+  })
+
+  test('a citation is keyed by its fields up to the last one given', async () => {
+    const key = (author: string) => (raw.query('SELECT hash FROM sources WHERE author = ?').get(author) as { hash: string }).hash
+    await createEntry(db, fields(), seen({ title: 'A book', vias: [letter({ author: 'a' }), letter({ author: 'b', source_kind: null, container: 'group' })] }), [], who)
+    expect(key('a')).toBe(await hashHex(JSON.stringify([null, null, 'a', 'QQ', '2026-11-14', null, 'personal'])))
+    expect(key('b')).toBe(await hashHex(JSON.stringify([null, null, 'b', 'QQ', '2026-11-14', 'group'])))
+  })
+
+  test('the form sends a kind for the source and each via, and a kind alone names no source', () => {
+    const form = new FormData()
+    for (const [name, value] of [['place', 'A scan'], ['author', 'x'], ['source_kind', 'personal']]) form.append(name, value)
+    for (const [author, kind] of [['甲', ''], ['乙', 'personal'], ['丙', 'other'], ['', 'personal']]) { form.append('via_author', author); form.append('via_source_kind', kind) }
+    const read = readSightingFields(form)
+    expect(read.source_kind).toBe('personal')
+    expect(read.vias.map(via => [via.author, via.source_kind])).toEqual([['甲', null], ['乙', 'personal'], ['丙', null]])
+  })
+
+  test('a kind alone stores no source', async () => {
+    const form = new FormData()
+    for (const [name, value] of [['place', 'A scan'], ['source_kind', 'personal']]) form.append(name, value)
+    expect(readSightingFields(form).source_kind).toBeNull()
+    const id = await createEntry(db, fields(), seen({ url: null, title: null, source_kind: 'personal' }), [], who)
+    expect((await getEntry(db, id))!.sightings[0].source_id).toBeNull()
+  })
+})
+
 describe('containers', () => {
   const message = (author: string, report_date: string, quote: string) => via({ author, report_date, container: 'zi.tools討論羣', publisher: 'QQ', quote })
 
@@ -2247,7 +2282,7 @@ describe('containers', () => {
 })
 
 test('a numbered page starts where the pages before it end', async () => {
-  for (let i = 0; i < 100; i++) await createEntry(db, fields({ claims: [newClaim('ids', `⿰山${String.fromCodePoint(0x4e00 + i)}`)] }), seen(), [], who)
+  for (let i = 0; i < 200; i++) await createEntry(db, fields({ claims: [newClaim('ids', `⿰山${String.fromCodePoint(0x4e00 + i)}`)] }), seen(), [], who)
   for (const order of ['new', 'old', 'most', 'fewest'] as const) {
     const whole = (await list(db, { order, limit: 500 }))!.tiles.map(tile => tile.id)
     for (const number of [2, 3]) {
@@ -2255,6 +2290,13 @@ test('a numbered page starts where the pages before it end', async () => {
       expect((await list(db, { order, after }))!.tiles.map(tile => tile.id)).toEqual(whole.slice((number - 1) * PAGE, number * PAGE))
     }
     expect(await pageCount(db, { order })).toEqual({ records: whole.length, pages: Math.ceil(whole.length / PAGE), floor: false })
+    // A chosen page size moves where each page starts.
+    for (const limit of PAGE_SIZES) {
+      const after = await pageCursor(db, { order, limit }, 2)
+      if (limit < whole.length) expect((await list(db, { order, limit, after }))!.tiles.map(tile => tile.id)).toEqual(whole.slice(limit, 2 * limit))
+      else expect(after).toBeUndefined()
+      expect((await pageCount(db, { order, limit }))!.pages).toBe(Math.ceil(whole.length / limit))
+    }
     expect(await pageCursor(db, { order }, Math.ceil(whole.length / PAGE) + 1)).toBeUndefined()
   }
   expect(await pageCursor(db, {}, 1)).toBeNull()
@@ -2272,4 +2314,10 @@ test('a numbered page starts where the pages before it end', async () => {
   expect(pageOf('0')).toBeNull()
   expect(pageOf('2')).toBe(2)
   expect(pageOf(String(PAGES_MAX + 1))).toBeNull()
+  // A page past the bound is refused without a read.
+  const unread = { prepare() { throw new Error('read') } } as unknown as D1Database
+  for (const limit of PAGE_SIZES) expect(await pageCursor(unread, { limit }, Math.ceil(PAGED_MAX / limit) + 1)).toBeUndefined()
+  // Every size fits in one read of a search.
+  for (const limit of PAGE_SIZES) expect(limit).toBeLessThan(SEARCH_WINDOW)
+  expect([null, '24', '96', '192', '48', '25', '024', '193'].map(pageSizeOf)).toEqual([PAGE, 24, 96, 192, null, null, null, null])
 })

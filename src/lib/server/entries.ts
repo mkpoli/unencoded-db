@@ -7,7 +7,7 @@ import { nameKey, nameLabel, sourceNameKey } from '../name-key'
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
-import { CONTEXTS, isScript, NEEDS, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
+import { CONTEXTS, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
 import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
@@ -25,14 +25,14 @@ import { cleanSourceUrl } from '$lib/source-url'
 import { dateText } from '$lib/dates'
 import { datedYear, prepareDates, readDates, sightingDates, type DateBook } from './date-readings'
 import { hashHex } from './image'
-import { ORDER, PAGE, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
+import { ORDER, PAGE, PAGE_SIZES, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
 
 export type EntryFields = { script: string; script_other: string | null; description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
 // A source as its citation fields. A sighting's `vias` list them from the one nearest the cited work outward.
 export type Citation = Record<typeof CITATION_FIELDS[number], string | null>
 // A link in a sighting's chain: the source, and the words of it this sighting quotes.
 export type Via = Citation & { quote: string | null }
-export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; vias: Via[]; original_date: string | null; page: string | null; contexts: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
+export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; source_kind: string | null; vias: Via[]; original_date: string | null; page: string | null; contexts: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
 export type Entry = Omit<EntryFields, 'claims'> & { status: Status | null; id: number; rev: number; ids: string | null; layout: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
@@ -44,11 +44,13 @@ export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical',
 // it passed through, from the one nearest the cited work to the one the contributor saw: a post that shows
 // a page of the cited work, say. `container` is what the source appeared in: the journal of an article, the
 // site of a page, the group of a chat message. A message has an author, a date and a container, and no title.
-export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date', 'container'] as const
+// `source_kind` marks a personal communication, which has no container to look it up in.
+export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind'] as const
+const blankCitation = (citation: Citation) => CITATION_FIELDS.every(field => field === 'source_kind' || citation[field] === null)
 // The form sends each via as one value of each of these, repeated once per via and aligned by position.
-export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_container', 'via_quote'] as const
+export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_container', 'via_source_kind', 'via_quote'] as const
 export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
-export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'container', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
+export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
 export const IMAGE_FIELDS = ['image_key', 'image_type', 'image_w', 'image_h', 'thumb_key', 'box'] as const
 
 const clean = (raw: unknown, max: number) => {
@@ -71,7 +73,7 @@ export const tidyVias = (vias: readonly Via[]): Via[] => {
   const seen = new Set<string>()
   return vias.filter(via => {
     const key = citationKey(via) + '\u0000' + (via.quote ?? '')
-    if (CITATION_FIELDS.every(field => via[field] === null) || seen.has(key)) return false
+    if (blankCitation(via) || seen.has(key)) return false
     seen.add(key)
     return true
   }).slice(0, VIAS_MAX)
@@ -89,7 +91,8 @@ function readVias(form: FormData): Via[] {
     publisher: clean(columns[3][index], 300),
     report_date: dateText(columns[4][index]),
     container: clean(columns[5][index], 300),
-    quote: clean(columns[6][index], 5000),
+    source_kind: sourceKind(clean(columns[6][index], 20)),
+    quote: clean(columns[7][index], 5000),
   })))
 }
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
@@ -122,7 +125,7 @@ export function readSightingFields(form: FormData): SightingFields {
     return text ? [{ text, locator: clean(locators[i], 300) }] : []
   })
   const chosen = (name: string) => new Set(form.getAll(name).map(String))
-  return {
+  const fields: SightingFields = {
     // A link alone answers where it was found.
     place: text(form, 'place', 500) ?? safeUrl ?? '',
     url: safeUrl,
@@ -131,6 +134,7 @@ export function readSightingFields(form: FormData): SightingFields {
     publisher: text(form, 'publisher', 300),
     report_date: dateText(form.get('report_date')),
     container: text(form, 'container', 300),
+    source_kind: sourceKind(text(form, 'source_kind', 20)),
     vias: readVias(form),
     original_date: dateText(form.get('original_date')),
     page: text(form, 'page', 80),
@@ -140,6 +144,8 @@ export function readSightingFields(form: FormData): SightingFields {
     note: text(form, 'note', 5000),
     quotes: quotes.length ? JSON.stringify(quotes) : null,
   }
+  if (blankCitation(fields)) fields.source_kind = null
+  return fields
 }
 
 // The marks of one picture as the form sends them, a JSON array of [x, y, width, height]. Each is kept inside the image.
@@ -359,11 +365,15 @@ const CITED_BY_PLACE = `UPDATE claims SET sightings = (SELECT json_group_array((
 const CITED_IN_SNAPSHOT = `UPDATE revisions SET snapshot = json_set(snapshot, '$.claims', json((SELECT json_group_array(json(json_set(claim.value, '$.sightings', json((SELECT k.sightings FROM claims k WHERE k.entry_id = revisions.entry_id AND k.key = json_extract(claim.value, '$.key')))))) FROM json_each(revisions.snapshot, '$.claims') claim))) WHERE entry_id = ${ENTRY_SEQ} AND kind = 'create'`
 
 // The citation is the source's identity: the same fields are the same row, whether a sighting cites
-// it as its work or as where it was found. A citation without a container hashes as its first five fields,
-// which is how every source was keyed before sources had one.
-async function citationOf(db: D1Database, values: (string | null)[], dates: DateBook) {
-  if (values.every(value => value === null)) return { hash: null, statements: [] }
-  const hash = await hashHex(JSON.stringify(values.at(-1) === null ? values.slice(0, -1) : values))
+// it as its work or as where it was found. The fields after the fifth
+// count only up to the last one given, so a source is keyed the same before and after a field is added. A kind
+// alone names no source.
+const CITATION_KEY_MIN = 5
+async function citationOf(db: D1Database, citation: Citation, dates: DateBook) {
+  if (blankCitation(citation)) return { hash: null, statements: [] }
+  const values = CITATION_FIELDS.map(field => citation[field])
+  const keyed = Math.max(CITATION_KEY_MIN, values.findLastIndex(value => value !== null) + 1)
+  const hash = await hashHex(JSON.stringify(values.slice(0, keyed)))
   const year = datedYear(values[CITATION_FIELDS.indexOf('report_date')], dates)?.n ?? null
   const publisher = values[CITATION_FIELDS.indexOf('publisher')]
   const key = publisher && nameKey(publisher)
@@ -375,13 +385,13 @@ async function citationOf(db: D1Database, values: (string | null)[], dates: Date
   }
   const [url, title, author, imprint, date, container] = values
   const sourceName = sourceNameKey(title || url || author || imprint || date || container || '')
-  statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup, container_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName, container && nameKey(container) || null))
+  statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup, container_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName, container && nameKey(container) || null))
   return { hash, statements }
 }
 // The hash of the cited work, and the links of the chain with the words each quotes.
 async function sourceOf(db: D1Database, fields: SightingFields, dates: DateBook) {
   const chain = tidyVias(fields.vias)
-  const [work, ...vias] = await Promise.all([citationOf(db, CITATION_FIELDS.map(field => fields[field]), dates), ...chain.map(via => citationOf(db, CITATION_FIELDS.map(field => via[field]), dates))])
+  const [work, ...vias] = await Promise.all([citationOf(db, fields, dates), ...chain.map(via => citationOf(db, via, dates))])
   return { hash: work.hash, vias: vias.flatMap((via, index) => via.hash === null ? [] : [{ hash: via.hash, quote: chain[index].quote }]), statements: [...work.statements, ...vias.flatMap(via => via.statements)] }
 }
 const SOURCE_ID = '(SELECT id FROM sources WHERE hash = ?)'
@@ -1042,10 +1052,11 @@ export async function list(db: D1Database, listing: Listing) {
   return { tiles, next, partial: read.searching && next !== null && tiles.length < limit, read: consumed }
 }
 
-// A list read whole from one range has numbered pages: page n starts after row (n − 1) × PAGE of that
-// range. A search and a shuffled list have none. Finding a page counts the rows before it in the index,
-// so the pages that can be asked for are bounded.
-export const PAGES_MAX = 400
+// A list read whole from one range has numbered pages: page n starts after row (n − 1) × the page size of
+// that range. A search and a shuffled list have none. Finding a page counts the rows before it in the index,
+// so the records that pages reach are bounded, and with them the pages of the smallest size.
+export const PAGED_MAX = 19200
+export const PAGES_MAX = PAGED_MAX / PAGE_SIZES[0]
 export const pageOf = (value: string | null | undefined) => value && /^[1-9]\d{0,3}$/.test(value) && Number(value) <= PAGES_MAX ? Number(value) : null
 function pagedRange(listing: Listing) {
   const plan = listPlan(listing), order = listing.order ?? ORDER
@@ -1057,24 +1068,25 @@ function pagedRange(listing: Listing) {
 export async function pageCursor(db: D1Database, listing: Listing, number: number): Promise<string | null | undefined> {
   if (number === 1) return null
   const range = pagedRange(listing)
-  if (!range || !Number.isInteger(number) || number < 1 || number > PAGES_MAX) return undefined
+  const size = listing.limit ?? PAGE
+  if (!range || !Number.isInteger(number) || number < 1 || (number - 1) * size >= PAGED_MAX) return undefined
   // The row before the page and the page's first row: a page without a first row is no page.
   const { results } = await db.prepare(`SELECT t.entry_id AS id, ${range.key} AS counted FROM entry_tags t WHERE t.tag = ? AND ${range.past} ORDER BY ${range.by} LIMIT 2 OFFSET ?`)
-    .bind(range.tag, ...cursorOf(range.order, null)!, (number - 1) * PAGE - 1).all<{ id: number; counted: number }>()
+    .bind(range.tag, ...cursorOf(range.order, null)!, (number - 1) * size - 1).all<{ id: number; counted: number }>()
   return results.length === 2 ? cursorAt(range.order, results[0]) : undefined
 }
-/** How many pages a listing has, at most PAGES_MAX; null for a listing without numbered pages. */
+/** How many pages a listing has, over at most PAGED_MAX records; null for a listing without numbered pages. */
 export async function pageCount(db: D1Database, listing: Listing): Promise<{ records: number; pages: number; floor: boolean } | null> {
   const range = pagedRange(listing)
   if (!range) return null
   // The orders by year list only the dated records, which no kept count names.
   const dated = range.order === 'earliest' || range.order === 'latest'
   const row = await (dated
-    ? db.prepare(`SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags t WHERE t.tag = ? AND t.year IS NOT NULL AND ${LISTED} LIMIT ${PAGES_MAX * PAGE})`)
+    ? db.prepare(`SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags t WHERE t.tag = ? AND t.year IS NOT NULL AND ${LISTED} LIMIT ${PAGED_MAX})`)
     : db.prepare('SELECT n FROM tag_counts WHERE tag = ?')).bind(range.tag).first<{ n: number }>()
-  const records = Math.min(PAGES_MAX * PAGE, row?.n ?? 0)
+  const records = Math.min(PAGED_MAX, row?.n ?? 0)
   // A list that reaches the last page offered may run on past it.
-  return { records, pages: Math.ceil(records / PAGE), floor: records === PAGES_MAX * PAGE }
+  return { records, pages: Math.ceil(records / (listing.limit ?? PAGE)), floor: records === PAGED_MAX }
 }
 
 // A search is counted once, from the shortest range it is tested against: a key, a word or the exact

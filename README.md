@@ -8,7 +8,7 @@ When two records are the same character, and how to merge them, is set out in [d
 
 ## Local development
 
-Install [Bun](https://bun.sh/) and run:
+Install [Bun](https://bun.sh/) and the ICU command-line tools (`icu-devtools` on Ubuntu), then run:
 
 ```sh
 bun install
@@ -41,18 +41,20 @@ The local setup and production release run the date sweep after applying migrati
 
 On a source page, open **Alternate names** to add a spelling or abbreviation for that citation. The Sources page and the title fields for direct and intermediate citations accept the start of a title or alternate name. Picking an edition fills its citation details. A new title can be entered freely. URL-only sources also match their hostname. The release runs `scripts/sweep-source-names.ts` to normalize existing names.
 
+Local setup and each release run `bun scripts/sweep-title-readings.ts` with `--local` or `--remote` to index every public source title. For example, both `Dai Nam nhat thong chi` and `Da Nan Yi Tong Zhi` find 大南一統志. The picker shows the recorded title and citation evidence. Only curated title variants appear with a variant label. A newly cited title is searchable as entered immediately and gains its generated spellings at the next sweep.
+
 ## Publishers
 
-A citation can name what the source appeared in: the journal and issue of an article, the site of a page, or the group of a chat message. A chat message, a forum post or a personal communication is cited as itself, with its author as they sign, its own date and the words quoted; the group or channel is its container, the service its publisher, and it has no title. A private message has no container. Choosing a suggested container fills the publisher and leaves the author and date to the message.
+A citation can name what the source appeared in: the journal and issue of an article, the site of a page, or the group of a chat message. A chat message, a forum post or a personal communication is cited as itself, with its author as they sign, its own date and the words quoted; the group or channel is its container, the service its publisher, and it has no title. A private message, a letter or a conversation has no container and is marked a personal communication. Choosing a suggested container fills the publisher and leaves the author and date to the message.
 
 The Sources page filters direct and intermediate citations by publisher. A contributor can choose a suggested publisher or enter a new name. The directory groups verified spellings such as 江蘇教育出版社 and 江苏教育出版社. Citations, exports and revision history retain the submitted name. Only publishers cited by a visible record appear in suggestions. The release runs `scripts/sweep-publishers.ts` to reconcile legacy lookup keys. The local setup runs the same sweep.
 
 ## Agents
 
-`https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. In Claude Code:
+`https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. `/[locale]/mcp` carries the setup commands, install links and tool list. In Claude Code:
 
 ```sh
-claude mcp add --transport http rare https://rare.glyphatlas.org/mcp
+claude mcp add --scope user --transport http rare https://rare.glyphatlas.org/mcp
 ```
 
 | Tool | Does |
