@@ -151,3 +151,22 @@ export async function joinAtlas(db: D1Database, current: Person | null, sub: str
   }
   return id
 }
+
+export const PEOPLE_PAGE = 100
+// Pages past this are refused before the database is read, so an offset stays bounded.
+export const PEOPLE_PAGES = 50
+
+export type Contributor = { id: string; name: string; changes: number }
+
+export function contributorsStatement(db: D1Database, page: number) {
+  // The catalogue's own maintenance is nobody.
+  return db.prepare(`SELECT p.id, p.name, p.changes FROM people p
+    WHERE p.merged_into IS NULL AND p.changes > 0 AND p.banned_at IS NULL AND p.name <> 'Catalogue maintenance'
+    ORDER BY p.changes DESC, p.id LIMIT ? OFFSET ?`).bind(PEOPLE_PAGE + 1, (page - 1) * PEOPLE_PAGE)
+}
+
+/** Everyone with a change to show, most changes first. */
+export async function contributors(db: D1Database, page: number) {
+  const { results } = await contributorsStatement(db, page).all<Contributor>()
+  return { people: results.slice(0, PEOPLE_PAGE), next: results.length > PEOPLE_PAGE && page < PEOPLE_PAGES ? page + 1 : null }
+}
