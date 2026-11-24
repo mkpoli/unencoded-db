@@ -2,6 +2,7 @@ import { error, fail, redirect } from '@sveltejs/kit'
 import { editEntry, hasLink, ENTRY_HISTORY_PAGE, getEntry, history, redactRevision, restoreSighting } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
+import { thank, thankable, thankedOf } from '$lib/server/notifications'
 import { tagList } from '$lib/server/tags'
 import { writer } from '$lib/server/people'
 import { entrySnapshot, revisionDates, revisionFields, sightingSnapshot } from '$lib/server/revisions'
@@ -18,6 +19,7 @@ export const load: PageServerLoad = async (event) => {
   const visibleSightings = new Map(found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => [sighting.id, sighting.rev]))
   const before = event.url?.searchParams.get('before')
   if (before !== null && before !== undefined && !positiveId(before)) error(404)
+  const viewer = event.locals?.person
   const [page, tags] = await Promise.all([history(db, id, before ? positiveId(before) : null), tagList(db)])
   const next = page.length > ENTRY_HISTORY_PAGE ? page[ENTRY_HISTORY_PAGE - 1].id : null
   const rows = page.slice(0, ENTRY_HISTORY_PAGE)
@@ -27,7 +29,8 @@ export const load: PageServerLoad = async (event) => {
       ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
       sightingRev: sighting_id ? visibleSightings.get(sighting_id) : null,
     }))
-  return { id, rev: found.entry.rev, updated_at: found.entry.updated_at, rows, dates: await revisionDates(db, rows), next, tags: tags.map(({ name, label, type }) => ({ name, label, type })) }
+  const thanked = viewer ? await thankedOf(db, viewer.id, rows.map(row => row.id)) : []
+  return { id, rev: found.entry.rev, updated_at: found.entry.updated_at, rows, thanked, dates: await revisionDates(db, rows), next, tags: tags.map(({ name, label, type }) => ({ name, label, type })) }
 }
 
 export const actions: Actions = {
@@ -69,6 +72,20 @@ export const actions: Actions = {
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })
     notifyIndexNow(event, { entries: [id] })
     redirect(303, `/${event.params.locale}/entry/${id}/history`)
+  },
+  // Anyone thanks whoever made a change; that person is told.
+  thank: async event => {
+    await guardWrite(event, 'EDITS')
+    const id = positiveId(event.params.id)
+    if (!id) error(404)
+    const db = env(event).DB
+    const found = await getEntry(db, id)
+    if (!found || found.entry.hidden_at || found.entry.merged_into) error(404)
+    const revisionId = positiveId(String((await event.request.formData()).get('revision') ?? ''))
+    if (!revisionId || !await thankable(db, id, revisionId)) error(404)
+    const person = await writer(event, db)
+    if (!await thank(db, id, revisionId, { actor: person.id, ip: await ipHash(event) })) error(404)
+    return { thanked: revisionId }
   },
   // A moderator takes a past version's content out of the history.
   redact: async event => {
