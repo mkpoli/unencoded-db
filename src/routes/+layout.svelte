@@ -11,7 +11,7 @@
   let { data, children } = $props()
 
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
-  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
+  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path === '/u' || path.startsWith('/u/') ? 'people' : path.startsWith('/mcp') ? 'mcp' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
   $effect(() => { syncFavourites(data.person?.id ?? null, data.favourites) })
   type NavMode = 'full' | 'priority' | 'compact'
   let navMode = $state<NavMode>()
@@ -142,7 +142,9 @@
       <div class="menu-body">
         <div class="menu-group">
           <a href={href('/favourites')} class:on={section === 'favourites'} onclick={() => { if (menu) menu.open = false }}>{t('favourites.title')}</a>
+          <a href={href('/u')} class:on={section === 'people'} aria-current={path === '/u' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('people.title')}</a>
           <a href={href('/data')} class:on={section === 'data'} aria-current={section === 'data' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('data.title')}</a>
+          <a href={href('/mcp')} class:on={section === 'mcp'} aria-current={section === 'mcp' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('mcp.title')}</a>
         </div>
         <div class="menu-group">
           <span class="menu-label">{t('nav.language')}</span>
@@ -166,6 +168,7 @@
     · {t('footer.images')} · {t('footer.code')}
     · <a class="text-link" href="https://glyphatlas.org/" target="_blank" rel="noopener">Glyph Atlas</a>
     · <a class="text-link" href={href('/data')}>{t('footer.data')}</a>
+    · <a class="text-link" href={href('/mcp')}>{t('footer.mcp')}</a>
   </p>
   <p><ChatLinks /></p>
 </footer>

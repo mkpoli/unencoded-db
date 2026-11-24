@@ -193,3 +193,20 @@ test('a restore that would leave evidence with no picture, link or place is refu
   const restore = actions.restore as (event: any) => Promise<any>
   expect(await restore({ ...loadEvent, locals: { person }, request: new Request('http://localhost', { method: 'POST', body: data }) })).toMatchObject({ status: 400, data: { error: 'evidence' } })
 })
+
+test('thanking for a change tells its writer and marks it thanked for the reader', async () => {
+  const { db } = openTestDb()
+  const writer = await createPerson(db), reader = await createPerson(db)
+  const id = await createEntry(db, fields, sighting, [], { actor: writer.id, ip: null })
+  const post = (revision: string, person: unknown) => ({
+    params: { locale: 'en', id: String(id) }, platform: { env: { DB: db } }, locals: { person }, url: new URL(`http://localhost/en/entry/${id}/history?/thank`),
+    request: new Request('http://localhost/', { method: 'POST', body: new URLSearchParams({ revision }) }), getClientAddress: () => '127.0.0.1',
+  }) as any
+  expect(await actions.thank(post('1', reader))).toEqual({ thanked: 1 })
+  await expect(actions.thank(post('1', writer))).rejects.toMatchObject({ status: 404 })
+  await expect(actions.thank(post('999', reader))).rejects.toMatchObject({ status: 404 })
+  const seen = (person: unknown) => load({ params: { locale: 'en', id: String(id) }, platform: { env: { DB: db } }, locals: { person } } as any) as any
+  expect((await seen(reader)).thanked).toEqual([1])
+  expect((await seen(writer)).thanked).toEqual([])
+  expect((await db.prepare('SELECT COUNT(*) AS n FROM notifications WHERE person = ? AND thank_id IS NOT NULL').bind(writer.id).first<{ n: number }>())!.n).toBe(1)
+})

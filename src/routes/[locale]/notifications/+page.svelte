@@ -4,9 +4,9 @@
   import { href, t, when } from '$lib/t'
   import type { Notification } from '$lib/server/notifications'
   let { data, form } = $props()
-  // A comment opens at itself, a change to evidence at that evidence, any other change at the record's history.
+  // A comment opens at itself, a change to evidence at that evidence, any other change and a thank at the record's history.
   const target = (notice: Notification) => notice.comment_id ? `${href(`/entry/${notice.entry_id}`)}#comment-${notice.comment_id}`
-    : notice.sighting_id ? `${href(`/entry/${notice.entry_id}`)}#sighting-${notice.sighting_id}` : href(`/entry/${notice.entry_id}/history`)
+    : notice.sighting_id && notice.kind !== 'thank' ? `${href(`/entry/${notice.entry_id}`)}#sighting-${notice.sighting_id}` : href(`/entry/${notice.entry_id}/history`)
   // Unread notices of hidden things are counted and not listed, so the count decides, not the list.
   const unread = $derived(!form?.read && data.unread > 0 && data.latest > 0)
   let sent = 0
@@ -31,7 +31,7 @@
         <li class:unread={!notification.read_at && !form?.read}>
           <div class="meta">
             {#if notification.by_name}<a class="text-link" href={href(`/u/${notification.by_id}`)}>{notification.by_name}</a>{/if}
-            <span>{t(notification.kind === 'comment' ? 'discussion.comment' : `history.kind.${notification.kind}`)}</span>
+            <span>{t(notification.kind === 'comment' ? 'discussion.comment' : notification.kind === 'thank' ? 'notifications.thank' : `history.kind.${notification.kind}`)}</span>
             <a class="text-link record" href={target(notification)}>{notification.ids || recordCode(notification.entry_id)}</a>
             {#if notification.kind === 'comment' && notification.sighting_id}<span class="badge">{t('discussion.about', { id: notification.sighting_id })}</span>{/if}
             <time datetime={notification.at}>{when(notification.at)}</time>
