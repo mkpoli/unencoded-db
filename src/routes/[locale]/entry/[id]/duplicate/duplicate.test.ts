@@ -78,6 +78,10 @@ test('the later record is kept apart from either page, by a relation that names 
   expect(await stated(2)).toHaveLength(1)
   await expect(actions.apart(event(apart('1', 'uncertain'), '', '2'))).rejects.toMatchObject({ status: 303 })
   expect(await stated(2)).toHaveLength(2)
+  // A relation that holds under one meaning does not say it of the record.
+  raw.exec(`INSERT INTO claims(entry_id, position, key, kind, value, data, under) VALUES (2, 10, 'mean0001', 'meaning', 'a fish', NULL, '[]'), (2, 11, 'rela0001', 'relation', 'R+0001', '{"relationship":"similar"}', '["mean0001"]')`)
+  await expect(actions.apart(event(apart('1', 'similar'), '', '2'))).rejects.toMatchObject({ status: 303 })
+  expect(await stated(2)).toHaveLength(4)
   // Its other claims are as they were.
   expect((await getEntry(db, 2))!.claims.filter(claim => claim.kind === 'ids').map(claim => claim.value)).toEqual(['⿱赤相'])
 })

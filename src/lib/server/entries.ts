@@ -558,7 +558,7 @@ export async function relateEntry(db: D1Database, id: number, to: number, data: 
     if (!entry || !other || entry.hidden_at || other.hidden_at) return { ok: false, code: 'missing' }
     if (entry.merged_into || other.merged_into) return { ok: false, code: 'merged' }
     const current = await claimRows(db, id)
-    if (current.some(claim => claim.kind === 'relation' && codedRecord(claim.value) === to && claim.data?.relationship === data.relationship && (claim.data.difference ?? '') === (data.difference ?? ''))) return { ok: true }
+    if (current.some(claim => claim.kind === 'relation' && !claim.under.length && codedRecord(claim.value) === to && claim.data?.relationship === data.relationship && (claim.data.difference ?? '') === (data.difference ?? ''))) return { ok: true }
     const claims = parseClaims([...current, newClaim('relation', recordCode(to), data)])
     if (!claims) return { ok: false, code: 'relatedCharacters' }
     const result = await editEntry(db, id, entry.rev, { ...snapshotOf(entry, ENTRY_FIELDS), claims } as EntryFields, who, summary)
