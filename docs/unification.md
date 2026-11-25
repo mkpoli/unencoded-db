@@ -44,6 +44,9 @@ Keep two records apart, and link them with a relation claim, when:
 
 - Open both records and compare their evidence images, not only their IDS.
 - When unsure, do not merge. Link the records with the relation Uncertain and say why.
+- Merge the later record into the earlier one (the lower number). The later number retires, redirects
+  to the earlier record, and is never reused. Both the server and the database reject merging an
+  earlier record into a later one.
 - Give the reason in the summary, for example "same form; IDS mistyped as ⿰木本".
 
 ## Undoing a merge

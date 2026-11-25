@@ -39,12 +39,12 @@ test('a record shows the records its relations name and the ones that name it, w
 
 test('a relation names a record by its code, from either side, and follows a merge', async () => {
   const { db, who, related } = await fixture()
+  const last = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('last'), [], who)
+  const kept = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('kept'), [], who)
   const a = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('a'), [picture('a')], who)
-  const b = await createEntry(db, record([newClaim('ids', '⿱𥫗雚'), relation('R+0001', 'variant'), relation('R+0002', 'similar'), relation('R+0009', 'similar')]), seen('b'), [picture('b')], who)
+  const b = await createEntry(db, record([newClaim('ids', '⿱𥫗雚'), relation('R+0003', 'variant'), relation('R+0004', 'similar'), relation('R+0009', 'similar')]), seen('b'), [picture('b')], who)
   expect((await related(b)).map(item => [item.tile.id, item.relationships, item.stated])).toEqual([[a, ['variant'], []]])
   expect((await related(a)).map(item => [item.tile.id, item.relationships, item.stated])).toEqual([[b, [], ['variant']]])
-  const kept = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('kept'), [], who)
-  const last = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('last'), [], who)
   await mergeEntry(db, a, kept, who, null)
   await mergeEntry(db, kept, last, who, null)
   expect((await related(b)).map(item => [item.tile.id, item.named])).toEqual([[last, [a]]])

@@ -50,11 +50,14 @@ test('rejects missing, hidden and merged records', async () => {
     await expect(load(event(new FormData(), id))).rejects.toMatchObject({ status: 404 })
     await expect(actions.default(event(new FormData(), id))).rejects.toMatchObject({ status: 404 })
   }
-  for (const sql of ["UPDATE entries SET hidden_at = 'now'", "UPDATE entries SET hidden_at = NULL, merged_into = 2"]) {
-    raw.exec(sql)
-    await expect(load(event())).rejects.toMatchObject({ status: 404 })
-    await expect(actions.default(event(new FormData()))).rejects.toMatchObject({ status: 404 })
-  }
+  raw.exec("UPDATE entries SET hidden_at = 'now' WHERE id = 1")
+  await expect(load(event())).rejects.toMatchObject({ status: 404 })
+  await expect(actions.default(event(new FormData()))).rejects.toMatchObject({ status: 404 })
+  const create = new FormData(); create.set('place', 'Other'); create.set('url', 'https://example.test/other')
+  await expect(createActions.default(event(create))).rejects.toMatchObject({ status: 303 })
+  raw.exec('UPDATE entries SET hidden_at = NULL WHERE id = 1; UPDATE entries SET merged_into = 1 WHERE id = 2')
+  await expect(load(event(new FormData(), '2'))).rejects.toMatchObject({ status: 404 })
+  await expect(actions.default(event(new FormData(), '2'))).rejects.toMatchObject({ status: 404 })
 })
 
 test('write guard rejects paused and rate-limited additions', async () => {

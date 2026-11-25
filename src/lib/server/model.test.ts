@@ -130,8 +130,8 @@ describe('claims', () => {
 
 // What becomes of the sightings a claim names when one of them is hidden, edited or moved.
 describe('the evidence a claim rests on', () => {
-  async function cited() {
-    const { db } = open()
+  async function cited(existing?: D1Database) {
+    const db = existing ?? open().db
     const sense = claim('meaning', 'east', null, { sightings: [1, 2] })
     const claims = [claim('reading', 'tung', null, { sightings: [2], under: [sense.key] }), sense, claim('relation', '東', { relationship: 'usage' }, { sightings: [1], under: [sense.key] })]
     const id = await createEntry(db, fields(claims), seen({ place: 'one' }), [], who, [{ fields: seen({ place: 'two', ...book }), media: [image('p')] }])
@@ -154,8 +154,9 @@ describe('the evidence a claim rests on', () => {
   })
 
   test('hiding a sighting, merging and unmerging each move the time of change of every record they alter', async () => {
-    const { db, id, two } = await cited()
+    const { db } = open()
     const into = await createEntry(db, fields([claim('reading', 'dong')]), seen({ place: 'three' }), [], who)
+    const { id, two } = await cited(db)
     const changed = async (record: number) => (await getEntry(db, record))!.entry.updated_at
     const age = () => db.prepare("UPDATE entries SET updated_at = '2000-01-01T00:00:00.000Z'").run()
     await age()
@@ -181,18 +182,19 @@ describe('the evidence a claim rests on', () => {
   })
 
   test('a merge moves the sightings and joins the claims, and undoing it gives each record its own again', async () => {
-    const { db, id, one, two, claims } = await cited()
+    const { db } = open()
     const kept = claim('reading', 'dong')
     const into = await createEntry(db, fields([kept]), seen({ place: 'three' }), [], who)
     const three = (await getEntry(db, into))!.sightings[0].id
+    const { id, one, two, claims } = await cited(db)
     expect((await mergeEntry(db, id, into, who, null)).ok).toBe(true)
     expect((await getEntry(db, id))!.claims).toEqual(claims)
     expect((await getEntry(db, into))!.claims).toEqual([kept, ...claims])
-    expect((await getEntry(db, into))!.sightings.map(sighting => sighting.id)).toEqual([one, two, three])
+    expect((await getEntry(db, into))!.sightings.map(sighting => sighting.id)).toEqual([three, one, two])
     // The record the sightings moved to may rest its own claims on them.
     const resting = [{ ...kept, sightings: [two, three] }, ...claims]
     expect(await editEntry(db, into, 2, fields(resting), who, null)).toEqual({ ok: true, rev: 3 })
-    expect(await sightingsOf(db, into)).toEqual([[two, three], [two], [one, two], [one]])
+    expect(await sightingsOf(db, into)).toEqual([[three, two], [two], [one, two], [one]])
     expect(await unmergeEntry(db, id, who)).toBe(true)
     expect((await getEntry(db, id))!.claims).toEqual(claims)
     expect((await getEntry(db, id))!.sightings.map(sighting => sighting.id)).toEqual([one, two])

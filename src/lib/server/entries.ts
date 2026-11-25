@@ -692,12 +692,13 @@ export async function redactRevision(db: D1Database, entry: number, revisionId: 
   return true
 }
 
-export type MergeResult = { ok: true } | { ok: false; code: 'self' | 'missing' | 'merged' | 'full' }
+export type MergeResult = { ok: true } | { ok: false; code: 'self' | 'order' | 'missing' | 'merged' | 'full' }
 
 // A duplicate joins the record it repeats. Its sightings move there and its claims are joined to that
 // record's; the duplicate keeps its own claims as they were, so parting the two gives each back its own.
 export async function mergeEntry(db: D1Database, from: number, into: number, who: Who, summary: string | null): Promise<MergeResult> {
   if (from === into) return { ok: false, code: 'self' }
+  if (from < into) return { ok: false, code: 'order' }
   for (let attempt = 0; ; attempt++) {
     const marks = [await revisionMark(db, from), await revisionMark(db, into)]
     const source = await getEntryRow(db, from), target = await getEntryRow(db, into)

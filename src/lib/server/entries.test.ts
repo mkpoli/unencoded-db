@@ -440,28 +440,28 @@ describe('the wiki', () => {
   test('merging moves the sightings, drops the record from lists, and undoing brings all of it back', async () => {
     const a = await createEntry(db, fields(), seen({ place: 'one' }), [], who)
     const b = await createEntry(db, fields(), seen({ place: 'two' }), [], who)
-    expect((await mergeEntry(db, a, b, who, null)).ok).toBe(true)
-    expect((await getEntry(db, b))!.sightings).toHaveLength(2)
-    expect((await list(db, {}))!.tiles.map(tile => tile.id)).toEqual([b])
+    expect((await mergeEntry(db, b, a, who, null)).ok).toBe(true)
+    expect((await getEntry(db, a))!.sightings).toHaveLength(2)
+    expect((await list(db, {}))!.tiles.map(tile => tile.id)).toEqual([a])
     expect(await counts(db)).toMatchObject({ all: 1 })
-    expect(await unmergeEntry(db, a, who)).toBe(true)
-    expect((await getEntry(db, b))!.sightings).toHaveLength(1)
+    expect(await unmergeEntry(db, b, who)).toBe(true)
     expect((await getEntry(db, a))!.sightings).toHaveLength(1)
+    expect((await getEntry(db, b))!.sightings).toHaveLength(1)
     expect((await list(db, {}))!.tiles.map(tile => tile.id)).toEqual([b, a])
   })
 
   test('merging joins the claims, and undoing gives each record back its own claims and pictures', async () => {
-    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰木木'), claim('reading', 'tung'), relation('林', 'variant', 'a stroke')] }), seen({ place: 'one' }), [{ ...image, image_key: 'a.jpg', thumb_key: 'a-t.jpg', box: '[[1,2,10,10]]' }], who)
     const b = await createEntry(db, fields({ claims: [claim('ids', '⿱木木'), claim('encoding', 'U+5D20', { charset: 'unicode' })] }), seen({ place: 'two' }), [], who)
+    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰木木'), claim('reading', 'tung'), relation('林', 'variant', 'a stroke')] }), seen({ place: 'one' }), [{ ...image, image_key: 'a.jpg', thumb_key: 'a-t.jpg', box: '[[1,2,10,10]]' }], who)
     const claimsOf = async (id: number) => (await getEntry(db, id))!.claims
     const [aClaims, bClaims] = [await claimsOf(a), await claimsOf(b)]
     await mergeEntry(db, a, b, who, null)
     expect(await claimsOf(a)).toEqual(aClaims)
     expect(await claimsOf(b)).toEqual([...bClaims, ...aClaims])
     const merged = (await getEntry(db, b))!
-    expect(merged.sightings.map(item => item.media.map(picture => picture.image_key))).toEqual([['a.jpg'], []])
+    expect(merged.sightings.map(item => item.media.map(picture => picture.image_key))).toEqual([[], ['a.jpg']])
     expect(merged.entry).toMatchObject({ cover_key: 'a-t.jpg', cover_place: 'one', sightings: 2 })
-    expect(merged.sightings[0].media[0].box).toBe('[[1,2,10,10]]')
+    expect(merged.sightings[1].media[0].box).toBe('[[1,2,10,10]]')
     expect((await claimedBy(db, 'ids', '⿰木木')).map(row => row.id)).toEqual([b])
     expect((await list(db, { query: 'tung' }))!.tiles.map(tile => tile.id)).toEqual([b])
     expect(await mediaVisible(db, 'a.jpg')).toBe(true)
@@ -565,13 +565,30 @@ describe('the wiki', () => {
     expect((await getEntry(db, c))!.sightings.map(sighting => sighting.place)).toEqual(['c'])
   })
 
-  test('a record cannot merge into itself or into a merged record', async () => {
+  test('a record cannot merge into itself, into a later record, or into a merged record', async () => {
     const a = await createEntry(db, fields(), seen(), [], who)
     const b = await createEntry(db, fields(), seen(), [], who)
     const c = await createEntry(db, fields(), seen(), [], who)
     expect(await mergeEntry(db, a, a, who, null)).toEqual({ ok: false, code: 'self' })
-    await mergeEntry(db, a, b, who, null)
-    expect(await mergeEntry(db, c, a, who, null)).toEqual({ ok: false, code: 'missing' })
+    expect(await mergeEntry(db, a, b, who, null)).toEqual({ ok: false, code: 'order' })
+    expect((await getEntry(db, a))!.entry.merged_into).toBeNull()
+    expect((await mergeEntry(db, b, a, who, null)).ok).toBe(true)
+    expect(await mergeEntry(db, c, b, who, null)).toEqual({ ok: false, code: 'missing' })
+  })
+
+  test('the database guards record code permanence and merge direction directly', async () => {
+    const a = await createEntry(db, fields(), seen(), [], who)
+    const b = await createEntry(db, fields(), seen(), [], who)
+    expect(() => raw.run('DELETE FROM entries WHERE id = ?', [b])).toThrow('entries cannot be deleted')
+    expect(() => raw.run('UPDATE entries SET id = 999 WHERE id = ?', [b])).toThrow('entry id cannot change')
+    expect(() => raw.run('UPDATE entries SET merged_into = ? WHERE id = ?', [a, a])).toThrow('a record can only merge into an earlier record')
+    expect(() => raw.run('UPDATE entries SET merged_into = ? WHERE id = ?', [b, a])).toThrow('a record can only merge into an earlier record')
+    expect(() => raw.run("INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at) VALUES (10, 'han', 10, ?, '2026', '2026')", [who.actor])).toThrow('a record can only merge into an earlier record')
+    expect(() => raw.run("INSERT INTO entries(script, merged_into, created_by, created_at, updated_at) VALUES ('han', 999, ?, '2026', '2026')", [who.actor])).toThrow('a record can only merge into an earlier record')
+    // Valid inserts with an auto-assigned id and merges into an earlier record succeed.
+    expect(() => raw.run("INSERT INTO entries(script, merged_into, created_by, created_at, updated_at) VALUES ('han', ?, ?, '2026', '2026')", [a, who.actor])).not.toThrow()
+    expect((await getEntry(db, a))!.entry.id).toBe(a)
+    expect((await getEntry(db, b))!.entry.id).toBe(b)
   })
 
   test('hiding rolls back with the index and rejects mismatched targets', async () => {
