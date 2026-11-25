@@ -58,6 +58,9 @@ its sightings and its own claims as they were. The record that stayed loses what
   that is still merged states it;
 - the fields it filled, unless one has been rewritten since.
 
+Evidence that was moved to another record since stays there. The last piece a duplicate brought cannot be
+moved while it is merged.
+
 A merge into a hidden record cannot be undone until the record is shown again.
 
 ## Sources

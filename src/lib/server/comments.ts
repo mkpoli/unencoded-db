@@ -9,7 +9,8 @@ export function cleanComment(input: unknown) {
 }
 
 export async function addComment(db: D1Database, target: { entry: number; sighting?: number | null }, body: string, who: { actor: string; ip: string | null }) {
-  const row = await db.prepare('INSERT INTO comments(entry_id, first_entry, sighting_id, body, author, at, ip_hash) VALUES(?1, ?1, ?2, ?3, ?4, ?5, ?6) RETURNING id')
+  // Evidence that moved while its form was open is commented on where it is now.
+  const row = await db.prepare('INSERT INTO comments(entry_id, first_entry, sighting_id, body, author, at, ip_hash) VALUES(COALESCE((SELECT entry_id FROM sightings WHERE id = ?2), ?1), COALESCE((SELECT first_entry FROM sightings WHERE id = ?2), ?1), ?2, ?3, ?4, ?5, ?6) RETURNING id')
     .bind(target.entry, target.sighting ?? null, body, who.actor, new Date().toISOString(), who.ip).first<{ id: number }>()
   return row!.id
 }
