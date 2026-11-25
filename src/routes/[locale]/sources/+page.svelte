@@ -4,7 +4,7 @@
   import Seo from '$lib/components/Seo.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import { href, media, t } from '$lib/t'
-  import { kindName } from '$lib/source-kind'
+  import { sourceByline, sourceName } from '$lib/source-name'
   import { recordCode } from '$lib/code'
   import { SOURCE_SORTS } from '$lib/order'
   let { data } = $props()
@@ -46,16 +46,17 @@
   {#if data.sources.length}
     <div class="cards">
       {#each data.sources as source (source.id)}
-        {@const name = source.title || source.container || host(source.url) || source.url || kindName(source.source_kind) || t('source.title')}
-        {@const kind = kindName(source.source_kind)}
-        {@const byline = [source.author, source.title ? source.container : null, name === kind ? null : kind, source.publisher].filter(Boolean).join(' · ')}
+        {@const { text, fields } = sourceName(source, t)}
+        {@const name = fields.includes('url') ? host(source.url) ?? text : text}
+        {@const byline = sourceByline(source, fields, t, ['author', 'container', 'source_kind', 'publisher'])}
+        {@const date = fields.includes('report_date') ? null : source.report_date}
         <article class="card">
           <a class="cover" href={href(`/source/${source.id}`)} tabindex="-1" aria-hidden="true">
             {#if source.cover}<img src={media(source.cover)} alt="" loading="lazy" decoding="async" />{:else}<span class="blank">{t('browse.noImage')}</span>{/if}
           </a>
           <div class="body">
             <h2 class="name"><a href={href(`/source/${source.id}`)}>{name}</a></h2>
-            {#if byline || source.report_date}<span class="byline">{byline}{#if byline && source.report_date} · {/if}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} /></span>{/if}
+            {#if byline || date}<span class="byline">{byline}{#if byline && date} · {/if}<EvidenceDate text={date} reading={data.dates.get(date ?? '')} /></span>{/if}
             {#if host(source.url) && name !== host(source.url)}<span class="byline">{host(source.url)}</span>{/if}
             <span class="count">{count(source.records)}</span>
           </div>
