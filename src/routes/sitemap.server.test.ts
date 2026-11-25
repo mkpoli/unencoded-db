@@ -50,8 +50,8 @@ test('record sitemaps say when each record last changed', async () => {
     INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES
       (1, 'han', 'p', '2026', '2026-11-16T14:13:22.122Z'), (2, 'han', 'p', '2026', 'not a time')`)
   const xml = await (await child({ platform: { env: { DB: db } }, params: { part: '1' } } as Parameters<typeof child>[0])).text()
-  expect(xml).toContain(`<url><loc>${SITE_ORIGIN}/en/entry/1</loc><lastmod>2026-11-16T14:13:22.122Z</lastmod></url>`)
-  expect(xml).toContain(`<url><loc>${SITE_ORIGIN}/en/entry/2</loc></url>`)
+  expect(xml).toContain(`<url><loc>${SITE_ORIGIN}/en/entry/1</loc><lastmod>2026-11-16T14:13:22.122Z</lastmod><xhtml:link`)
+  expect(xml).toContain(`<url><loc>${SITE_ORIGIN}/en/entry/2</loc><xhtml:link`)
 })
 
 test('record sitemaps list the pictures of visible sightings, through the export index', async () => {
@@ -78,4 +78,17 @@ test('record sitemaps list the pictures of visible sightings, through the export
   expect(images).not.toContain(`${SITE_ORIGIN}/media/v2/hidden.png`)
   expect(plans.join('\n')).toContain('sightings_visible_export')
   expect(plans.join('\n')).not.toMatch(/USE TEMP B-TREE FOR ORDER BY|SCAN (?:s|x|entries|sightings|sighting_media)(?:\s|$)/)
+})
+
+test('page sitemaps name every language and the English default for each page', async () => {
+  const { db, raw } = openTestDb()
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES (1, 'han', 'p', '2026', '2026')")
+  const entry = await (await child({ platform: { env: { DB: db } }, params: { part: '1' } } as Parameters<typeof child>[0])).text()
+  const ja = entry.split('<url>').find(block => block.includes(`<loc>${SITE_ORIGIN}/ja/entry/1</loc>`))!
+  expect([...ja.matchAll(/<xhtml:link rel="alternate" hreflang="([^"]+)" href="([^"]+)"\/>/g)].map(match => [match[1], match[2]])).toEqual([
+    ...LOCALES.map(locale => [locale, `${SITE_ORIGIN}/${locale}/entry/1`]), ['x-default', `${SITE_ORIGIN}/en/entry/1`],
+  ])
+  expect(entry).toContain('xmlns:xhtml="http://www.w3.org/1999/xhtml"')
+  const site = await (await child({ platform: { env: { DB: db } }, params: { part: 'site' } } as Parameters<typeof child>[0])).text()
+  expect(site).toContain(`hreflang="x-default" href="${SITE_ORIGIN}/"`)
 })
