@@ -171,9 +171,9 @@
       if (found && !hadSource) row.kind = ''
       row.url = keep(row.url, 'viaUrl'); row.title = keep(row.title, 'viaTitle'); row.author = keep(row.author, 'viaAuthor')
       row.publisher = keep(row.publisher, 'viaPublisher'); row.date = keep(row.date, 'viaDate')
-      // Words written for the source this row held no longer belong to it once a post replaces it. A row
+      // Words and pictures of the source this row held no longer belong to it once a post replaces it. A row
       // that held no source is being filled, so words already in it are for this post.
-      if (hadSource && [row.url, row.title, row.author, row.publisher, row.date].join('\u0000') !== before) { row.quote = ''; row.kind = '' }
+      if (hadSource && [row.url, row.title, row.author, row.publisher, row.date].join('\u0000') !== before) { row.quote = ''; row.kind = ''; shots[row.key]?.clear() }
       if (!next?.viaUrl || row.url === next.viaUrl) row.quote = keep(row.quote, 'viaQuote')
       postedKey = found ? row.key : null
       if (row.url) viaOpen = true
@@ -211,7 +211,7 @@
       row.url === (source.url ?? '') && row.title === (source.title ?? '') && row.author === (source.author ?? '')
       && row.publisher === (source.publisher ?? '') && row.date === (source.report_date ?? '') && row.container === (source.container ?? '') && row.kind === (source.source_kind ?? '')
     )
-    if (!blankVia(row) && !sameSource) row.quote = ''
+    if (!blankVia(row) && !sameSource) { row.quote = ''; shots[row.key]?.clear() }
     if (row.key === postedKey) postedKey = null
     row.url = source.url ?? ''
     row.title = source.title ?? ''

@@ -46,7 +46,7 @@
             {#if pictures && via.pictures?.length}
               <span class="pictures">
                 {#each via.pictures as picture, index (picture.image_key)}
-                  <a href={media(picture.image_key)} target="_blank" rel="noopener"><img src={media(picture.thumb_key)} width={shownWidth(picture)} alt={pictureAlt([via.title || via.container, via.author], index, via.pictures.length)} loading="lazy" decoding="async" /></a>
+                  <a href={media(picture.image_key)} target="_blank" rel="noopener"><img src={media(picture.thumb_key)} width={shownWidth(picture)} alt={pictureAlt([via.title || via.container || via.url || t('source.title'), via.author], index, via.pictures.length)} loading="lazy" decoding="async" /></a>
                 {/each}
               </span>
             {/if}

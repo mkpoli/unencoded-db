@@ -72,14 +72,15 @@ const text = (form: FormData, name: string, max: number) => clean(form.get(name)
 const link = (form: FormData, name: string) => cleanLink(form.get(name))
 
 const citationKey = (citation: Citation) => JSON.stringify(CITATION_FIELDS.map(field => citation[field]))
-// The vias of a chain: rows with no field are dropped, a row that repeats an earlier one is dropped, and
+// The vias of a chain: rows with no field and no picture are dropped, a row that repeats an earlier one is dropped, and
 // at most VIAS_MAX are kept. The quote stays with the link that carries it, and two links to one source
 // that quote different words are two links: two messages one person sent to a group on one day. The pictures
 // of a repeated row join the row it repeats.
 export const tidyVias = (vias: readonly Via[]): Via[] => {
   const kept = new Map<string, Via>()
   for (const via of vias) {
-    if (blankCitation(via)) continue
+    // A row with pictures alone is refused and shown again; `sourceOf` never saves it.
+    if (blankCitation(via) && !via.pictures?.length) continue
     const key = viaKey(via), first = kept.get(key)
     const pictures = [...new Map([...first?.pictures ?? [], ...via.pictures ?? []].map(picture => [picture.image_key, picture])).values()].slice(0, VIA_MEDIA_MAX)
     const { pictures: _, ...row } = first ?? via
@@ -88,24 +89,28 @@ export const tidyVias = (vias: readonly Via[]): Via[] => {
   return [...kept.values()].slice(0, VIAS_MAX)
 }
 const viaKey = (via: Via) => citationKey(via) + '\u0000' + (via.quote ?? '')
-// A restore brings back the text and leaves the pictures as they are: a link of the chain the sighting still has
-// keeps the pictures it has now, and a link that had gone comes back with its own.
+// A restore brings back the text and leaves the pictures as they are. A link the version names with the same words keeps
+// its pictures; any other link with pictures stays in the chain with them, after the links of the version.
 function restoredVias(vias: readonly Via[], current: readonly Via[]): Via[] {
-  const left = [...current]
-  const take = (same: (via: Via) => boolean) => { const at = left.findIndex(same); return at < 0 ? null : left.splice(at, 1)[0] }
-  const exact = vias.map(via => take(now => viaKey(now) === viaKey(via)))
-  return vias.map((via, index) => {
-    const now = exact[index] ?? take(now => citationKey(now) === citationKey(via))
-    return now ? { ...via, pictures: now.pictures } : via
-  })
+  const pictured = new Map(current.filter(via => via.pictures?.length).map(via => [viaKey(via), via]))
+  const named = new Set(vias.map(viaKey))
+  const kept = [...pictured].filter(([key]) => !named.has(key)).map(([, via]) => ({ ...snapshotOf(via, CITATION_FIELDS), quote: via.quote, pictures: via.pictures }) as Via)
+  const text = vias.map(via => ({ ...via, pictures: pictured.get(viaKey(via))?.pictures }))
+  // Past the most links a chain holds, a link with pictures stays and the last one without gives way.
+  for (let over = text.length + kept.length - VIAS_MAX; over > 0; over--) {
+    const at = text.findLastIndex(via => !via.pictures)
+    if (at < 0) break
+    text.splice(at, 1)
+  }
+  return [...text, ...kept]
 }
 // Whether a sighting names a web address, as its source or in its chain, or pictures a source it was found in.
 export const citesEvidence = (fields: Pick<SightingFields, 'url' | 'vias'>) => Boolean(fields.url) || fields.vias.some(via => via.url || via.pictures?.length)
-// The vias a form sends, in the order of the page, with the pictures read for each row.
-function readVias(form: FormData, pictures: readonly ViaPicture[][]): Via[] {
+// The rows of vias a form sends, in the order of the page.
+function viaRows(form: FormData): Via[] {
   const columns = VIA_INPUTS.map(name => form.getAll(name))
   const rows = Math.max(...columns.map(column => column.length))
-  return tidyVias(Array.from({ length: rows }, (_, index) => ({
+  return Array.from({ length: rows }, (_, index) => ({
     url: cleanLink(columns[0][index]),
     title: clean(columns[1][index], 300),
     author: clean(columns[2][index], 300),
@@ -114,9 +119,10 @@ function readVias(form: FormData, pictures: readonly ViaPicture[][]): Via[] {
     container: clean(columns[5][index], 300),
     source_kind: sourceKind(clean(columns[6][index], 20)),
     quote: clean(columns[7][index], 5000),
-    pictures: pictures[index],
-  })))
+  }))
 }
+/** Whether each row of vias a form sends names a source. */
+export const namedVias = (form: FormData) => viaRows(form).map(via => !blankCitation(via))
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
 const now = () => new Date().toISOString()
 
@@ -157,7 +163,7 @@ export function readSightingFields(form: FormData, viaPictures: readonly ViaPict
     report_date: dateText(form.get('report_date')),
     container: text(form, 'container', 300),
     source_kind: sourceKind(text(form, 'source_kind', 20)),
-    vias: readVias(form, viaPictures),
+    vias: tidyVias(viaRows(form).map((via, index) => ({ ...via, pictures: viaPictures[index] }))),
     original_date: dateText(form.get('original_date')),
     page: text(form, 'page', 80),
     contexts: storeChosen(CONTEXTS, chosen('contexts')),

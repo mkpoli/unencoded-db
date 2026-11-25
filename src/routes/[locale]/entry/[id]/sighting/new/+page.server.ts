@@ -26,7 +26,7 @@ export const actions: Actions = {
     const values = readSightingFields(form)
     const shots = await readViaPictures(form)
     if (found.sightings.length >= SIGHTINGS_MAX) return fail(400, { error: 'sightingLimit', values })
-    if (typeof shots === 'string') return fail(400, { error: shots, values })
+    if (shots.error) return fail(400, { error: shots.error, values })
     const fields = readSightingFields(form, shots.all)
     const media = await uploadedImages(form, MEDIA)
     if (media === 'invalid') return fail(400, { error: 'image', values })

@@ -59,7 +59,7 @@ export const actions: Actions = {
       const fields = old && sightingSnapshot(old.snapshot)
       if (!old || !fields) error(404)
       // A restore keeps the pictures, so a version without a place or a link needs one to stay.
-      if (!sighting.media.length && !citesEvidence(fields) && !fields.place) return fail(400, { error: 'evidence' })
+      if (!sighting.media.length && !sighting.vias.some(via => via.pictures?.length) && !citesEvidence(fields) && !fields.place) return fail(400, { error: 'evidence' })
       const person = await writer(event, db)
       const result = await restoreSighting(db, id, sighting.id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, old.rev, revisionId)
       if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })

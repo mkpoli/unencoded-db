@@ -1,9 +1,9 @@
-import { CITATION_FIELDS, readBoxes, SIGHTING_FIELDS, VIA_INPUTS, type StoredImage, type Via, type ViaPicture } from '$lib/server/entries'
+import { namedVias, readBoxes, SIGHTING_FIELDS, VIA_INPUTS, type StoredImage, type Via, type ViaPicture } from '$lib/server/entries'
 import { MAX_IMAGE, MAX_THUMB, prepareImage, storeImage } from '$lib/server/image'
 import { MEDIA_MAX, VIA_MEDIA_MAX } from '$lib/limits'
 import { SIGHTING_START } from '$lib/scripts'
 
-const SIGHTING_NAMES = new Set<string>([...SIGHTING_FIELDS, ...VIA_INPUTS, 'quote_text', 'quote_locator', 'image', 'thumb', 'box', 'via_keep', 'via_image', 'via_thumb'])
+const SIGHTING_NAMES = new Set<string>([...SIGHTING_FIELDS, ...VIA_INPUTS, 'quote_text', 'quote_locator', 'image', 'thumb', 'box', 'via_keep', 'via_drop', 'via_image', 'via_thumb'])
 
 // The sightings of a form, in the order of the page: one form of its own for each, with the fields and
 // pictures between its opening field and the next. Fields of the record itself are left out, wherever
@@ -53,40 +53,41 @@ const described = ({ image, thumb }: ReadImage): ViaPicture => ({ image_key: ima
 
 // The pictures of the go-betweens a form sends. A row of the chain opens with `via_url`, and the fields up to the
 // next one are its own, so a row dragged elsewhere takes its pictures along: `via_keep` names one the
-// sighting already holds, `via_image` is a new one and `via_thumb` its thumbnail. `kept` is each row's stored
-// pictures and `all` those and the new ones; `files` are the new ones, which are not stored here.
-export async function readViaPictures(form: FormData, stored: readonly Via[] = []): Promise<{ kept: ViaPicture[][]; all: ViaPicture[][]; files: ReadImage[] } | 'image' | 'viaSource'> {
+// sighting already holds, `via_drop` takes it away without scripts, `via_image` is a new one and `via_thumb` its
+// thumbnail. `kept` is each row's stored pictures, which a refused form shows again, and `all` those and the
+// new ones; `files` are the new ones, which are not stored here.
+type ViaPictures = { kept: ViaPicture[][]; all: ViaPicture[][]; files: ReadImage[]; error: 'viaImage' | 'viaSource' | null }
+export async function readViaPictures(form: FormData, stored: readonly Via[] = []): Promise<ViaPictures> {
   const held = new Map(stored.flatMap(via => via.pictures ?? []).map(picture => [picture.image_key, picture]))
-  const named = new Set<string>(CITATION_FIELDS.filter(field => field !== 'source_kind').map(field => `via_${field}`))
-  type Row = { named: boolean; kept: ViaPicture[]; images: File[]; thumbs: File[] }
-  const rows: Row[] = []
+  const dropped = new Set(form.getAll('via_drop').map(String))
+  const rows: { kept: ViaPicture[]; images: File[]; thumbs: File[] }[] = []
   for (const [name, value] of form.entries()) {
-    if (name === 'via_url') rows.push({ named: false, kept: [], images: [], thumbs: [] })
-    const row = rows.at(-1)
+    if (name === 'via_url') rows.push({ kept: [], images: [], thumbs: [] })
+    const row = rows.at(-1), file = value as unknown
     if (!row) continue
-    const file = value as unknown
     if (file instanceof File) {
       if (file.size && name === 'via_image') row.images.push(file)
       else if (file.size && name === 'via_thumb') row.thumbs.push(file)
       continue
     }
-    if (named.has(name) && value.trim()) row.named = true
-    const picture = name === 'via_keep' && held.get(value)
+    const picture = name === 'via_keep' && !dropped.has(value) && held.get(value)
     if (picture) row.kept.push(picture)
   }
+  const kept = rows.map(row => row.kept), named = namedVias(form)
+  const refused = (error: 'viaImage' | 'viaSource'): ViaPictures => ({ kept, all: kept, files: [], error })
+  if (rows.some((row, index) => !named[index] && (row.kept.length || row.images.length))) return refused('viaSource')
   const all: ViaPicture[][] = [], files: ReadImage[] = []
   for (const row of rows) {
-    if (row.kept.length + row.images.length > VIA_MEDIA_MAX) return 'image'
-    if (!row.named && (row.kept.length || row.images.length)) return 'viaSource'
+    if (row.kept.length + row.images.length > VIA_MEDIA_MAX) return refused('viaImage')
     const own = new FormData()
     for (const image of row.images) own.append('image', image)
     for (const thumb of row.thumbs) own.append('thumb', thumb)
     const read = await readImages(own)
-    if (read === 'invalid') return 'image'
+    if (read === 'invalid') return refused('viaImage')
     all.push([...row.kept, ...read.map(described)])
     files.push(...read)
   }
-  return { kept: rows.map(row => row.kept), all, files }
+  return { kept, all, files, error: null }
 }
 
 export async function storeImages(media: R2Bucket, images: ReadImage[]): Promise<StoredImage[]> {

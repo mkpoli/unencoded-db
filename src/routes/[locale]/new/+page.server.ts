@@ -60,7 +60,7 @@ export const actions: Actions = {
     const pictures: ReadImage[][] = [], cited: { fields: SightingFields; files: ReadImage[] }[] = []
     for (const [index, section] of sections.entries()) {
       const shots = await readViaPictures(section.form)
-      if (typeof shots === 'string') return reject(400, shots, index + 1)
+      if (shots.error) return reject(400, shots.error, index + 1)
       const fields = readSightingFields(section.form, shots.all)
       const images = await readImages(section.form)
       if (images === 'invalid') return reject(400, 'image', index + 1)

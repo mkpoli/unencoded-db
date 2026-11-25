@@ -28,7 +28,7 @@ export const actions: Actions = {
     const typed = Array.from({ length: Math.min(count, BATCH_ROWS_MAX) }, (_, i) => ({ ids: ids[i] ?? '', note: notes[i] ?? '' }))
     const values = { script: base.script, script_other: base.script_other, ...shared, rows: typed }
     const shots = await readViaPictures(form)
-    if (typeof shots === 'string') return reject(400, shots, values)
+    if (shots.error) return reject(400, shots.error, values)
     const cited = readSightingFields(form, shots.all)
     if (count > BATCH_ROWS_MAX) return reject(400, 'batchTooMany', values)
     // A row with nothing in it is skipped, so a spare row costs nothing.

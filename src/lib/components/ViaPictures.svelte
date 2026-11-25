@@ -15,7 +15,8 @@
   let kept = $state(untrack(() => [...stored]))
   let added = $state<Added[]>([])
   let working = $state(0)
-  let bad = $state(false), over = $state(false)
+  let bad = $state(false), most = $state(false), over = $state(false)
+  let gone = false
   let input = $state<HTMLInputElement>(), thumbs = $state<HTMLInputElement>()
   let next = 0
   const count = $derived(kept.length + added.length)
@@ -31,16 +32,27 @@
   }
 
   export async function take(files: Iterable<File>) {
-    bad = false
+    bad = most = false
     for (const source of files) {
-      if (count + working >= VIA_MEDIA_MAX) break
+      if (count + working >= VIA_MEDIA_MAX) { most = true; break }
       working++; onready?.(true)
       try {
         const { file, bitmap } = await prepare(source)
-        added.push({ key: next++, file, thumb: await thumbnail(bitmap, null), url: URL.createObjectURL(file) })
+        const thumb = await thumbnail(bitmap, null)
+        if (gone) return
+        added.push({ key: next++, file, thumb, url: URL.createObjectURL(file) })
       } catch { bad = true }
       finally { working--; onready?.(false); send() }
     }
+    send()
+  }
+
+  /** Takes every picture away: they are of a source the row no longer names. */
+  export function clear() {
+    kept = []
+    for (const item of added) URL.revokeObjectURL(item.url)
+    added = []
+    bad = most = false
     send()
   }
 
@@ -50,7 +62,7 @@
     send()
   }
 
-  onDestroy(() => { for (const item of added) URL.revokeObjectURL(item.url) })
+  onDestroy(() => { gone = true; for (const item of added) URL.revokeObjectURL(item.url) })
 </script>
 
 {#snippet picture(src: string, index: number, onremove: () => void)}
@@ -65,6 +77,7 @@
   <div class="pictures" role="group" aria-labelledby="{uid}-label">
     {#each kept as item, index (item.image_key)}
       <input type="hidden" name="via_keep" value={item.image_key} />
+      <noscript><label class="hint"><input type="checkbox" name="via_drop" value={item.image_key} /> {t('field.imageRemove')} {index + 1}</label></noscript>
       {@render picture(media(item.thumb_key), index, () => kept = kept.filter(other => other.image_key !== item.image_key))}
     {/each}
     {#each added as item, index (item.key)}
@@ -79,7 +92,8 @@
       </label>
     {:else if working}<span class="hint" role="status">{t('field.imageWorking')}</span>{/if}
   </div>
-  {#if bad}<p class="notice bad small">{t('field.imageBad')}</p>{/if}
+  {#if bad}<p class="notice bad small" role="alert">{t('field.imageBad')}</p>{/if}
+  {#if most}<p class="hint" role="status">{t('field.viaPicturesMax', { max: VIA_MEDIA_MAX })}</p>{/if}
 </div>
 
 <style>

@@ -113,6 +113,10 @@
       const files = [...pictures.querySelectorAll<HTMLInputElement>('input[type="file"]')]
       return { target: files[0] ?? pictures, marks: [pictures, ...files] }
     }
+    if (error === 'viaSource' || error === 'viaImage') {
+      const field = inSighting(`input[name="${error === 'viaSource' ? 'via_author' : 'via_image'}"]`)
+      return field ? { target: field, marks: [field] } : null
+    }
     if (error === 'ivd' && formEl) {
       const sequence = formEl.querySelector<HTMLElement>('input[name="ivd_sequence"]')
       const status = formEl.querySelector<HTMLElement>('select[name="ivd_status"]')

@@ -26,7 +26,7 @@ export const actions: Actions = {
     const { id, sighting } = await target(event)
     const form = await event.request.formData()
     const shots = await readViaPictures(form, sighting.vias)
-    const values = readSightingFields(form, typeof shots === 'string' ? [] : shots.kept)
+    const values = readSightingFields(form, shots.kept)
     if (!form.has('quote_text')) values.quotes = sighting.quotes
     const summary = String(form.get('summary') ?? '').trim().slice(0, 500)
     // The positions of the pictures the form takes away; new ones follow those that stay.
@@ -37,7 +37,7 @@ export const actions: Actions = {
     const rev = positiveId(String(form.get('rev') ?? ''))
     if (!rev || rev !== sighting.rev) return fail(409, { error: 'conflict', values, summary, removeMedia, marks: null })
     const { DB, MEDIA } = env(event)
-    if (typeof shots === 'string') return fail(400, { error: shots, values, summary, removeMedia, marks })
+    if (shots.error) return fail(400, { error: shots.error, values, summary, removeMedia, marks })
     const fields = { ...values, vias: readSightingFields(form, shots.all).vias }
     const read = await readMarks(form, sighting.media)
     const gone = new Set(sighting.media.map((_, position) => position).filter(position => removed.has(String(position))))

@@ -585,19 +585,28 @@ describe('the pictures of a go-between', () => {
     expect(await held(db, sighting)).toEqual([['甲', ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']], ['甲', []]])
   })
 
-  test('stay as they are through a restore, and come back with a go-between that had gone', async () => {
-    const { db, id, sighting } = await add([message('甲'), message('乙', null, [shot('b')])])
+  test('stay as they are through a restore, whatever the version held', async () => {
+    const { db, id, sighting } = await add([message('甲', '文', [shot('a')]), message('乙', null, [shot('b')])])
     const version = async (rev: number) => sightingSnapshot((await history(db, id)).find(row => row.sighting_id === sighting && row.rev === rev)!.snapshot)!
-    expect((await version(1)).vias.map(via => via.pictures?.length ?? 0)).toEqual([0, 1])
-    // 甲 gains a picture and other words, and 乙 goes.
-    await editSighting(db, sighting, 1, seen({ vias: [message('甲', '文', [shot('a')])] }), null, who, null, id)
-    expect(await restoreSighting(db, id, sighting, 2, await version(1), who, 1)).toMatchObject({ ok: true })
-    expect(await held(db, sighting)).toEqual([['甲', ['a.jpg']], ['乙', ['b.jpg']]])
-    // A picture taken off a go-between that stays is not brought back by restoring older words.
-    await editSighting(db, sighting, 3, seen({ vias: [message('甲', '新', []), message('乙', null, [])] }), null, who, null, id)
-    expect(await restoreSighting(db, id, sighting, 4, await version(3), who, 3)).toMatchObject({ ok: true })
-    expect(await held(db, sighting)).toEqual([['甲', []], ['乙', []]])
-    expect(sightingSnapshot(JSON.stringify({ ...seen(), vias: [{ ...message('甲'), pictures: [{ image_key: 1 }] }] }))).toBeNull()
+    const rev = async () => (await getSighting(db, sighting))!.rev
+    const edit = async (vias: Via[]) => editSighting(db, sighting, await rev(), seen({ vias }), null, who, null, id)
+    const restore = async (to: number) => restoreSighting(db, id, sighting, await rev(), await version(to), who, to)
+    const words = async () => (await getSighting(db, sighting))!.vias.map(item => [item.author, item.quote, (item.pictures ?? []).map(picture => picture.image_key)])
+    // The journal keeps what the pictures were; a version read back has text alone.
+    expect(JSON.parse((await history(db, id)).find(row => row.sighting_id === sighting)!.snapshot).vias[0].pictures[0].image_key).toBe('a.jpg')
+    expect((await version(1)).vias.some(item => item.pictures)).toBe(false)
+    // A picture taken away does not come back with the words, even when the citation was corrected since.
+    await edit([{ ...message('甲', '文'), report_date: '2026-11-15' }, message('乙', null, [shot('b')])])
+    await restore(1)
+    expect(await words()).toEqual([['甲', '文', []], ['乙', null, ['b.jpg']]])
+    // A picture given to a corrected link stays with that link, beside the one the version names.
+    await edit([message('甲', '改', [shot('c')])])
+    await restore(1)
+    expect(await words()).toEqual([['甲', '文', []], ['乙', null, []], ['甲', '改', ['c.jpg']]])
+    // In a full chain the links with pictures stay.
+    await edit([message('丙', null, [shot('c')]), message('丁', null, [shot('d')]), message('戊', null, [shot('e')])])
+    await restore(1)
+    expect(await words()).toEqual([['甲', '文', []], ['丙', null, ['c.jpg']], ['丁', null, ['d.jpg']], ['戊', null, ['e.jpg']]])
   })
 
   test('are in the export, each with the go-between it shows', async () => {
