@@ -6,16 +6,19 @@ export const nameKey = (name: string) => nameLabel(name).toLowerCase()
 export const sourceNameKey = (name: string) => nameKey(name).replace(/^https?:\/\/(?=.)/, '')
 
 // What else a source is found by: its author and each of several authors, what it appeared in, its link, and the
-// account or group number that stands in brackets after a name.
+// account or number that stands in brackets after a name, or is the name.
 export function sourceKeys({ author, container, url }: { author: string | null; container: string | null; url: string | null }) {
   const keys = new Set<string>()
   for (const name of [author, container]) {
     const key = nameKey(name ?? '')
     keys.add(key)
-    for (const part of key.split(/[、;]/)) keys.add(part.trim())
-    for (const [, account, number] of key.matchAll(/(?:^|\()@([a-z0-9_.-]+)|\((\d{5,})\)/g)) {
-      if (account) keys.add(account).add(`@${account}`)
-      if (number) keys.add(number)
+    for (const part of key.split(/[、;]/).map(part => part.trim())) {
+      keys.add(part)
+      for (const text of [part, ...[...part.matchAll(/[([【]([^()[\]【】]+)[)\]】]/g)].map(match => match[1].trim())]) {
+        const account = text.match(/^@(\S+)$/)?.[1], number = text !== part && text.match(/(?:^|\s)(\d{5,})$/)?.[1]
+        if (account) keys.add(account).add(`@${account}`)
+        if (number) keys.add(number)
+      }
     }
   }
   keys.add(sourceNameKey(url ?? ''))
