@@ -30,7 +30,7 @@
             {/each}
           </div>
           <div class="compare">
-            {#each group.records as record (record.id)}{#if record.with}<a class="button" href={href(`/entry/${record.id}/duplicate?of=${record.with}`)}>{t('duplicate.compare')} <span class="code">{recordCode(record.with)} · {recordCode(record.id)}</span></a>{/if}{/each}
+            {#each group.pairs as [earlier, later] (`${earlier}.${later}`)}<a class="button" href={href(`/entry/${later}/duplicate?of=${earlier}`)}>{t('duplicate.compare')} <span class="code">{recordCode(earlier)} · {recordCode(later)}</span></a>{/each}
           </div>
         </section>
       {/each}

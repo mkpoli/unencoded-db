@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import { newClaim, type Claim } from '$lib/claims'
-import { ALIKE_PAGE, formsStatement, membersStatement, parseAlikeCursor, statedStatement } from '$lib/server/alike'
+import { ALIKE_PAGE, PAIRS_MAX, formsStatement, membersStatement, parseAlikeCursor, statedStatement } from '$lib/server/alike'
+import { recordCode } from '$lib/code'
 import { createEntry, editEntry, mergeEntry, setHidden, unmergeEntry, type EntryFields, type SightingFields } from '$lib/server/entries'
 import { createPerson } from '$lib/server/people'
 import { openTestDb } from '$lib/server/testdb'
@@ -14,7 +15,7 @@ async function fixture() {
   const person = await createPerson(db)
   const who = { actor: person.id, ip: null }
   const add = (ids: string | string[], script?: string) => createEntry(db, fields([ids].flat().map(value => newClaim('ids', value)), script), seen, [], who)
-  const open = async (query = '') => await load({ url: new URL(`https://example.test/en/duplicates${query}`), params: { locale: 'en' }, locals: {}, platform: { env: { DB: db } } } as never) as { groups: { ids: string[]; same: boolean; records: { id: number; script: string; with: number | null }[] }[]; next: string | null }
+  const open = async (query = '') => await load({ url: new URL(`https://example.test/en/duplicates${query}`), params: { locale: 'en' }, locals: {}, platform: { env: { DB: db } } } as never) as { groups: { ids: string[]; same: boolean; records: { id: number; script: string }[]; pairs: [number, number][] }[]; next: string | null }
   const listed = async () => (await open()).groups.map(group => [group.ids.join(' '), group.same, group.records.map(record => record.id)])
   const relate = (id: number, rev: number, ids: string, value: string) => editEntry(db, id, rev, fields([newClaim('ids', ids), { ...newClaim('relation', value), data: { relationship: 'glyph' } } as Claim]), who, null)
   return { db, raw, who, add, open, listed, relate }
@@ -24,7 +25,8 @@ test('records of one form are listed, the form with the latest record first, wha
   const { add, open, listed } = await fixture()
   await add('⿱赤相'); await add('⿰王甲'); await add('⿱赤相', 'miao'); await add('⿰木木'); await add('⿰壬甲'); await add('⿱？木'); await add('⿱？木')
   expect(await listed()).toEqual([['⿰王甲 ⿰壬甲', false, [2, 5]], ['⿱赤相', true, [1, 3]]])
-  expect((await open()).groups[1].records.map(record => [record.script, record.with])).toEqual([['han', null], ['miao', 1]])
+  const [, group] = (await open()).groups
+  expect([group.records.map(record => record.script), group.pairs]).toEqual([['han', 'miao'], [[1, 3]]])
 })
 
 test('a merge takes the pair off the list and its undo brings it back', async () => {
@@ -45,9 +47,20 @@ test('a relation that names the other record takes the pair off the list', async
   expect(await listed()).toEqual([])
   // A third record is undecided with both.
   await add('⿱赤相')
-  expect((await open()).groups[0].records.map(record => [record.id, record.with])).toEqual([[1, null], [2, null], [3, 1]])
+  expect((await open()).groups[0].pairs).toEqual([[1, 3], [2, 3]])
   await relate(3, 1, '⿱赤相', 'R+0001')
-  expect((await open()).groups[0].records.map(record => [record.id, record.with])).toEqual([[2, null], [3, 2]])
+  const [group] = (await open()).groups
+  expect([group.pairs, group.records.map(record => record.id)]).toEqual([[[2, 3]], [2, 3]])
+})
+
+test('a record stays listed however many earlier ones are decided among themselves', async () => {
+  const { raw, add, open } = await fixture()
+  for (let n = 0; n < PAIRS_MAX + 2; n++) await add('⿱赤相')
+  const last = PAIRS_MAX + 2
+  for (let a = 1; a < last; a++) for (let b = a + 1; b < last; b++) raw.prepare("INSERT INTO claims(entry_id, position, key, kind, value) VALUES (?, ?, ?, 'relation', ?)").run(a, b, `key${b}`, recordCode(b))
+  const [group] = (await open()).groups
+  expect(group.pairs).toEqual(Array.from({ length: PAIRS_MAX }, (_, index) => [index + 1, last]))
+  expect(group.records.at(-1)!.id).toBe(last)
 })
 
 test('a hidden record and a description edited away are left out, and the counts follow', async () => {
