@@ -78,10 +78,10 @@ const citationKey = (citation: Citation) => JSON.stringify(CITATION_FIELDS.map(f
 // of a repeated row join the row it repeats.
 export const tidyVias = (vias: readonly Via[]): Via[] => {
   const kept = new Map<string, Via>()
-  for (const via of vias) {
+  for (const [index, via] of vias.entries()) {
     // A row with pictures alone is refused and shown again; `sourceOf` never saves it.
     if (blankCitation(via) && !via.pictures?.length) continue
-    const key = viaKey(via), first = kept.get(key)
+    const key = blankCitation(via) ? String(index) : viaKey(via), first = kept.get(key)
     const pictures = [...new Map([...first?.pictures ?? [], ...via.pictures ?? []].map(picture => [picture.image_key, picture])).values()].slice(0, VIA_MEDIA_MAX)
     const { pictures: _, ...row } = first ?? via
     kept.set(key, pictures.length ? { ...row, pictures } : row)

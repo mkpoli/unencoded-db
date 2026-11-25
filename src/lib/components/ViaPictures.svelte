@@ -16,7 +16,8 @@
   let added = $state<Added[]>([])
   let working = $state(0)
   let bad = $state(false), most = $state(false), over = $state(false)
-  let gone = false
+  // Raised when the pictures are cleared or the row goes, so one still being prepared is not added after.
+  let turn = 0
   let input = $state<HTMLInputElement>(), thumbs = $state<HTMLInputElement>()
   let next = 0
   const count = $derived(kept.length + added.length)
@@ -33,13 +34,14 @@
 
   export async function take(files: Iterable<File>) {
     bad = most = false
+    const started = turn
     for (const source of files) {
       if (count + working >= VIA_MEDIA_MAX) { most = true; break }
       working++; onready?.(true)
       try {
         const { file, bitmap } = await prepare(source)
         const thumb = await thumbnail(bitmap, null)
-        if (gone) return
+        if (turn !== started) return
         added.push({ key: next++, file, thumb, url: URL.createObjectURL(file) })
       } catch { bad = true }
       finally { working--; onready?.(false); send() }
@@ -49,6 +51,7 @@
 
   /** Takes every picture away: they are of a source the row no longer names. */
   export function clear() {
+    turn++
     kept = []
     for (const item of added) URL.revokeObjectURL(item.url)
     added = []
@@ -62,7 +65,7 @@
     send()
   }
 
-  onDestroy(() => { gone = true; for (const item of added) URL.revokeObjectURL(item.url) })
+  onDestroy(() => { turn++; for (const item of added) URL.revokeObjectURL(item.url) })
 </script>
 
 {#snippet picture(src: string, index: number, onremove: () => void)}
