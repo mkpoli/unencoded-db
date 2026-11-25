@@ -60,12 +60,23 @@ const removal = ({ kind, snapshot }: SnapshotRow) => (kind === 'hide' || kind ==
 
 // The old version a revision holds, or null for a change that changed no readable text.
 export function revisionFields(row: SnapshotRow) {
+  const moved = row.kind === 'edit' ? moveSnapshot(row.snapshot) : null
   return {
-    kind: removal(row) ? row.kind === 'hide' ? 'remove' : 'put_back' : row.kind,
+    kind: removal(row) ? row.kind === 'hide' ? 'remove' : 'put_back' : moved ? 'move' : row.kind,
+    moved,
     fields: !row.redacted_at && !row.sighting_id && ENTRY_KINDS.includes(row.kind) ? entrySnapshot(row.snapshot) : null,
     sightingFields: !row.redacted_at && row.sighting_id && SIGHTING_KINDS.includes(row.kind) ? sightingSnapshot(row.snapshot) : null,
     merge: MERGE_KINDS.includes(row.kind) ? mergeSnapshot(row.snapshot) : null,
   }
+}
+
+// Which evidence an edit moved, and the record it went to or came from.
+function moveSnapshot(raw: string): { sighting: number; to?: number; from?: number } | null {
+  try {
+    const { sighting, to, from } = JSON.parse(raw)?.moved ?? {}
+    const id = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0
+    return !id(sighting) ? null : id(to) ? { sighting, to } : id(from) ? { sighting, from } : null
+  } catch { return null }
 }
 
 // The other record of a merge: the duplicate a record took in (`from`), or the record a duplicate joined (`into`).

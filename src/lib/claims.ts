@@ -198,6 +198,25 @@ export function partClaims(claims: readonly Claim[], gone: ReadonlySet<number>, 
   return left.map(claim => ({ ...claim, under: claim.under.filter(scope => byKey.has(scope) && (!scoped.has(link(claim.key, scope)) || says.has(link(stated(claim), stated(byKey.get(scope)!))))) }))
 }
 
+// What evidence says of its character. A description, a code or a tag is a record's own and stays with it.
+const SAID_BY_EVIDENCE: readonly ClaimKind[] = ['reading', 'meaning', 'relation']
+
+/** The claims of two records once a sighting moves from the one to the other. What rests on it alone goes
+ * along; what rests on more is stated on both, each resting on what it has. A claim that another one which
+ * stays holds under, or that the other record has no room for, stays too. */
+export function moveClaims(from: readonly Claim[], into: readonly Claim[], sighting: number): { from: Claim[]; into: Claim[] } {
+  const said = from.filter(claim => SAID_BY_EVIDENCE.includes(claim.kind) && claim.sightings.includes(sighting))
+  const keys = new Set(said.map(claim => claim.key))
+  const joined = joinClaims(into, said.map(claim => ({ ...claim, sightings: [sighting], under: claim.under.filter(scope => keys.has(scope)) })))
+  const taken = new Set(joined.claims.filter(claim => claim.sightings.includes(sighting)).map(stated))
+  const gone = new Set(said.filter(claim => claim.sightings.length === 1 && taken.has(stated(claim))).map(claim => claim.key))
+  for (let more = true; more;) {
+    more = false
+    for (const claim of from) if (!gone.has(claim.key)) for (const scope of claim.under) more = gone.delete(scope) || more
+  }
+  return { from: from.filter(claim => !gone.has(claim.key)).map(claim => ({ ...claim, sightings: claim.sightings.filter(id => id !== sighting) })), into: joined.claims }
+}
+
 export const claimsOf = (claims: readonly Claim[], kind: ClaimKind) => claims.filter(claim => claim.kind === kind)
 export const valuesOf = (claims: readonly Claim[], kind: ClaimKind) => claimsOf(claims, kind).map(claim => claim.value)
 
