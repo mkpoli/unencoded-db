@@ -465,7 +465,7 @@
   "about.apiJson": "Tất cả mục từ dạng JSON",
   "about.apiCsv": "Tất cả mục từ dạng CSV, mỗi dòng một bằng chứng",
   "about.privacyTitle": "Thông tin được lưu về bạn",
-  "about.privacy": "Cookie lưu tên của trình duyệt; tên của bạn xuất hiện trên nội dung bạn lưu. Trang web lưu mã băm có khóa của địa chỉ của bạn cùng mỗi lần lưu để người kiểm duyệt sử dụng và không bao giờ hiển thị mã đó. Dữ liệu vị trí và thiết bị được xóa khỏi ảnh tải lên.",
+  "about.privacy": "Cookie lưu tên của trình duyệt; tên của bạn xuất hiện trên nội dung bạn lưu. Danh sách người đóng góp hiển thị ảnh đại diện trên tài khoản Glyph Atlas của bạn. Trang web lưu mã băm có khóa của địa chỉ của bạn cùng mỗi lần lưu để người kiểm duyệt sử dụng và không bao giờ hiển thị mã đó. Dữ liệu vị trí và thiết bị được xóa khỏi ảnh tải lên.",
   "about.takedownTitle": "Chỉnh sửa và gỡ bỏ",
   "about.takedown": "Hãy dùng chức năng Báo cáo trên mục từ hoặc liên hệ qua địa chỉ liên lạc nếu nội dung ghi sai nguồn hoặc không nên xuất hiện ở đây. Tài liệu đang được xem xét sẽ được ẩn trong khi kiểm tra.",
   "about.sourcesTitle": "Nguồn",
