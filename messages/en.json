@@ -339,6 +339,8 @@
   "ready.rules": "IRG's rules",
   "edit.title": "Edit record {id}",
   "edit.identity": "The character",
+  "duplicates.title": "Possible duplicates",
+  "duplicates.empty": "No possible duplicates.",
   "duplicate.title": "Duplicate of another record",
   "duplicate.compare": "Compare",
   "duplicate.other": "Another record",

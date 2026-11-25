@@ -339,6 +339,8 @@
   "ready.rules": "IRGの規則",
   "edit.title": "記録{id}を編集",
   "edit.identity": "文字",
+  "duplicates.title": "重複の可能性がある記録",
+  "duplicates.empty": "重複の可能性がある記録はありません。",
   "duplicate.title": "別の記録との重複",
   "duplicate.compare": "比較",
   "duplicate.other": "別の記録",
