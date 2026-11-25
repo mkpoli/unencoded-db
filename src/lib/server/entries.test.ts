@@ -2228,6 +2228,27 @@ test('the Sources page finds a source by its author, container, link and account
   expect(raw.query('SELECT * FROM source_keys').all()).toEqual([])
 })
 
+test('a search reads the sightings of the sources on its page alone', async () => {
+  const insert = raw.prepare('INSERT INTO sources(hash, title, name_lookup, records) VALUES (?, ?, ?, 1)'), key = raw.prepare("INSERT INTO source_keys VALUES ('某討論羣', ?)")
+  raw.transaction(() => { for (let id = 1; id <= 4000; id++) { insert.run(String(id), `${id}`, `${id}`); key.run(id) } })()
+  const statements: { sql: string; values: unknown[] }[] = []
+  const traced = { prepare(sql: string) {
+    const statement = db.prepare(sql)
+    return { bind(...values: unknown[]) { statements.push({ sql, values }); return statement.bind(...values) } }
+  }, batch: (list: D1PreparedStatement[]) => db.batch(list) } as D1Database
+  for (const sort of ['new', 'most', 'earliest'] as const) {
+    statements.length = 0
+    expect((await sourceList(traced, sort, null, null, '某討論羣')).sources.length).toBe(SOURCES_PAGE)
+    for (const { sql, values } of statements.filter(statement => statement.sql.includes('source_keys'))) {
+      const plan = (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
+      const chosen = plan.findIndex(detail => /USE TEMP B-TREE FOR ORDER BY/.test(detail)), read = plan.findIndex(detail => /sightings_by_source/.test(detail))
+      expect(plan[0]).toBe('MATERIALIZE page')
+      expect(chosen).toBeGreaterThan(0)
+      expect(chosen).toBeLessThan(read)
+    }
+  }
+})
+
 test('the picker pages through shared spellings by normalized name and source id', async () => {
   const insert = raw.prepare('INSERT INTO sources(hash, title, name_lookup, records) VALUES (?, ?, ?, 1)')
   for (let id = 1; id <= 30; id++) insert.run(String(id), 'École ＡＢＣ', 'école abc')

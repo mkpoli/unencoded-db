@@ -1464,7 +1464,13 @@ function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | nul
   const after = order.key ? `(c.${order.key}, c.id) ${past} (?, ?)` : `c.id ${past} ?`
   const bound = order.key ? [cursor?.key ?? start, cursor?.id ?? start] : [cursor?.id ?? start]
   type Row = Source & { year: number | null; records: number; direct: string; via: string }
-  return db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(false)} AS direct, ${seen(true)} AS via FROM ${query ? `(SELECT DISTINCT source_id FROM (${sourceMatches})) m CROSS JOIN sources c ON c.id = m.source_id` : `sources c INDEXED BY ${order.index}${publisher !== null ? '_publisher' : ''}`} WHERE ${order.where} ${publisher !== null ? 'AND c.publisher_id = ?' : ''} AND ${after} ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction} LIMIT ?`)
+  const sorted = `ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction}`
+  const within = `WHERE ${order.where} ${publisher !== null ? 'AND c.publisher_id = ?' : ''} AND ${after} ${sorted} LIMIT ?`
+  const cards = `SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(false)} AS direct, ${seen(true)} AS via`
+  // What a search finds is sorted as a whole, so its page is chosen before any source reads its sightings.
+  return db.prepare(query
+    ? `WITH page AS MATERIALIZED (SELECT c.id FROM (SELECT DISTINCT source_id FROM (${sourceMatches})) m CROSS JOIN sources c ON c.id = m.source_id ${within}) ${cards} FROM page CROSS JOIN sources c ON c.id = page.id ${sorted}`
+    : `${cards} FROM sources c INDEXED BY ${order.index}${publisher !== null ? '_publisher' : ''} ${within}`)
     .bind(...(query ? sourceMatchParams(query) : []), ...(publisher !== null ? [publisher] : []), ...bound, limit).all<Row>().then(({ results }) => results)
 }
 
