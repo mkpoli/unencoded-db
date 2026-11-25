@@ -323,6 +323,7 @@
   "sighting.splitLink": "Tách thành mục từ mới",
   "sighting.split": "Tạo mục từ",
   "sighting.splitTitle": "Tách bằng chứng khỏi mục từ {id}",
+  "sighting.moveThere": "Chuyển bằng chứng sang đó",
   "sighting.discuss": "Thảo luận bằng chứng này",
   "sighting.addAnother": "Thêm chữ khác từ đây",
   "sighting.evidence": "Tải xuống cho IRG",

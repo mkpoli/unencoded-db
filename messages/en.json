@@ -323,6 +323,7 @@
   "sighting.splitLink": "Split off into a new record",
   "sighting.split": "Make the record",
   "sighting.splitTitle": "Split evidence off record {id}",
+  "sighting.moveThere": "Move the evidence there",
   "sighting.discuss": "Discuss this evidence",
   "sighting.addAnother": "Add another character from here",
   "sighting.evidence": "Download for IRG",

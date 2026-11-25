@@ -323,6 +323,7 @@
   "sighting.splitLink": "分出為新記錄",
   "sighting.split": "建立記錄",
   "sighting.splitTitle": "從記錄{id}分出證據",
+  "sighting.moveThere": "將證據移到該記錄",
   "sighting.discuss": "討論此證據",
   "sighting.addAnother": "從這裡新增另一個字",
   "sighting.evidence": "下載IRG證據圖片",

@@ -23,9 +23,13 @@
   import IdsGlyph from './IdsGlyph.svelte'
   import IdsLine from './IdsLine.svelte'
 
-  let { values = [], primary = $bindable(''), chosen = $bindable(null), exclude = null, anchor, onfill }: {
-    values?: string[]; primary?: string; chosen?: number[] | null; exclude?: number | null; anchor?: string; onfill?: (fill: Fill) => void
+  let { values = [], primary = $bindable(''), chosen = $bindable(null), exclude = null, placed, anchor, onfill }: {
+    values?: string[]; primary?: string; chosen?: number[] | null; exclude?: number | null; placed?: (id: number) => string; anchor?: string; onfill?: (fill: Fill) => void
   } = $props()
+
+  // `placed` answers where the evidence at hand goes to a record that describes it already; without it, evidence is added there.
+  const evidenceHref = (id: number) => placed?.(id) ?? href(`/entry/${id}/sighting/new`)
+  const evidenceTab = $derived(placed ? undefined : '_blank')
 
   const uid = $props.id()
   let next = 0
@@ -185,7 +189,7 @@
           <span class="body"><span class="line">{lone.facts.code}</span><span class="ids">{lone.facts.ids ?? ''}</span></span>
           <span class="choices">
             {#each lone.records as record (record.id)}
-              <a class="button" href={href(`/entry/${record.id}/sighting/new`)} target="_blank">{t('field.encodedSame')} · {recordCode(record.id)}</a>
+              <a class="button" href={evidenceHref(record.id)} target={evidenceTab}>{t('field.encodedSame')} · {recordCode(record.id)}</a>
             {:else}
               <button type="button" class="button" onclick={() => take(lone!.facts, false)}>{t('field.encodedSame')}</button>
             {/each}
@@ -209,7 +213,7 @@
                     {:else if item.record.cover_key}<img src={media(item.record.cover_key)} alt="" loading="lazy" decoding="async" />{/if}
                   </span>
                   <span class="body">
-                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier !== 'similar'} <a class="text-link" href={href(`/entry/${item.record.id}/sighting/new`)} target="_blank">{t('field.candidateAdd')}</a>{/if}{#if whole && group.tier !== 'same'} <a class="text-link" href={href(`/entry/${item.record.id}?ids_add=${encodeURIComponent(sequence)}#edit-ids`)} target="_blank">{t('field.candidateAddIds')}</a>{/if}</span>
+                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier !== 'similar'} <a class="text-link" href={evidenceHref(item.record.id)} target={evidenceTab}>{t(placed ? 'sighting.moveThere' : 'field.candidateAdd')}</a>{/if}{#if whole && group.tier !== 'same' && !placed} <a class="text-link" href={href(`/entry/${item.record.id}?ids_add=${encodeURIComponent(sequence)}#edit-ids`)} target="_blank">{t('field.candidateAddIds')}</a>{/if}</span>
                     <span class="ids">{item.record.ids ?? ''}</span>
                   </span>
                 {:else}

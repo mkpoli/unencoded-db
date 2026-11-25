@@ -323,6 +323,7 @@
   "sighting.splitLink": "新しい記録に分ける",
   "sighting.split": "記録を作成",
   "sighting.splitTitle": "記録{id}から証拠を分ける",
+  "sighting.moveThere": "証拠をそこへ移動",
   "sighting.discuss": "この証拠について議論",
   "sighting.addAnother": "ここから別の字を追加",
   "sighting.evidence": "IRG用にダウンロード",

@@ -819,7 +819,6 @@ export async function moveSighting(db: D1Database, from: number, id: number, bas
 
 /** Moves a sighting to a record made for it in the same write, and answers that record. */
 export async function splitSighting(db: D1Database, from: number, id: number, baseRev: number, fields: EntryFields, who: Who, summary: string | null): Promise<{ id: number } | Exclude<MoveResult, 'done' | 'same'>> {
-  await ensureTags(db, valuesOf(fields.claims, 'tag'), who)
   return relocate(db, from, id, baseRev, { ...fields, claims: mapSightings(fields.claims, () => null) }, who, summary)
 }
 
@@ -841,6 +840,7 @@ async function relocate(db: D1Database, from: number, id: number, baseRev: numbe
     if (sighting.rev !== baseRev) return 'conflict'
     if (standsAlone(leaving, id)) return 'only'
     if (staying.length >= SIGHTINGS_MAX) return 'crowded'
+    if (made) await ensureTags(db, valuesOf(made.claims, 'tag'), who)
     const past = (entry: number, way: 'from' | 'to') => db.prepare(`SELECT json_extract(snapshot, '$.moved') AS moved FROM revisions WHERE entry_id = ? AND kind IN ('create','edit') AND json_extract(snapshot, '$.moved.sighting') = ? AND json_extract(snapshot, '$.moved.${way}') IS NOT NULL ORDER BY id DESC LIMIT 1`).bind(entry, id)
     const [came, went] = (await db.batch<{ moved: string }>([past(from, 'from'), past(into, 'to')])).map(({ results }) => results[0] ? JSON.parse(results[0].moved) as Partial<Brought> & { first?: number } : null)
     // Moved back, it is again the part of the record it was.
@@ -882,7 +882,9 @@ async function relocate(db: D1Database, from: number, id: number, baseRev: numbe
       ])
       return { id: into }
     } catch (error) {
-      if (attempt < 4 && ((await revisionMark(db, from)) !== marks[0] || (await revisionMark(db, into)) !== marks[1] || (made && await nextEntry(db) !== into))) continue
+      const overtaken = (await revisionMark(db, from)) !== marks[0] || (await revisionMark(db, into)) !== marks[1] || (made && await nextEntry(db) !== into)
+      if (overtaken && attempt < 4) continue
+      if (overtaken && made) return 'conflict'
       throw error
     }
   }

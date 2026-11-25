@@ -74,11 +74,16 @@ test('what rests on the evidence alone goes to the new record, beside what the f
 })
 
 test('a split that cannot be made makes no record', async () => {
-  const { db, a, s, first, who, event, count } = await fixture()
+  const { db, raw, a, s, first, who, event, count } = await fixture()
   expect(await actions.default(event({ rev: '9', ids: '⿱木木' }))).toMatchObject({ status: 409, data: { error: 'conflict' } })
   expect(await actions.default(event({ ids: '⿱木木' }))).toMatchObject({ status: 409 })
   expect(await actions.default(event({ rev: '1', ids: 'x'.repeat(3000) }))).toMatchObject({ status: 400 })
   for (const bad of [event({ rev: '1' }, 99), event({ rev: '1' }, 'x'), event({ rev: '1' }, s, 99)]) await expect(actions.default(bad)).rejects.toMatchObject({ status: 404 })
+  // Nothing is made for a split that is refused, not even a tag.
+  expect(await splitSighting(db, a, s, 9, fields([newClaim('tag', 'ghost')]), who, null)).toBe('conflict')
+  expect(raw.query("SELECT count(*) AS n FROM tags WHERE name = 'ghost'").get()).toEqual({ n: 0 })
+  // A script typed and emptied stays empty in the form that comes back.
+  expect(await actions.default(event({ rev: '9', script: 'other', script_other: '' }))).toMatchObject({ status: 409, data: { values: { script_other: null } } })
   expect(await splitSighting(db, a, s, 1, fields(), who, null)).toEqual({ id: a + 1 })
   expect(await load(event({}, first))).toMatchObject({ only: true })
   expect(await splitSighting(db, a, first, 1, fields(), who, null)).toBe('only')
@@ -105,6 +110,20 @@ test('a record made meanwhile keeps its number, and the split takes the one afte
   expect((await getEntry(db, a + 1))!.sightings.map(x => x.place)).toEqual(['Meanwhile'])
   expect((await getEntry(db, a + 2))!.sightings.map(x => x.id)).toEqual([s])
   await agree()
+})
+
+test('a split that keeps losing its number is a conflict, and makes nothing', async () => {
+  const { db, a, s, who, count } = await fixture()
+  const batch = db.batch.bind(db)
+  let made = 0
+  db.batch = async statements => {
+    if (statements.some(statement => (statement as unknown as { sql: string }).sql.startsWith('INSERT INTO entries(id, rev'))) { made++; await createEntry(db, fields(), seen('Meanwhile'), [], who) }
+    return batch(statements)
+  }
+  expect(await splitSighting(db, a, s, 1, fields(), who, null)).toBe('conflict')
+  expect(made).toBe(5)
+  expect(count('entries')).toBe(1 + made)
+  expect((await getEntry(db, a))!.sightings.map(x => x.id)).toContain(s)
 })
 
 test('two people splitting the same evidence make one record', async () => {
