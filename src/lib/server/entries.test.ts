@@ -1,7 +1,7 @@
 import { containerSuggestions } from './containers'
 import { hashHex } from './image'
 import { copyOfSource, copyPage, matchingCopies } from './digitized-copies'
-import { editSourceAlias, sourceAliases, suggestSources } from './source-aliases'
+import { sourceMatches, sourceMatchParams, editSourceAlias, sourceAliases, suggestSources } from './source-aliases'
 import { publicPublisher, publisherDirectory, publisherSuggestions } from './publishers'
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
@@ -2202,6 +2202,32 @@ test('source names find the exact public citation, including via-only works and 
   expect(await editSourceAlias(db, editions[1].id, 'private', false, who.actor)).toBe(false)
 })
 
+test('the Sources page finds a source by its author, container, link and account, and the title field by its name', async () => {
+  const message = via({ author: '甲（1234567）', container: '某討論羣（7654321）', publisher: 'QQ', report_date: '2026-11-17' })
+  const entry = await createEntry(db, fields(), seen({ title: '某字典', author: '乙、丙', url: 'https://example.org/dict', vias: [message, via({ author: '丁（@Someone）', url: 'https://x.com/Someone/status/1' })] }), [], who)
+  const found = async (query: string) => (await sourceList(db, 'new', null, null, query)).sources.map(source => source.author)
+  for (const query of ['甲', '甲（1234567）', '甲(123', '1234567', '某討論', '7654321']) expect(await found(query)).toEqual(['甲（1234567）'])
+  for (const query of ['乙', '丙', '某字', 'example.org/d', 'https://example.org/dict']) expect(await found(query)).toEqual(['乙、丙'])
+  for (const query of ['丁', 'someone', '@someone', 'x.com/someone']) expect(await found(query)).toEqual(['丁（@Someone）'])
+  // Publishers have a filter of their own, and the middle of a name finds nothing.
+  for (const query of ['QQ', '討論羣', '234567']) expect(await found(query)).toEqual([])
+  // Each way a source is found is a range of an index.
+  const plan = (raw.query(`EXPLAIN QUERY PLAN ${sourceMatches}`).all(...sourceMatchParams('甲')) as { detail: string }[]).map(row => row.detail)
+  expect(plan.some(detail => /SEARCH k USING PRIMARY KEY \(lookup>\? AND lookup<\?\)/.test(detail))).toBe(true)
+  expect(plan.filter(detail => /^SCAN|TEMP B-TREE/.test(detail))).toEqual([])
+  // A group's name in the title field offers none of its messages.
+  for (const query of ['某討論', '7654321', '丙']) expect(await suggestSources(db, query)).toEqual([])
+  await setHidden(db, { entry }, true, who, null)
+  for (const query of ['甲', '7654321', '乙']) expect(await found(query)).toEqual([])
+  await setHidden(db, { entry }, false, who, null)
+  // The keys of a source go with it, as D1 enforces foreign keys.
+  raw.exec('PRAGMA foreign_keys = ON')
+  const sighting = (await getEntry(db, entry))!.sightings[0]
+  await editSighting(db, sighting.id, sighting.rev, seen({ title: '某字典' }), null, who, null, entry)
+  expect(raw.query('SELECT author FROM sources').all()).toEqual([{ author: null }])
+  expect(raw.query('SELECT * FROM source_keys').all()).toEqual([])
+})
+
 test('the picker pages through shared spellings by normalized name and source id', async () => {
   const insert = raw.prepare('INSERT INTO sources(hash, title, name_lookup, records) VALUES (?, ?, ?, 1)')
   for (let id = 1; id <= 30; id++) insert.run(String(id), 'École ＡＢＣ', 'école abc')
@@ -2271,7 +2297,8 @@ describe('digitized copy filter', () => {
       const matches = await suggestSources(db, q)
       expect(matches.map(row => row.title)).toEqual([title, title])
       expect(new Set(matches.map(row => row.evidence?.entry))).toEqual(new Set([book, print]))
-      expect((await sourceList(db, 'new', null, null, q)).sources.map(row => row.title)).toEqual([title, title])
+      // A source is found by its author as written; only a title has readings.
+      expect((await sourceList(db, 'new', null, null, q)).sources.map(row => row.title)).toEqual(q === title ? ['Another book', title, title] : [title, title])
       expect((await matchingCopies(db, q)).map(copy => copy.slug)).toEqual([slug])
     }
     const [edition] = await suggestSources(db, '汇音字典')

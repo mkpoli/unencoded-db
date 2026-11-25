@@ -547,7 +547,7 @@
   "source.remove": "삭제",
   "source.removeAlias": "{alias} 삭제",
   "source.aliasError": "변경 사항을 저장할 수 없습니다. 입력한 이름과 등록된 이름을 확인해 주세요.",
-  "sources.name": "제목 또는 다른 이름",
+  "sources.name": "제목, 저자, 수록처, 링크",
   "sources.noMatches": "조건에 맞는 출처가 없습니다.",
   "source.title": "출처",
   "source.view": "출처 상세",

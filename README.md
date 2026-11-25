@@ -39,7 +39,7 @@ The local setup and production release run the date sweep after applying migrati
 
 ## Source names
 
-On a source page, open **Alternate names** to add a spelling or abbreviation for that citation. The Sources page and the title fields for direct and intermediate citations accept the start of a title or alternate name. Picking an edition fills its citation details. A new title can be entered freely. URL-only sources also match their hostname. The release runs `scripts/sweep-source-names.ts` to normalize existing names.
+On a source page, open **Alternate names** to add a spelling or abbreviation for that citation. The Sources page and the title fields for direct and intermediate citations accept the start of a title or alternate name. Picking an edition fills its citation details. A new title can be entered freely. URL-only sources also match their hostname. The Sources page also accepts the start of an author, of one of several authors, of what the source appeared in, of its link, and the account or group number written after a name, as in `甲（@account）` or `甲（1234567）`. The release runs `scripts/sweep-source-names.ts` to normalize existing names.
 
 Local setup and each release run `bun scripts/sweep-title-readings.ts` with `--local` or `--remote` to index every public source title. For example, both `Dai Nam nhat thong chi` and `Da Nan Yi Tong Zhi` find 大南一統志. The picker shows the recorded title and citation evidence. Only curated title variants appear with a variant label. A newly cited title is searchable as entered immediately and gains its generated spellings at the next sweep.
 
@@ -78,6 +78,7 @@ An agent can sign in, and then writes under a person's name. The site is the OAu
 | `sightings` | One place the character was seen: where, page, date, contexts, style, source types |
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
 | `source_aliases`, `source_alias_changes`, `source_search_names` | Alternate names for individual citations, their contributor history, and the lookup index for visible sources |
+| `source_keys` | The authors, containers, links and account numbers the Sources page finds a source by |
 | `date_readings`, `evidence_dates` | Calendar readings and the view of transcribed dates in sources, sightings and revision history |
 | `date_index_state` | Generation used to retry writes when their date readings change |
 | `publishers`, `publisher_aliases` | Publisher identities and reviewed alternative spellings for the source filter |
