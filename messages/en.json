@@ -455,7 +455,7 @@
   "about.apiJson": "All records as JSON",
   "about.apiCsv": "All records as CSV, one row per piece of evidence",
   "about.privacyTitle": "What is kept about you",
-  "about.privacy": "A cookie keeps your browser's name, and your name appears on what you save. The site keeps a keyed hash of your address with each save, for moderators, and never shows it. Location and device data are removed from uploaded pictures.",
+  "about.privacy": "A cookie keeps your browser's name, and your name appears on what you save. The list of contributors shows the picture of your Glyph Atlas account. The site keeps a keyed hash of your address with each save, for moderators, and never shows it. Location and device data are removed from uploaded pictures.",
   "about.takedownTitle": "Corrections and removal",
   "about.takedown": "Use Report on a record, or write to the contact address, if something misstates its source or should not be here. Material under review is hidden while it is checked.",
   "about.sourcesTitle": "Sources",
