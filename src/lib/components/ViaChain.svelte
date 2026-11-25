@@ -21,7 +21,6 @@
       {#each vias as via, position (position)}
         {@const name = sourceName(via, t)}
         {@const byline = meta(via, name.fields)}
-        {@const date = name.fields.includes('report_date') ? null : via.report_date}
         <li class="item">
           {#if position}<span class="arrow" aria-hidden="true">←</span>{/if}
           <div class="node">
@@ -35,9 +34,9 @@
                 <span>{name.text}</span>
               {/if}
             </span>
-            {#if byline || date}
+            {#if byline || via.report_date}
               <span class="meta">
-                {byline}{#if date}{#if byline}{' · '}{/if}<EvidenceDate text={date} reading={dates?.get(date)} />{/if}
+                {byline}{#if via.report_date}{#if byline}{' · '}{/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}
               </span>
             {/if}
             {#if via.quote}<blockquote class="quote">{via.quote}</blockquote>{/if}

@@ -1,13 +1,13 @@
 import { sourceKind } from './scripts'
 
 // What a source is called wherever it is listed, linked or drawn. A source without a title, as a chat message or a
-// letter is, goes by what it appeared in, then by its link, its author, or the little else it states.
-const NAMES = [['title'], ['container'], ['url'], ['author', 'source_kind'], ['publisher'], ['report_date']] as const
+// letter is, goes by what it appeared in, then by its link, its author, or its publisher.
+const NAMES = [['title'], ['container'], ['url'], ['author', 'source_kind'], ['publisher']] as const
 export type NameField = typeof NAMES[number][number]
-type Nameable = { [field in NameField]?: string | null }
+type Nameable = { [field in NameField]?: string | null } & { report_date?: string | null }
 type Label = (key: `${string}.${string}`) => string
 
-const stated = (source: Nameable, field: NameField, label: Label) => {
+const stated = (source: Nameable, field: NameField | 'report_date', label: Label) => {
   if (field !== 'source_kind') return source[field] || null
   const kind = sourceKind(source.source_kind)
   return kind && label(`sourceKind.${kind}`)
@@ -29,6 +29,6 @@ export function sourceHeading(source: Nameable, label: Label) {
 }
 
 /** What a line beside the name says of a source, less the fields that are the name. */
-export function sourceByline(source: Nameable, fields: readonly NameField[], label: Label, shown: readonly NameField[]) {
-  return shown.filter(field => !fields.includes(field)).map(field => stated(source, field, label)).filter(Boolean).join(' · ')
+export function sourceByline(source: Nameable, fields: readonly NameField[], label: Label, shown: readonly (NameField | 'report_date')[]) {
+  return shown.filter(field => !fields.includes(field as NameField)).map(field => stated(source, field, label)).filter(Boolean).join(' · ')
 }

@@ -14,7 +14,8 @@ test('a source goes by its title, then what it appeared in, its link, its author
   expect(named({ author: '甲', source_kind: 'personal', publisher: 'QQ' })).toEqual({ text: '甲 · Personal communication', fields: ['author', 'source_kind'] })
   expect(named({ source_kind: 'personal', report_date: '2026' })).toEqual({ text: 'Personal communication', fields: ['source_kind'] })
   expect(named({ publisher: 'A site', report_date: '2026' })).toEqual({ text: 'A site', fields: ['publisher'] })
-  expect(named({ report_date: '2026', source_kind: 'unknown' })).toEqual({ text: '2026', fields: ['report_date'] })
+  // A date is no name; it stands beside the name with its reading.
+  expect(named({ report_date: '2026', source_kind: 'unknown' })).toEqual({ text: 'Source', fields: [] })
   expect(named({ title: '', author: null })).toEqual({ text: 'Source', fields: [] })
 })
 
