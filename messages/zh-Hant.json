@@ -347,6 +347,7 @@
   "duplicate.joins": "合併到另一條記錄",
   "duplicate.of": "記錄編號",
   "duplicate.merge": "合併",
+  "duplicate.apart": "分別保留",
   "history.title": "記錄{id}的歷史",
   "history.back": "返回記錄",
   "history.restore": "還原此版本",

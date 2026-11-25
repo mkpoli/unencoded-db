@@ -347,6 +347,7 @@
   "duplicate.joins": "병합될 기록",
   "duplicate.of": "기록 번호",
   "duplicate.merge": "병합",
+  "duplicate.apart": "별도로 유지",
   "history.title": "기록 {id}의 이력",
   "history.back": "기록으로 돌아가기",
   "history.restore": "이 버전으로 복원",
