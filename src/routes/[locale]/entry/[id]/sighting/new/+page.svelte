@@ -4,12 +4,27 @@
   import SightingFields from '$lib/components/SightingFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { MEDIA_MAX } from '$lib/limits'
-  import { href, t } from '$lib/t'
+  import { href, media, t } from '$lib/t'
   import { recordCode } from '$lib/code'
+  import { onMount } from 'svelte'
   let { data, form } = $props()
   let busy = $state(false)
   let pictures = $state<PictureList>()
   const title = $derived(t('sighting.addTitle', { id: recordCode(data.id) }))
+
+  // The pictures of the sighting the form starts from, fetched so that a new box can be drawn on each.
+  onMount(() => {
+    if (form || !data.seed?.pictures.length) return
+    const controller = new AbortController()
+    void (async () => {
+      for (const key of data.seed?.pictures ?? []) {
+        const response = await fetch(media(key), { signal: controller.signal }).catch(() => null)
+        if (controller.signal.aborted) return
+        if (response?.ok) await pictures?.add(await response.blob())
+      }
+    })()
+    return () => controller.abort()
+  })
 </script>
 
 <Seo {title} />
@@ -19,7 +34,7 @@
   <form class="stack" method="POST" enctype="multipart/form-data">
     <section class="panel stack">
       <PictureList bind:this={pictures} max={MEDIA_MAX} onready={(working) => busy = working} />
-      <SightingFields values={form?.values ?? {}} onphotos={files => pictures?.offer(files)} />
+      <SightingFields values={form?.values ?? data.seed?.values ?? {}} onphotos={files => pictures?.offer(files)} />
     </section>
     <SubmitBar {busy} label={t('entry.addSighting')} cancel={href(`/entry/${data.id}`)} />
   </form>

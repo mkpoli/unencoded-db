@@ -1,4 +1,4 @@
-import { readBoxes, SIGHTING_FIELDS, VIA_INPUTS, type StoredImage } from '$lib/server/entries'
+import { CITATION_FIELDS, getEntryRow, getSighting, readBoxes, SIGHTING_FIELDS, VIA_INPUTS, type SightingFields, type StoredImage } from '$lib/server/entries'
 import { MAX_IMAGE, MAX_THUMB, prepareImage, storeImage } from '$lib/server/image'
 import { MEDIA_MAX } from '$lib/limits'
 import { SIGHTING_START } from '$lib/scripts'
@@ -106,4 +106,20 @@ export function positiveId(value: string | null | undefined): number | null {
   if (!value || !/^[1-9]\d*$/.test(value)) return null
   const id = Number(value)
   return Number.isSafeInteger(id) ? id : null
+}
+
+export type SightingSeed = { id: number; values: Partial<SightingFields>; pictures: string[] }
+
+// A visible sighting's citation, where it was found and its pictures, to pre-fill another form from it.
+export async function loadSightingSeed(db: D1Database, raw: string | null): Promise<SightingSeed | null> {
+  const id = positiveId(raw)
+  if (!id) return null
+  const sighting = await getSighting(db, id)
+  const entry = sighting && !sighting.hidden_at ? await getEntryRow(db, sighting.entry_id) : null
+  if (!sighting || !entry || entry.hidden_at || entry.merged_into) return null
+  const values: Partial<SightingFields> = {
+    ...Object.fromEntries((['place', 'original_date', 'page', ...CITATION_FIELDS] as const).map(field => [field, sighting[field]])),
+    vias: sighting.vias.map(({ id: _, ...via }) => via),
+  }
+  return { id, values, pictures: sighting.media.map(picture => picture.image_key) }
 }

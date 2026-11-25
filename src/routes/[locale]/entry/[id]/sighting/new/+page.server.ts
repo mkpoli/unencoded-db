@@ -3,15 +3,19 @@ import { addSighting, hasLink, getEntry, readSightingFields, SightingLimitError,
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
-import { positiveId, uploadedImages } from '../../../../../_submission.server'
+import { loadSightingSeed, positiveId, uploadedImages } from '../../../../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
+// `?sighting=` starts the form from a visible sighting: its citation, where it was found and its pictures,
+// so evidence from another record can be attached here.
 export const load: PageServerLoad = async (event) => {
   const id = positiveId(event.params.id)
   if (!id) error(404)
-  const found = await getEntry(env(event).DB, id)
+  const { DB } = env(event)
+  const found = await getEntry(DB, id)
   if (!found || found.entry.hidden_at || found.entry.merged_into) error(404)
-  return { id, ids: found.entry.ids }
+  const seed = await loadSightingSeed(DB, event.url.searchParams.get('sighting'))
+  return { id, ids: found.entry.ids, seed }
 }
 
 export const actions: Actions = {

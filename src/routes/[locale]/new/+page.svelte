@@ -208,7 +208,7 @@
   {#if message}<p class="notice bad" role="alert" tabindex="-1" bind:this={notice}>{message}</p>{/if}
   <form class="form" method="POST" enctype="multipart/form-data" bind:this={formEl} onsubmit={weigh} oninvalidcapture={invalid} oninput={clearInvalid} onchange={clearInvalid}>
     <section class="panel character">
-      <CharacterFields values={descriptions} {layout} bind:primary onfill={facts => filled = facts}>
+      <CharacterFields values={descriptions} {layout} bind:primary sighting={data.seed?.id ?? null} onfill={facts => filled = facts}>
         <div class="sheet">
           <CompositionField ids={primary} value={composition} />
           <ScriptPicker value={values?.script} other={values?.script_other} />
