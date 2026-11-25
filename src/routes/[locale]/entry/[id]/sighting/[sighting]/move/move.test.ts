@@ -119,24 +119,92 @@ test('a move that cannot be made is refused and changes nothing', async () => {
   expect(raw.query(`SELECT count(*) AS n FROM revisions WHERE snapshot LIKE '%"moved"%'`).get()).toEqual({ n: 0 })
 })
 
-test('evidence goes to the record a named duplicate was merged into, and undoing a merge leaves it where it was moved', async () => {
-  const { db, a, b, s, who, event, ids, claims, agree } = await fixture()
-  const reading = { ...newClaim('reading', 'rin'), sightings: [] as number[] }
-  const dup = await createEntry(db, fields([newClaim('ids', '⿱木木'), reading]), seen('Dup'), [], who)
+test('evidence goes to the record a named duplicate was merged into, and a merge can be undone around a move', async () => {
+  const { db, a, b, s, first, who, event, ids, claims, rows, agree } = await fixture()
+  const dup = await createEntry(db, fields([newClaim('ids', '⿱木木')]), seen('Dup'), [], who)
   const held = (await getEntry(db, dup))!.sightings[0].id
-  await editEntry(db, dup, 1, fields([newClaim('ids', '⿱木木'), { ...reading, sightings: [held] }]), who, null)
+  const more = (await addSighting(db, dup, seen('Dup two'), [], who))!
+  const reading = { ...newClaim('reading', 'rin'), sightings: [held] }
+  await editEntry(db, dup, 1, fields([newClaim('ids', '⿱木木'), reading]), who, null)
   expect(await mergeEntry(db, dup, b, who, null)).toEqual({ ok: true })
   await expect(actions.default(event({ rev: '1', to: String(dup) }))).rejects.toMatchObject({ status: 303, location: `/en/entry/${b}#sighting-${s}` })
-  // What the duplicate brought moves on to the first record, and stays there when the merge is undone.
+  // The last evidence of either record stays while they are merged, so that undoing it leaves each its own.
+  const own = (await getEntry(db, b))!.sightings.find(x => x.place === 'B one')!.id
   expect(await moveSighting(db, b, held, 1, a, who, null)).toBe('done')
+  expect(await moveSighting(db, b, more, 1, a, who, null)).toBe('only')
+  expect(await load(event({}, { entry: b, sighting: more }))).toMatchObject({ only: true })
+  expect(await moveSighting(db, b, s, 1, a, who, null)).toBe('done')
+  expect(await moveSighting(db, b, own, 1, a, who, null)).toBe('only')
   expect((await claims(a)).slice(1)).toEqual([['reading', 'rin', [held]]])
   await agree()
+  // Moved back, it is the duplicate's again; the other stays where it went.
+  expect(await moveSighting(db, a, held, 1, b, who, null)).toBe('done')
   expect(await unmergeEntry(db, dup, who)).toBe(true)
-  expect(await ids(a)).toContain(held)
-  expect(await ids(dup)).toEqual([])
-  expect((await claims(dup)).every(([, , rests]) => !(rests as number[]).includes(held))).toBe(true)
-  expect(await ids(b)).toContain(s)
+  expect(await ids(dup)).toEqual([held, more])
+  expect(await ids(b)).toEqual([own])
+  expect(await ids(a)).toEqual([first, s])
+  expect((await getEntry(db, a))!.sightings.map(x => x.first_entry)).toEqual([a, a])
   await agree()
+  // Undone with the evidence elsewhere, the duplicate's claims no longer rest on it.
+  expect(await mergeEntry(db, dup, b, who, null)).toEqual({ ok: true })
+  expect(await moveSighting(db, b, held, 1, a, who, null)).toBe('done')
+  expect(await unmergeEntry(db, dup, who)).toBe(true)
+  expect(await ids(dup)).toEqual([more])
+  expect((await claims(dup)).every(([, , rests]) => !(rests as number[]).includes(held))).toBe(true)
+  expect((await rows(a)).length).toBeGreaterThan(0)
+  await agree()
+})
+
+test('moving there and back leaves the other record the claims it had', async () => {
+  const { db, a, b, s, first, who, other, claims } = await fixture()
+  const fish = { ...newClaim('meaning', 'fish'), sightings: [first] }, tree = { ...newClaim('meaning', 'tree'), sightings: [first] }
+  const kan = { ...newClaim('reading', 'kan'), sightings: [s] }, gyo = { ...newClaim('reading', 'gyo'), sightings: [s], under: [fish.key] }, rin = { ...newClaim('reading', 'rin'), sightings: [s], under: [tree.key] }
+  const self = { ...newClaim('relation', `R+${b.toString(16).toUpperCase().padStart(4, '0')}`, { relationship: 'variant', difference: null, evidence: null }), sightings: [s] }
+  expect(await editEntry(db, a, 1, fields([newClaim('ids', '⿰木木'), fish, tree, kan, gyo, rin, self]), who, null)).toMatchObject({ ok: true })
+  expect(await editEntry(db, b, 1, fields([newClaim('ids', '⿱木木'), newClaim('reading', 'kan'), newClaim('reading', 'gyo')]), other, null)).toMatchObject({ ok: true })
+  const before = (await getEntry(db, b))!.claims
+  expect(await moveSighting(db, a, s, 1, b, who, null)).toBe('done')
+  // A reading goes with the meaning it holds under; one the other record gives of itself is not narrowed, and
+  // no record is related to itself.
+  const there = (await getEntry(db, b))!.claims
+  expect(there.map(c => [c.kind, c.value, c.sightings, c.under.map(key => there.find(x => x.key === key)!.value)])).toEqual([
+    ['ids', '⿱木木', [], []], ['reading', 'kan', [s], []], ['reading', 'gyo', [], []], ['meaning', 'tree', [], []], ['reading', 'rin', [s], ['tree']]])
+  const here = (await getEntry(db, a))!.claims
+  expect(here.map(c => [c.kind, c.value, c.sightings, c.under.map(key => here.find(x => x.key === key)!.value)])).toEqual([
+    ['ids', '⿰木木', [], []], ['meaning', 'fish', [first], []], ['meaning', 'tree', [first], []], ['reading', 'gyo', [], ['fish']], ['relation', self.value, [], []]])
+  expect(await moveSighting(db, b, s, 1, a, who, null)).toBe('done')
+  expect((await getEntry(db, b))!.claims).toEqual(before)
+  const back = (await getEntry(db, a))!.claims
+  expect(back.filter(c => c.sightings.includes(s)).map(c => [c.value, c.under.map(key => back.find(x => x.key === key)!.value)])).toEqual([['kan', []], ['rin', ['tree']]])
+  expect((await claims(a)).filter(([, value]) => value === 'tree')).toEqual([['meaning', 'tree', [first]]])
+})
+
+test('what a hidden record once said of evidence does not surface when the evidence moves', async () => {
+  const { db, a, b, who, other, rows } = await fixture()
+  const dup = await createEntry(db, fields([newClaim('ids', '⿰木木')]), seen('SECRET'), [], who)
+  const held = (await getEntry(db, dup))!.sightings[0].id
+  await addSighting(db, dup, seen('Dup two'), [], who)
+  await editSighting(db, held, 1, seen('Plain'), null, who, null, dup)
+  expect(await mergeEntry(db, dup, a, who, null)).toEqual({ ok: true })
+  await setHidden(db, { entry: dup }, true, other, null)
+  expect(await moveSighting(db, a, held, 2, b, who, null)).toBe('done')
+  expect(JSON.stringify([await rows(b), (await globalHistory(db)).rows])).not.toContain('SECRET')
+})
+
+test('a comment or a report written while the evidence moved goes where it went', async () => {
+  const { db, a, b, s, who, other } = await fixture()
+  expect(await moveSighting(db, a, s, 1, b, who, null)).toBe('done')
+  await addComment(db, { entry: a, sighting: s }, 'late', other)
+  await report(db, { entry: a, sighting: s }, 'late', other.actor)
+  expect((await commentsOf(db, b)).map(c => c.body)).toEqual(['late'])
+  expect((await openReports(db, 0)).reports[0]).toMatchObject({ entry_id: b, sighting_id: s })
+})
+
+test('a move reads no whole table', () => {
+  const { raw } = openTestDb()
+  const plan = (sql: string) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all() as { detail: string }[]).map(row => row.detail).join()
+  for (const sql of ['UPDATE revisions SET entry_id = 1 WHERE entry_id = 2 AND sighting_id = 3', 'UPDATE comments SET entry_id = 1, first_entry = 1 WHERE entry_id = 2 AND sighting_id = 3', 'UPDATE reports SET entry_id = 1 WHERE sighting_id = 3'])
+    expect(plan(sql)).not.toMatch(/SCAN (revisions|comments|reports)/)
 })
 
 test('a redacted move still says which evidence went where, and the recorders are told', async () => {

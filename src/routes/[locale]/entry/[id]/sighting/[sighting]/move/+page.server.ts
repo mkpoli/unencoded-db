@@ -1,5 +1,5 @@
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
-import { getEntryRow, getSighting, moveSighting, tilesOf } from '$lib/server/entries'
+import { getEntry, getEntryRow, moveSighting, standsAlone, tilesOf } from '$lib/server/entries'
 import { tileGlyphs } from '$lib/server/glyphs'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
@@ -11,11 +11,11 @@ async function target(event: RequestEvent) {
   const id = positiveId(event.params.id), sightingId = positiveId(event.params.sighting)
   if (!id || !sightingId) error(404)
   const db = env(event).DB
-  const entry = await getEntryRow(db, id)
-  if (!entry || entry.hidden_at || entry.merged_into) error(404)
-  const sighting = await getSighting(db, sightingId)
-  if (!sighting || sighting.entry_id !== id || sighting.hidden_at) error(404)
-  return { id, sighting, only: entry.sightings === 1 }
+  const found = await getEntry(db, id)
+  if (!found || found.entry.hidden_at || found.entry.merged_into) error(404)
+  const sighting = found.sightings.find(item => item.id === sightingId && !item.hidden_at)
+  if (!sighting) error(404)
+  return { id, sighting, only: standsAlone(found.sightings, sightingId) }
 }
 
 // The record a reader names, or the one it was merged into.
