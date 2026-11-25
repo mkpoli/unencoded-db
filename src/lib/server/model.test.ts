@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
-import { addSighting, claimedBy, createEntry, editEntry, editSighting, exportPage, getEntry, getSighting, history, list, mediaVisible, mergeEntry, readSightingFields, redactRevision, restoreSighting, revertEntry, setHidden, sourcePage, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, claimedBy, createEntry, editEntry, editSighting, exportPage, getEntry, getSighting, history, list, mediaVisible, mergeEntry, readSightingFields, redactRevision, restoreSighting, revertEntry, setHidden, sourcePage, unmergeEntry, type EntryFields, type SightingFields, type StoredImage, type Via } from './entries'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { mediaBatches } from './export'
 import { sightingSnapshot } from './revisions'
 import { openTestDb } from './testdb'
 
@@ -540,5 +541,72 @@ describe('part rows', () => {
     const { raw } = open()
     const plan = (raw.query("EXPLAIN QUERY PLAN SELECT entry_id FROM entry_tags t WHERE t.tag = ? AND (t.sightings, t.entry_id) < (?, ?) AND t.tag NOT GLOB '[wp]:*' ORDER BY t.sightings DESC, t.entry_id DESC LIMIT 5").all('all', 9, 9) as { detail: string }[]).map(row => row.detail).join('\n')
     expect(plan).toContain('entry_tags_by_sightings')
+  })
+})
+
+describe('the pictures of a go-between', () => {
+  const shot = (name: string) => { const { box: _, ...picture } = image(name); return picture }
+  const message = (author: string, quote: string | null = null, pictures?: ReturnType<typeof shot>[]): Via => ({ url: null, title: null, author, publisher: 'QQ', report_date: '2026-11-14', container: '某討論羣', source_kind: null, quote, ...(pictures ? { pictures } : {}) })
+  const held = async (db: D1Database, id: number) => (await getSighting(db, id))!.vias.map(via => [via.author, (via.pictures ?? []).map(picture => picture.image_key)])
+  const add = async (vias: Via[]) => {
+    const { db, raw } = open()
+    raw.exec('PRAGMA foreign_keys = ON')
+    const id = await createEntry(db, fields(), seen({ vias }), [image('page')], who)
+    return { db, raw, id, sighting: (await getEntry(db, id))!.sightings[0].id }
+  }
+
+  test('follow the go-between through an edit and a reorder, and go with it', async () => {
+    const { db, raw, id, sighting } = await add([message('甲', null, [shot('a'), shot('b')]), message('乙', '文', [shot('c')])])
+    expect(await held(db, sighting)).toEqual([['甲', ['a.jpg', 'b.jpg']], ['乙', ['c.jpg']]])
+    const { vias } = (await getSighting(db, sighting))!
+    await editSighting(db, sighting, 1, seen({ vias: [message('丙'), vias[1], vias[0]] }), null, who, null, id)
+    expect(await held(db, sighting)).toEqual([['丙', []], ['乙', ['c.jpg']], ['甲', ['a.jpg', 'b.jpg']]])
+    // The cover and the pictures of the sighting are its own.
+    expect((await getEntry(db, id))!.entry.cover_key).toBe('page-t.jpg')
+    expect((await getSighting(db, sighting))!.media.map(picture => picture.image_key)).toEqual(['page.jpg'])
+    await editSighting(db, sighting, 2, seen({ vias: [vias[0]] }), null, who, null, id)
+    expect(await held(db, sighting)).toEqual([['甲', ['a.jpg', 'b.jpg']]])
+    expect((raw.query('SELECT count(*) AS n FROM sighting_via_media').get() as { n: number }).n).toBe(2)
+  })
+
+  test('are seen while the sighting is, and no longer once they are gone', async () => {
+    const { db, id, sighting } = await add([message('甲', null, [shot('a')])])
+    for (const key of ['a.jpg', 'a-t.jpg']) expect(await mediaVisible(db, key)).toBe(true)
+    await setHidden(db, { entry: id, sighting }, true, who, null)
+    for (const key of ['a.jpg', 'a-t.jpg']) expect(await mediaVisible(db, key)).toBe(false)
+    await setHidden(db, { entry: id, sighting }, false, who, null)
+    expect(await mediaVisible(db, 'a.jpg')).toBe(true)
+    await editSighting(db, sighting, (await getSighting(db, sighting))!.rev, seen({ vias: [message('甲')] }), null, who, null, id)
+    expect(await mediaVisible(db, 'a.jpg')).toBe(false)
+  })
+
+  test('of rows that repeat one message are kept together, up to the most one holds', async () => {
+    const { db, sighting } = await add([message('甲', '文', [shot('a'), shot('b')]), message('甲', '文', [shot('b'), shot('c'), shot('d'), shot('e')]), message('甲', '別文')])
+    expect(await held(db, sighting)).toEqual([['甲', ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']], ['甲', []]])
+  })
+
+  test('stay as they are through a restore, and come back with a go-between that had gone', async () => {
+    const { db, id, sighting } = await add([message('甲'), message('乙', null, [shot('b')])])
+    const version = async (rev: number) => sightingSnapshot((await history(db, id)).find(row => row.sighting_id === sighting && row.rev === rev)!.snapshot)!
+    expect((await version(1)).vias.map(via => via.pictures?.length ?? 0)).toEqual([0, 1])
+    // 甲 gains a picture and other words, and 乙 goes.
+    await editSighting(db, sighting, 1, seen({ vias: [message('甲', '文', [shot('a')])] }), null, who, null, id)
+    expect(await restoreSighting(db, id, sighting, 2, await version(1), who, 1)).toMatchObject({ ok: true })
+    expect(await held(db, sighting)).toEqual([['甲', ['a.jpg']], ['乙', ['b.jpg']]])
+    // A picture taken off a go-between that stays is not brought back by restoring older words.
+    await editSighting(db, sighting, 3, seen({ vias: [message('甲', '新', []), message('乙', null, [])] }), null, who, null, id)
+    expect(await restoreSighting(db, id, sighting, 4, await version(3), who, 3)).toMatchObject({ ok: true })
+    expect(await held(db, sighting)).toEqual([['甲', []], ['乙', []]])
+    expect(sightingSnapshot(JSON.stringify({ ...seen(), vias: [{ ...message('甲'), pictures: [{ image_key: 1 }] }] }))).toBeNull()
+  })
+
+  test('are in the export, each with the go-between it shows', async () => {
+    const { db, id, sighting } = await add([message('甲'), message('乙', null, [shot('a'), shot('b')])])
+    expect((await exportPage(db, 0, 10)).entries[0].evidence[0].vias.map(via => via.pictures?.map(picture => picture.image_key))).toEqual([[], ['a.jpg', 'b.jpg']])
+    const rows = []
+    for await (const batch of mediaBatches(db, 1)) rows.push(...batch)
+    expect(rows.map(row => [row.sighting_id, row.image_key, row.via_position, row.source_author])).toEqual([[sighting, 'page.jpg', null, null], [sighting, 'a.jpg', 1, '乙'], [sighting, 'b.jpg', 1, '乙']])
+    await setHidden(db, { entry: id, sighting }, true, who, null)
+    for await (const batch of mediaBatches(db, 1)) expect(batch).toEqual([])
   })
 })

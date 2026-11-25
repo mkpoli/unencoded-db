@@ -45,7 +45,7 @@ Local setup and each release run `bun scripts/sweep-title-readings.ts` with `--l
 
 ## Publishers
 
-A citation can name what the source appeared in: the journal and issue of an article, the site of a page, or the group of a chat message. A chat message, a forum post or a personal communication is cited as itself, with its author as they sign, its own date and the words quoted; the group or channel is its container, the service its publisher, and it has no title. A private message, a letter or a conversation has no container and is marked a personal communication. Choosing a suggested container fills the publisher and leaves the author and date to the message.
+A citation can name what the source appeared in: the journal and issue of an article, the site of a page, or the group of a chat message. A chat message, a forum post or a personal communication is cited as itself, with its author as they sign, its own date and the words quoted; the group or channel is its container, the service its publisher, and it has no title. A private message, a letter or a conversation has no container and is marked a personal communication. Choosing a suggested container fills the publisher and leaves the author and date to the message. A go-between also holds up to four pictures of itself, such as a screenshot of the message. They stay apart from the pictures of the character: they are never the cover of a record or a source.
 
 The Sources page filters direct and intermediate citations by publisher. A contributor can choose a suggested publisher or enter a new name. The directory groups verified spellings such as 江蘇教育出版社 and 江苏教育出版社. Citations, exports and revision history retain the submitted name. Only publishers cited by a visible record appear in suggestions. The release runs `scripts/sweep-publishers.ts` to reconcile legacy lookup keys. The local setup runs the same sweep.
 
@@ -77,6 +77,7 @@ An agent can sign in, and then writes under a person's name. The site is the OAu
 | `claims` | What a record states more than once: description sequences, composition, readings, meanings, codes, related characters, IVD, categories, collections, tags |
 | `sightings` | One place the character was seen: where, page, date, contexts, style, source types |
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
+| `sighting_via_media` | The pictures of a go-between itself, by its place in the chain |
 | `source_aliases`, `source_alias_changes`, `source_search_names` | Alternate names for individual citations, their contributor history, and the lookup index for visible sources |
 | `date_readings`, `evidence_dates` | Calendar readings and the view of transcribed dates in sources, sightings and revision history |
 | `date_index_state` | Generation used to retry writes when their date readings change |

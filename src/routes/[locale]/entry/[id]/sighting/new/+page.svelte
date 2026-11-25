@@ -7,7 +7,8 @@
   import { href, t } from '$lib/t'
   import { recordCode } from '$lib/code'
   let { data, form } = $props()
-  let busy = $state(false)
+  let adding = $state(false), found = $state(false)
+  const busy = $derived(adding || found)
   let pictures = $state<PictureList>()
   const title = $derived(t('sighting.addTitle', { id: recordCode(data.id) }))
 </script>
@@ -18,8 +19,8 @@
   {#if form?.error}<p class="notice bad" role="alert">{t(`error.${form.error}`)}</p>{/if}
   <form class="stack" method="POST" enctype="multipart/form-data">
     <section class="panel stack">
-      <PictureList bind:this={pictures} max={MEDIA_MAX} onready={(working) => busy = working} />
-      <SightingFields values={form?.values ?? {}} onphotos={files => pictures?.offer(files)} />
+      <PictureList bind:this={pictures} max={MEDIA_MAX} onready={(working) => adding = working} />
+      <SightingFields values={form?.values ?? {}} onphotos={files => pictures?.offer(files)} onready={working => found = working} />
     </section>
     <SubmitBar {busy} label={t('entry.addSighting')} cancel={href(`/entry/${data.id}`)} />
   </form>

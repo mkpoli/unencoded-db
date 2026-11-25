@@ -9,9 +9,9 @@
   import { href, t } from '$lib/t'
   import { recordCode } from '$lib/code'
   let { data, form } = $props()
-  let adding = $state(false)
+  let adding = $state(false), found = $state(false)
   let marking = $state<Record<number, boolean>>({})
-  const busy = $derived(adding || Object.values(marking).some(Boolean))
+  const busy = $derived(adding || found || Object.values(marking).some(Boolean))
   let pictures = $state<PictureList>()
   const title = $derived(t('sighting.editTitle', { id: recordCode(data.id) }))
   let removed = $state<string[]>(untrack(() => form?.removeMedia ?? []))
@@ -34,7 +34,7 @@
         </div>
       {/if}
       <PictureList bind:this={pictures} max={room} onready={(working) => adding = working} />
-      <SightingFields values={form?.values ?? data.sighting} onphotos={files => pictures?.offer(files)} />
+      <SightingFields values={form?.values ?? data.sighting} onphotos={files => pictures?.offer(files)} onready={working => found = working} />
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" value={form?.summary ?? ''} /></div>
     </section>
     {#if form?.error === 'conflict'}<button class="button" type="submit" disabled>{t('form.save')}</button>{:else}<SubmitBar {busy} cancel={href(`/entry/${data.id}`)} />{/if}

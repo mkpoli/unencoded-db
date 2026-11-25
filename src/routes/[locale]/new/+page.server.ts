@@ -3,11 +3,11 @@ import { fail, redirect } from '@sveltejs/kit'
 import { mapSightings, newClaim } from '$lib/claims'
 import { readNewTag } from '$lib/tags'
 import { ADD_SIGHTINGS_MAX } from '$lib/limits'
-import { CITATION_FIELDS, hasLink, type SightingFields, createEntry, getEntryRow, getSighting, readEntryFields, readSightingFields } from '$lib/server/entries'
+import { CITATION_FIELDS, citesEvidence, type SightingFields, createEntry, getEntryRow, getSighting, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
-import { positiveId, readImages, sightingForms, storeImages, type ReadImage } from '../../_submission.server'
+import { positiveId, readImages, readViaPictures, sightingForms, storeImages, type ReadImage } from '../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
 // `?sighting=` starts the form from a visible sighting: its citation, where it was found and its pictures,
@@ -20,11 +20,11 @@ export const load: PageServerLoad = async (event) => {
   const sighting = await getSighting(DB, id)
   const entry = sighting && !sighting.hidden_at ? await getEntryRow(DB, sighting.entry_id) : null
   if (!sighting || !entry || entry.hidden_at || entry.merged_into) return { seed: null, tags, groups }
-  const values: Partial<SightingFields> = { ...Object.fromEntries((['place', 'original_date', 'page', ...CITATION_FIELDS] as const).map(field => [field, sighting[field]])), vias: sighting.vias.map(({ id: _, ...via }) => via) }
+  const values: Partial<SightingFields> = { ...Object.fromEntries((['place', 'original_date', 'page', ...CITATION_FIELDS] as const).map(field => [field, sighting[field]])), vias: sighting.vias.map(({ id: _, pictures: __, ...via }) => via) }
   return { seed: { values, pictures: sighting.media.map(picture => picture.image_key) }, tags, groups }
 }
 
-const filled = (form: FormData, fields: SightingFields) => Object.values({ ...fields, vias: fields.vias.length }).some(Boolean) || form.getAll('image').some(file => file instanceof File && file.size > 0)
+const filled = (form: FormData, fields: SightingFields) => Object.values({ ...fields, vias: fields.vias.length }).some(Boolean) || [...form.getAll('image'), ...form.getAll('via_image')].some(file => file instanceof File && file.size > 0)
 
 export const actions: Actions = {
   // A record and the sightings it starts with. Each sighting needs a picture or a link, and all of them are read and checked before a picture is stored or a row written; the record
@@ -57,17 +57,24 @@ export const actions: Actions = {
     if (!sections.length) return reject(400, 'evidence', 1)
     if (sections.length > ADD_SIGHTINGS_MAX) return reject(400, 'sightingsMax')
 
-    const pictures: ReadImage[][] = []
+    const pictures: ReadImage[][] = [], cited: { fields: SightingFields; files: ReadImage[] }[] = []
     for (const [index, section] of sections.entries()) {
+      const shots = await readViaPictures(section.form)
+      if (typeof shots === 'string') return reject(400, shots, index + 1)
+      const fields = readSightingFields(section.form, shots.all)
       const images = await readImages(section.form)
       if (images === 'invalid') return reject(400, 'image', index + 1)
-      if (!images.length && !hasLink(section.fields)) return reject(400, 'evidence', index + 1)
+      if (!images.length && !citesEvidence(fields)) return reject(400, 'evidence', index + 1)
+      cited.push({ fields, files: shots.files })
       pictures.push(images)
     }
     if (!(await chargeWrites(event, 'ADDS', sections.length - 1))) return reject(429, 'slow')
 
     const drafts = []
-    for (const [index, fields] of sightings.entries()) drafts.push({ fields, media: await storeImages(MEDIA, pictures[index]) })
+    for (const [index, { fields, files }] of cited.entries()) {
+      await storeImages(MEDIA, files)
+      drafts.push({ fields, media: await storeImages(MEDIA, pictures[index]) })
+    }
     const person = await writer(event, DB)
     const who = { actor: person.id, ip: await ipHash(event) }
     if (fresh && !(await createTag(DB, tags, fresh, who, groups)).ok) return reject(400, 'tag')

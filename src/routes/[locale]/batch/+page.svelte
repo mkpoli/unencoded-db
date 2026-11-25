@@ -9,7 +9,7 @@
   import { href, t } from '$lib/t'
   let { form } = $props()
   const values = $derived(form?.values)
-  let busy = $state(0)
+  let busy = $state(0), found = $state(false)
   let next = 0
   // Typed rows come back with a rejected batch; pictures are chosen again.
   const row = (ids = '', note = '') => ({ key: next++, ids, note })
@@ -25,7 +25,7 @@
   <form class="stack" method="POST" enctype="multipart/form-data">
     <section class="panel stack">
       <ScriptPicker value={values?.script} other={values?.script_other} />
-      <SightingFields {values} />
+      <SightingFields {values} onready={working => found = working} />
     </section>
     <section class="stack"><h2>{t('batch.rows')}</h2>
       {#each rows as item, index (item.key)}
@@ -39,7 +39,7 @@
       {/each}
       {#if rows.length < BATCH_ROWS_MAX}<div><button type="button" class="button" onclick={() => rows.push(row())}>{t('batch.add')}</button></div>{/if}
     </section>
-    <SubmitBar busy={busy > 0} label={t('batch.save')} cancel={href()} />
+    <SubmitBar busy={busy > 0 || found} label={t('batch.save')} cancel={href()} />
   </form>
 </div>
 <style>

@@ -167,6 +167,7 @@ export type MediaRow = {
   image_h: number
   thumb_key: string
   box: string | null
+  via_position: number | null
   sighting_id: number
   entry_id: number
   source_id: number | null
@@ -179,13 +180,14 @@ export type MediaRow = {
   source_kind: string | null
 }
 
-const MEDIA_COLUMNS = ['record_code', 'entry_id', 'sighting_id', 'image_key', 'image_url', 'thumb_key', 'thumb_url', 'image_type', 'image_w', 'image_h', 'box', 'source_id', 'source_title', 'source_author', 'source_publisher', 'source_report_date', 'source_container', 'source_kind', 'source_url'] as const
+const MEDIA_COLUMNS = ['record_code', 'entry_id', 'sighting_id', 'image_key', 'image_url', 'thumb_key', 'thumb_url', 'image_type', 'image_w', 'image_h', 'box', 'via_position', 'source_id', 'source_title', 'source_author', 'source_publisher', 'source_report_date', 'source_container', 'source_kind', 'source_url'] as const
 
 const mediaUrl = (origin: string, key: string) => new URL(`/media/v2/${key}`, origin).href
 
 export const mediaCsvHeader = () => MEDIA_COLUMNS.map(csvCell).join(',') + '\r\n'
 
-/** The visible pictures, each with the record it shows and the work it cites. */
+/** The visible pictures, each with its record and the work it shows. The picture of a go-between shows the
+ * go-between, and `via_position` is its place in the chain, from 0. */
 export function mediaCsvRows(rows: readonly MediaRow[], origin: string) {
   return rows.map(row => [
     recordCode(row.entry_id),
@@ -199,6 +201,7 @@ export function mediaCsvRows(rows: readonly MediaRow[], origin: string) {
     row.image_w,
     row.image_h,
     row.box,
+    row.via_position,
     row.source_id,
     row.source_title,
     row.source_author,
@@ -210,7 +213,7 @@ export function mediaCsvRows(rows: readonly MediaRow[], origin: string) {
   ].map(csvCell).join(',')).join('\r\n') + (rows.length ? '\r\n' : '')
 }
 
-const MEDIA_QUERY = `SELECT m.position, m.image_key, m.image_type, m.image_w, m.image_h, m.thumb_key, m.box,
+const MEDIA_QUERY = `SELECT m.position, m.image_key, m.image_type, m.image_w, m.image_h, m.thumb_key, m.box, NULL AS via_position,
   s.id AS sighting_id, s.entry_id,
   c.id AS source_id, c.url AS source_url, c.title AS source_title, c.author AS source_author, c.publisher AS source_publisher, c.report_date AS source_report_date, c.container AS source_container, c.source_kind
   FROM sighting_media m
@@ -221,19 +224,35 @@ const MEDIA_QUERY = `SELECT m.position, m.image_key, m.image_type, m.image_w, m.
     AND (m.sighting_id, m.position) > (?, ?)
   ORDER BY m.sighting_id, m.position LIMIT ?`
 
-/** Every picture on a visible sighting, in the order of its record and then its place on the page. */
+const VIA_MEDIA_QUERY = `SELECT m.position, m.image_key, m.image_type, m.image_w, m.image_h, m.thumb_key, NULL AS box, m.via_position,
+  s.id AS sighting_id, s.entry_id,
+  c.id AS source_id, c.url AS source_url, c.title AS source_title, c.author AS source_author, c.publisher AS source_publisher, c.report_date AS source_report_date, c.container AS source_container, c.source_kind
+  FROM sighting_via_media m
+  CROSS JOIN sighting_vias v ON v.sighting_id = m.sighting_id AND v.position = m.via_position
+  JOIN sightings s ON s.id = m.sighting_id
+  JOIN entries e ON e.id = s.entry_id
+  JOIN sources c ON c.id = v.source_id
+  WHERE s.hidden_at IS NULL AND e.hidden_at IS NULL AND e.merged_into IS NULL
+    AND (m.sighting_id, m.via_position, m.position) > (?, ?, ?)
+  ORDER BY m.sighting_id, m.via_position, m.position LIMIT ?`
+
+/** Every picture on a visible sighting, in the order of its sighting and then its place on the page, and after
+ * them the pictures of the go-betweens. */
 export async function* mediaBatches(db: D1Database, size = 500): AsyncGenerator<MediaRow[]> {
   const limit = Math.max(size, 1)
-  let sighting = 0
-  let position = -1
-  for (;;) {
-    const { results } = await db.prepare(MEDIA_QUERY).bind(sighting, position, limit + 1).all<MediaRow>()
-    const page = results.slice(0, limit)
-    if (page.length) yield page
-    if (results.length <= limit) return
-    const last = page[page.length - 1]
-    if (last.sighting_id === sighting && last.position === position) throw new Error('media cursor did not advance')
-    sighting = last.sighting_id
-    position = last.position
+  for (const [query, first, cursorOf] of [
+    [MEDIA_QUERY, [0, -1], (row: MediaRow) => [row.sighting_id, row.position]],
+    [VIA_MEDIA_QUERY, [0, -1, -1], (row: MediaRow) => [row.sighting_id, row.via_position!, row.position]],
+  ] as const) {
+    let cursor: readonly number[] = first
+    for (;;) {
+      const { results } = await db.prepare(query).bind(...cursor, limit + 1).all<MediaRow>()
+      const page = results.slice(0, limit)
+      if (page.length) yield page
+      if (results.length <= limit) break
+      const last = cursorOf(page[page.length - 1])
+      if (last.every((part, index) => part === cursor[index])) throw new Error('media cursor did not advance')
+      cursor = last
+    }
   }
 }

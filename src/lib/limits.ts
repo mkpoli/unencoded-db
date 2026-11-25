@@ -2,6 +2,8 @@
 export const MAX_IMAGE_BYTES = 16 * 1024 * 1024
 /** The most pictures one sighting holds: as many as one post on X carries. */
 export const MEDIA_MAX = 20
+/** The most pictures one go-between holds: the parts of a long message. */
+export const VIA_MEDIA_MAX = 4
 /** The most characters one batch holds: the number of adds a rate window allows. */
 export const BATCH_ROWS_MAX = 10
 /** The most sightings a new record starts with. Each one after the first takes one more add from the rate

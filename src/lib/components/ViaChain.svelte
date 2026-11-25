@@ -4,15 +4,18 @@
   // there is one. A source without a title, as a chat message is, goes by what it appeared in.
   import EvidenceDate from './EvidenceDate.svelte'
   import type { DateReading } from '$lib/dates'
-  import { href, t } from '$lib/t'
+  import { href, media, t } from '$lib/t'
+  import { pictureAlt } from '$lib/picture'
   import { kindName } from '$lib/source-kind'
-  import type { Via as StoredVia } from '$lib/server/entries'
+  import type { Via as StoredVia, ViaPicture } from '$lib/server/entries'
 
   type Via = StoredVia & { id?: number }
-  let { vias, label = true, dates }: { vias: readonly Via[]; label?: boolean; dates?: Map<string, DateReading | null> } = $props()
+  let { vias, label = true, dates, pictures = false }: { vias: readonly Via[]; label?: boolean; dates?: Map<string, DateReading | null>; pictures?: boolean } = $props()
   // The container stands as the name of a source without a title, so it is not said twice.
   // The same holds for a personal communication, which often has neither.
   const meta = (via: Via) => [via.author, via.title ? via.container : null, via.title || via.container || via.url ? kindName(via.source_kind) : null, via.publisher].filter(Boolean)
+  // As large as fits, so the frame is never wider than the picture.
+  const shownWidth = ({ image_w, image_h }: ViaPicture) => Math.max(24, Math.round(Math.min(image_w, 360, 220 * image_w / image_h)))
   const web = (url: string | null) => Boolean(url && /^https?:\/\//i.test(url))
 </script>
 
@@ -40,6 +43,13 @@
               </span>
             {/if}
             {#if via.quote}<blockquote class="quote">{via.quote}</blockquote>{/if}
+            {#if pictures && via.pictures?.length}
+              <span class="pictures">
+                {#each via.pictures as picture, index (picture.image_key)}
+                  <a href={media(picture.image_key)} target="_blank" rel="noopener"><img src={media(picture.thumb_key)} width={shownWidth(picture)} alt={pictureAlt([via.title || via.container, via.author], index, via.pictures.length)} loading="lazy" decoding="async" /></a>
+                {/each}
+              </span>
+            {/if}
           </div>
         </li>
       {/each}
@@ -56,5 +66,9 @@
   .node { min-width: 0; overflow-wrap: anywhere; line-height: 1.55 }
   .meta { display: block; margin-top: 1px; color: var(--muted); font-size: 12.5px }
   .url { overflow-wrap: anywhere }
+  .pictures { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin-top: 6px }
+  .pictures a { display: block; max-inline-size: 100%; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-sunken); overflow: hidden }
+  .pictures a:hover { border-color: var(--line-strong) }
+  .pictures img { display: block; block-size: auto; max-inline-size: 100% }
   .quote { max-width: 75ch; margin: 4px 0 0; padding: 2px 0 2px 10px; border-left: 2px solid var(--line-strong); white-space: pre-wrap; overflow-wrap: anywhere }
 </style>
