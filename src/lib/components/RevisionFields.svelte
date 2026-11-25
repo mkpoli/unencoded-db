@@ -23,7 +23,10 @@
     { key: 'author', label: 'field.author' },
     { key: 'container', label: 'field.container' },
     { key: 'source_kind', label: 'field.sourceKind' },
+    { key: 'publication_kind', label: 'field.publicationKind' },
     { key: 'publisher', label: 'field.publisher' },
+    { key: 'volume', label: 'field.volume' },
+    { key: 'number', label: 'field.number' },
     { key: 'report_date', label: 'field.reportDate' },
     { key: 'original_date', label: 'field.originalDate' },
     { key: 'page', label: 'field.page' },
@@ -64,7 +67,7 @@
       {#if source.url}<a class="text-link url" href={source.url} target="_blank" rel="noopener noreferrer">{source.url} ↗</a>{/if}
     </div>
     <dl class="facts">
-      {#each sourceFields as field}{#if source[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={source[field.key]} reading={dates?.get(source[field.key] ?? '')} />{:else if field.key === 'source_kind'}{kindName(source.source_kind)}{:else}{source[field.key]}{/if}</dd></div>{/if}{/each}
+      {#each sourceFields as field}{#if source[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={source[field.key]} reading={dates?.get(source[field.key] ?? '')} />{:else if field.key === 'source_kind'}{kindName(source.source_kind)}{:else if field.key === 'publication_kind'}{t(`publicationKind.${source.publication_kind}`)}{:else}{source[field.key]}{/if}</dd></div>{/if}{/each}
       {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
       {#if source.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${source.style}`)}</dd></div>{/if}
       {#if types.length}<div><dt>{t('field.sourceTypes')}</dt><dd>{types.map(type => t(`evidence.type.${type}`)).join(' · ')}</dd></div>{/if}

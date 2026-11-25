@@ -1,6 +1,6 @@
 import { quotations } from '../quotations'
 import { readDates, sightingDates } from './date-readings'
-import { STYLES, VIAS_MAX, isStoredContexts, isStoredSightingTypes, sourceKind } from '$lib/scripts'
+import { STYLES, VIAS_MAX, isStoredContexts, isStoredSightingTypes, publicationKind, sourceKind } from '$lib/scripts'
 import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, tidyVias, type EntryFields, type SightingFields, type Via } from './entries'
 
 // Only entry fields are public; a snapshot can also hold sighting or internal data.
@@ -15,7 +15,11 @@ function parseVias(raw: unknown): Via[] | null {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return null
     if (item.container === undefined) item.container = null
     if (item.source_kind === undefined) item.source_kind = null
+    if (item.publication_kind === undefined) item.publication_kind = null
+    if (item.volume === undefined) item.volume = null
+    if (item.number === undefined) item.number = null
     if (item.source_kind !== sourceKind(item.source_kind)) return null
+    if (item.publication_kind !== publicationKind(item.publication_kind)) return null
     for (const field of CITATION_FIELDS) if (typeof item[field] !== 'string' && item[field] !== null) return null
     if (typeof item.quote !== 'string' && item.quote !== null && item.quote !== undefined) return null
     if (item.url !== null && !/^https?:\/\//i.test(item.url)) return null
@@ -32,10 +36,14 @@ export function sightingSnapshot(raw: string): SightingFields | null {
     if (!('quotes' in value)) value.quotes = null
     if (!('container' in value)) value.container = null
     if (!('source_kind' in value)) value.source_kind = null
+    if (!('publication_kind' in value)) value.publication_kind = null
+    if (!('volume' in value)) value.volume = null
+    if (!('number' in value)) value.number = null
     for (const field of SIGHTING_FIELDS) {
       if (typeof value[field] !== 'string' && value[field] !== null) return null
     }
     if (value.source_kind !== sourceKind(value.source_kind)) return null
+    if (value.publication_kind !== publicationKind(value.publication_kind)) return null
     quotations(value.quotes)
     if (!isStoredContexts(value.contexts)) return null
     if (value.style !== null && !(STYLES as readonly string[]).includes(value.style)) return null

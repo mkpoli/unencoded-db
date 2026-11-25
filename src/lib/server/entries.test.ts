@@ -24,8 +24,8 @@ const described = (...sequences: string[]) => fields({ claims: sequences.map(seq
 const relation = (character: string, relationship: string, difference = '', evidence = ''): Claim => claim('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) })
 // A source is found among the sightings that passed through it by the index of the chain, never by a scan.
 const VIA_SEARCH = /SEARCH v USING (COVERING )?INDEX sighting_vias_by_source \(source_id=\?\)/
-const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, quote: null, ...over })
-const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
+const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, publication_kind: null, volume: null, number: null, quote: null, ...over })
+const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, publication_kind: null, volume: null, number: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
 const image: StoredImage = { image_key: 'a.webp', image_type: 'image/webp', image_w: 100, image_h: 100, thumb_key: 't.webp', box: null }
 
 let db: D1Database, raw: ReturnType<typeof openTestDb>['raw'], who: { actor: string; ip: null }
@@ -2382,7 +2382,7 @@ describe('digitized copy filter', () => {
 })
 
 describe('personal communications', () => {
-  const letter = (more: Partial<Via> = {}) => via({ author: '甲', publisher: 'QQ', report_date: '2026-11-14', source_kind: 'personal', quote: 'as told', ...more })
+  const letter = (more: Partial<Via> = {}) => via({ author: '甲', publisher: 'QQ', report_date: '2026-11-14', source_kind: 'personal', publication_kind: null, volume: null, number: null, quote: 'as told', ...more })
 
   test('a private message is a source of its own, apart from the same citation without the kind', async () => {
     const id = await createEntry(db, fields(), seen({ title: 'A book', vias: [letter(), letter({ source_kind: null })] }), [], who)
@@ -2393,7 +2393,7 @@ describe('personal communications', () => {
 
   test('a citation is keyed by its fields up to the last one given', async () => {
     const key = (author: string) => (raw.query('SELECT hash FROM sources WHERE author = ?').get(author) as { hash: string }).hash
-    await createEntry(db, fields(), seen({ title: 'A book', vias: [letter({ author: 'a' }), letter({ author: 'b', source_kind: null, container: 'group' })] }), [], who)
+    await createEntry(db, fields(), seen({ title: 'A book', vias: [letter({ author: 'a' }), letter({ author: 'b', source_kind: null, publication_kind: null, volume: null, number: null, container: 'group' })] }), [], who)
     expect(key('a')).toBe(await hashHex(JSON.stringify([null, null, 'a', 'QQ', '2026-11-14', null, 'personal'])))
     expect(key('b')).toBe(await hashHex(JSON.stringify([null, null, 'b', 'QQ', '2026-11-14', 'group'])))
   })
@@ -2413,6 +2413,40 @@ describe('personal communications', () => {
     expect(readSightingFields(form).source_kind).toBeNull()
     const id = await createEntry(db, fields(), seen({ url: null, title: null, source_kind: 'personal' }), [], who)
     expect((await getEntry(db, id))!.sightings[0].source_id).toBeNull()
+  })
+})
+
+describe('publication details', () => {
+  test('reads volume, number and publication kind, and infers a periodical or a web source', () => {
+    const form = new FormData()
+    form.set('place', 'A citation'); form.set('title', 'Article'); form.set('volume', '12'); form.set('number', '3')
+    expect(readSightingFields(form)).toMatchObject({ publication_kind: 'journal', volume: '12', number: '3' })
+    form.set('publication_kind', 'newspaper')
+    expect(readSightingFields(form).publication_kind).toBe('newspaper')
+    form.delete('publication_kind'); form.delete('volume'); form.delete('number')
+    form.set('url', 'https://example.test/page')
+    expect(readSightingFields(form).publication_kind).toBe('website')
+    form.set('container', 'A journal')
+    expect(readSightingFields(form).publication_kind).toBeNull()
+    form.delete('container'); form.set('source_kind', 'personal')
+    expect(readSightingFields(form).publication_kind).toBeNull()
+  })
+
+  test('keeps the details in the source and in past versions', async () => {
+    const id = await createEntry(db, fields(), seen({ title: 'Article', publisher: 'Journal Press', publication_kind: 'journal', volume: '12', number: '3' }), [], who)
+    const sighting = (await getEntry(db, id))!.sightings[0]
+    expect(sighting).toMatchObject({ publication_kind: 'journal', volume: '12', number: '3' })
+    expect(raw.query('SELECT publication_kind, volume, number FROM sources WHERE title = ?').get('Article')).toEqual({ publication_kind: 'journal', volume: '12', number: '3' })
+    const row = (await history(db, id)).find(row => row.kind === 'sighting')!
+    expect(JSON.parse(row.snapshot)).toMatchObject({ publication_kind: 'journal', volume: '12', number: '3' })
+  })
+
+  test('files a publisher under the kind its visible sources mostly name', async () => {
+    await createEntry(db, fields(), seen({ title: 'A journal article', publisher: 'Journal Press', publication_kind: 'journal' }), [], who)
+    await createEntry(db, fields(), seen({ title: 'A second article', publisher: 'Journal Press', publication_kind: 'journal' }), [], who)
+    await createEntry(db, fields(), seen({ title: 'A book', publisher: 'Journal Press', publication_kind: 'book' }), [], who)
+    const press = (await publisherDirectory(db)).find(publisher => publisher.label === 'Journal Press')!
+    expect(press.publicationKind).toBe('journal')
   })
 })
 

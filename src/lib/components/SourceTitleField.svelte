@@ -17,9 +17,10 @@
   const byKey = $derived(new Map(matches.map(source => [String(source.id), source])))
   type Cursor = [string, number]
   let page = $state<{ cursor: Cursor | null }>({ cursor: null }), next = $state<Cursor | null>(null)
+  const details = (source: Source) => [source.volume && `${t('field.volume')} ${source.volume}`, source.number && `${t('field.number')} ${source.number}`].filter(Boolean).join(' · ')
   const options = $derived<ComboOption[]>([...matches.map(source => ({
     key: String(source.id),
-    label: source.title || (source.container && [source.author, source.container].filter(Boolean).join(' · ')) || source.url || [source.author, kindName(source.source_kind)].filter(Boolean).join(' · ') || source.publisher || source.report_date || `#${source.id}`,
+    label: [source.title || (source.container && [source.author, source.container].filter(Boolean).join(' · ')) || source.url || [source.author, kindName(source.source_kind)].filter(Boolean).join(' · ') || source.publisher || source.report_date || `#${source.id}`, details(source)].filter(Boolean).join(' · '),
   })), ...(next !== null ? [{ key: 'more', more: true, label: t('browse.more') }] : [])])
 
   function search(text: string) {
@@ -73,6 +74,7 @@
             {:else if source.alias && source.alias !== option.label}<span>{t('source.alias')} · {source.alias}</span>{/if}
             {#if source.author}<span>{t('field.author')} · {source.author}</span>{/if}
             {#if source.container && source.title}<span>{t('field.container')} · {source.container}</span>{/if}
+            {#if details(source)}<span>{details(source)}</span>{/if}
             {#if source.source_kind}<span>{kindName(source.source_kind)}</span>{/if}
             {#if source.publisher}<span>{t('field.publisher')} · {source.publisher}</span>{/if}
             {#if source.report_date}<span>{t('field.reportDate')} · <EvidenceDate text={source.report_date} reading={westernDate(source.report_date)} /></span>{/if}

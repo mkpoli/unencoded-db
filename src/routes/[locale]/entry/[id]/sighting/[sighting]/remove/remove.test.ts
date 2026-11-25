@@ -7,7 +7,7 @@ import { actions as history, load as loadHistory } from '../../../history/+page.
 import { load as loadReport } from '../../../report/+page.server'
 import { actions, load } from './+page.server'
 
-const seen = (place: string, original_date: string | null = null) => ({ place, url: null, title: null, container: null, source_kind: null, author: null, publisher: null, report_date: null, vias: [], original_date, page: null, contexts: null, style: null, types: null, quotes: null, note: null }) as SightingFields
+const seen = (place: string, original_date: string | null = null) => ({ place, url: null, title: null, container: null, source_kind: null, publication_kind: null, volume: null, number: null, author: null, publisher: null, report_date: null, vias: [], original_date, page: null, contexts: null, style: null, types: null, quotes: null, note: null }) as SightingFields
 
 async function fixture() {
   const { db, raw } = openTestDb()

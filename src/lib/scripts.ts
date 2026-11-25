@@ -67,6 +67,11 @@ export const SOURCE_KINDS = ['personal'] as const
 export type SourceKind = (typeof SOURCE_KINDS)[number]
 export const sourceKind = (raw: string | null | undefined): SourceKind | null => SOURCE_KINDS.find(kind => kind === raw) ?? null
 
+// The kind of publication a citation names. A publisher is filed under the kinds of the sources that cite it.
+export const PUBLICATION_KINDS = ['book', 'journal', 'newspaper', 'website', 'other'] as const
+export type PublicationKind = (typeof PUBLICATION_KINDS)[number]
+export const publicationKind = (raw: string | null | undefined): PublicationKind | null => PUBLICATION_KINDS.find(kind => kind === raw) ?? null
+
 // A sighting stores the options chosen from a list as a JSON array in the order of the list, or null for none.
 function parseChosen<T extends string>(options: readonly T[], raw: string | null | undefined): T[] {
   try {

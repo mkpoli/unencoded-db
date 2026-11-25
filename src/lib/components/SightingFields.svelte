@@ -8,19 +8,20 @@
   import ContainerField from './ContainerField.svelte'
   import { tick, untrack } from 'svelte'
   import { flip } from 'svelte/animate'
-  import { CONTEXTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, parseContexts, parseSightingTypes } from '$lib/scripts'
+  import { CONTEXTS, PUBLICATION_KINDS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, parseContexts, parseSightingTypes } from '$lib/scripts'
   import { cleanLinkInput } from '$lib/link-input'
   import { fetchPost, postId, type PostInfo } from '$lib/source-url'
   import { westernDate } from '$lib/dates'
   import { eraRead, t } from '$lib/t'
   import type { Citation, SightingFields, Via } from '$lib/server/entries'
+  import type { PublicationKind } from '$lib/scripts'
   import { VIAS_MAX } from '$lib/scripts'
 
   let { values = {}, onphotos }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void } = $props()
   const uid = $props.id()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
   const appears = $derived(new Set(parseContexts(values.contexts)))
-  const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.container || values.source_kind || values.original_date || values.page || values.contexts || values.style || values.types || values.quotes || values.note))
+  const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.container || values.source_kind || values.publication_kind || values.volume || values.number || values.original_date || values.page || values.contexts || values.style || values.types || values.quotes || values.note))
 
   let place = $state(untrack(() => values.place ?? ''))
   let url = $state(untrack(() => values.url ?? ''))
@@ -35,11 +36,14 @@
   let publisher = $state(untrack(() => values.publisher ?? ''))
   let container = $state(untrack(() => values.container ?? ''))
   let kind = $state(untrack(() => values.source_kind ?? ''))
+  let publicationKind = $state(untrack(() => values.publication_kind ?? ''))
+  let volume = $state(untrack(() => values.volume ?? ''))
+  let number = $state(untrack(() => values.number ?? ''))
 
   // The chain, nearest the cited work first. One empty row is always there to fill.
-  type Row = { key: number; url: string; title: string; author: string; publisher: string; date: string; container: string; kind: string; quote: string }
+  type Row = { key: number; url: string; title: string; author: string; publisher: string; date: string; container: string; kind: string; publicationKind: string; volume: string; number: string; quote: string }
   let nextKey = 0
-  const via = (from?: Partial<Via>): Row => ({ key: nextKey++, url: from?.url ?? '', title: from?.title ?? '', author: from?.author ?? '', publisher: from?.publisher ?? '', date: from?.report_date ?? '', container: from?.container ?? '', kind: from?.source_kind ?? '', quote: from?.quote ?? '' })
+  const via = (from?: Partial<Via>): Row => ({ key: nextKey++, url: from?.url ?? '', title: from?.title ?? '', author: from?.author ?? '', publisher: from?.publisher ?? '', date: from?.report_date ?? '', container: from?.container ?? '', kind: from?.source_kind ?? '', publicationKind: from?.publication_kind ?? '', volume: from?.volume ?? '', number: from?.number ?? '', quote: from?.quote ?? '' })
   const passage = (from?: Quotation) => ({ key: nextKey++, text: from?.text ?? '', locator: from?.locator ?? '' })
   let passages = $state(untrack(() => {
     const saved = quotations(values.quotes)
@@ -184,6 +188,9 @@
     reportDate = source.report_date ?? ''
     container = source.container ?? ''
     kind = source.source_kind ?? ''
+    publicationKind = source.publication_kind ?? ''
+    volume = source.volume ?? ''
+    number = source.number ?? ''
     lookedUp = url = source.url ?? ''
     if (!samePost && postedPassage !== null) {
       const row = passages.find(item => item.key === postedPassage)
@@ -196,9 +203,10 @@
   }
 
   function chooseVia(row: Row, source: Citation) {
-    const sameSource = row.url && row.url === source.url && row.container === (source.container ?? '') && row.kind === (source.source_kind ?? '') || (
+    const sameSource = row.url && row.url === source.url && row.container === (source.container ?? '') && row.kind === (source.source_kind ?? '') && row.publicationKind === (source.publication_kind ?? '') && row.volume === (source.volume ?? '') && row.number === (source.number ?? '') || (
       row.url === (source.url ?? '') && row.title === (source.title ?? '') && row.author === (source.author ?? '')
       && row.publisher === (source.publisher ?? '') && row.date === (source.report_date ?? '') && row.container === (source.container ?? '') && row.kind === (source.source_kind ?? '')
+      && row.publicationKind === (source.publication_kind ?? '') && row.volume === (source.volume ?? '') && row.number === (source.number ?? '')
     )
     if (!blankVia(row) && !sameSource) row.quote = ''
     if (row.key === postedKey) postedKey = null
@@ -209,6 +217,9 @@
     row.date = source.report_date ?? ''
     row.container = source.container ?? ''
     row.kind = source.source_kind ?? ''
+    row.publicationKind = source.publication_kind ?? ''
+    row.volume = source.volume ?? ''
+    row.number = source.number ?? ''
   }
 
   $effect(() => {
@@ -246,6 +257,11 @@
     <select {id} class="input" {name} {value} onchange={event => onpick(event.currentTarget.value)}><option value="">—</option>{#each SOURCE_KINDS as item}<option value={item}>{t(`sourceKind.${item}`)}</option>{/each}</select></div>
 {/snippet}
 
+{#snippet publicationKindField(id: string, name: string, value: string, onpick: (value: string) => void)}
+  <div class="field"><label for={id}>{t('field.publicationKind')}</label>
+    <select {id} class="input" {name} {value} onchange={event => onpick(event.currentTarget.value)}><option value="">—</option>{#each PUBLICATION_KINDS as item}<option value={item}>{t(`publicationKind.${item}`)}</option>{/each}</select></div>
+{/snippet}
+
 <div class="field">
   <label for="{uid}-url">{t('field.url')}</label>
   <input id="{uid}-url" class="input" type="url" name="url" bind:value={url} use:cleanLinkInput placeholder="https://" maxlength="1000" pattern="[hH][tT][tT][pP][sS]?://.+" autocorrect="off" autocapitalize="none" spellcheck="false" />
@@ -273,7 +289,10 @@
     <SourceTitleField id="{uid}-title" name="title" bind:value={title} onselect={chooseSource} />
     <div class="field"><label for="{uid}-author">{t('field.author')}</label><input id="{uid}-author" class="input" name="author" bind:value={author} maxlength="300" /></div>
     <ContainerField id="{uid}-container" name="container" bind:value={container} bind:publisher />
-    <PublisherField id="{uid}-publisher" name="publisher" bind:value={publisher} />
+    <PublisherField id="{uid}-publisher" name="publisher" bind:value={publisher} onpick={picked => publicationKind = picked ?? ''} />
+    {@render publicationKindField(`${uid}-publication_kind`, 'publication_kind', publicationKind, value => publicationKind = value)}
+    <div class="field"><label for="{uid}-volume">{t('field.volume')}</label><input id="{uid}-volume" class="input" name="volume" bind:value={volume} maxlength="80" /></div>
+    <div class="field"><label for="{uid}-number">{t('field.number')}</label><input id="{uid}-number" class="input" name="number" bind:value={number} maxlength="80" /></div>
     {@render kindField(`${uid}-source_kind`, 'source_kind', kind, value => kind = value)}
     <div class="field"><label for="{uid}-page">{t('field.page')}</label><input id="{uid}-page" class="input" name="page" bind:value={page} maxlength="80" /></div>
     <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" bind:value={reportDate} aria-describedby="{uid}-report_date-hint {uid}-report_date-read" /><p class="hint" id="{uid}-report_date-hint">{t('field.reportDateHint')}</p>{@render yearRead(`${uid}-report_date`, reportDate)}</div>
@@ -308,7 +327,10 @@
         <SourceTitleField id="{uid}-via_title-{row.key}" name="via_title" bind:value={row.title} onselect={source => chooseVia(row, source)} />
         <div class="field"><label for="{uid}-via_author-{row.key}">{t('field.author')}</label><input id="{uid}-via_author-{row.key}" class="input" name="via_author" bind:value={row.author} maxlength="300" /></div>
         <ContainerField id="{uid}-via_container-{row.key}" name="via_container" bind:value={row.container} bind:publisher={row.publisher} />
-        <PublisherField id="{uid}-via_publisher-{row.key}" name="via_publisher" bind:value={row.publisher} />
+        <PublisherField id="{uid}-via_publisher-{row.key}" name="via_publisher" bind:value={row.publisher} onpick={picked => row.publicationKind = picked ?? ''} />
+        {@render publicationKindField(`${uid}-via_publication_kind-${row.key}`, 'via_publication_kind', row.publicationKind, value => row.publicationKind = value)}
+        <div class="field"><label for="{uid}-via_volume-{row.key}">{t('field.volume')}</label><input id="{uid}-via_volume-{row.key}" class="input" name="via_volume" bind:value={row.volume} maxlength="80" /></div>
+        <div class="field"><label for="{uid}-via_number-{row.key}">{t('field.number')}</label><input id="{uid}-via_number-{row.key}" class="input" name="via_number" bind:value={row.number} maxlength="80" /></div>
         {@render kindField(`${uid}-via_source_kind-${row.key}`, 'via_source_kind', row.kind, value => row.kind = value)}
         <div class="field"><label for="{uid}-via_report_date-{row.key}">{t('field.reportDate')}</label><input id="{uid}-via_report_date-{row.key}" class="input" name="via_report_date" bind:value={row.date} aria-describedby="{uid}-via_report_date-{row.key}-read" />{@render yearRead(`${uid}-via_report_date-${row.key}`, row.date)}</div>
       </div>
@@ -332,6 +354,10 @@
         <div class="field"><label for="{uid}-via_author-next">{t('field.author')}</label><input id="{uid}-via_author-next" class="input" name="via_author" maxlength="300" /></div>
         <div class="field"><label for="{uid}-via_container-next">{t('field.container')}</label><input id="{uid}-via_container-next" class="input" name="via_container" maxlength="300" /></div>
         <div class="field"><label for="{uid}-via_publisher-next">{t('field.publisher')}</label><input id="{uid}-via_publisher-next" class="input" name="via_publisher" maxlength="300" /></div>
+        <div class="field"><label for="{uid}-via_publication_kind-next">{t('field.publicationKind')}</label>
+          <select id="{uid}-via_publication_kind-next" class="input" name="via_publication_kind"><option value="">—</option>{#each PUBLICATION_KINDS as item}<option value={item}>{t(`publicationKind.${item}`)}</option>{/each}</select></div>
+        <div class="field"><label for="{uid}-via_volume-next">{t('field.volume')}</label><input id="{uid}-via_volume-next" class="input" name="via_volume" maxlength="80" /></div>
+        <div class="field"><label for="{uid}-via_number-next">{t('field.number')}</label><input id="{uid}-via_number-next" class="input" name="via_number" maxlength="80" /></div>
         <div class="field"><label for="{uid}-via_report_date-next">{t('field.reportDate')}</label><input id="{uid}-via_report_date-next" class="input" name="via_report_date" /></div>
         {@render kindField(`${uid}-via_source_kind-next`, 'via_source_kind', '', () => {})}
       </div>

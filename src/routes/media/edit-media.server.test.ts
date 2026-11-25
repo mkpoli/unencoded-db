@@ -4,7 +4,7 @@ import { editSighting, type SightingFields, type StoredImage } from '$lib/server
 import { GET } from './[...key]/+server'
 
 const original = `${'a'.repeat(64)}.png`, thumb = `${'b'.repeat(64)}.webp`, replacement = `${'c'.repeat(64)}.jpg`
-const fields: SightingFields = { place: 'New place', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
+const fields: SightingFields = { place: 'New place', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, publication_kind: null, volume: null, number: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
 const image: StoredImage = { image_key: replacement, thumb_key: replacement, image_type: 'image/jpeg', image_w: 20, image_h: 20, box: null }
 
 test('sighting edits atomically replace or remove served pictures', async () => {

@@ -7,7 +7,7 @@ import { nameKey, nameLabel, sourceNameKey } from '../name-key'
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
-import { CONTEXTS, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
+import { CONTEXTS, isScript, NEEDS, publicationKind, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
 import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
@@ -32,7 +32,7 @@ export type EntryFields = { script: string; script_other: string | null; descrip
 export type Citation = Record<typeof CITATION_FIELDS[number], string | null>
 // A link in a sighting's chain: the source, and the words of it this sighting quotes.
 export type Via = Citation & { quote: string | null }
-export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; source_kind: string | null; vias: Via[]; original_date: string | null; page: string | null; contexts: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
+export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; source_kind: string | null; publication_kind: string | null; volume: string | null; number: string | null; vias: Via[]; original_date: string | null; page: string | null; contexts: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
 export type Entry = Omit<EntryFields, 'claims'> & { status: Status | null; id: number; rev: number; ids: string | null; layout: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
@@ -46,13 +46,15 @@ const FILLED_FIELDS = ['description', 'radical', 'strokes'] as const
 // it passed through, from the one nearest the cited work to the one the contributor saw: a post that shows
 // a page of the cited work, say. `container` is what the source appeared in: the journal of an article, the
 // site of a page, the group of a chat message. A message has an author, a date and a container, and no title.
-// `source_kind` marks a personal communication, which has no container to look it up in.
-export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind'] as const
-const blankCitation = (citation: Citation) => CITATION_FIELDS.every(field => field === 'source_kind' || citation[field] === null)
+// `source_kind` marks a personal communication, which has no container to look it up in. `publication_kind`
+// is the kind of publication and, with a periodical's volume and number, is part of the citation itself.
+export const CITATION_FIELDS = ['url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind', 'publication_kind', 'volume', 'number'] as const
+const CITATION_DETAILS = ['source_kind', 'publication_kind', 'volume', 'number'] as const
+const blankCitation = (citation: Citation) => CITATION_FIELDS.every(field => (CITATION_DETAILS as readonly string[]).includes(field) || citation[field] === null)
 // The form sends each via as one value of each of these, repeated once per via and aligned by position.
-export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_container', 'via_source_kind', 'via_quote'] as const
+export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_container', 'via_source_kind', 'via_quote', 'via_publication_kind', 'via_volume', 'via_number'] as const
 export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
-export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
+export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes', 'publication_kind', 'volume', 'number'] as const
 export const IMAGE_FIELDS = ['image_key', 'image_type', 'image_w', 'image_h', 'thumb_key', 'box'] as const
 
 const clean = (raw: unknown, max: number) => {
@@ -86,16 +88,27 @@ export const hasLink = (fields: Pick<SightingFields, 'url' | 'vias'>) => Boolean
 function readVias(form: FormData): Via[] {
   const columns = VIA_INPUTS.map(name => form.getAll(name))
   const rows = Math.max(...columns.map(column => column.length))
-  return tidyVias(Array.from({ length: rows }, (_, index) => ({
-    url: cleanLink(columns[0][index]),
-    title: clean(columns[1][index], 300),
-    author: clean(columns[2][index], 300),
-    publisher: clean(columns[3][index], 300),
-    report_date: dateText(columns[4][index]),
-    container: clean(columns[5][index], 300),
-    source_kind: sourceKind(clean(columns[6][index], 20)),
-    quote: clean(columns[7][index], 5000),
-  })))
+  return tidyVias(Array.from({ length: rows }, (_, index) => {
+    const url = cleanLink(columns[0][index])
+    const container = clean(columns[5][index], 300)
+    const source_kind = sourceKind(clean(columns[6][index], 20))
+    const volume = clean(columns[9][index], 80), number = clean(columns[10][index], 80)
+    const publication_kind = publicationKind(clean(columns[8][index], 20))
+      ?? (source_kind === 'personal' ? null : volume || number ? 'journal' : url && !container ? 'website' : null)
+    return {
+      url,
+      title: clean(columns[1][index], 300),
+      author: clean(columns[2][index], 300),
+      publisher: clean(columns[3][index], 300),
+      report_date: dateText(columns[4][index]),
+      container,
+      source_kind,
+      quote: clean(columns[7][index], 5000),
+      publication_kind,
+      volume,
+      number,
+    }
+  }))
 }
 const oneOf = (value: string | null, allowed: readonly string[]) => (value && allowed.includes(value) ? value : null)
 const now = () => new Date().toISOString()
@@ -127,6 +140,13 @@ export function readSightingFields(form: FormData): SightingFields {
     return text ? [{ text, locator: clean(locators[i], 300) }] : []
   })
   const chosen = (name: string) => new Set(form.getAll(name).map(String))
+  const source_kind = sourceKind(text(form, 'source_kind', 20))
+  const volume = text(form, 'volume', 80), number = text(form, 'number', 80)
+  const container = text(form, 'container', 300)
+  // A volume or number names a periodical; a link with no container is a web source. A personal
+  // communication stays outside the published kinds.
+  const publication_kind = publicationKind(text(form, 'publication_kind', 20))
+    ?? (source_kind === 'personal' ? null : volume || number ? 'journal' : safeUrl && !container ? 'website' : null)
   const fields: SightingFields = {
     // A link alone answers where it was found.
     place: text(form, 'place', 500) ?? safeUrl ?? '',
@@ -135,8 +155,11 @@ export function readSightingFields(form: FormData): SightingFields {
     author: text(form, 'author', 300),
     publisher: text(form, 'publisher', 300),
     report_date: dateText(form.get('report_date')),
-    container: text(form, 'container', 300),
-    source_kind: sourceKind(text(form, 'source_kind', 20)),
+    container,
+    source_kind,
+    publication_kind,
+    volume,
+    number,
     vias: readVias(form),
     original_date: dateText(form.get('original_date')),
     page: text(form, 'page', 80),
@@ -146,7 +169,12 @@ export function readSightingFields(form: FormData): SightingFields {
     note: text(form, 'note', 5000),
     quotes: quotes.length ? JSON.stringify(quotes) : null,
   }
-  if (blankCitation(fields)) fields.source_kind = null
+  if (blankCitation(fields)) {
+    fields.source_kind = null
+    fields.publication_kind = null
+    fields.volume = null
+    fields.number = null
+  }
   return fields
 }
 
@@ -394,7 +422,7 @@ async function citationOf(db: D1Database, citation: Citation, dates: DateBook) {
   }
   const [url, title, author, imprint, date, container] = values
   const sourceName = sourceNameKey(title || url || author || imprint || date || container || '')
-  statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup, container_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName, container && nameKey(container) || null))
+  statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup, container_lookup) VALUES(${Array(CITATION_FIELDS.length + 5).fill('?').join(', ')}) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName, container && nameKey(container) || null))
   return { hash, statements }
 }
 // The hash of the cited work, and the links of the chain with the words each quotes.

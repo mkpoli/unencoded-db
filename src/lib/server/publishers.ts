@@ -1,4 +1,5 @@
 import { nameKey } from '../name-key'
+import { publicationKind } from '../scripts'
 
 // A UTF-8 name beginning with the query sorts below the same prefix followed by FF.
 // Limit each index range before combining the two lists.
@@ -15,14 +16,16 @@ export function publisherSuggestions(db: D1Database, query: string) {
     : `SELECT id FROM publishers WHERE listed = 1 ORDER BY lookup LIMIT ${SUGGESTIONS}`
 
   const statement = db.prepare(`SELECT p.id, p.name,
-    (SELECT json_group_array(spelling) FROM publisher_aliases a WHERE a.publisher_id = p.id) AS aliases
+    (SELECT json_group_array(spelling) FROM publisher_aliases a WHERE a.publisher_id = p.id) AS aliases,
+    (SELECT s.publication_kind FROM sources s WHERE s.publisher_id = p.id AND s.records > 0 AND s.publication_kind IS NOT NULL
+      GROUP BY s.publication_kind ORDER BY count(*) DESC, s.publication_kind LIMIT 1) AS publication_kind
     FROM (${candidates}) m CROSS JOIN publishers p ON p.id = m.id ORDER BY p.lookup LIMIT ${SUGGESTIONS}`)
   return key ? statement.bind(key) : statement
 }
 
 export async function publisherDirectory(db: D1Database, query = '') {
-  const { results } = await publisherSuggestions(db, query).all<{ id: number; name: string; aliases: string }>()
-  return results.map(p => ({ id: p.id, label: p.name, aliases: JSON.parse(p.aliases) as string[] }))
+  const { results } = await publisherSuggestions(db, query).all<{ id: number; name: string; aliases: string; publication_kind: string | null }>()
+  return results.map(p => ({ id: p.id, label: p.name, aliases: JSON.parse(p.aliases) as string[], publicationKind: publicationKind(p.publication_kind) }))
 }
 
 export function publicPublisher(db: D1Database, text: string) {

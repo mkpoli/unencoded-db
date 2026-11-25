@@ -12,7 +12,7 @@
   let { vias, label = true, dates }: { vias: readonly Via[]; label?: boolean; dates?: Map<string, DateReading | null> } = $props()
   // The container stands as the name of a source without a title, so it is not said twice.
   // The same holds for a personal communication, which often has neither.
-  const meta = (via: Via) => [via.author, via.title ? via.container : null, via.title || via.container || via.url ? kindName(via.source_kind) : null, via.publisher].filter(Boolean)
+  const meta = (via: Via) => [via.author, via.title ? via.container : null, via.title || via.container || via.url ? kindName(via.source_kind) : null, via.publisher, via.volume && `${t('field.volume')} ${via.volume}`, via.number && `${t('field.number')} ${via.number}`].filter(Boolean)
   const web = (url: string | null) => Boolean(url && /^https?:\/\//i.test(url))
 </script>
 

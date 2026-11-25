@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  export type ComboOption = { key?: string; more?: boolean; label: string; hint?: string; terms?: string; group?: number }
+  export type ComboOption = { key?: string; more?: boolean; label: string; hint?: string; terms?: string; group?: number; groupLabel?: string }
 </script>
 
 <script lang="ts">
@@ -28,6 +28,7 @@
   const active = $derived(activeKey === null ? -1 : shown.findIndex(option => (option.key ?? option.label) === activeKey))
   const expanded = $derived(open && shown.length > 0)
   const optionId = (index: number) => `${id}-option-${index}`
+  const startsGroup = (index: number) => index === 0 || shown[index].group !== shown[index - 1].group
 
   function show() {
     if (!open) onopen?.()
@@ -72,11 +73,13 @@
   <span class="chevron" aria-hidden="true">⌄</span>
   <ul bind:this={list} id="{id}-list" role="listbox" aria-labelledby={labelledby} hidden={!expanded}>
     {#each shown as option, index (index)}
+      {#if startsGroup(index) && option.groupLabel}<li class="group" role="presentation" aria-hidden="true">{option.groupLabel}</li>{/if}
       <!-- The input takes the keys for the list and names the active option, as the combobox pattern has it. -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <li
         id={optionId(index)} role="option" aria-selected={index === active} class:active={index === active}
-        class:chosen={!option.key && fold(option.label) === fold(value)} class:break={index > 0 && option.group !== shown[index - 1].group}
+        class:chosen={!option.key && fold(option.label) === fold(value)} class:break={!option.groupLabel && index > 0 && option.group !== shown[index - 1].group}
+        aria-label={option.groupLabel ? `${option.groupLabel}: ${option.label}` : undefined}
         onpointerdown={event => event.preventDefault()} onclick={() => take(option)}
       >
         {#if optionContent && !option.more}{@render optionContent(option)}
@@ -97,5 +100,7 @@
   li.chosen { color: var(--accent); font-weight: 500 }
   li.break { margin-top: 5px; position: relative }
   li.break::before { content: ''; position: absolute; inset-inline: 6px; top: -3px; border-top: 1px solid var(--line) }
+  li.group { position: sticky; top: 0; z-index: 1; min-height: 0; margin: 0 -4px; padding: 7px 14px 4px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; background: var(--surface); cursor: default }
+  li.group:hover { background: var(--surface) }
   .hint { color: var(--muted); font-size: 12.5px; font-weight: 400 }
 </style>
