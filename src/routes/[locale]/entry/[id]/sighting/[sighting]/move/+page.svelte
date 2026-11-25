@@ -43,12 +43,14 @@
         <input class="input" id="to" name="to" value={data.typed} placeholder={t('duplicate.of')} required />
         <button class="button primary" type="submit">{t('duplicate.compare')}</button>
       </form>
+      <a class="text-link split" href={href(`/entry/${data.id}/sighting/${data.sighting.id}/split`)}>{t('sighting.splitLink')}</a>
     {/if}
   {/if}
 </div>
 
 <style>
   .back { align-self:start; color:var(--muted) }
+  .split { align-self:start }
   .find .input { flex:1 1 0; width:auto; min-width:0 }
   .pair { display:grid; grid-template-columns:repeat(2,minmax(0,240px)); gap:24px }
   .pair figure { margin:0; min-width:0 }

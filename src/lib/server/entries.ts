@@ -686,7 +686,7 @@ export async function redactRevision(db: D1Database, entry: number, revisionId: 
   await db.batch([
     // A redacted merge still says which record it joined and what it gave, by key, so it can be undone, and a
     // redacted move which evidence went where.
-    db.prepare(`UPDATE revisions SET snapshot = CASE WHEN kind = 'hide' THEN snapshot WHEN kind = 'edit' AND json_extract(snapshot, '$.moved') IS NOT NULL THEN json_object('moved', json_extract(snapshot, '$.moved')) WHEN kind IN ('merge','unmerge') THEN json_object('from', json_extract(snapshot, '$.from'), 'into', json_extract(snapshot, '$.into'), 'added', json(json_extract(snapshot, '$.added')), 'scoped', json(json_extract(snapshot, '$.scoped')), 'filled', json(json_extract(snapshot, '$.filled'))) ELSE '{}' END, summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
+    db.prepare(`UPDATE revisions SET snapshot = CASE WHEN kind = 'hide' THEN snapshot WHEN kind IN ('create','edit') AND json_extract(snapshot, '$.moved') IS NOT NULL THEN json_object('moved', json_extract(snapshot, '$.moved')) WHEN kind IN ('merge','unmerge') THEN json_object('from', json_extract(snapshot, '$.from'), 'into', json_extract(snapshot, '$.into'), 'added', json(json_extract(snapshot, '$.added')), 'scoped', json(json_extract(snapshot, '$.scoped')), 'filled', json(json_extract(snapshot, '$.filled'))) ELSE '{}' END, summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
     db.prepare('DELETE FROM date_readings WHERE transcription NOT IN (SELECT value FROM evidence_dates WHERE value IS NOT NULL)'),
     revision(db, who, { entry, sighting: row.sighting_id, kind: 'redact', rev: row.rev, snapshot: JSON.stringify({ revision: revisionId }), summary }),
   ])
@@ -813,23 +813,40 @@ export type MoveResult = 'done' | 'missing' | 'merged' | 'conflict' | 'only' | '
 // a record merged into the first says of it stays there.
 export async function moveSighting(db: D1Database, from: number, id: number, baseRev: number, into: number, who: Who, summary: string | null): Promise<MoveResult> {
   if (from === into) return 'same'
+  const result = await relocate(db, from, id, baseRev, into, who, summary)
+  return typeof result === 'string' ? result : 'done'
+}
+
+/** Moves a sighting to a record made for it in the same write, and answers that record. */
+export async function splitSighting(db: D1Database, from: number, id: number, baseRev: number, fields: EntryFields, who: Who, summary: string | null): Promise<{ id: number } | Exclude<MoveResult, 'done' | 'same'>> {
+  await ensureTags(db, valuesOf(fields.claims, 'tag'), who)
+  return relocate(db, from, id, baseRev, { ...fields, claims: mapSightings(fields.claims, () => null) }, who, summary)
+}
+
+const nextEntry = async (db: D1Database) => ((await db.prepare(`SELECT ${ENTRY_SEQ} AS seq`).first<{ seq: number | null }>())?.seq ?? 0) + 1
+
+async function relocate(db: D1Database, from: number, id: number, baseRev: number, to: number | EntryFields, who: Who, summary: string | null): Promise<{ id: number } | Exclude<MoveResult, 'done' | 'same'>> {
   for (let attempt = 0; ; attempt++) {
+    // A new record takes the next number. Another one made meanwhile has it, and the write starts over.
+    const made = typeof to === 'number' ? null : to
+    const into = typeof to === 'number' ? to : await nextEntry(db)
     const marks = [await revisionMark(db, from), await revisionMark(db, into)]
-    const source = await getEntryRow(db, from), target = await getEntryRow(db, into)
+    const source = await getEntryRow(db, from)
+    const target = made ? { ...snapshotOf(made, ENTRY_FIELDS), id: into, rev: 0, merged_into: null, hidden_at: null } as unknown as Entry : await getEntryRow(db, into)
     if (!source || source.hidden_at || !target || target.hidden_at) return 'missing'
     if (source.merged_into || target.merged_into) return 'merged'
-    const [leaving, staying] = [await sightingRows(db, from), await sightingRows(db, into)]
+    const [leaving, staying] = [await sightingRows(db, from), made ? [] : await sightingRows(db, into)]
     const sighting = leaving.find(item => item.id === id)
     if (!sighting || sighting.hidden_at) return 'missing'
     if (sighting.rev !== baseRev) return 'conflict'
     if (standsAlone(leaving, id)) return 'only'
     if (staying.length >= SIGHTINGS_MAX) return 'crowded'
-    const past = (entry: number, way: 'from' | 'to') => db.prepare(`SELECT json_extract(snapshot, '$.moved') AS moved FROM revisions WHERE entry_id = ? AND kind = 'edit' AND json_extract(snapshot, '$.moved.sighting') = ? AND json_extract(snapshot, '$.moved.${way}') IS NOT NULL ORDER BY id DESC LIMIT 1`).bind(entry, id)
+    const past = (entry: number, way: 'from' | 'to') => db.prepare(`SELECT json_extract(snapshot, '$.moved') AS moved FROM revisions WHERE entry_id = ? AND kind IN ('create','edit') AND json_extract(snapshot, '$.moved.sighting') = ? AND json_extract(snapshot, '$.moved.${way}') IS NOT NULL ORDER BY id DESC LIMIT 1`).bind(entry, id)
     const [came, went] = (await db.batch<{ moved: string }>([past(from, 'from'), past(into, 'to')])).map(({ results }) => results[0] ? JSON.parse(results[0].moved) as Partial<Brought> & { first?: number } : null)
     // Moved back, it is again the part of the record it was.
     const { results: parts } = await db.prepare(`${PARTS} SELECT id FROM part`).bind(into).all<{ id: number }>()
     const first = parts.some(part => part.id === went?.first) ? went!.first! : into
-    const claims = moveClaims(await claimRows(db, from), await claimRows(db, into), id, into, { added: came?.added ?? [], joined: came?.joined ?? [] })
+    const claims = moveClaims(await claimRows(db, from), made ? made.claims : await claimRows(db, into), id, into, { added: came?.added ?? [], joined: came?.joined ?? [] })
     const left = leaving.filter(item => item.id !== id), held = [...staying, { ...sighting, entry_id: into, first_entry: first }].sort((a, b) => a.id - b.id)
     const at = now()
     const indexes = [...await reindex(db, from, source, claims.from, left), ...await reindex(db, into, target, claims.into, held)]
@@ -838,12 +855,18 @@ export async function moveSighting(db: D1Database, from: number, id: number, bas
       checkChanged(db, entry.id, who),
       db.prepare('DELETE FROM claims WHERE entry_id = ?').bind(entry.id),
       insertClaims(db, entry.id, said),
-      revision(db, who, { entry: entry.id, kind: 'edit', rev: entry.rev + 1, snapshot: JSON.stringify({ ...JSON.parse(entrySnapshot({ ...snapshotOf(entry, ENTRY_FIELDS), claims: said } as EntryFields)), moved }), summary }),
+      revision(db, who, { entry: entry.id, kind: entry.rev ? 'edit' : 'create', rev: entry.rev + 1, snapshot: JSON.stringify({ ...JSON.parse(entrySnapshot({ ...snapshotOf(entry, ENTRY_FIELDS), claims: said } as EntryFields)), moved }), summary }),
     ]
+    const told = write(source, claims.from, { sighting: id, to: into, first: sighting.first_entry })
     try {
       await db.batch([
         checkMark(db, from, marks[0], who),
         checkMark(db, into, marks[1], who),
+        // The making of a record tells no one, so the first record tells of the move while the evidence is still its own.
+        ...(made ? [
+          db.prepare(`INSERT INTO entries(id, rev, ${ENTRY_FIELDS.join(', ')}, created_by, created_at, updated_at) VALUES(?, 0, ${ENTRY_FIELDS.map(() => '?').join(', ')}, ?, ?, ?)`).bind(into, ...ENTRY_FIELDS.map(field => made[field]), who.actor, at, at),
+          ...told,
+        ] : []),
         db.prepare('UPDATE sightings SET entry_id = ?, first_entry = ?, updated_at = ? WHERE id = ? AND entry_id = ? AND rev = ? AND hidden_at IS NULL').bind(into, first, at, id, from, baseRev),
         checkChanged(db, from, who),
         db.prepare('UPDATE revisions SET entry_id = ? WHERE entry_id = ? AND sighting_id = ?').bind(into, from, id),
@@ -851,15 +874,15 @@ export async function moveSighting(db: D1Database, from: number, id: number, bas
         db.prepare('UPDATE reports SET entry_id = ? WHERE sighting_id = ?').bind(into, id),
         // A record merged into the first keeps its own claims for an undo; they cannot rest on it either.
         db.prepare(`${PARTS} UPDATE claims SET sightings = (SELECT json_group_array(value) FROM json_each(claims.sightings) WHERE value != ?2) WHERE entry_id IN (SELECT id FROM part WHERE id != ?1) AND EXISTS (SELECT 1 FROM json_each(claims.sightings) WHERE value = ?2)`).bind(from, id),
-        ...write(source, claims.from, { sighting: id, to: into, first: sighting.first_entry }),
+        ...(made ? [] : told),
         ...write(target, claims.into, { sighting: id, from, ...claims.brought }),
         ...indexes,
         recount(db, from, [sighting.source_id, ...sighting.vias.map(via => via.id)]),
         recount(db, into),
       ])
-      return 'done'
+      return { id: into }
     } catch (error) {
-      if (attempt < 4 && ((await revisionMark(db, from)) !== marks[0] || (await revisionMark(db, into)) !== marks[1])) continue
+      if (attempt < 4 && ((await revisionMark(db, from)) !== marks[0] || (await revisionMark(db, into)) !== marks[1] || (made && await nextEntry(db) !== into))) continue
       throw error
     }
   }
