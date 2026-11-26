@@ -1,6 +1,8 @@
 <script lang="ts">
   // A picture that opens at the size it fits its frame and can be enlarged and moved. The frame stays
   // put while the picture grows inside it, so a mark drawn over the picture keeps its place at any scale.
+  // Up to the file's own resolution the enlarged picture is laid out at its enlarged size, so the browser
+  // draws it from the file's own pixels; past that it is stretched. A hidden copy keeps the size that fits.
   import type { Snippet } from 'svelte'
   import type { Box } from '$lib/picture'
   import { aroundPoint, clampZoom, confinePan, focusBox, maxZoomFor, ZOOM_MAX, ZOOM_STEP, type Pan, type Size } from '$lib/zoom'
@@ -8,7 +10,7 @@
 
   let {
     src, alt, width, height, loading = 'lazy',
-    image = $bindable(), zoom = $bindable(1), maxZoom = $bindable(ZOOM_MAX), frame = $bindable(), pan = $bindable<Pan>({ x: 0, y: 0 }),
+    image = $bindable(), zoom = $bindable(1), maxZoom = $bindable(ZOOM_MAX), fitted = $bindable<Size>({ width: 0, height: 0 }), frame = $bindable(), pan = $bindable<Pan>({ x: 0, y: 0 }),
     disabled = false, marking = false, fill = false, wheelZoom = false, hideTools = false,
     onstart, onmove, onend, onload, overlay,
   }: {
@@ -17,6 +19,7 @@
     image?: HTMLImageElement
     zoom?: number
     maxZoom?: number
+    fitted?: Size
     frame?: HTMLElement
     pan?: Pan
     disabled?: boolean
@@ -35,15 +38,23 @@
   let pinch: { distance: number; midpoint: Pan; zoom: number; pan: Pan } | null = null
   const pointers = new Map<number, { x: number; y: number }>()
   let marked: number | null = null
+  let sizer = $state<HTMLImageElement>()
+  // How many times the fitted picture must grow to show one pixel of the file per CSS pixel.
+  let native = $state(1)
+  const laid = $derived(Math.min(zoom, native))
 
-  const pictureSize = (): Size => ({ width: image?.offsetWidth ?? 0, height: image?.offsetHeight ?? 0 })
+  const pictureSize = (): Size => ({ width: sizer?.offsetWidth ?? 0, height: sizer?.offsetHeight ?? 0 })
   const naturalSize = (): Size => ({ width: image?.naturalWidth || width || 0, height: image?.naturalHeight || height || 0 })
   const frameSize = (): Size => ({ width: frame?.clientWidth ?? 0, height: frame?.clientHeight ?? 0 })
   const settled = (next: Pan, scale = zoom) => confinePan(next, scale, pictureSize(), frameSize())
 
   function syncMetrics() {
-    const fitted = pictureSize()
-    const ceiling = maxZoomFor(naturalSize(), fitted)
+    const size = pictureSize()
+    if (size.width !== fitted.width || size.height !== fitted.height) fitted = size
+    const natural = naturalSize()
+    const ratio = size.width > 0 && natural.width > 0 ? Math.max(1, natural.width / size.width) : 1
+    if (ratio !== native) native = ratio
+    const ceiling = maxZoomFor(natural, size)
     if (ceiling !== maxZoom) maxZoom = ceiling
     if (zoom > ceiling) zoom = ceiling
     const next = settled(pan, zoom)
@@ -190,7 +201,7 @@
     // The observer reports once on observe, which measures the picture as it first stands.
     const observer = new ResizeObserver(() => syncMetrics())
     observer.observe(frame)
-    if (image) observer.observe(image)
+    if (sizer) observer.observe(sizer)
     return () => observer.disconnect()
   })
 </script>
@@ -199,9 +210,12 @@
 <div class="zoom" bind:this={frame} class:fill class:marking class:panning={!marking && zoom > 1} class:dragging={Boolean(drag)}
      role="group" aria-label={t('field.imageZoom')} tabindex="0"
      onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onlostpointercapture={up} ondblclick={dblclick} onkeydown={keydown} onwheel={wheel}>
-  <div class="plane" style:transform="translate({pan.x}px, {pan.y}px) scale({zoom})" style:--inv={1 / zoom}>
-    <img bind:this={image} {src} {alt} {width} {height} {loading} draggable="false" onload={loaded} />
-    {@render overlay?.()}
+  <div class="plane" style:transform="translate({pan.x}px, {pan.y}px)">
+    <img class="sizer" bind:this={sizer} {src} alt="" aria-hidden="true" {width} {height} {loading} draggable="false" onload={syncMetrics} />
+    <div class="shown" style:inset="{(1 - laid) * 50}%" style:transform="scale({zoom / laid})" style:--inv={laid / zoom}>
+      <img bind:this={image} {src} {alt} {loading} draggable="false" onload={loaded} />
+      {@render overlay?.()}
+    </div>
   </div>
   {#if !hideTools}
     <div class="tools">
@@ -221,11 +235,14 @@
   .zoom.panning { cursor: grab; touch-action: none }
   .zoom.dragging { cursor: grabbing }
   .zoom:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: -3px }
-  .plane { position: relative; display: inline-block; max-width: 100%; line-height: 0; transform-origin: center center; will-change: transform }
-  .plane img { display: block; width: auto; height: auto; max-width: 100%; max-height: var(--picture-height, 65vh); pointer-events: none; -webkit-user-drag: none }
-  @supports (height: 1dvh) { .plane img { max-height: var(--picture-height, 65dvh) } }
+  .plane { position: relative; display: inline-block; max-width: 100%; line-height: 0 }
+  .plane img { display: block; pointer-events: none; -webkit-user-drag: none }
+  .sizer { width: auto; height: auto; max-width: 100%; max-height: var(--picture-height, 65vh); visibility: hidden }
+  @supports (height: 1dvh) { .sizer { max-height: var(--picture-height, 65dvh) } }
+  .shown { position: absolute }
+  .shown img { width: 100%; height: 100% }
   .zoom.fill .plane { max-width: none }
-  .zoom.fill .plane img { max-width: 100cqw; max-height: 100cqh }
+  .zoom.fill .sizer { max-width: 100cqw; max-height: 100cqh }
   .tools { position: absolute; right: 10px; bottom: 10px; z-index: 2; display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: light-dark(rgb(255 255 255 / 94%), rgb(27 27 31 / 94%)); box-shadow: 0 2px 12px light-dark(rgb(0 0 0 / 12%), rgb(0 0 0 / 40%)); cursor: default }
   .tools button { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--ink); font-size: 20px; line-height: 1; cursor: pointer }
   .tools button:hover:enabled { background: var(--accent-light) }
