@@ -27,6 +27,15 @@ test('a record is a licensed work with its cited sources and a trail', () => {
   expect(trail.itemListElement.map((item: any) => item.item)).toEqual(['https://rare.glyphatlas.org/ja', 'https://rare.glyphatlas.org/ja/entry/12'])
 })
 
+test('the vias are cited once after the works, with their container, and a via that is also a cited work stays one entry', () => {
+  const post = { id: 9, title: '乙帖', author: '乙', container: '丙羣', url: 'https://example.org/post' }
+  const [work] = recordData({ locale: 'en', id: 1, name: 'n', description: 'd', siteName: 's', sources: [source], vias: [post, post, source] }) as any[]
+  expect(work.citation.map((entry: any) => entry.url)).toEqual(['https://rare.glyphatlas.org/en/source/7', 'https://rare.glyphatlas.org/en/source/9'])
+  expect(work.citation[1]).toMatchObject({ name: '乙帖', creator: '乙', isPartOf: { '@type': 'CreativeWork', name: '丙羣' } })
+  const [onlyVia] = recordData({ locale: 'en', id: 1, name: 'n', description: 'd', siteName: 's', sources: [], vias: [post] }) as any[]
+  expect(onlyVia.citation).toHaveLength(1)
+})
+
 test('a record without a picture or sources leaves those fields out', () => {
   const [work] = recordData({ locale: 'en', id: 1, name: 'n', description: 'd', siteName: 's', sources: [] }) as any[]
   expect('image' in work).toBe(false)
