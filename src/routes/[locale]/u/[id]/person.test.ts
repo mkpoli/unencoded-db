@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { newClaim } from '$lib/claims'
-import { addSighting, createEntry, editEntry, personRevisionsStatement, setHidden, type EntryFields, type SightingFields } from '$lib/server/entries'
-import { createPerson, joinAtlas, joinPerson, startSession } from '$lib/server/people'
+import { addSighting, createEntry, editEntry, getEntry, globalHistory, personRevisionsStatement, setHidden, type EntryFields, type SightingFields } from '$lib/server/entries'
+import { agentsOf, agentsOfStatement, contributors, createPerson, joinAtlas, joinPerson, startSession } from '$lib/server/people'
 import { thank } from '$lib/server/notifications'
 import { openTestDb } from '$lib/server/testdb'
 import { actions, load } from './+page.server'
@@ -186,4 +186,59 @@ test('a merged person is signed out everywhere, and their thanks neither repeat 
   expect(raw.query('SELECT revision_id, person FROM thanks').all()).toEqual([{ revision_id: byWriter, person: target.id }])
   expect(raw.query('SELECT COUNT(*) AS n FROM notifications WHERE thank_id IS NOT NULL').get()).toEqual({ n: 1 })
   expect(raw.query('SELECT (SELECT COUNT(*) FROM agent_tokens) + (SELECT COUNT(*) FROM sessions) AS n').get()).toEqual({ n: 0 })
+})
+
+test('a moderator merges an agent into its commander, keeping the agent name while counting toward the commander', async () => {
+  const { db, raw } = openTestDb()
+  const commander = await createPerson(db, 'atlas-cmd', 'Commander')
+  const agent = await createPerson(db), sibling = await createPerson(db), namedAgent = await createPerson(db)
+  const entry = await createEntry(db, fields, sighting, [], { actor: agent.id, ip: null })
+  await editEntry(db, entry, 1, { ...fields, description: 'From sibling' }, { actor: sibling.id, ip: null }, null)
+  await editEntry(db, entry, 2, { ...fields, description: 'From named agent' }, { actor: namedAgent.id, ip: null }, null)
+  await editEntry(db, entry, 3, { ...fields, description: 'Direct edit' }, { actor: commander.id, ip: null }, null)
+  // Sibling was already folded into `agent` as a non-agent; `namedAgent` was already marked as its own agent.
+  expect(await joinPerson(db, sibling.id, agent.id)).toBeNull()
+  expect(await joinPerson(db, namedAgent.id, agent.id, { agent: 'Claude Code Opus 5.5' })).toBeNull()
+
+  // Invalid agent name is refused before touching the database.
+  const invalid = await merging(db, agent.id, { into: commander.id, agent: 'x'.repeat(81) }) as any
+  expect(invalid.data.merge).toBe('agent')
+
+  // First post previews target and agent; changing the agent requires re-confirming.
+  const preview = await merging(db, agent.id, { into: commander.id, agent: '  DSH   DeepSeek Flash ' }) as any
+  expect(preview.target).toEqual({ id: commander.id, name: 'Commander', changes: 1 })
+  expect(preview.agent).toBe('DSH DeepSeek Flash')
+  const changed = await merging(db, agent.id, { into: commander.id, confirm: commander.id, agent: 'Antigravity Gemini 4 Neon', confirm_agent: 'DSH DeepSeek Flash' }) as any
+  expect(changed.target.id).toBe(commander.id)
+  expect(changed.agent).toBe('Antigravity Gemini 4 Neon')
+
+  await expect(merging(db, agent.id, { into: commander.id, confirm: commander.id, agent: 'DSH DeepSeek Flash', confirm_agent: 'DSH DeepSeek Flash' })).rejects.toMatchObject({ status: 303, location: `/en/u/${commander.id}` })
+
+  // All 5 changes roll into the commander, and only the commander appears on /u.
+  expect(await contributors(db, 1)).toEqual({ people: [{ id: commander.id, name: 'Commander', changes: 5, atlas: 1 }], next: null })
+  expect(await agentsOf(db, commander.id)).toEqual(['Claude Code Opus 5.5', 'DSH DeepSeek Flash'])
+
+  // The entry, sighting, history, and profile preserve both commander and agent identity.
+  const loaded = await getEntry(db, entry)
+  expect(loaded!.entry).toMatchObject({ by_id: commander.id, by_name: 'Commander', by_agent: 'DSH DeepSeek Flash' })
+  expect(loaded!.sightings[0]).toMatchObject({ by_id: commander.id, by_name: 'Commander', by_agent: 'DSH DeepSeek Flash' })
+
+  const page = await load(event(db, commander.id)) as any
+  expect(page.agents).toEqual(['Claude Code Opus 5.5', 'DSH DeepSeek Flash'])
+  expect(page.rows.map((row: any) => ({ by_name: row.by_name, by_agent: row.by_agent }))).toEqual([
+    { by_name: 'Commander', by_agent: null },
+    { by_name: 'Commander', by_agent: 'Claude Code Opus 5.5' },
+    { by_name: 'Commander', by_agent: 'DSH DeepSeek Flash' },
+    { by_name: 'Commander', by_agent: 'DSH DeepSeek Flash' },
+    { by_name: 'Commander', by_agent: 'DSH DeepSeek Flash' },
+  ])
+  const feed = await globalHistory(db)
+  expect(feed.rows[0]).toMatchObject({ by_id: commander.id, by_name: 'Commander', by_agent: null })
+  expect(feed.rows[1]).toMatchObject({ by_id: commander.id, by_name: 'Commander', by_agent: 'Claude Code Opus 5.5' })
+
+  // Reading a commander's agents uses index seeks over the partial covering index, never scanning duplicate rows.
+  const stmt = agentsOfStatement(db, commander.id) as unknown as { sql: string; values: unknown[] }
+  const plan = (raw.query(`EXPLAIN QUERY PLAN ${stmt.sql}`).all(...(stmt.values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')
+  expect(plan).toContain('USING COVERING INDEX people_agents_by_commander')
+  expect(plan).not.toContain('TEMP B-TREE')
 })

@@ -27,8 +27,8 @@ export const load: PageServerLoad = async (event) => {
   const next = page.length > ENTRY_HISTORY_PAGE ? page[ENTRY_HISTORY_PAGE - 1].id : null
   const rows = page.slice(0, ENTRY_HISTORY_PAGE)
     .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id) || removedRevs.has(row.sighting_id))
-    .map(({ id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, snapshot, redacted_at }) => ({
-      id, entry_id, sighting_id, rev, summary, at, by_id, by_name, redacted: Boolean(redacted_at),
+    .map(({ id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, by_agent, snapshot, redacted_at }) => ({
+      id, entry_id, sighting_id, rev, summary, at, by_id, by_name, by_agent, redacted: Boolean(redacted_at),
       ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
       sightingRev: sighting_id ? visibleSightings.get(sighting_id) ?? removedRevs.get(sighting_id) : null,
       removed: sighting_id !== null && removedRevs.has(sighting_id),

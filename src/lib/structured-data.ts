@@ -40,15 +40,18 @@ function citation(locale: string, source: SourceFacts): Json {
 export type RecordFacts = {
   locale: string; id: number; name: string; description: string; siteName: string
   image?: string | null  // a path or URL of the cover picture
-  sources: SourceFacts[]
+  sources: SourceFacts[]  // the works cited
+  vias?: SourceFacts[]  // what the evidence was found through
 }
 
+// schema.org has no property for a go-between: `isBasedOn` says the record is derived from a work, which
+// a record is not, so the vias are cited like the works.
 // The record is a CreativeWork: it holds evidence and claims, not a definition of a term. The licence covers
 // the record text only; the pictures keep the rights of the works they come from.
 export function recordData(facts: RecordFacts): Json[] {
   const url = `${SITE_ORIGIN}/${facts.locale}/entry/${facts.id}`
   const seen = new Set<number>()
-  const sources = facts.sources.filter(source => !seen.has(source.id) && seen.add(source.id))
+  const sources = [...facts.sources, ...facts.vias ?? []].filter(source => !seen.has(source.id) && seen.add(source.id))
   return [
     present({
       '@context': CONTEXT, '@type': 'CreativeWork', '@id': url, url, name: facts.name, description: facts.description,
