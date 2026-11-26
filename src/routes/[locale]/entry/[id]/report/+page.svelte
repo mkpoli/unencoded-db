@@ -12,7 +12,7 @@
     <p role="status">{t('report.sent')}</p>
   {:else}
     <h2>{t('duplicate.title')}</h2>
-    <form method="POST" action={href(`/entry/${data.target.entry}/duplicate`)} class="row find">
+    <form method="POST" action={`${href(`/entry/${data.target.entry}/duplicate`)}?/merge`} class="row find">
       <label class="sr-only" for="of">{t('duplicate.of')}</label>
       <input class="input" id="of" name="of" placeholder={t('duplicate.of')} required />
       <button class="button primary" type="submit">{t('duplicate.merge')}</button>
