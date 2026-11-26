@@ -7,12 +7,12 @@
   import { t } from '$lib/t'
 
   let {
-    src, alt, width, height, href = null, loading = 'lazy',
+    src, alt, width, height, loading = 'lazy',
     image = $bindable(), zoom = $bindable(1), maxZoom = $bindable(ZOOM_MAX), frame = $bindable(), pan = $bindable<Pan>({ x: 0, y: 0 }),
     disabled = false, marking = false, fill = false, wheelZoom = false, hideTools = false,
     onstart, onmove, onend, onload, overlay,
   }: {
-    src: string; alt: string; width?: number; height?: number; href?: string | null
+    src: string; alt: string; width?: number; height?: number
     loading?: 'eager' | 'lazy'
     image?: HTMLImageElement
     zoom?: number
@@ -31,11 +31,10 @@
     overlay?: Snippet
   } = $props()
 
-  let drag = $state<{ id: number; x: number; y: number; pan: Pan; moved: boolean } | null>(null)
+  let drag = $state<{ id: number; x: number; y: number; pan: Pan } | null>(null)
   let pinch: { distance: number; midpoint: Pan; zoom: number; pan: Pan } | null = null
   const pointers = new Map<number, { x: number; y: number }>()
   let marked: number | null = null
-  let moved = false
 
   const pictureSize = (): Size => ({ width: image?.offsetWidth ?? 0, height: image?.offsetHeight ?? 0 })
   const naturalSize = (): Size => ({ width: image?.naturalWidth || width || 0, height: image?.naturalHeight || height || 0 })
@@ -86,9 +85,7 @@
   }
 
   function down(event: PointerEvent) {
-    if (disabled || (event.target as Element).closest('.tools')) return
-    if (event.pointerType === 'mouse' && event.button !== 0) return
-    moved = false
+    if (disabled || event.button !== 0 || (event.target as Element).closest('.tools')) return
     if (marking) {
       if (!onstart?.(event)) return
       event.preventDefault()
@@ -98,16 +95,17 @@
     }
     if (event.pointerType !== 'mouse') {
       pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      // A pen has no capture of its own: without one, lifting it outside the frame would leave it counted.
+      frame!.setPointerCapture(event.pointerId)
       if (pointers.size === 2) {
         drag = null
         const pair = pairGeometry()
         pinch = { distance: pair.distance, midpoint: pair.midpoint, zoom, pan }
-        frame!.setPointerCapture(event.pointerId)
         return
       }
     }
     if (zoom <= 1) return
-    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, pan, moved: false }
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, pan }
     frame!.focus({ preventScroll: true })
     frame!.setPointerCapture(event.pointerId)
   }
@@ -122,15 +120,12 @@
         const anchored = aroundPoint(pinch.pan, pinch.midpoint, pinch.zoom, next)
         pan = settled({ x: anchored.x + (pair.midpoint.x - pinch.midpoint.x), y: anchored.y + (pair.midpoint.y - pinch.midpoint.y) }, next)
         zoom = next
-        moved = true
         return
       }
     }
     if (!drag || drag.id !== event.pointerId) return
     const x = drag.pan.x + event.clientX - drag.x, y = drag.pan.y + event.clientY - drag.y
-    if (Math.abs(event.clientX - drag.x) + Math.abs(event.clientY - drag.y) > 3) drag.moved = true
     pan = settled({ x, y })
-    moved = drag.moved
   }
 
   function up(event: PointerEvent) {
@@ -142,16 +137,9 @@
     pointers.delete(event.pointerId)
     if (pointers.size < 2) pinch = null
     if (drag?.id === event.pointerId) {
-      moved = drag.moved
       drag = null
       if (frame?.hasPointerCapture(event.pointerId)) frame.releasePointerCapture(event.pointerId)
     }
-  }
-
-  function clicked(event: MouseEvent) {
-    if (!moved) return
-    moved = false
-    event.preventDefault()
   }
 
   function dblclick(event: MouseEvent) {
@@ -210,20 +198,11 @@
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <div class="zoom" bind:this={frame} class:fill class:marking class:panning={!marking && zoom > 1} class:dragging={Boolean(drag)}
      role="group" aria-label={t('field.imageZoom')} tabindex="0"
-     onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} ondblclick={dblclick} onkeydown={keydown} onwheel={wheel}>
-  {#if href}
-    <a class="picture" {href} draggable="false" onclick={clicked}>
-      <div class="plane" style:transform="translate({pan.x}px, {pan.y}px) scale({zoom})" style:--inv={1 / zoom}>
-        <img bind:this={image} {src} {alt} {width} {height} {loading} draggable="false" onload={loaded} />
-        {@render overlay?.()}
-      </div>
-    </a>
-  {:else}
-    <div class="plane" style:transform="translate({pan.x}px, {pan.y}px) scale({zoom})" style:--inv={1 / zoom}>
-      <img bind:this={image} {src} {alt} {width} {height} {loading} draggable="false" onload={loaded} />
-      {@render overlay?.()}
-    </div>
-  {/if}
+     onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onlostpointercapture={up} ondblclick={dblclick} onkeydown={keydown} onwheel={wheel}>
+  <div class="plane" style:transform="translate({pan.x}px, {pan.y}px) scale({zoom})" style:--inv={1 / zoom}>
+    <img bind:this={image} {src} {alt} {width} {height} {loading} draggable="false" onload={loaded} />
+    {@render overlay?.()}
+  </div>
   {#if !hideTools}
     <div class="tools">
       <button type="button" class="out" aria-label={t('field.imageZoomOut')} title={t('field.imageZoomOut')} disabled={disabled || zoom <= 1} onclick={() => zoomBy(1 / ZOOM_STEP)}>−</button>
@@ -242,7 +221,6 @@
   .zoom.panning { cursor: grab; touch-action: none }
   .zoom.dragging { cursor: grabbing }
   .zoom:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: -3px }
-  .picture { display: flex; justify-content: center; width: 100%; max-width: 100%; line-height: 0 }
   .plane { position: relative; display: inline-block; max-width: 100%; line-height: 0; transform-origin: center center; will-change: transform }
   .plane img { display: block; width: auto; height: auto; max-width: 100%; max-height: var(--picture-height, 65vh); pointer-events: none; -webkit-user-drag: none }
   @supports (height: 1dvh) { .plane img { max-height: var(--picture-height, 65dvh) } }

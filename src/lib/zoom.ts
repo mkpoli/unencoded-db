@@ -45,7 +45,8 @@ export function focusBox(box: Box, natural: Size, fitted: Size, frame: Size, max
   const boxWidth = (box[2] / natural.width) * fitted.width
   const boxHeight = (box[3] / natural.height) * fitted.height
   const target = (Math.min(frame.width, frame.height) * 0.25) / Math.max(1, boxWidth, boxHeight)
-  const zoom = clampZoom(Math.max(2, target), max)
+  const whole = 0.9 * Math.min(frame.width / Math.max(1, boxWidth), frame.height / Math.max(1, boxHeight))
+  const zoom = clampZoom(Math.min(whole, Math.max(2, target)), max)
   const dx = (cx - 0.5) * fitted.width
   const dy = (cy - 0.5) * fitted.height
   return { zoom, pan: confinePan({ x: -dx * zoom, y: -dy * zoom }, zoom, fitted, frame) }

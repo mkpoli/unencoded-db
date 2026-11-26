@@ -40,3 +40,8 @@ test('focusing a box on a wide scan expands into the full frame height', () => {
   expect(result.zoom).toBeGreaterThan(4)
   expect(result.pan.x).toBeLessThan(0)
 })
+
+test('focusing a box that fills most of the picture keeps the whole box in the frame', () => {
+  const result = focusBox([120, 120, 560, 560], { width: 800, height: 800 }, { width: 600, height: 600 }, { width: 1200, height: 700 }, 16)
+  expect(result.zoom).toBe(1.5)
+})
