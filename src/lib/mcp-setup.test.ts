@@ -7,7 +7,7 @@ import {
   codexCommand,
   cursorConfig,
   cursorInstallUrl,
-  geminiCommand,
+  antigravityCommand,
   genericConfig,
   MCP_SERVER_NAME,
   mcpEndpoint,
@@ -25,7 +25,7 @@ test('mcp setup helpers build valid commands, configs and install links', () => 
 
   expect(claudeCodeCommand(ENDPOINT)).toBe(`claude mcp add --scope user --transport http ${MCP_SERVER_NAME} ${ENDPOINT}`)
   expect(codexCommand(ENDPOINT)).toBe(`codex mcp add ${MCP_SERVER_NAME} --url ${ENDPOINT}`)
-  expect(geminiCommand(ENDPOINT)).toBe(`gemini mcp add --scope user --transport http ${MCP_SERVER_NAME} ${ENDPOINT}`)
+  expect(antigravityCommand(ENDPOINT)).toBe(`agy mcp add ${MCP_SERVER_NAME} ${ENDPOINT}`)
 
   const cursor = new URL(cursorInstallUrl(ENDPOINT))
   expect(`${cursor.protocol}//${cursor.host}${cursor.pathname}`).toBe('cursor://anysphere.cursor-deeplink/mcp/install')
