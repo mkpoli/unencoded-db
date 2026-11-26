@@ -25,7 +25,7 @@
   const groups = $derived(localized(givenGroups, locale()))
   // A record that names a tag by an alias shows, and saves, the tag it stands for.
   const selected = $derived([...new Set(named.map(name => canonicalName(name, tags)))])
-  const suggestedTags = $derived([...new Set(givenSuggested.map(name => canonicalName(name, tags)).filter(Boolean))])
+  const suggestedTags = $derived([...new Set(givenSuggested.map(name => canonicalName(name, tags)))].filter(name => tags.some(tag => tag.name === name)))
 
   const uid = $props.id()
   const GENERAL_PILL_LIMIT = 24
@@ -42,7 +42,7 @@
   let addError = $state<string | null>(null)
 
   const known = $derived<Tag[]>([...tags, ...made.filter(item => !tags.some(other => other.name === item.name))])
-  const extraNames = $derived([...new Set([...selected, ...suggestedTags])].filter(value => !known.some(item => item.name === value)))
+  const extraNames = $derived(selected.filter(value => !known.some(item => item.name === value)))
   const all = $derived<Tag[]>([
     ...known,
     ...extraNames
