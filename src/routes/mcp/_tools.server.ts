@@ -6,7 +6,7 @@ import { readDates, sightingDates } from '$lib/server/date-readings'
 // (https://modelcontextprotocol.io/specification/2025-11-25/server/tools).
 import { isHttpError, type RequestEvent } from '@sveltejs/kit'
 import { isDescription } from 'ids-input'
-import { newClaimKey } from '$lib/claims'
+import { newClaimKey, type Claim, type ClaimKind } from '$lib/claims'
 import { parseRecordCode, recordCode } from '$lib/code'
 import { DOCULECTS } from '$lib/doculects'
 import { COLLECTIONS } from '$lib/tags'
@@ -18,9 +18,9 @@ import { RELATION_KINDS } from '$lib/related'
 import { CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
 import { tagList } from '$lib/server/tags'
-import { addSighting, CITATION_FIELDS, createEntry, getEntry, hasLink, list, mediaVisible, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX } from '$lib/server/entries'
+import { addSighting, CITATION_FIELDS, createEntry, editEntry, editSighting, getEntry, hasLink, list, mediaVisible, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, type StoredImage } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
-import { notifyIndexNow } from '$lib/server/indexnow'
+import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { MAX_WRITE_BODY } from '$lib/server/body-limit'
 import { MAX_IMAGE, prepareImage } from '$lib/server/image'
 import { agentWriter } from '$lib/server/people'
@@ -66,7 +66,7 @@ const shown = (event: RequestEvent, id: number) => ({ id, code: recordCode(id), 
 
 // ---------- Writes ----------
 
-async function guard(event: RequestEvent, limit: 'ADDS') {
+async function guard(event: RequestEvent, limit: 'ADDS' | 'EDITS') {
   try { await guardWrite(event, limit) } catch (cause) {
     if (!isHttpError(cause)) throw cause
     throw new Refusal(cause.status === 403 ? said('banned') : cause.status === 503 ? said('paused') : cause.status === 429 ? said('slow') : cause.body.message)
@@ -150,22 +150,36 @@ async function pictureBytes(event: RequestEvent, address: string, budget: Budget
 // A sighting's pictures, fetched and checked and not yet stored. No thumbnail is cut here, so each picture
 // is its own cover, as it is for a form sent without scripts.
 async function readPictures(event: RequestEvent, value: unknown, budget: Budget): Promise<ReadImage[]> {
-  const pictures: ReadImage[] = []
-  for (const item of items(value)) {
-    if (pictures.length >= MEDIA_MAX) throw new Refusal(`A sighting holds up to ${MEDIA_MAX} pictures.`)
-    const { url, marks } = typeof item === 'string' ? { url: item, marks: null } : record(item)
+  const pictures = pictureItems(value)
+  const read: ReadImage[] = []
+  for (const picture of pictures) read.push(await readPicture(event, picture, budget))
+  return read
+}
+
+function pictureItems(value: unknown) {
+  const pictures = items(value).map(item => typeof item === 'string' ? { url: item } : record(item))
+  if (pictures.length > MEDIA_MAX) throw new Refusal(`A sighting holds up to ${MEDIA_MAX} pictures.`)
+  return pictures.map(({ url, marks }) => {
     const address = text(url).trim()
     if (!address) throw new Refusal('Each picture needs a url.')
-    const bytes = await pictureBytes(event, address, budget)
-    budget.bytes -= bytes.byteLength
-    const image = await prepareImage(new File([bytes as BlobPart], 'picture'), MAX_IMAGE)
-    if (!image) throw new Refusal(`${said('image')} (${address})`)
-    const marked = items(marks).length > 0
-    const box = marked ? readBoxes(JSON.stringify(marks), image.width, image.height) : null
-    if (marked && !box) throw new Refusal(`marks holds up to ${BOXES_MAX} boxes, each [x, y, width, height] in pixels inside the picture and at least 4 pixels a side. This picture is ${image.width} × ${image.height}.`)
-    pictures.push({ image, thumb: image, box })
-  }
-  return pictures
+    return { address, marks }
+  })
+}
+
+// The marks of one picture, or null for none.
+function marksOn(marks: unknown, width: number, height: number) {
+  if (!items(marks).length) return null
+  const box = readBoxes(JSON.stringify(marks), width, height)
+  if (!box) throw new Refusal(`marks holds up to ${BOXES_MAX} boxes, each [x, y, width, height] in pixels inside the picture and at least 4 pixels a side. This picture is ${width} × ${height}.`)
+  return box
+}
+
+async function readPicture(event: RequestEvent, { address, marks }: { address: string; marks: unknown }, budget: Budget): Promise<ReadImage> {
+  const bytes = await pictureBytes(event, address, budget)
+  budget.bytes -= bytes.byteLength
+  const image = await prepareImage(new File([bytes as BlobPart], 'picture'), MAX_IMAGE)
+  if (!image) throw new Refusal(`${said('image')} (${address})`)
+  return { image, thumb: image, box: marksOn(marks, image.width, image.height) }
 }
 
 function sightingForm(input: Json) {
@@ -193,54 +207,98 @@ function sightingForm(input: Json) {
   return form
 }
 
-// The record's own fields as /new sends them. A row of meanings, readings or related characters gets its
-// key here, so a later row can name it and each row can name the sightings behind it.
-function entryForm(input: Json, sightings: number, tags: readonly string[]) {
+// The record's own fields as its form sends them. A field the input leaves out is left out of the form, so
+// an edit keeps it; a list the input gives replaces the record's. A row of meanings, readings or related
+// characters keeps the key of the claim it names by `key`, or gets a new one, so a later row can name it and
+// each row can name the sightings behind it. `cite` reads the sightings a row names; a row that names none
+// keeps those of the claim it continues.
+function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) => number[], current: readonly Claim[] = []) {
   const form = new FormData()
+  const given = (name: string) => input[name] !== undefined
   if (text(input.script).trim()) form.set('script', text(input.script))
-  for (const sequence of items(input.ids).map(text).map(cleanIds).filter(Boolean)) {
-    if (!isDescription(sequence)) throw new Refusal(`Not an ideographic description sequence: ${sequence}`)
-    form.append('ids', sequence)
+  if (given('ids')) {
+    const sequences = items(input.ids).map(text).map(cleanIds).filter(Boolean)
+    if (!sequences.length) throw new Refusal('ids holds at least one description sequence.')
+    for (const sequence of sequences) {
+      if (!isDescription(sequence)) throw new Refusal(`Not an ideographic description sequence: ${sequence}`)
+      form.append('ids', sequence)
+    }
   }
-  for (const name of ['description', 'radical', 'strokes']) if (text(input[name]).trim()) form.set(name, text(input[name]))
+  for (const name of ['description', 'radical', 'strokes']) if (given(name)) form.set(name, text(input[name]))
 
-  const rows = (value: unknown, field: string) => items(value).map(row => typeof row === 'string' ? { [field]: row } : record(row)).map(row => ({ row, key: newClaimKey() }))
-  const evidence = (key: string, row: Json) => { for (const place of places(row.evidence, sightings, 'evidence')) form.append(`sightings.${key}`, String(place)) }
-  const under = (key: string, value: unknown, scopes: { key: string }[], name: string) => { for (const place of places(value, scopes.length, name)) form.append(`under.${key}`, scopes[place - 1].key) }
+  const held = new Map(current.map(claim => [claim.key, claim]))
+  const taken = new Set<string>()
+  // A row without a key continues the claim it repeats word for word, compared as the claims store text.
+  const same = (value: unknown) => text(value).normalize('NFC').trim()
+  const repeats = (kind: ClaimKind, row: Json) => (claim: Claim) => claim.kind === kind && !taken.has(claim.key) && (
+    kind === 'relation' ? claim.value === same(row.character) && claim.data?.relationship === same(row.relationship)
+    : claim.value === same(row.text) && (kind !== 'reading' || (claim.data?.doculect ?? '') === same(row.doculect)))
+  const rows = (value: unknown, field: string, kind: ClaimKind) => items(value).map(row => typeof row === 'string' ? { [field]: row } : record(row)).map(row => {
+    const named = held.get(text(row.key))
+    const kept = named?.kind === kind && !taken.has(named.key) ? named : row.key === undefined ? current.find(repeats(kind, row)) : undefined
+    if (kept) taken.add(kept.key)
+    return { row, key: kept?.key ?? newClaimKey(), kept }
+  })
+  const evidence = (key: string, row: Json, kept?: Claim) => {
+    for (const sighting of row.evidence !== undefined ? cite(row.evidence) : kept?.sightings ?? []) form.append(`sightings.${key}`, String(sighting))
+  }
+  const under = (key: string, value: unknown, scopes: { key: string }[], name: string, kind: ClaimKind, kept?: Claim) => {
+    const named = value !== undefined ? places(value, scopes.length, name).map(place => scopes[place - 1].key) : kept?.under.filter(scope => held.get(scope)?.kind === kind) ?? []
+    for (const scope of named) form.append(`under.${key}`, scope)
+  }
 
-  const meanings = rows(input.meanings, 'text'), readings = rows(input.readings, 'text'), related = rows(input.related, 'character')
-  if (meanings.length) form.set('meanings_present', '1')
-  for (const { row, key } of meanings) {
+  const meanings = rows(input.meanings, 'text', 'meaning'), readings = rows(input.readings, 'text', 'reading'), related = rows(input.related, 'character', 'relation')
+  if (given('meanings')) form.set('meanings_present', '1')
+  for (const { row, key, kept } of meanings) {
     form.append('meaning', text(row.text)); form.append('meaning_key', key)
-    evidence(key, row)
+    evidence(key, row, kept)
   }
-  if (readings.length) form.set('readings_present', '1')
-  for (const { row, key } of readings) {
+  if (given('readings')) form.set('readings_present', '1')
+  for (const { row, key, kept } of readings) {
     form.append('reading', text(row.text)); form.append('reading_doculect', text(row.doculect)); form.append('reading_key', key)
-    under(key, row.meanings, meanings, 'meanings')
-    evidence(key, row)
+    under(key, row.meanings, meanings, 'meanings', 'meaning', kept)
+    evidence(key, row, kept)
   }
-  if (related.length) form.set('related_characters_present', '1')
-  for (const { row, key } of related) {
+  if (given('related')) form.set('related_characters_present', '1')
+  for (const { row, key, kept } of related) {
     form.append('related_character', text(row.character)); form.append('related_relationship', choice(row.relationship, RELATION_KINDS, 'relationship'))
     form.append('related_difference', text(row.difference)); form.append('related_evidence', text(row.basis)); form.append('related_key', key)
-    under(key, row.meanings, meanings, 'meanings')
-    under(key, row.readings, readings, 'readings')
-    evidence(key, row)
+    under(key, row.meanings, meanings, 'meanings', 'meaning', kept)
+    under(key, row.readings, readings, 'readings', 'reading', kept)
+    evidence(key, row, kept)
   }
 
-  const encodings = items(input.encodings).map(record)
-  if (encodings.length) form.set('encodings_present', '1')
-  for (const encoding of encodings) { form.append('encoding_charset', text(encoding.charset)); form.append('encoding_code', text(encoding.code)) }
-  const ivd = text(input.ivd).trim()
-  if (ivd) { form.set('ivd_status', ivd === 'none' ? 'none' : 'registered'); if (ivd !== 'none') form.set('ivd_sequence', ivd) }
-  if (items(input.categories).length) form.set('tags_present', '1')
+  if (given('encodings')) form.set('encodings_present', '1')
+  for (const encoding of items(input.encodings).map(record)) { form.append('encoding_charset', text(encoding.charset)); form.append('encoding_code', text(encoding.code)) }
+  if (given('ivd')) {
+    const ivd = text(input.ivd).trim()
+    form.set('ivd_status', !ivd ? '' : ivd === 'none' ? 'none' : 'registered')
+    if (ivd && ivd !== 'none') form.set('ivd_sequence', ivd)
+  }
+  if (given('categories') || given('tags')) form.set('tags_present', '1')
   for (const slug of items(input.categories)) form.append('tag', choice(slug, tags, 'categories'))
-  if (items(input.collections).length) form.set('collections_present', '1')
-  for (const slug of items(input.collections)) form.append('collection', choice(slug, COLLECTIONS.map(collection => collection.slug), 'collections'))
   for (const tag of items(input.tags)) form.append('tags', text(tag))
+  if (given('collections')) form.set('collections_present', '1')
+  for (const slug of items(input.collections)) form.append('collection', choice(slug, COLLECTIONS.map(collection => collection.slug), 'collections'))
   return form
 }
+
+// A record a write names, refused when it is missing, hidden or merged into another.
+async function openRecord(event: RequestEvent, named: unknown) {
+  const id = recordId(named)
+  const found = id ? await getEntry(env(event).DB, id) : null
+  if (!id || !found || found.entry.hidden_at) throw new Refusal(said('missing'))
+  if (found.entry.merged_into) throw new Refusal(`${said('merged')} Write to ${recordCode(found.entry.merged_into)} (${found.entry.merged_into}).`)
+  return { id, found }
+}
+
+// The revision an edit is made against: the one get_record answered.
+function revisionOf(value: unknown) {
+  if (!Number.isInteger(value) || (value as number) < 1) throw new Refusal('rev is the revision get_record answered.')
+  return value as number
+}
+const changed = (current: number) => new Refusal(`It changed after you read it and is now at rev ${current}. Read it again with get_record and make the edit on that.`)
+const summaryOf = (input: Json) => text(input.summary).trim().slice(0, 500) || null
 
 // Everything is read and every picture fetched before anything is stored. Each sighting after the first
 // takes one more add from the rate window, as it does on /new, and takes it before its pictures are
@@ -251,7 +309,7 @@ async function addRecord(event: RequestEvent, input: Json) {
   if (!inputs.length) throw new Refusal('A record starts with at least one sighting.')
   if (inputs.length > ADD_SIGHTINGS_MAX) throw new Refusal(said('sightingsMax', { max: ADD_SIGHTINGS_MAX }))
   const tags = await tagList(env(event).DB)
-  const { fields: entry, error } = readEntryFields(entryForm(input, inputs.length, tags.map(tag => tag.name)), tags)
+  const { fields: entry, error } = readEntryFields(entryForm(input, tags.map(tag => tag.name), value => places(value, inputs.length, 'evidence')), tags)
   if (error) throw new Refusal(said(error))
   const stated = inputs.map((sighting, index) => {
     const fields = readSightingFields(sightingForm(sighting))
@@ -273,11 +331,8 @@ async function addRecord(event: RequestEvent, input: Json) {
 
 async function addSightingTo(event: RequestEvent, input: Json) {
   await guard(event, 'ADDS')
-  const id = recordId(input.record)
+  const { id, found } = await openRecord(event, input.record)
   const { DB, MEDIA } = env(event)
-  const found = id ? await getEntry(DB, id) : null
-  if (!id || !found || found.entry.hidden_at) throw new Refusal(said('missing'))
-  if (found.entry.merged_into) throw new Refusal(`${said('merged')} Add to ${recordCode(found.entry.merged_into)} (${found.entry.merged_into}).`)
   if (found.sightings.length >= SIGHTINGS_MAX) throw new Refusal(said('sightingLimit'))
   const fields = readSightingFields(sightingForm(input))
   if (!items(input.pictures).length && !hasLink(fields)) throw new Refusal(said('evidence'))
@@ -293,6 +348,83 @@ async function addSightingTo(event: RequestEvent, input: Json) {
   if (!sighting) throw new Refusal(said('missing'))
   notifyIndexNow(event, { entries: [id] })
   return { record: shown(event, id), sighting }
+}
+
+// Like the record's edit form: what the input leaves out stays, and the edit is made against the
+// revision the agent read.
+async function editRecordOf(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const { id, found } = await openRecord(event, input.record)
+  const rev = revisionOf(input.rev)
+  if (rev !== found.entry.rev) throw changed(found.entry.rev)
+  const own = found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => sighting.id)
+  const cite = (value: unknown) => items(value).map(sighting => {
+    if (!own.includes(sighting as number)) throw new Refusal(`evidence names this record's sightings by id: ${own.join(', ')}.`)
+    return sighting as number
+  })
+  const { DB } = env(event)
+  const tags = await tagList(DB)
+  const { fields, error } = readEntryFields(entryForm(input, tags.map(tag => tag.name), cite, found.claims), tags, { ...found.entry, claims: found.claims })
+  if (error) throw new Refusal(said(error))
+  const person = await agentWriter(event, DB)
+  const result = await editEntry(DB, id, rev, fields, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
+  if (!result.ok) throw result.code === 'conflict' ? changed((await getEntry(DB, id))?.entry.rev ?? rev) : new Refusal(said(result.code))
+  notifyIndexNow(event, { entries: [id] })
+  return { record: shown(event, id), rev: result.rev }
+}
+
+// Like the sighting's edit form. Given pictures are the whole list: a picture the sighting holds is named
+// by its address and kept, with new marks when they are given; any other is fetched as add_sighting does.
+async function editSightingOf(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const { id, found } = await openRecord(event, input.record)
+  const sighting = found.sightings.find(sighting => sighting.id === Number(text(input.sighting)) && !sighting.hidden_at)
+  if (!sighting) throw new Refusal(`${recordCode(id)} has no sighting ${text(input.sighting)}. Its sightings: ${found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => sighting.id).join(', ')}.`)
+  const rev = revisionOf(input.rev)
+  if (rev !== sighting.rev) throw changed(sighting.rev)
+  const now: Json = {
+    place: sighting.place, ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
+    original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, types: parseSightingTypes(sighting.types), note: sighting.note,
+    quotes: quotations(sighting.quotes), vias: sighting.vias.map(({ id: _, ...via }) => via),
+  }
+  const stated = Object.fromEntries(Object.keys(now).filter(name => input[name] !== undefined).map(name => [name, input[name]]))
+  const fields = readSightingFields(sightingForm({ ...now, ...stated }))
+  const pictures = input.pictures === undefined ? null : await editedPictures(event, sighting.media, input.pictures)
+  if (!(pictures ?? sighting.media).length && !hasLink(fields) && !fields.place) throw new Refusal(said('evidence'))
+  const { DB, MEDIA } = env(event)
+  let media: StoredImage[] | null = null
+  if (pictures) {
+    media = []
+    for (const picture of pictures) media.push('image_key' in picture ? picture : (await storeImages(MEDIA, [picture]))[0])
+  }
+  const person = await agentWriter(event, DB)
+  const result = await editSighting(DB, sighting.id, rev, fields, media, { actor: person.id, ip: await ipHash(event) }, summaryOf(input), id)
+  if (!result.ok) throw result.code === 'conflict' ? changed((await getEntry(DB, id))?.sightings.find(row => row.id === sighting.id)?.rev ?? rev) : new Refusal(said(result.code))
+  notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
+  return { record: shown(event, id), sighting: sighting.id, rev: result.rev }
+}
+
+// The pictures an edit leaves a sighting with, none stored yet.
+async function editedPictures(event: RequestEvent, held: readonly StoredImage[], value: unknown) {
+  const budget = { bytes: MAX_WRITE_BODY, fetches: FETCHES_MAX }
+  const pictures: (StoredImage | ReadImage)[] = []
+  // A sighting may hold one picture twice with different marks: each address keeps a held picture not yet
+  // kept, the one with the same marks when there is one.
+  const unkept = [...held]
+  for (const picture of pictureItems(value)) {
+    let address: URL | null = null
+    try { address = new URL(picture.address) } catch { /* refused when it is read */ }
+    const key = address?.origin === event.url.origin ? OWN_PICTURE.exec(address.pathname)?.[1] : undefined
+    const candidates = unkept.filter(stored => stored.image_key === key)
+    const marked = picture.marks === undefined ? undefined : JSON.stringify(picture.marks)
+    const kept = candidates.find(stored => marked !== undefined && JSON.stringify(stored.box ? JSON.parse(stored.box) : []) === marked) ?? candidates[0]
+    if (!kept) { pictures.push(await readPicture(event, picture, budget)); continue }
+    unkept.splice(unkept.indexOf(kept), 1)
+    // A picture marked anew stands as its own cover, as a fetched one does.
+    const box = picture.marks === undefined ? kept.box : marksOn(picture.marks, kept.image_w, kept.image_h)
+    pictures.push(box === kept.box ? kept : { ...kept, box, thumb_key: kept.image_key })
+  }
+  return pictures
 }
 
 // ---------- Reads ----------
@@ -329,13 +461,13 @@ async function getRecord(event: RequestEvent, input: Json) {
   const sightings = found.sightings.filter(sighting => !sighting.hidden_at)
   const visible = new Set(sightings.map(sighting => sighting.id))
   return {
-    ...shown(event, id),
+    ...shown(event, id), rev: entry.rev,
     script: entry.script === 'other' ? entry.script_other ?? 'other' : entry.script,
     status: entry.status, description: entry.description, radical: entry.radical, strokes: entry.strokes,
     claims: found.claims.map(claim => ({ key: claim.key, kind: claim.kind, value: claim.value, ...(claim.data ? { data: claim.data } : {}), ...(claim.under.length ? { under: claim.under } : {}), evidence: claim.sightings.filter(sighting => visible.has(sighting)) })),
     date_readings: Object.fromEntries(await readDates(env(event).DB, sightingDates(sightings))),
     sightings: sightings.map(sighting => ({
-      id: sighting.id, place: sighting.place,
+      id: sighting.id, rev: sighting.rev, place: sighting.place,
       ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
       original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note,
       vias: sighting.vias.map(({ id: _, ...via }) => via),
@@ -353,6 +485,8 @@ To add a character:
 2. Call find_similar_records with the IDS and compare the pictures of what comes back. When a record shows the same form, call add_sighting on it. Otherwise call add_record.
 3. Cite the work the character appears in as the sighting's source, with author, title, publisher, date and page. Cite where you found it, such as a post or a chat message that shows the page, as a via, with its author, date, link and the words you quote.
 4. A chat message, a forum post or a personal communication is evidence and is cited as one: the author as they sign, the date of that message, the words quoted, the group or channel as container, the service as publisher, and no title. A private message, a letter or a conversation has no container and takes source_kind personal. Each message is its own citation; never reuse another message's author or date.
+
+To correct a record or a sighting, read it with get_record and call edit_record or edit_sighting with the rev it shows, giving only what changes. Say what changed and why in summary.
 
 Record every attested form, whether or not Unicode encodes it; an encoded character takes an encoding with charset "unicode". State only the readings, meanings and relations the evidence gives.`
 
@@ -389,12 +523,53 @@ const SIGHTING = {
   },
 }
 const SIGHTING_RULE = 'A sighting needs a picture or a link.'
-const EVIDENCE = { type: 'array', items: { type: 'integer', minimum: 1 }, description: 'The sightings that support this, by their place in `sightings`, from 1.' }
 const RECORD = { type: 'string', description: 'A record: its id, or its code such as R+00A1.' }
+const REV = { type: 'integer', minimum: 1, description: 'The rev get_record answered. An edit made after another one is refused.' }
+const SUMMARY = { type: 'string', maxLength: 500, description: 'What the edit changes and why, shown in the history.' }
+
+// The record's own fields. `evidence` says how a row names its sightings; `key` lets an edit's row continue a claim.
+function recordFields(evidence: Json, key?: Json) {
+  const own = key ? { key } : {}
+  return {
+    script: { type: 'string', description: `The script: one of ${SCRIPTS.map(script => script.id).filter(id => id !== 'other').join(', ')}, or another script's name. Han when left out.` },
+    ids: { type: 'array', minItems: 1, items: { type: 'string' }, description: 'Ideographic description sequences of the form as the picture shows it. The first one draws the glyph; the others are further ways to describe the same form.' },
+    description: { type: 'string', description: 'What is notable about the form, in prose.' },
+    radical: { type: 'string', description: 'The radical, when the source states one.' },
+    strokes: { type: 'integer', minimum: 0, description: 'Total strokes.' },
+    meanings: { type: 'array', items: { type: 'object', required: ['text'], properties: { ...own, text: { type: 'string' }, evidence } } },
+    readings: { type: 'array', items: { type: 'object', required: ['text'], properties: {
+      ...own,
+      text: { type: 'string' },
+      doculect: { type: 'string', description: `The language or dialect: one of ${DOCULECTS.join(', ')}, or another name.` },
+      meanings: { type: 'array', items: { type: 'integer', minimum: 1 }, description: 'The meanings this reading goes with, by their place in `meanings`, from 1.' },
+      evidence,
+    } } },
+    encodings: { type: 'array', description: 'The character sets, dictionaries and glyph registries that hold the character.', items: { type: 'object', required: ['charset', 'code'], properties: {
+      charset: { type: 'string', description: `One of ${REGISTRIES.map(registry => registry.id).join(', ')}, or another work's name.` },
+      code: { type: 'string', description: 'The code as the work writes it, such as U+2D6DD for unicode.' },
+    } } },
+    related: { type: 'array', items: { type: 'object', required: ['character', 'relationship'], properties: {
+      ...own,
+      character: { type: 'string', description: 'The other character, or its description sequence.' },
+      relationship: { type: 'string', enum: RELATION_KINDS },
+      difference: { type: 'string', description: 'How the two forms differ.' },
+      basis: { type: 'string', description: 'The evidence or source for the relation, in words.' },
+      meanings: { type: 'array', items: { type: 'integer', minimum: 1 }, description: 'The meanings under which the relation holds, by their place in `meanings`.' },
+      readings: { type: 'array', items: { type: 'integer', minimum: 1 }, description: 'The readings under which the relation holds, by their place in `readings`.' },
+      evidence,
+    } } },
+    ivd: { type: 'string', description: 'A registered IVD sequence such as "U+4E00 U+E0100", or "none" when the form is known to have none.' },
+    categories: { type: 'array', items: { type: 'string' } },
+    collections: { type: 'array', items: { type: 'string', enum: COLLECTIONS.map(collection => collection.slug) } },
+    tags: { type: 'array', items: { type: 'string' } },
+  }
+}
 
 type Tool = { name: string; title: string; description: string; inputSchema: Json; annotations: Json; run: (event: RequestEvent, input: Json) => Promise<unknown> }
 const READS = { readOnlyHint: true }
 const ADDS = { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
+// An edit replaces what it changes; the history keeps the version before it.
+const EDITS = { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
 
 const TOOLS: Tool[] = [
   {
@@ -420,35 +595,7 @@ const TOOLS: Tool[] = [
     name: 'add_record', title: 'Add a character', annotations: ADDS, run: addRecord,
     description: `Add a record for a form no record shows yet, with the sightings it starts from. ${SIGHTING_RULE} Answers the new record's id, code and page.`,
     inputSchema: { type: 'object', required: ['ids', 'sightings'], properties: {
-      script: { type: 'string', description: `The script: one of ${SCRIPTS.map(script => script.id).filter(id => id !== 'other').join(', ')}, or another script's name. Han when left out.` },
-      ids: { type: 'array', minItems: 1, items: { type: 'string' }, description: 'Ideographic description sequences of the form as the picture shows it. The first one draws the glyph; the others are further ways to describe the same form.' },
-      description: { type: 'string', description: 'What is notable about the form, in prose.' },
-      radical: { type: 'string', description: 'The radical, when the source states one.' },
-      strokes: { type: 'integer', minimum: 0, description: 'Total strokes.' },
-      meanings: { type: 'array', items: { type: 'object', required: ['text'], properties: { text: { type: 'string' }, evidence: EVIDENCE } } },
-      readings: { type: 'array', items: { type: 'object', required: ['text'], properties: {
-        text: { type: 'string' },
-        doculect: { type: 'string', description: `The language or dialect: one of ${DOCULECTS.join(', ')}, or another name.` },
-        meanings: { type: 'array', items: { type: 'integer', minimum: 1 }, description: 'The meanings this reading goes with, by their place in `meanings`, from 1.' },
-        evidence: EVIDENCE,
-      } } },
-      encodings: { type: 'array', description: 'The character sets, dictionaries and glyph registries that hold the character.', items: { type: 'object', required: ['charset', 'code'], properties: {
-        charset: { type: 'string', description: `One of ${REGISTRIES.map(registry => registry.id).join(', ')}, or another work's name.` },
-        code: { type: 'string', description: 'The code as the work writes it, such as U+2D6DD for unicode.' },
-      } } },
-      related: { type: 'array', items: { type: 'object', required: ['character', 'relationship'], properties: {
-        character: { type: 'string', description: 'The other character, or its description sequence.' },
-        relationship: { type: 'string', enum: RELATION_KINDS },
-        difference: { type: 'string', description: 'How the two forms differ.' },
-        basis: { type: 'string', description: 'The evidence or source for the relation, in words.' },
-        meanings: { type: 'array', items: { type: 'integer', minimum: 1 }, description: 'The meanings under which the relation holds, by their place in `meanings`.' },
-        readings: { type: 'array', items: { type: 'integer', minimum: 1 }, description: 'The readings under which the relation holds, by their place in `readings`.' },
-        evidence: EVIDENCE,
-      } } },
-      ivd: { type: 'string', description: 'A registered IVD sequence such as "U+4E00 U+E0100", or "none" when the form is known to have none.' },
-      categories: { type: 'array', items: { type: 'string' } },
-      collections: { type: 'array', items: { type: 'string', enum: COLLECTIONS.map(collection => collection.slug) } },
-      tags: { type: 'array', items: { type: 'string' } },
+      ...recordFields({ type: 'array', items: { type: 'integer', minimum: 1 }, description: 'The sightings that support this, by their place in `sightings`, from 1.' }),
       sightings: { type: 'array', minItems: 1, maxItems: ADD_SIGHTINGS_MAX, items: { type: 'object', properties: SIGHTING } },
     } },
   },
@@ -457,13 +604,31 @@ const TOOLS: Tool[] = [
     description: `Add one more place a recorded form was seen. ${SIGHTING_RULE} Answers the record and the new sighting's id.`,
     inputSchema: { type: 'object', required: ['record'], properties: { record: RECORD, ...SIGHTING } },
   },
+  {
+    name: 'edit_record', title: 'Edit a record', annotations: EDITS, run: editRecordOf,
+    description: 'Change a record\'s own fields. A field left out stays as it is; a list given replaces the record\'s whole list, so send the rows to keep with the new ones. A row that repeats one the record holds, or names its key, keeps that row\'s evidence. Answers the new rev.',
+    inputSchema: { type: 'object', required: ['record', 'rev'], properties: {
+      record: RECORD, rev: REV, summary: SUMMARY,
+      ...recordFields(
+        { type: 'array', items: { type: 'integer', minimum: 1 }, description: 'The sightings that support this, by their id in get_record. Left out, a row that continues a claim keeps its evidence.' },
+        { type: 'string', description: 'The key get_record shows for the claim this row continues.' },
+      ),
+    } },
+  },
+  {
+    name: 'edit_sighting', title: 'Edit evidence on a record', annotations: EDITS, run: editSightingOf,
+    description: `Change one sighting of a record. A field left out stays as it is; quotes, vias and pictures given replace the whole list. Keep a picture by giving its address from get_record. ${SIGHTING_RULE} Answers the new rev.`,
+    inputSchema: { type: 'object', required: ['record', 'sighting', 'rev'], properties: {
+      record: RECORD, sighting: { type: 'integer', minimum: 1, description: 'The sighting\'s id in get_record.' }, rev: REV, summary: SUMMARY, ...SIGHTING,
+    } },
+  },
 ]
 
 /** Public tool names and whether each writes, in server order. */
 export const MCP_TOOLS = TOOLS.map(({ name, annotations }) => ({ name, write: annotations.readOnlyHint !== true }))
 
-/** The tools, known tag names listed on `add_record`'s `categories` alias schema. */
-export const toolList = (tags: readonly string[]) => TOOLS.map(({ run: _, ...tool }) => tool.name !== 'add_record' ? tool : {
+/** The tools, known tag names listed on the `categories` schema of the tools that take one. */
+export const toolList = (tags: readonly string[]) => TOOLS.map(({ run: _, ...tool }) => !('categories' in record(tool.inputSchema.properties)) ? tool : {
   ...tool, inputSchema: { ...tool.inputSchema, properties: { ...record(tool.inputSchema.properties), categories: { type: 'array', items: { type: 'string', enum: tags } } } },
 })
 

@@ -735,6 +735,8 @@
   "mcp.tool.get_record": "記録の主張、出典、画像URLを取得します。",
   "mcp.tool.add_record": "新しい文字と証拠を追加します。",
   "mcp.tool.add_sighting": "既存の記録に証拠を1件追加します。",
+  "mcp.tool.edit_record": "記録の内容を修正します。",
+  "mcp.tool.edit_sighting": "記録の証拠を1件修正します。",
   "mcp.authTitle": "ログインと書き込み",
   "mcp.authBody": "ログインしなくても利用でき、接続ごとに新しい匿名の名前が付きます。OAuth 2.1対応のクライアントからGlyph Atlasで認証すると、ご自身のアカウント名義で記録されます。",
   "mcp.writesBody": "書き込みにはWebフォームと同じ検証が適用されます。証拠画像は公開URLから取得されます。"
