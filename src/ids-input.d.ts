@@ -6,6 +6,7 @@ declare module 'ids-input' {
   export function isDescription(text: string | null | undefined): boolean
   export function parse(ids: string | null | undefined, options?: { open?: boolean }): { tree?: IdsPart; problem?: IdsProblem }
   export function isNode(part: IdsPart | undefined): part is IdsNode
+  export function rateFormsOfPart(part: IdsPart | undefined): readonly { id: string; label: string; text: string }[]
   export function write(tree: IdsPart): string
 }
 

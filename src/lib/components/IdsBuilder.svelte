@@ -21,6 +21,7 @@
   // The IDS Workshop's tools over the editor of a description's own field: the operators, the
   // description as a tree, the chosen part, and the pickers a part is taken from. They edit the text in
   // the field, so the drawing beside it follows each part as it is placed.
+  import { rateFormsOfPart } from 'ids-input'
   import { createUnifiable, grassForm, IdsAlternatives, IdsCharacterInfo, IdsOperators, IdsPartTools, IdsPicker, IdsTree, type IdsEditor } from 'ids-input/svelte'
   // ids-input loads a font shard for each rare character a panel shows; its entry point does not export the watcher.
   import { watchFallback } from '../../../node_modules/ids-input/src/svelte/fallback-font.js'
@@ -62,7 +63,7 @@
   {/if}
 {/snippet}
 <IdsCharacterInfo root={scope ?? root} {adapter} {messages} {locale} onpick={(part, path) => editor.take(part, path)}
-  extra={grassForm(editor) || unifiable.entries.length ? formChoices : undefined} />
+  extra={grassForm(editor) || rateFormsOfPart(editor.picked).length || unifiable.entries.length ? formChoices : undefined} />
 
 <style>
   .builder {
