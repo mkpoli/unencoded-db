@@ -15,7 +15,7 @@
   let { data, form } = $props()
   const source = $derived(data.source)
   const heading = $derived(sourceHeading(source, t))
-  const structured = $derived(sourceData({ locale: locale(), source, name: heading, siteName: t('app.name'), sourcesName: t('nav.sources') }))
+  const structured = $derived(sourceData({ locale: locale(), source, archives: data.archives, name: heading, siteName: t('app.name'), sourcesName: t('nav.sources') }))
   const facts = [
     { key: 'title', label: 'field.title' },
     { key: 'author', label: 'field.author' },

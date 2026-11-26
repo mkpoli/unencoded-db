@@ -61,14 +61,16 @@ export function recordData(facts: RecordFacts): Json[] {
   ]
 }
 
-export type SourcePageFacts = { locale: string; source: SourceFacts; name: string; siteName: string; sourcesName: string }
+// `archives` are copies of the source kept by web archives, given as `archivedAt`.
+export type SourcePageFacts = { locale: string; source: SourceFacts; archives?: string[]; name: string; siteName: string; sourcesName: string }
 
-export function sourceData({ locale, source, name, siteName, sourcesName }: SourcePageFacts): Json[] {
+export function sourceData({ locale, source, archives = [], name, siteName, sourcesName }: SourcePageFacts): Json[] {
+  const copies = archives.map(web).filter(url => url !== null)
   const url = sourceUrl(locale, source.id), container = containerOf(source)
   return [
     present({
       '@context': CONTEXT, '@type': 'CreativeWork', '@id': url, url, name, creator: source.author, publisher: source.publisher,
-      datePublished: machineDate(source.report_date), sameAs: web(source.url), inLanguage: locale,
+      datePublished: machineDate(source.report_date), sameAs: web(source.url), archivedAt: copies.length ? copies : null, inLanguage: locale,
       isPartOf: container ? [SITE, container] : SITE,
     }),
     breadcrumbs([{ name: siteName, url: `${SITE_ORIGIN}/${locale}` }, { name: sourcesName, url: `${SITE_ORIGIN}/${locale}/sources` }, { name, url }]),
