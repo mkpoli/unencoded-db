@@ -220,6 +220,26 @@ test('a token follows its person into the account they sign in to, and stops at 
   expect((await call('add_record', record('⿰山西'), headers)).status).toBe(401)
 })
 
+test('a token bound to an agent row records writes under the agent while honoring the commander', async () => {
+  const { db, raw, call } = fixture()
+  raw.exec("INSERT INTO people(id, name, atlas_sub, role, created_at) VALUES('cmd', 'Commander', 'sub', 'moderator', '2026-01-01T00:00:00.000Z')")
+  raw.exec("INSERT INTO people(id, name, created_at, merged_into, agent) VALUES('ag1', 'Antigravity Gemini 4 Neon', '2026-01-01T00:00:00.000Z', 'cmd', 1)")
+  raw.exec("INSERT INTO agent_clients(id, name, redirect_uris, created_at) VALUES('c1', 'Antigravity', '[]', '2026-01-01T00:00:00.000Z')")
+  const access = 'b'.repeat(64)
+  raw.run("INSERT INTO agent_tokens(token_hash, client, person, created_at) VALUES(?, 'c1', 'ag1', ?)", [await hashHex(access), new Date().toISOString()])
+  const headers = { authorization: `Bearer ${access}` }
+
+  expect((await (await call('add_record', record('⿰山東'), headers)).json()).result.isError).toBeUndefined()
+  expect(raw.query('SELECT created_by FROM entries').get()).toEqual({ created_by: 'ag1' })
+  expect(raw.query('SELECT changes FROM people WHERE id = ?').get('cmd')).toEqual({ changes: 2 })
+  expect(raw.query('SELECT changes FROM people WHERE id = ?').get('ag1')).toEqual({ changes: 0 })
+
+  // Banning the commander immediately stops the agent's token.
+  raw.exec("UPDATE people SET banned_at = '2026-11-26T00:00:00.000Z' WHERE id = 'cmd'")
+  expect((await (await call('add_record', record('⿰山西'), headers)).json()).result).toMatchObject({ isError: true })
+  expect(db).toBeDefined()
+})
+
 test('a form is taken only from this site, and the token endpoints from anywhere', async () => {
   const { send, form, client, consent, count } = fixture()
   const posted = (route: string, path: string, headers: Record<string, string>) => send(route, path, { method: 'POST', headers, body: 'decision=allow' }).then((answer: any) => answer.status, (thrown: any) => thrown.status)

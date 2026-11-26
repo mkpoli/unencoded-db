@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { DateReading } from '$lib/dates'
+  import AgentBadge from './AgentBadge.svelte'
   import RevisionFields from './RevisionFields.svelte'
   import { localized, tagLabels, type Tag } from '$lib/tags'
   import type { EntryFields, SightingFields } from '$lib/server/entries'
@@ -9,7 +10,7 @@
 
   type Row = {
     id: number; entry_id: number; sighting_id: number | null; kind: string; rev: number
-    summary: string | null; at: string; by_id: string; by_name: string; ids?: string | null
+    summary: string | null; at: string; by_id: string; by_name: string; by_agent?: string | null; ids?: string | null
     fields: EntryFields | null; sightingFields: SightingFields | null; sightingRev?: number | null
     redacted?: boolean; redacted_at?: string | null; removed?: boolean | number
     merge?: { from: number } | { into: number } | null
@@ -40,7 +41,10 @@
   <time class="revision-time" datetime={row.at}>{when(row.at)}</time>
   {#if showActor}
     <span class="revision-actor">
-      {#if row.by_name}<a class="text-link" href={href(`/u/${row.by_id}`)} onclick={stop}>{row.by_name}</a>{:else}—{/if}
+      {#if row.by_name}
+        <a class="text-link actor-name" href={href(`/u/${row.by_id}`)} onclick={stop}>{row.by_name}</a>
+        {#if row.by_agent}<AgentBadge name={row.by_agent} standalone={row.by_agent === row.by_name} />{/if}
+      {:else}—{/if}
     </span>
   {/if}
   <span class="revision-change">
@@ -51,6 +55,7 @@
       {:else if row.sighting_id}<a class="revision-number" href={href(`/entry/${row.entry_id}#sighting-${row.sighting_id}`)} onclick={stop}>#{row.sighting_id}</a>{/if}
       {#if row.merge}{@const other = 'from' in row.merge ? row.merge.from : row.merge.into}<a class="revision-number" href={href(`/entry/${other}`)} onclick={stop}>{t('from' in row.merge ? 'history.mergedFrom' : 'history.mergedTo', { id: recordCode(other) })}</a>{/if}
       {#if row.moved}{@const holder = row.moved.to ?? row.entry_id}<a class="revision-number" href={href(`/entry/${holder}#sighting-${row.moved.sighting}`)} onclick={stop}>#{row.moved.sighting}</a><a class="revision-number" href={href(`/entry/${row.moved.to ?? row.moved.from}`)} onclick={stop}>{t(row.moved.to ? 'history.movedTo' : 'history.movedFrom', { id: recordCode((row.moved.to ?? row.moved.from)!) })}</a>{/if}
+      {#if !showActor && row.by_agent}<AgentBadge name={row.by_agent} standalone={row.by_agent === row.by_name} />{/if}
     </span>
     {#if row.redacted || row.redacted_at}<span class="revision-comment">{t('history.redacted')}</span>{:else if row.summary}<span class="revision-comment">{row.summary}</span>{/if}
   </span>
@@ -144,10 +149,10 @@
   .revision-row:hover { background: var(--surface-tile) }
   .revision-row.static:hover { background: none }
   .revision-time { flex: 0 0 148px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap }
-  .revision-actor { flex: 0 0 140px; min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-  .revision-actor a { color: var(--ink) }
+  .revision-actor { display: flex; flex: 0 0 clamp(170px, 32%, 242px); flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; color: var(--muted) }
+  .actor-name { max-inline-size: 100%; overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap }
   .revision-change { display: flex; flex: 1 1 0; flex-direction: column; gap: 2px; min-width: 0 }
-  .revision-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 7px; min-width: 0 }
+  .revision-main { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 7px; min-width: 0 }
   .revision-kind { font-weight: 500 }
   .revision-entry { font-weight: 500; overflow-wrap: anywhere }
   .revision-number { color: var(--muted); font-size: 11.5px; white-space: nowrap }
@@ -173,7 +178,7 @@
   @media (max-width: 700px) {
     .revision-row { flex-wrap: wrap; gap: 2px 10px; padding: 12px 2px }
     .revision-time { flex: 0 0 auto }
-    .revision-actor { flex: 1 1 auto; order: 2 }
+    .revision-actor { flex: 1 1 auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 6px; order: 2 }
     .redact-reason { order: 5 }
     .revision-thank { order: 3; margin-left: auto }
     .revision-toggle { order: 3; margin-left: auto }

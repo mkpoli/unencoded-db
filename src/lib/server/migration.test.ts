@@ -184,7 +184,7 @@ test('0005 gives every claim a key, a list of sightings and a scope, in claims a
   expect(journal.filter(row => !versions.some(version => version.id === row.id)).map(row => row.snapshot)).toEqual([sighting, '{}', '{"revision":4}', '{}', '{"from":3}'])
 
   // An old version is restored through the store, with its keys and the sighting it rested on.
-  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0019_via_chain.sql', '0016_tag_year.sql', '0018_first_sighting.sql', '0023_categories.sql', '0024_category_rows.sql', '0026_typed_tags.sql', '0027_date_readings.sql', '0028_publishers.sql', '0029_via_quote.sql', '0031_sighting_quotations.sql', '0041_source_container.sql', '0048_source_kind.sql', '0045_tag_aliases.sql', '0056_forms.sql', '0055_via_pictures.sql']) raw.exec(migration(name))
+  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0019_via_chain.sql', '0016_tag_year.sql', '0018_first_sighting.sql', '0023_categories.sql', '0024_category_rows.sql', '0026_typed_tags.sql', '0027_date_readings.sql', '0028_publishers.sql', '0029_via_quote.sql', '0031_sighting_quotations.sql', '0041_source_container.sql', '0048_source_kind.sql', '0045_tag_aliases.sql', '0056_forms.sql', '0055_via_pictures.sql', '0058_agent_attribution.sql']) raw.exec(migration(name))
   const db = d1Over(raw)
   expect(await revertEntry(db, 1, 1, { actor: 'p', ip: null })).toEqual({ ok: true, rev: 5 })
   expect((await getEntry(db, 1))!.claims).toEqual(first)
