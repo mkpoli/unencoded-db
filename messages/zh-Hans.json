@@ -687,6 +687,7 @@
   "tags.unimply": "取消{name}自动携带{target}",
   "tags.carriedBy": "由{via}自动携带",
   "tags.impliedAuto": "同时自动携带：",
+  "tags.fromSource": "同出处标签：",
   "tags.undo": "撤销",
   "tags.change.create": "添加",
   "tags.change.move": "移动",

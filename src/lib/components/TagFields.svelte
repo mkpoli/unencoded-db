@@ -20,11 +20,12 @@
   } from '$lib/tags'
   import { locale, t } from '$lib/t'
 
-  let { tags: given = [], groups: givenGroups = [], selected: named = [], collections = [] }: { tags?: Tag[]; groups?: TagGroup[]; selected?: string[]; collections?: string[] } = $props()
+  let { tags: given = [], groups: givenGroups = [], selected: named = [], collections = [], suggested: givenSuggested = [] }: { tags?: Tag[]; groups?: TagGroup[]; selected?: string[]; collections?: string[]; suggested?: string[] } = $props()
   const tags = $derived(localized(given, locale()))
   const groups = $derived(localized(givenGroups, locale()))
   // A record that names a tag by an alias shows, and saves, the tag it stands for.
   const selected = $derived([...new Set(named.map(name => canonicalName(name, tags)))])
+  const suggestedTags = $derived([...new Set(givenSuggested.map(name => canonicalName(name, tags)))].filter(name => tags.some(tag => tag.name === name)))
 
   const uid = $props.id()
   const GENERAL_PILL_LIMIT = 24
@@ -41,10 +42,10 @@
   let addError = $state<string | null>(null)
 
   const known = $derived<Tag[]>([...tags, ...made.filter(item => !tags.some(other => other.name === item.name))])
+  const extraNames = $derived(selected.filter(value => !known.some(item => item.name === value)))
   const all = $derived<Tag[]>([
     ...known,
-    ...selected
-      .filter(value => !known.some(item => item.name === value))
+    ...extraNames
       .map((value, index) => ({
         name: value,
         label: value,
@@ -52,7 +53,7 @@
         group: null,
         aliases: [],
         names: {},
-        position: Number.MAX_SAFE_INTEGER - selected.length + index,
+        position: Number.MAX_SAFE_INTEGER - extraNames.length + index,
         rev: 0,
         n: 0,
         implies: [],
@@ -95,6 +96,7 @@
     return [...set]
   })
   const closure = $derived(implicationClosure(activeDirect, all))
+  const activeDirectSet = $derived(new Set(activeDirect))
   const impliedMap = $derived(new Map(closure.implied.map(item => [item.name, item.via])))
 
   async function addTag() {
@@ -160,6 +162,28 @@
       {/each}
     </div>
   {/each}
+
+  {#if suggestedTags.length}
+    <div class="implied-row" aria-live="polite">
+      <span class="implied-label">{t('tags.fromSource')}</span>
+      {#each suggestedTags as name (name)}
+        {@const info = byName.get(name)}
+        {@const ticked = activeDirectSet.has(name)}
+        <button
+          type="button"
+          class="tag-chip suggest"
+          class:ticked
+          data-tag-type={info?.type ?? 'general'}
+          aria-pressed={ticked}
+          disabled={ticked}
+          onclick={() => setChecked(name, true)}
+        >
+          <span class="suggest-mark" aria-hidden="true">{ticked ? '✓' : '+'}</span>
+          <span>{info?.label ?? name}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
 
   {#if closure.implied.length}
     <div class="implied-row" aria-live="polite">
@@ -273,6 +297,10 @@
   .pills { display: flex; flex-wrap: wrap; gap: 6px }
   .implied-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 7px; background: var(--surface-sunken); font-size: 12.5px }
   .implied-label { color: var(--muted); font-weight: 500 }
+  .tag-chip.suggest { min-block-size: max(28px, var(--target-size)); cursor: pointer }
+  .tag-chip.suggest:hover:not(:disabled) { filter: brightness(0.95) }
+  .tag-chip.suggest.ticked { opacity: 0.72; cursor: default }
+  .suggest-mark { font-weight: 600 }
   .via { font-size: 11.5px; opacity: 0.8 }
   .new-tag { container: new-tag / inline-size; border: 1px solid var(--line); border-radius: 7px; padding: 8px 12px }
   .new-tag summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 500 }

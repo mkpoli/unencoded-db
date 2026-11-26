@@ -687,6 +687,7 @@
   "tags.unimply": "Stop carrying {target} from {name}",
   "tags.carriedBy": "Carried automatically by {via}",
   "tags.impliedAuto": "Also carried automatically:",
+  "tags.fromSource": "From this source:",
   "tags.undo": "Undo",
   "tags.change.create": "Added",
   "tags.change.move": "Moved",
