@@ -43,8 +43,12 @@ test('export pages JSON and escapes CSV cells', async () => {
   expect(body.entries[0].evidence).toHaveLength(1)
   expect(body.next).toBe(1)
   expect(response.headers.get('link')).toContain('after=1')
+  raw.exec("UPDATE sightings SET original_date = '-168'; UPDATE entries SET first_year = '-167'")
   const csv = await (await exportEntries(event('/api/entries?format=csv'))).text()
   expect(csv).toContain('"\'=formula"')
+  // A year before the common era is a number, and stays one.
+  expect(csv).toContain('"-168"')
+  expect(csv).not.toContain("'-16")
   const header = csv.split('\r\n')[0]
   expect(header).not.toContain('record_code')
   expect(header).not.toContain('created_by_name')

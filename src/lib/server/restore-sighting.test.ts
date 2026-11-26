@@ -4,7 +4,7 @@ import { createPerson } from './people'
 import { openTestDb } from './testdb'
 
 const entry: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] }
-const seen = (place: string): SightingFields => ({ place, url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null })
+const seen = (place: string): SightingFields => ({ place, url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null })
 const image: StoredImage = { image_key: 'current.webp', image_type: 'image/webp', image_w: 100, image_h: 80, thumb_key: 'thumb.webp', box: '[[1,2,10,10]]' }
 
 async function fixture() {
@@ -39,8 +39,11 @@ test('rejects stale, hidden and unrelated sightings', async () => {
 
 test('visibility and ownership changes immediately before the batch prevent restoration', async () => {
   for (const change of ['sighting hidden', 'entry hidden', 'entry merged', 'moved'] as const) {
-    const { db, raw, who, id, sighting } = await fixture()
+    const { db, raw } = openTestDb()
+    const who = { actor: (await createPerson(db)).id, ip: null }
     const other = await createEntry(db, entry, seen('other'), [], who)
+    const id = await createEntry(db, entry, seen('original'), [], who)
+    const sighting = (await getEntry(db, id))!.sightings[0].id
     const batch = db.batch.bind(db)
     let injected = false
     db.batch = (async (statements: D1PreparedStatement[]) => {

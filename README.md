@@ -8,7 +8,7 @@ When two records are the same character, and how to merge them, is set out in [d
 
 ## Local development
 
-Install [Bun](https://bun.sh/) and run:
+Install [Bun](https://bun.sh/) and the ICU command-line tools (`icu-devtools` on Ubuntu), then run:
 
 ```sh
 bun install
@@ -33,26 +33,28 @@ Without client credentials, the site offers anonymous contributions. Signing in 
 
 ## Evidence dates
 
-Report dates, original dates and dates in a citation chain keep the contributor's transcription. Chinese and Japanese era dates use the [HuTime Calendar Conversion API](https://ap.hutime.org/cal/). Each HuTime conversion records its query, precision and inclusive Western-calendar bounds. For example, 明萬曆34年 runs from 1606-02-07 through 1607-01-27. The chronology files it under 1606. Dates already in the Western calendar use the same 1582 Julian/Gregorian cutover. An ambiguous or unreadable expression stays available as entered. A dynasty name or the prefix 日本 can identify the intended calendar.
+Report dates, original dates and dates in a citation chain keep the contributor's transcription. Chinese and Japanese era dates use the [HuTime Calendar Conversion API](https://ap.hutime.org/cal/). Each HuTime conversion records its query, precision and inclusive Western-calendar bounds. For example, 明萬曆34年 runs from 1606-02-07 through 1607-01-27. The chronology files it under 1606. Dates already in the Western calendar use the same 1582 Julian/Gregorian cutover. A year before the common era is read from 前168年, 西元前168年, 168 BCE, BC 168, 168 TCN, 기원전 168년 or -168, all the same year; a minus sign counts years as BCE does, with no year 0, and the record and source pages show the year beside it. A zero-padded signed year (-0168) stays unread, since it is how ISO 8601 writes one, and ISO 8601 counts it one year apart. The bounds and `first_year` in the exports and the API follow ISO 8601: 168 BCE is -0167 and -167. An ambiguous or unreadable expression stays available as entered. A dynasty name or the prefix 日本 can identify the intended calendar.
 
 The local setup and production release run the date sweep after applying migrations. Saving a sighting retries its unresolved dates. To retry all unresolved dates locally, run `bun scripts/sweep-dates.ts --local`. Add `--recheck` to verify existing readings again. A failed lookup preserves the previous reading. The sweep also rebuilds source years, earliest sightings and decade counts. The paged JSON export includes a `date_readings` dictionary keyed by the original wording. The paged CSV export carries the same readings for each sighting in the `date_readings` column; the whole-dataset files keep the transcribed dates in each sighting.
 
 ## Source names
 
-On a source page, open **Alternate names** to add a spelling or abbreviation for that citation. The Sources page and the title fields for direct and intermediate citations accept the start of a title or alternate name. Picking an edition fills its citation details. A new title can be entered freely. URL-only sources also match their hostname. The release runs `scripts/sweep-source-names.ts` to normalize existing names.
+On a source page, open **Alternate names** to add a spelling or abbreviation for that citation. The Sources page and the title fields for direct and intermediate citations accept the start of a title or alternate name. Picking an edition fills its citation details. A new title can be entered freely. URL-only sources also match their hostname. The Sources page also accepts the start of an author, of one of several authors separated by `、` or `;`, of what the source appeared in, of its link, and the account or number in brackets after a name, as in `甲（@account）` or `甲（1234567）`. The release runs `scripts/sweep-source-names.ts` to normalize existing names.
+
+Local setup and each release run `bun scripts/sweep-title-readings.ts` with `--local` or `--remote` to index every public source title. For example, both `Dai Nam nhat thong chi` and `Da Nan Yi Tong Zhi` find 大南一統志. The picker shows the recorded title and citation evidence. Only curated title variants appear with a variant label. A newly cited title is searchable as entered immediately and gains its generated spellings at the next sweep.
 
 ## Publishers
 
-A citation can name what the source appeared in: the journal and issue of an article, the site of a page, or the group of a chat message. A chat message, a forum post or a personal communication is cited as itself, with its author as they sign, its own date and the words quoted; the group or channel is its container, the service its publisher, and it has no title. A private message has no container. Choosing a suggested container fills the publisher and leaves the author and date to the message.
+A citation can name what the source appeared in: the journal and issue of an article, the site of a page, or the group of a chat message. A chat message, a forum post or a personal communication is cited as itself, with its author as they sign, its own date and the words quoted; the group or channel is its container, the service its publisher, and it has no title. A private message, a letter or a conversation has no container and is marked a personal communication. Choosing a suggested container fills the publisher and leaves the author and date to the message.
 
 The Sources page filters direct and intermediate citations by publisher. A contributor can choose a suggested publisher or enter a new name. The directory groups verified spellings such as 江蘇教育出版社 and 江苏教育出版社. Citations, exports and revision history retain the submitted name. Only publishers cited by a visible record appear in suggestions. The release runs `scripts/sweep-publishers.ts` to reconcile legacy lookup keys. The local setup runs the same sweep.
 
 ## Agents
 
-`https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. In Claude Code:
+`https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. `/[locale]/mcp` carries the setup commands, install links and tool list. In Claude Code:
 
 ```sh
-claude mcp add --transport http rare https://rare.glyphatlas.org/mcp
+claude mcp add --scope user --transport http rare https://rare.glyphatlas.org/mcp
 ```
 
 | Tool | Does |
@@ -76,6 +78,7 @@ An agent can sign in, and then writes under a person's name. The site is the OAu
 | `sightings` | One place the character was seen: where, page, date, contexts, style, source types |
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
 | `source_aliases`, `source_alias_changes`, `source_search_names` | Alternate names for individual citations, their contributor history, and the lookup index for visible sources |
+| `source_keys` | The authors, containers, links and account numbers the Sources page finds a source by |
 | `date_readings`, `evidence_dates` | Calendar readings and the view of transcribed dates in sources, sightings and revision history |
 | `date_index_state` | Generation used to retry writes when their date readings change |
 | `publishers`, `publisher_aliases` | Publisher identities and reviewed alternative spellings for the source filter |

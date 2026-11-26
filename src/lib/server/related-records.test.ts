@@ -5,7 +5,7 @@ import { createPerson } from './people'
 import { relatedClaimsStatements, relatedPicturesStatement, relatedRecords, relatedTilesStatement, RELATED_PICTURES } from './related-records'
 import { openTestDb } from './testdb'
 
-const seen = (place: string, more: Partial<SightingFields> = {}): SightingFields => ({ place, url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...more })
+const seen = (place: string, more: Partial<SightingFields> = {}): SightingFields => ({ place, url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...more })
 const picture = (name: string): StoredImage => ({ image_key: `${name}.webp`, image_type: 'image/webp', image_w: 10, image_h: 10, thumb_key: `${name}-t.webp`, box: null })
 const record = (claims: Claim[]): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims })
 const relation = (character: string, relationship: string) => newClaim('relation', character, { relationship })
@@ -39,12 +39,12 @@ test('a record shows the records its relations name and the ones that name it, w
 
 test('a relation names a record by its code, from either side, and follows a merge', async () => {
   const { db, who, related } = await fixture()
+  const last = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('last'), [], who)
+  const kept = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('kept'), [], who)
   const a = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('a'), [picture('a')], who)
-  const b = await createEntry(db, record([newClaim('ids', '⿱𥫗雚'), relation('R+0001', 'variant'), relation('R+0002', 'similar'), relation('R+0009', 'similar')]), seen('b'), [picture('b')], who)
+  const b = await createEntry(db, record([newClaim('ids', '⿱𥫗雚'), relation('R+0003', 'variant'), relation('R+0004', 'similar'), relation('R+0009', 'similar')]), seen('b'), [picture('b')], who)
   expect((await related(b)).map(item => [item.tile.id, item.relationships, item.stated])).toEqual([[a, ['variant'], []]])
   expect((await related(a)).map(item => [item.tile.id, item.relationships, item.stated])).toEqual([[b, [], ['variant']]])
-  const kept = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('kept'), [], who)
-  const last = await createEntry(db, record([newClaim('ids', '⿱艹雚')]), seen('last'), [], who)
   await mergeEntry(db, a, kept, who, null)
   await mergeEntry(db, kept, last, who, null)
   expect((await related(b)).map(item => [item.tile.id, item.named])).toEqual([[last, [a]]])

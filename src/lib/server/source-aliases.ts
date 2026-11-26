@@ -2,16 +2,17 @@ import { sourceNameKey, titleReadingKey } from '../name-key'
 import { sampledSightings } from './source-sightings'
 import type { Source } from './entries'
 
-// Read both indexed prefix ranges. A source may match several readings and its literal name.
+// Read every indexed prefix range. A source may match several readings, its literal name and its other keys.
 const prefix = "lookup >= ? AND lookup < CAST(? || X'FF' AS TEXT)"
 const readingMatches = `SELECT r.lookup, c.id AS source_id FROM source_title_readings r
   CROSS JOIN sources c ON c.title = r.title AND c.records > 0 WHERE ${prefix}`
 export const sourceMatches = `SELECT source_id FROM source_search_names WHERE ${prefix}
-  UNION ALL SELECT source_id FROM (${readingMatches})`
+  UNION ALL SELECT source_id FROM (${readingMatches})
+  UNION ALL SELECT k.source_id FROM source_keys k CROSS JOIN sources c ON c.id = k.source_id AND c.records > 0 WHERE ${prefix}`
 
 export function sourceMatchParams(text: string) {
   const literal = sourceNameKey(text), reading = titleReadingKey(text) || null
-  return [literal, literal, reading, reading]
+  return [literal, literal, reading, reading, literal, literal]
 }
 
 export const SOURCE_SUGGESTIONS = 24
@@ -27,12 +28,15 @@ export async function suggestSources(db: D1Database, text: string, cursor: NameC
   const [after, id] = cursor ?? ['', 0]
   // Each source has one winning name across cursor pages. Prefer a matching shared reading.
   const { results } = await db.prepare(`WITH titles AS MATERIALIZED (
-    SELECT title, min(lookup) AS lookup FROM source_title_readings WHERE ${prefix} GROUP BY title
+    SELECT title, coalesce(min(lookup) FILTER (WHERE generated = 0), min(lookup)) AS lookup FROM source_title_readings WHERE ${prefix} GROUP BY title
   )
-  SELECT c.id, c.title, c.url, c.author, c.publisher, c.report_date, c.container, c.records,
+  SELECT c.id, c.title, c.url, c.author, c.publisher, c.report_date, c.container, c.source_kind, c.records,
     (SELECT json_object('thumb', thumb, 'entry', entry, 'ids', ids, 'place', place, 'page', page, 'via', via)
       FROM (${sample(false)} UNION ALL ${sample(true)}) ORDER BY thumb IS NULL, via, sighting LIMIT 1) AS evidence,
-    n.lookup, a.spelling AS alias, r.spelling AS reading FROM (
+    n.lookup, CASE WHEN r.generated = 1 THEN (
+      SELECT spelling FROM source_aliases WHERE source_id = n.source_id AND lookup >= ?3
+        AND lookup < CAST(?3 || X'FF' AS TEXT) ORDER BY lookup LIMIT 1) ELSE a.spelling END AS alias,
+    CASE WHEN r.generated = 0 THEN r.spelling END AS reading FROM (
       SELECT lookup, source_id FROM source_search_names candidate
       WHERE lookup < CAST(?3 || X'FF' AS TEXT)
         AND (lookup, source_id) > (max(?3, ?4), CASE WHEN ?4 >= ?3 THEN ?5 ELSE 0 END)

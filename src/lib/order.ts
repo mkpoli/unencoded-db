@@ -12,8 +12,11 @@ export const SOURCE_SORTS = ['new', 'most', 'earliest', 'latest'] as const
 export type SourceSort = (typeof SOURCE_SORTS)[number]
 export const sourceSortOf = (value: string | null | undefined): SourceSort | null => !value ? 'new' : (SOURCE_SORTS as readonly string[]).includes(value) ? value as SourceSort : null
 export const seedOf = (value: string | null | undefined) => value && /^(0|[1-9]\d{0,9})$/.test(value) && Number(value) < SEEDS ? Number(value) : null
-// The records one page of a list holds.
+// The records one page of a list holds, and the sizes a reader can choose in ?per=. Each size has many divisors,
+// so the grid's rows fill, and stays under the candidates one read of a search tests. A tile reads one stored drawing.
 export const PAGE = 48
+export const PAGE_SIZES = [24, 48, 72, 96, 144, 192] as const
+export const pageSizeOf = (value: string | null | undefined) => !value ? PAGE : (PAGE_SIZES as readonly number[]).includes(Number(value)) && String(Number(value)) === value && Number(value) !== PAGE ? Number(value) : null
 // The page numbers a pager offers: the first, the last and those beside the open ones, with null where numbers are left out.
 export function pageSteps(from: number, to: number, last: number, beside = 2): (number | null)[] {
   const steps: (number | null)[] = []

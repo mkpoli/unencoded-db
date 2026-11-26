@@ -29,7 +29,7 @@ export const load: PageServerLoad = async event => {
   const [reports, entries, sightings] = await Promise.all([
     openReports(db, reportsAfter ?? 0),
     db.prepare(`SELECT id, ids, hidden_at FROM entries WHERE hidden_at IS NOT NULL AND id < ? ORDER BY id DESC LIMIT ${HIDDEN_PAGE + 1}`).bind(entryBefore ?? Number.MAX_SAFE_INTEGER).all<{ id: number; ids: string | null; hidden_at: string }>(),
-    db.prepare(`SELECT s.id, s.entry_id, s.place, s.hidden_at, e.ids FROM sightings s JOIN entries e ON e.id = s.entry_id WHERE s.hidden_at IS NOT NULL AND s.id < ? ORDER BY s.id DESC LIMIT ${HIDDEN_PAGE + 1}`).bind(sightingBefore ?? Number.MAX_SAFE_INTEGER).all<{ id: number; entry_id: number; place: string; hidden_at: string; ids: string | null }>(),
+    db.prepare(`SELECT s.id, s.entry_id, s.place, s.hidden_at, s.removed_by IS NOT NULL AS removed, e.ids FROM sightings s JOIN entries e ON e.id = s.entry_id WHERE s.hidden_at IS NOT NULL AND s.id < ? ORDER BY s.id DESC LIMIT ${HIDDEN_PAGE + 1}`).bind(sightingBefore ?? Number.MAX_SAFE_INTEGER).all<{ id: number; entry_id: number; place: string; hidden_at: string; removed: number; ids: string | null }>(),
   ])
   return {
     reports: reports.reports,

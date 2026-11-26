@@ -1,4 +1,6 @@
 <script lang="ts">
+  import EvidenceDate from './EvidenceDate.svelte'
+  import { westernDate } from '$lib/dates'
   // The records a record is compared with, one to a row: its glyph, what relates the two, and the
   // pictures of its first sightings, each leading to that sighting on its own page.
   import { recordCode } from '$lib/code'
@@ -30,7 +32,7 @@
             <li>
               <a href="{href(`/entry/${tile.id}`)}#sighting-{picture.sighting}" title={name}>
                 <img src={media(picture.thumb_key)} alt={name} loading="lazy" decoding="async" />
-                <span class="caption"><span class="name">{name}</span>{#if picture.date}<span class="date">{picture.date}</span>{/if}</span>
+                <span class="caption"><span class="name">{name}</span>{#if picture.date}<span class="date"><EvidenceDate text={picture.date} reading={westernDate(picture.date)} /></span>{/if}</span>
               </a>
             </li>
           {/each}

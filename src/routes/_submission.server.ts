@@ -1,3 +1,4 @@
+import { parseRecordCode } from '$lib/code'
 import { readBoxes, SIGHTING_FIELDS, VIA_INPUTS, type StoredImage } from '$lib/server/entries'
 import { MAX_IMAGE, MAX_THUMB, prepareImage, storeImage } from '$lib/server/image'
 import { MEDIA_MAX } from '$lib/limits'
@@ -107,3 +108,6 @@ export function positiveId(value: string | null | undefined): number | null {
   const id = Number(value)
   return Number.isSafeInteger(id) ? id : null
 }
+
+/** A record as a reader names it: its number, its code in either spelling, or the address of its page. */
+export const recordNamed = (text: string) => positiveId(text.trim()) ?? parseRecordCode(text) ?? positiveId(/\/entry\/(\d+)/.exec(text)?.[1])
