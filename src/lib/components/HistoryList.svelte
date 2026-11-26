@@ -10,7 +10,7 @@
 
   type Row = {
     id: number; entry_id: number; sighting_id: number | null; kind: string; rev: number
-    summary: string | null; at: string; by_id: string; by_name: string; by_agent?: string | null; ids?: string | null
+    summary: string | null; at: string; by_id: string; by_name: string; by_agent?: string | null; by_model?: string | null; ids?: string | null
     fields: EntryFields | null; sightingFields: SightingFields | null; sightingRev?: number | null
     redacted?: boolean; redacted_at?: string | null; removed?: boolean | number
     merge?: { from: number } | { into: number } | null
@@ -43,7 +43,7 @@
     <span class="revision-actor">
       {#if row.by_name}
         <a class="text-link actor-name" href={href(`/u/${row.by_id}`)} onclick={stop}>{row.by_name}</a>
-        {#if row.by_agent}<AgentBadge name={row.by_agent} standalone={row.by_agent === row.by_name} />{/if}
+        {#if row.by_agent}<AgentBadge name={row.by_agent} model={row.by_model ?? null} standalone={row.by_agent === row.by_name} />{/if}
       {:else}—{/if}
     </span>
   {/if}
@@ -55,7 +55,7 @@
       {:else if row.sighting_id}<a class="revision-number" href={href(`/entry/${row.entry_id}#sighting-${row.sighting_id}`)} onclick={stop}>#{row.sighting_id}</a>{/if}
       {#if row.merge}{@const other = 'from' in row.merge ? row.merge.from : row.merge.into}<a class="revision-number" href={href(`/entry/${other}`)} onclick={stop}>{t('from' in row.merge ? 'history.mergedFrom' : 'history.mergedTo', { id: recordCode(other) })}</a>{/if}
       {#if row.moved}{@const holder = row.moved.to ?? row.entry_id}<a class="revision-number" href={href(`/entry/${holder}#sighting-${row.moved.sighting}`)} onclick={stop}>#{row.moved.sighting}</a><a class="revision-number" href={href(`/entry/${row.moved.to ?? row.moved.from}`)} onclick={stop}>{t(row.moved.to ? 'history.movedTo' : 'history.movedFrom', { id: recordCode((row.moved.to ?? row.moved.from)!) })}</a>{/if}
-      {#if !showActor && row.by_agent}<AgentBadge name={row.by_agent} standalone={row.by_agent === row.by_name} />{/if}
+      {#if !showActor && row.by_agent}<AgentBadge name={row.by_agent} model={row.by_model ?? null} standalone={row.by_agent === row.by_name} />{/if}
     </span>
     {#if row.redacted || row.redacted_at}<span class="revision-comment">{t('history.redacted')}</span>{:else if row.summary}<span class="revision-comment">{row.summary}</span>{/if}
   </span>
@@ -149,7 +149,7 @@
   .revision-row:hover { background: var(--surface-tile) }
   .revision-row.static:hover { background: none }
   .revision-time { flex: 0 0 148px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap }
-  .revision-actor { display: flex; flex: 0 0 clamp(170px, 32%, 242px); flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; color: var(--muted) }
+  .revision-actor { display: flex; flex: 0 0 clamp(185px, 34%, 262px); flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; color: var(--muted) }
   .actor-name { max-inline-size: 100%; overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap }
   .revision-change { display: flex; flex: 1 1 0; flex-direction: column; gap: 2px; min-width: 0 }
   .revision-main { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 7px; min-width: 0 }
