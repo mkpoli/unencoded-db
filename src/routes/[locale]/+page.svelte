@@ -21,6 +21,7 @@
   import { TILE_SIZE_COOKIE, TILE_SIZES, pageColumns, tileSizeOf } from '$lib/tile-size'
   import { browseHref, browseSearchParams, mergeFilter, toggleMark, type BrowseState } from '$lib/browse-params'
   import { consumeReturningEntry, rememberBrowse } from '$lib/browse-return.svelte'
+  import { parseRecordCode } from '$lib/code'
   import type { Snapshot } from './$types'
   let { data } = $props()
   const tagSections = $derived(arrangeTags(localized(data.tags, locale()), localized(data.groups, locale())))
@@ -277,12 +278,18 @@
     }
     if (navigatingTo === target) return
     navigatingTo = target
+    const gotoOptions = parseRecordCode(trimmed) !== null ? {} : options
     try {
-      await goto(target, options)
+      await goto(target, gotoOptions)
     } finally {
       if (navigatingTo === target) navigatingTo = null
     }
   }
+  const controlsDirty = () =>
+    script !== (data.script ?? '') ||
+    need !== (NEEDS.includes(data.filter as never) ? (data.filter ?? '') : '') ||
+    (!pinned && tag !== (data.tag ?? '')) ||
+    decade !== (data.decade ?? '')
   function search(event: SubmitEvent) {
     event.preventDefault()
     void applyFilters({ noScroll: true, keepFocus: true })
@@ -292,7 +299,7 @@
     resolvingIds = false
     query = ''
     queryInput?.focus()
-    if (data.query || navigatingTo !== null) void applyFilters({ noScroll: true, keepFocus: true })
+    if (data.query || navigatingTo !== null || controlsDirty()) void applyFilters({ noScroll: true, keepFocus: true })
   }
   function queryKeydown(event: KeyboardEvent) {
     if (event.key !== 'Escape' || event.isComposing || event.keyCode === 229 || !query) return
@@ -300,6 +307,7 @@
     filterTicket++
     resolvingIds = false
     query = ''
+    if (controlsDirty()) void applyFilters({ noScroll: true, keepFocus: true })
   }
   // When the reader edited #q without submitting yet, clicking a status, sort, or work chip keeps that query.
   function chipClick(event: MouseEvent, overrides: Partial<BrowseState>) {
