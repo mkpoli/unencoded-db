@@ -43,8 +43,8 @@
     const controller = new AbortController()
     fetch('/api/sources/tags?' + params, { signal: controller.signal })
       .then(response => response.ok ? response.json() as Promise<{ tags?: string[] }> : null)
-      .then(payload => { if (!controller.signal.aborted && payload?.tags) sourceTags = payload.tags })
-      .catch(() => {})
+      .then(payload => { if (!controller.signal.aborted) sourceTags = payload?.tags ?? [] })
+      .catch(() => { if (!controller.signal.aborted) sourceTags = [] })
     return () => controller.abort()
   })
   // A claim names a sighting of this form by its place on the page, which changes when one is removed.

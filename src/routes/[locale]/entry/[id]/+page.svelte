@@ -72,7 +72,7 @@
     fetch('/api/sources/tags?' + params)
       .then(response => response.ok ? response.json() as Promise<{ tags?: string[] }> : null)
       .then(payload => { if (sourceTagsOf === key) sourceTags = payload?.tags ?? [] })
-      .catch(() => {})
+      .catch(() => { if (sourceTagsOf === key) sourceTags = [] })
   })
   let fields = $state<CharacterFields>()
   // The description groups on the page, so each one's report shows its own drawing.
