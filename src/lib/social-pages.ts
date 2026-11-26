@@ -24,6 +24,7 @@ export const SOCIAL_PAGES = {
   report: { path: '/entry/[id]/report', title: 'report.title' },
   'edit-evidence': { path: '/entry/[id]/sighting/[sighting]/edit', title: 'sighting.edit' },
   'move-evidence': { path: '/entry/[id]/sighting/[sighting]/move', title: 'sighting.moveLink' },
+  'split-evidence': { path: '/entry/[id]/sighting/[sighting]/split', title: 'sighting.splitLink' },
   'remove-evidence': { path: '/entry/[id]/sighting/[sighting]/remove', title: 'sighting.removeLink' },
   'add-evidence': { path: '/entry/[id]/sighting/new', title: 'social.addEvidence' },
   favourites: { path: '/favourites', title: 'favourites.title' },
