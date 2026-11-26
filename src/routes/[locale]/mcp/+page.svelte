@@ -183,16 +183,15 @@
         {#if client === 'claude-code' || client === 'antigravity'}
           <p class="hint">{t('mcp.authHint', { command: client === 'claude-code' ? CLAUDE_CODE_AUTH_PATH : ANTIGRAVITY_AUTH_PATH })}</p>
         {:else if client === 'codex'}
-          {@const authCommand = CODEX_LOGIN_COMMAND}
           <div class="sub-step">
             <span class="hint">{t('mcp.authStep')}</span>
             <div class="code-line">
-              <pre><code class="mono" bind:this={authCommandEl}>{authCommand}</code></pre>
+              <pre><code class="mono" bind:this={authCommandEl}>{CODEX_LOGIN_COMMAND}</code></pre>
               <button
                 type="button"
                 class="button copy-btn"
                 class:copied={copiedKey === authKey}
-                onclick={() => copy(authKey, authCommand, authCommandEl)}
+                onclick={() => copy(authKey, CODEX_LOGIN_COMMAND, authCommandEl)}
               >
                 {@render copyIcon(copiedKey === authKey)}
                 <span>{copiedKey === authKey ? t('entry.copied') : t('entry.copy')}</span>
