@@ -110,6 +110,44 @@ export function cleanName(text: unknown) {
   return name.length >= 1 && name.length <= NAME_MAX ? name : null
 }
 
+// What a person who joins another hands over: favourites, notices and the thanks they gave.
+function belongings(db: D1Database, from: string, into: string) {
+  return [
+    db.prepare('INSERT OR IGNORE INTO favourites(person, entry_id, at) SELECT ?, entry_id, at FROM favourites WHERE person = ?').bind(into, from),
+    db.prepare('DELETE FROM favourites WHERE person = ?').bind(from),
+    // A notice both people hold of one thing stays the joined person's own.
+    db.prepare('UPDATE OR IGNORE notifications SET person = ? WHERE person = ?').bind(into, from),
+    db.prepare('DELETE FROM notifications WHERE person = ?').bind(from),
+    // Thanks said before joining are the joined person's, so a change is not thanked for twice; those for
+    // the joined person's own changes go, with their notices.
+    db.prepare('DELETE FROM notifications WHERE thank_id IN (SELECT k.id FROM thanks k JOIN revisions r ON r.id = k.revision_id JOIN people p ON p.id = r.actor WHERE k.person = ?1 AND COALESCE(p.merged_into, p.id) = ?2)').bind(from, into),
+    db.prepare('DELETE FROM thanks WHERE person = ?1 AND revision_id IN (SELECT r.id FROM revisions r JOIN people p ON p.id = r.actor WHERE COALESCE(p.merged_into, p.id) = ?2)').bind(from, into),
+    db.prepare('UPDATE OR IGNORE thanks SET person = ? WHERE person = ?').bind(into, from),
+  ]
+}
+
+export type JoinRefusal = 'missing' | 'self' | 'banned'
+
+/** A moderator joins a person who never signed in to another, as signing in would. People already joined
+ * to them follow, and their browsers are signed out. */
+export async function joinPerson(db: D1Database, from: string, into: string): Promise<JoinRefusal | null> {
+  if (from === into) return 'self'
+  const { results } = await db.prepare('SELECT id, atlas_sub, merged_into, banned_at FROM people WHERE id IN (?, ?)').bind(from, into)
+    .all<{ id: string; atlas_sub: string | null; merged_into: string | null; banned_at: string | null }>()
+  const source = results.find(row => row.id === from), target = results.find(row => row.id === into)
+  if (!source || !target || source.atlas_sub || source.merged_into || target.merged_into) return 'missing'
+  if (source.banned_at || target.banned_at) return 'banned'
+  const joined = 'EXISTS (SELECT 1 FROM people WHERE id = ?1 AND merged_into = ?2)'
+  const [result] = await db.batch([
+    db.prepare('UPDATE people SET merged_into = ?2 WHERE id = ?1 AND atlas_sub IS NULL AND merged_into IS NULL AND banned_at IS NULL AND EXISTS (SELECT 1 FROM people WHERE id = ?2 AND merged_into IS NULL AND banned_at IS NULL) RETURNING id').bind(from, into),
+    db.prepare(`UPDATE people SET merged_into = ?2 WHERE merged_into = ?1 AND ${joined}`).bind(from, into),
+    db.prepare(`DELETE FROM sessions WHERE person = ?1 AND ${joined}`).bind(from, into),
+  ])
+  if (!result.results.length) return 'missing'
+  await db.batch(belongings(db, from, into))
+  return null
+}
+
 // A person signs in through Glyph Atlas: this browser's anonymous person, if any, joins the account's.
 export async function joinAtlas(db: D1Database, current: Person | null, sub: string, atlasName: string, session?: string, replacement?: string) {
   if (current && !current.atlas && !session) throw new Error('Missing session')
@@ -136,18 +174,7 @@ export async function joinAtlas(db: D1Database, current: Person | null, sub: str
       ...finish(current.id, id),
     ])
     if (!result.results.length) throw new Error('Identity changed during sign-in')
-    await db.batch([
-      db.prepare('INSERT OR IGNORE INTO favourites(person, entry_id, at) SELECT ?, entry_id, at FROM favourites WHERE person = ?').bind(id, current.id),
-      db.prepare('DELETE FROM favourites WHERE person = ?').bind(current.id),
-      // A notice both people hold of one thing stays the account's own.
-      db.prepare('UPDATE OR IGNORE notifications SET person = ? WHERE person = ?').bind(id, current.id),
-      db.prepare('DELETE FROM notifications WHERE person = ?').bind(current.id),
-      // Thanks said before signing in are the account's, so a change is not thanked for twice; those for
-      // the account's own changes go, with their notices.
-      db.prepare('DELETE FROM notifications WHERE thank_id IN (SELECT k.id FROM thanks k JOIN revisions r ON r.id = k.revision_id JOIN people p ON p.id = r.actor WHERE k.person = ?1 AND COALESCE(p.merged_into, p.id) = ?2)').bind(current.id, id),
-      db.prepare('DELETE FROM thanks WHERE person = ?1 AND revision_id IN (SELECT r.id FROM revisions r JOIN people p ON p.id = r.actor WHERE COALESCE(p.merged_into, p.id) = ?2)').bind(current.id, id),
-      db.prepare('UPDATE OR IGNORE thanks SET person = ? WHERE person = ?').bind(id, current.id),
-    ])
+    await db.batch(belongings(db, current.id, id))
   }
   return id
 }

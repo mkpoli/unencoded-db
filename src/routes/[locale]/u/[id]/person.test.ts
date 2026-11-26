@@ -3,7 +3,7 @@ import { newClaim } from '$lib/claims'
 import { addSighting, createEntry, editEntry, personRevisionsStatement, setHidden, type EntryFields, type SightingFields } from '$lib/server/entries'
 import { createPerson } from '$lib/server/people'
 import { openTestDb } from '$lib/server/testdb'
-import { load } from './+page.server'
+import { actions, load } from './+page.server'
 
 const fields: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', '⿰木木')] }
 const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
@@ -11,6 +11,7 @@ const event = (db: D1Database, person: string, before?: string) => ({
   params: { locale: 'en', id: person },
   url: new URL(`http://localhost/en/u/${person}${before === undefined ? '' : `?before=${before}`}`),
   platform: { env: { DB: db } },
+  locals: { person: null },
 }) as any
 
 test('personal contributions list visible revisions with their old versions', async () => {
@@ -99,4 +100,59 @@ test('a person recorded under a UUID has a page', async () => {
   raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('${id}', 'Early', '2026-11-08T15:00:16.227Z')`)
   expect((await load(event(db, id)) as any).person).toMatchObject({ id, name: 'Early' })
   await expect(load(event(db, '0a1b2c3d-4e5f-4a6b-8c7d'))).rejects.toMatchObject({ status: 404 })
+})
+
+const moderator = { id: 'mod', name: 'Moderator', atlas: false, moderator: true, banned: false }
+const merging = (db: D1Database, id: string, fields: Record<string, string>, person: any = moderator) => {
+  const form = new FormData()
+  for (const [key, value] of Object.entries(fields)) form.set(key, value)
+  return actions.merge({
+    params: { locale: 'en', id }, url: new URL(`https://example.test/en/u/${id}?/merge`), route: { id: '/[locale]/u/[id]' },
+    request: { formData: async () => form }, locals: { person }, platform: { env: { DB: db } }, getClientAddress: () => '127.0.0.1',
+  } as any)
+}
+
+test('a moderator merges a person into the one they are, after seeing who that is', async () => {
+  const { db, raw } = openTestDb()
+  const anonymous = await createPerson(db), other = await createPerson(db), account = await createPerson(db, 'atlas-1', 'Account')
+  const entry = await createEntry(db, fields, sighting, [], { actor: anonymous.id, ip: null })
+  await editEntry(db, entry, 1, { ...fields, description: 'Later' }, { actor: account.id, ip: null }, null)
+  // Someone already joined to the anonymous person follows them.
+  await editEntry(db, entry, 2, { ...fields, description: 'Again' }, { actor: other.id, ip: null }, null)
+  raw.run('UPDATE people SET merged_into = ? WHERE id = ?', [anonymous.id, other.id])
+  raw.run("INSERT INTO sessions(token_hash, person, created_at) VALUES ('t', ?, '2026')", [anonymous.id])
+  raw.run("INSERT INTO favourites(person, entry_id, at) VALUES (?, ?, '2026')", [anonymous.id, entry])
+
+  const asked = await merging(db, anonymous.id, { into: `https://rare.glyphatlas.org/en/u/${account.id}` }) as any
+  expect(asked.target).toEqual({ id: account.id, name: 'Account', changes: 1 })
+  expect(raw.query('SELECT merged_into FROM people WHERE id = ?').get(anonymous.id)).toEqual({ merged_into: null })
+
+  await expect(merging(db, anonymous.id, { into: account.id, confirm: account.id })).rejects.toMatchObject({ status: 303, location: `/en/u/${account.id}` })
+  expect(raw.query('SELECT id, merged_into, changes FROM people ORDER BY changes DESC, id').all()).toEqual(
+    [{ id: account.id, merged_into: null, changes: 4 }, ...[anonymous.id, other.id].sort().map(id => ({ id, merged_into: account.id, changes: 0 }))])
+  expect(raw.query('SELECT person FROM favourites').all()).toEqual([{ person: account.id }])
+  expect(raw.query('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 0 })
+  expect((await load(event(db, account.id)) as any).rows).toHaveLength(4)
+})
+
+test('merging refuses what signing in could not do, and anyone but a moderator', async () => {
+  const { db, raw } = openTestDb()
+  const anonymous = await createPerson(db), account = await createPerson(db, 'atlas-1', 'Account'), banned = await createPerson(db)
+  raw.run("UPDATE people SET banned_at = '2026' WHERE id = ?", [banned.id])
+  for (const person of [null, { ...moderator, moderator: false }, { ...moderator, banned: true }])
+    await expect(merging(db, anonymous.id, { into: account.id, confirm: account.id }, person)).rejects.toMatchObject({ status: 403 })
+  const refused = async (id: string, into: string, confirm = into) => ((await merging(db, id, { into, confirm })) as any).data.merge
+  // Before anything is confirmed, too.
+  expect(await refused(anonymous.id, anonymous.id, '')).toBe('self')
+  expect(await refused(anonymous.id, banned.id, '')).toBe('banned')
+  expect(await refused(anonymous.id, 'nobody', '')).toBe('missing')
+  expect(await refused(anonymous.id, 'nobody')).toBe('missing')
+  expect(await refused(anonymous.id, '000000000000')).toBe('missing')
+  expect(await refused(anonymous.id, anonymous.id)).toBe('self')
+  expect(await refused(account.id, anonymous.id)).toBe('missing')
+  expect(await refused(anonymous.id, banned.id)).toBe('banned')
+  expect(await refused(banned.id, account.id)).toBe('banned')
+  expect(raw.query('SELECT COUNT(*) AS n FROM people WHERE merged_into IS NOT NULL').get()).toEqual({ n: 0 })
+  const page = async (person: any, id: string) => (await load({ ...event(db, id), locals: { person } }) as any).mergeable
+  expect([await page(moderator, anonymous.id), await page(moderator, account.id), await page(moderator, banned.id), await page(null, anonymous.id)]).toEqual([true, false, false, false])
 })
