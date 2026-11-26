@@ -112,24 +112,29 @@ export function cleanName(text: unknown) {
 
 // What a person who joins another hands over: favourites, notices and the thanks they gave.
 function belongings(db: D1Database, from: string, into: string) {
+  // Each statement acts only once `from` has joined `into`, so they ride in the batch that joins them.
+  const joined = 'EXISTS (SELECT 1 FROM people WHERE id = ?1 AND merged_into = ?2)'
+  // A thank that would now be someone's thanks for their own change, or a second thanks from one person.
+  const spent = `SELECT k.id FROM thanks k JOIN revisions r ON r.id = k.revision_id JOIN people p ON p.id = r.actor
+    WHERE (k.person IN (?1, ?2) AND COALESCE(p.merged_into, p.id) = ?2) OR (k.person = ?1 AND k.revision_id IN (SELECT revision_id FROM thanks WHERE person = ?2))`
   return [
-    db.prepare('INSERT OR IGNORE INTO favourites(person, entry_id, at) SELECT ?, entry_id, at FROM favourites WHERE person = ?').bind(into, from),
-    db.prepare('DELETE FROM favourites WHERE person = ?').bind(from),
+    // People who had joined `from` follow it, so every join stays one step from the person it names.
+    db.prepare(`UPDATE people SET merged_into = ?2 WHERE merged_into = ?1 AND ${joined}`).bind(from, into),
+    db.prepare(`INSERT OR IGNORE INTO favourites(person, entry_id, at) SELECT ?2, entry_id, at FROM favourites WHERE person = ?1 AND ${joined}`).bind(from, into),
+    db.prepare(`DELETE FROM favourites WHERE person = ?1 AND ${joined}`).bind(from, into),
+    db.prepare(`DELETE FROM notifications WHERE thank_id IN (${spent}) AND ${joined}`).bind(from, into),
+    db.prepare(`DELETE FROM thanks WHERE id IN (${spent}) AND ${joined}`).bind(from, into),
+    db.prepare(`UPDATE thanks SET person = ?2 WHERE person = ?1 AND ${joined}`).bind(from, into),
     // A notice both people hold of one thing stays the joined person's own.
-    db.prepare('UPDATE OR IGNORE notifications SET person = ? WHERE person = ?').bind(into, from),
-    db.prepare('DELETE FROM notifications WHERE person = ?').bind(from),
-    // Thanks said before joining are the joined person's, so a change is not thanked for twice; those for
-    // the joined person's own changes go, with their notices.
-    db.prepare('DELETE FROM notifications WHERE thank_id IN (SELECT k.id FROM thanks k JOIN revisions r ON r.id = k.revision_id JOIN people p ON p.id = r.actor WHERE k.person = ?1 AND COALESCE(p.merged_into, p.id) = ?2)').bind(from, into),
-    db.prepare('DELETE FROM thanks WHERE person = ?1 AND revision_id IN (SELECT r.id FROM revisions r JOIN people p ON p.id = r.actor WHERE COALESCE(p.merged_into, p.id) = ?2)').bind(from, into),
-    db.prepare('UPDATE OR IGNORE thanks SET person = ? WHERE person = ?').bind(into, from),
+    db.prepare(`UPDATE OR IGNORE notifications SET person = ?2 WHERE person = ?1 AND ${joined}`).bind(from, into),
+    db.prepare(`DELETE FROM notifications WHERE person = ?1 AND ${joined}`).bind(from, into),
   ]
 }
 
 export type JoinRefusal = 'missing' | 'self' | 'banned'
 
 /** A moderator joins a person who never signed in to another, as signing in would. People already joined
- * to them follow, and their browsers are signed out. */
+ * to them follow, and their browsers and agents are signed out. */
 export async function joinPerson(db: D1Database, from: string, into: string): Promise<JoinRefusal | null> {
   if (from === into) return 'self'
   const { results } = await db.prepare('SELECT id, atlas_sub, merged_into, banned_at FROM people WHERE id IN (?, ?)').bind(from, into)
@@ -140,11 +145,14 @@ export async function joinPerson(db: D1Database, from: string, into: string): Pr
   const joined = 'EXISTS (SELECT 1 FROM people WHERE id = ?1 AND merged_into = ?2)'
   const [result] = await db.batch([
     db.prepare('UPDATE people SET merged_into = ?2 WHERE id = ?1 AND atlas_sub IS NULL AND merged_into IS NULL AND banned_at IS NULL AND EXISTS (SELECT 1 FROM people WHERE id = ?2 AND merged_into IS NULL AND banned_at IS NULL) RETURNING id').bind(from, into),
-    db.prepare(`UPDATE people SET merged_into = ?2 WHERE merged_into = ?1 AND ${joined}`).bind(from, into),
+    // Signing in shows that two people are one; a moderator's word does not carry what `from` was allowed
+    // to do into `into`'s name, so its browsers and agents are signed out.
     db.prepare(`DELETE FROM sessions WHERE person = ?1 AND ${joined}`).bind(from, into),
+    db.prepare(`DELETE FROM agent_tokens WHERE person = ?1 AND ${joined}`).bind(from, into),
+    db.prepare(`DELETE FROM agent_codes WHERE person = ?1 AND ${joined}`).bind(from, into),
+    ...belongings(db, from, into),
   ])
   if (!result.results.length) return 'missing'
-  await db.batch(belongings(db, from, into))
   return null
 }
 
@@ -172,9 +180,9 @@ export async function joinAtlas(db: D1Database, current: Person | null, sub: str
     const [result] = await db.batch([
       db.prepare('UPDATE people SET merged_into = ? WHERE id = ? AND atlas_sub IS NULL AND merged_into IS NULL AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = ? AND person = people.id) RETURNING id').bind(id, current.id, sessionHash),
       ...finish(current.id, id),
+      ...belongings(db, current.id, id),
     ])
     if (!result.results.length) throw new Error('Identity changed during sign-in')
-    await db.batch(belongings(db, current.id, id))
   }
   return id
 }

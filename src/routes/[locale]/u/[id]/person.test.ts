@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test'
 import { newClaim } from '$lib/claims'
 import { addSighting, createEntry, editEntry, personRevisionsStatement, setHidden, type EntryFields, type SightingFields } from '$lib/server/entries'
-import { createPerson } from '$lib/server/people'
+import { createPerson, joinAtlas, joinPerson, startSession } from '$lib/server/people'
+import { thank } from '$lib/server/notifications'
 import { openTestDb } from '$lib/server/testdb'
 import { actions, load } from './+page.server'
 
@@ -155,4 +156,34 @@ test('merging refuses what signing in could not do, and anyone but a moderator',
   expect(raw.query('SELECT COUNT(*) AS n FROM people WHERE merged_into IS NOT NULL').get()).toEqual({ n: 0 })
   const page = async (person: any, id: string) => (await load({ ...event(db, id), locals: { person } }) as any).mergeable
   expect([await page(moderator, anonymous.id), await page(moderator, account.id), await page(moderator, banned.id), await page(null, anonymous.id)]).toEqual([true, false, false, false])
+})
+
+test('a merged person who later signs in brings along whoever was merged into them', async () => {
+  const { db, raw } = openTestDb()
+  const first = await createPerson(db), second = await createPerson(db), account = await createPerson(db, 'atlas-1', 'Account')
+  const entry = await createEntry(db, fields, sighting, [], { actor: first.id, ip: null })
+  await editEntry(db, entry, 1, { ...fields, description: 'Later' }, { actor: second.id, ip: null }, null)
+  expect(await joinPerson(db, first.id, second.id)).toBeNull()
+  expect(await joinAtlas(db, second, 'atlas-1', 'Account', await startSession(db, second.id))).toBe(account.id)
+  expect(raw.query('SELECT id, merged_into, changes FROM people ORDER BY id').all()).toEqual(
+    [{ id: account.id, merged_into: null, changes: 3 }, { id: first.id, merged_into: account.id, changes: 0 }, { id: second.id, merged_into: account.id, changes: 0 }].sort((a, b) => a.id.localeCompare(b.id)))
+  expect((await load(event(db, account.id)) as any).rows).toHaveLength(3)
+})
+
+test('a merged person is signed out everywhere, and their thanks neither repeat nor thank themselves', async () => {
+  const { db, raw } = openTestDb()
+  const source = await createPerson(db), target = await createPerson(db, 'atlas-1', 'Target'), writer = await createPerson(db)
+  const entry = await createEntry(db, fields, sighting, [], { actor: writer.id, ip: null })
+  await editEntry(db, entry, 1, { ...fields, description: 'Source' }, { actor: source.id, ip: null }, null)
+  const [byWriter, bySource] = (raw.query('SELECT id, actor FROM revisions ORDER BY id').all() as { id: number; actor: string }[]).filter(row => row.actor !== writer.id || row.id === 1).map(row => row.id)
+  await thank(db, entry, byWriter, { actor: source.id, ip: 'a' })
+  await thank(db, entry, byWriter, { actor: target.id, ip: 'b' })
+  await thank(db, entry, bySource, { actor: target.id, ip: 'b' })
+  raw.exec("INSERT INTO agent_clients(id, name, redirect_uris, created_at) VALUES ('client', null, '[]', '2026')")
+  raw.run("INSERT INTO agent_tokens(token_hash, client, person, created_at) VALUES ('token', 'client', ?, '2026')", [source.id])
+  raw.run("INSERT INTO sessions(token_hash, person, created_at) VALUES ('session', ?, '2026')", [source.id])
+  expect(await joinPerson(db, source.id, target.id)).toBeNull()
+  expect(raw.query('SELECT revision_id, person FROM thanks').all()).toEqual([{ revision_id: byWriter, person: target.id }])
+  expect(raw.query('SELECT COUNT(*) AS n FROM notifications WHERE thank_id IS NOT NULL').get()).toEqual({ n: 1 })
+  expect(raw.query('SELECT (SELECT COUNT(*) FROM agent_tokens) + (SELECT COUNT(*) FROM sessions) AS n').get()).toEqual({ n: 0 })
 })
