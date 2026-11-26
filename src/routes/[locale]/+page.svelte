@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
-  import { afterNavigate, goto, invalidateAll, preloadData } from '$app/navigation'
+  import { onDestroy, onMount, tick, untrack } from 'svelte'
+  import { afterNavigate, beforeNavigate, goto, invalidateAll, preloadData, replaceState } from '$app/navigation'
   import { browser } from '$app/environment'
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
@@ -19,9 +19,28 @@
   import { decadeNumber } from '$lib/dates'
   import { decadeName, href, locale, t, yearsName } from '$lib/t'
   import { TILE_SIZE_COOKIE, TILE_SIZES, pageColumns, tileSizeOf } from '$lib/tile-size'
+  import { browseHref, browseSearchParams, mergeFilter, toggleMark, type BrowseState } from '$lib/browse-params'
+  import { rememberBrowse } from '$lib/browse-return.svelte'
   import type { Snapshot } from './$types'
   let { data } = $props()
   const tagSections = $derived(arrangeTags(localized(data.tags, locale()), localized(data.groups, locale())))
+  const currentState = $derived<BrowseState>({
+    query: data.query,
+    also: data.also,
+    script: data.script,
+    filter: data.filter,
+    collection: data.collection,
+    tag: data.tag,
+    radical: data.radical,
+    decade: data.decade,
+    within: data.within,
+    without: data.without,
+    order: data.order,
+    seed: data.seed,
+    per: data.per,
+    page: data.number,
+    after: page.url.searchParams.get('after'),
+  })
   // Further pages are appended as the list nears its end. They belong to the listing they were read for,
   // and a new listing starts again from its own first page.
   type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: string | null; partial: boolean; total: typeof data.total; scanned: number }
@@ -36,12 +55,7 @@
   let busyFor = $state.raw<typeof data | null>(null)
   const busy = $derived(busyFor === data)
   let failedFor = $state.raw<typeof data | null>(null)
-  const more = $derived.by(() => {
-    const params = new URLSearchParams(page.url.searchParams)
-    params.delete('page')
-    params.set('after', shown.next ?? '')
-    return `?${params}`
-  })
+  const more = $derived(browseHref(href(), { ...currentState, page: null, after: shown.next }))
   async function grow() {
     if (busy || shown.next === null) return
     const from = data, base = shown, target = more
@@ -88,11 +102,54 @@
     event.preventDefault()
     grow()
   }
+  // Form controls stay synced with the URL parameters across navigations and back/forward steps.
+  let query = $state(untrack(() => data.query ?? ''))
+  let script = $state(untrack(() => data.script ?? ''))
+  let need = $state(untrack(() => NEEDS.includes(data.filter as never) ? (data.filter ?? '') : ''))
+  let tag = $state(untrack(() => data.tag ?? ''))
+  let decade = $state(untrack(() => data.decade ?? ''))
+  function syncControls() {
+    query = data.query ?? ''
+    script = data.script ?? ''
+    need = NEEDS.includes(data.filter as never) ? (data.filter ?? '') : ''
+    tag = data.tag ?? ''
+    decade = data.decade ?? ''
+  }
   // Returning to the list brings back the pages read so far; a reload starts again from the first.
   // SvelteKit scrolls before it restores them, so the place is set again once they are drawn. Drawings
   // are asked for again as tiles come into view.
   let arrival = ''
-  afterNavigate(navigation => { arrival = navigation.type })
+  let alive = true
+  let navTicket = 0
+  let navigatingTo: string | null = null
+  onDestroy(() => {
+    alive = false
+    filterTicket++
+    navTicket++
+  })
+  beforeNavigate(() => {
+    filterTicket++
+    navTicket++
+  })
+  afterNavigate(navigation => {
+    arrival = navigation.type
+    navigatingTo = null
+    syncControls()
+    const canonical = browseHref(href(), currentState)
+    const canonicalSearch = canonical.includes('?') ? canonical.slice(canonical.indexOf('?')) : ''
+    rememberBrowse(canonicalSearch)
+    if (browser) {
+      const target = `${canonical}${page.url.hash}`
+      const ticket = ++navTicket
+      if (target !== `${location.pathname}${location.search}${location.hash}`) {
+        // Defer until after SvelteKit finishes initial hydration (started = true).
+        queueMicrotask(() => {
+          if (!alive || ticket !== navTicket) return
+          if (target !== `${location.pathname}${location.search}${location.hash}`) replaceState(target, page.state)
+        })
+      }
+    }
+  })
   const reloaded = () => (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'reload'
   export const snapshot: Snapshot<{ tiles: Shown['tiles']; next: string | null; partial: boolean; total: Shown['total']; scanned: number; y: number } | null> = {
     capture: () => loaded?.for === data ? { tiles: loaded.tiles, next: loaded.next, partial: loaded.partial, total: loaded.total, scanned: loaded.scanned, y: scrollY } : null,
@@ -104,12 +161,7 @@
     }
   }
   // A new order drops the place and the shuffle's start; shuffling again deals a new start.
-  const sorted = (order: string) => {
-    const params = new URLSearchParams(page.url.searchParams)
-    for (const name of ['after', 'page', 'seed']) params.delete(name)
-    if (order === ORDER) params.delete('sort'); else params.set('sort', order)
-    return params.size ? `?${params}` : href()
-  }
+  const sorted = (order: string) => browseHref(href(), { ...currentState, order, seed: null, page: null, after: null })
   // The reader's tile width, set on the document so the server-drawn list and a moved slider agree.
   // The document holds the width last chosen in this tab; the layout's data holds the one the first page was drawn at.
   let tileSize = $state(tileSizeOf(browser ? document.documentElement.dataset.tileSize : String(page.data.tileSize)))
@@ -152,33 +204,62 @@
   }
   // A whole description, or parts typed with no structure (艹時), is also searched under its other spellings,
   // which the table in the browser knows. Without the table, or without scripts, it is searched as typed.
-  async function search(event: SubmitEvent) {
-    const form = event.currentTarget as HTMLFormElement
-    const values = new FormData(form)
-    const query = cleanIds(String(values.get('q') ?? ''))
-    const whole = isDescription(query)
-    if (!whole && !isParts(query)) return
-    event.preventDefault()
-    const params = new URLSearchParams(values as unknown as Record<string, string>)
+  let filterTicket = 0
+  async function applyFilters(options: { noScroll?: boolean; keepFocus?: boolean } = {}) {
+    const ticket = ++filterTicket
+    const trimmed = query.trim()
+    const cleaned = cleanIds(trimmed)
+    const whole = isDescription(cleaned)
+    const parts = !whole && isParts(cleaned)
     let spellings: string[] = []
-    try { spellings = whole ? equivalentSpellings(query, await describedTable()).slice(1) : partSpellings(query, await describedTable()).slice(1) } catch { /* searched as typed */ }
-    for (const spelling of spellings) params.append('also', spelling)
-    await goto(`?${params}`)
+    if (trimmed === data.query && data.also.length) {
+      spellings = data.also
+    } else if (whole || parts) {
+      try {
+        const table = await describedTable()
+        if (ticket !== filterTicket) return
+        spellings = whole ? equivalentSpellings(cleaned, table).slice(1) : partSpellings(cleaned, table).slice(1)
+      } catch { /* searched as typed */ }
+    }
+    if (!alive || ticket !== filterTicket) return
+    const target = browseHref(href(), {
+      query: trimmed,
+      also: spellings,
+      script,
+      filter: mergeFilter(need, data.filter),
+      collection: pinned?.name === 'collection' ? pinned.value : null,
+      tag: pinned?.name === 'tag' ? pinned.value : pinned ? null : tag,
+      radical: data.radical,
+      decade,
+      within: data.within,
+      without: data.without,
+      order: data.order,
+      seed: data.seed,
+      per: data.per,
+    })
+    const current = browser ? `${location.pathname}${location.search}` : `${page.url.pathname}${page.url.search}`
+    if (navigatingTo === null && target === current) {
+      syncControls()
+      return
+    }
+    if (navigatingTo === target) return
+    navigatingTo = target
+    try {
+      await goto(target, options)
+    } finally {
+      if (navigatingTo === target) navigatingTo = null
+    }
+  }
+  function search(event: SubmitEvent) {
+    event.preventDefault()
+    void applyFilters()
   }
   const count = (key: string) => data.counts?.[key] ?? 0
   // The list's address without its place, which the page form keeps and adds a page to.
-  const unplaced = $derived([...page.url.searchParams].filter(([name]) => name !== 'after' && name !== 'page'))
+  const unplaced = $derived([...browseSearchParams({ ...currentState, page: null, after: null })])
   // Another page size starts the list again from its first page.
-  const sized = (size: number) => {
-    const params = new URLSearchParams(unplaced)
-    if (size === PAGE) params.delete('per'); else params.set('per', String(size))
-    return params.size ? `?${params}` : href()
-  }
-  const paged = (number: number) => {
-    const params = new URLSearchParams(unplaced)
-    if (number > 1) params.set('page', String(number))
-    return params.size ? `?${params}` : href()
-  }
+  const sized = (size: number) => browseHref(href(), { ...currentState, per: size, page: null, after: null })
+  const paged = (number: number) => browseHref(href(), { ...currentState, page: number, after: null })
   function turn(event: SubmitEvent) {
     event.preventDefault()
     const typed = Number(new FormData(event.currentTarget as HTMLFormElement).get('page'))
@@ -204,33 +285,12 @@
   const knownTag = $derived(data.tag ? data.tags.find(item => item.name === data.tag) ?? null : null)
   // A collection or an unlisted tag is chosen by following a link, and stays until it is cleared.
   const pinned = $derived(data.collection ? { name: 'collection', value: data.collection, label: COLLECTIONS.find(item => item.slug === data.collection)?.label ?? data.collection } : data.tag && !knownTag ? { name: 'tag', value: data.tag, label: `#${data.tag}` } : null)
-  const withFilter = (filter: string) => {
-    const params = new URLSearchParams(page.url.searchParams)
-    for (const name of ['after', 'page']) params.delete(name)
-    if (filter) params.set('filter', filter); else params.delete('filter')
-    return params.size ? `?${params}` : href()
-  }
+  const withFilter = (filter: string) => browseHref(href(), { ...currentState, filter: filter || null, page: null, after: null })
   // A work's two chips: one keeps the list to the records in it, the other to the ones not in it. A chip
   // that is on turns itself off, and turning one on turns the other off.
-  const withMark = (id: string, name: 'in' | 'out') => {
-    const params = new URLSearchParams(page.url.searchParams)
-    const on = params.getAll(name).includes(id)
-    const kept = { in: params.getAll('in').filter(item => item !== id), out: params.getAll('out').filter(item => item !== id) }
-    if (!on) kept[name].push(id)
-    for (const key of ['in', 'out', 'after', 'page'] as const) params.delete(key)
-    for (const key of ['in', 'out'] as const) for (const item of kept[key]) params.append(key, item)
-    return params.size ? `?${params}` : href()
-  }
-  const unpinned = $derived.by(() => {
-    const params = new URLSearchParams(page.url.searchParams)
-    for (const name of ['collection', 'tag', 'genre', 'after', 'page']) params.delete(name)
-    return params.size ? `?${params}` : href()
-  })
-  const unfiled = $derived.by(() => {
-    const params = new URLSearchParams(page.url.searchParams)
-    for (const name of ['radical', 'after', 'page']) params.delete(name)
-    return params.size ? `?${params}` : href()
-  })
+  const withMark = (id: string, name: 'in' | 'out') => browseHref(href(), { ...currentState, ...toggleMark(data.within, data.without, id, name), page: null, after: null })
+  const unpinned = $derived(browseHref(href(), { ...currentState, collection: null, tag: null, page: null, after: null }))
+  const unfiled = $derived(browseHref(href(), { ...currentState, radical: null, page: null, after: null }))
 </script>
 
 {#snippet sizes()}
@@ -260,20 +320,20 @@
     <a class="button primary" href={href('/new')}>{t('browse.addOne')}</a>
   </div>
   <form class="filters" method="GET" onsubmit={search}>
-    <div class="search field"><label for="q">{t('browse.searchLabel')}</label><input class="input" id="q" name="q" value={data.query ?? ''} placeholder={t('browse.search')} aria-describedby="search-hint" /></div>
-    <div class="field"><label for="script">{t('field.script')}</label><select class="input" id="script" name="script" value={data.script ?? ''}><option value="">{t('browse.all')}</option>{#each SCRIPTS as script (script.id)}{#if count(`s:${script.id}`) || data.script === script.id}<option value={script.id}>{t(`script.${script.id}`)} ({count(`s:${script.id}`)})</option>{/if}{/each}</select></div>
-    <div class="field"><label for="filter">{t('browse.needs')}</label><select class="input" id="filter" name="filter" value={NEEDS.includes(data.filter as never) ? data.filter : ''}><option value="">{t('browse.all')}</option>{#each NEEDS as need}<option value={need}>{t(`needs.${need}`)} ({count(`n:${need}`)})</option>{/each}</select></div>
+    <div class="search field"><label for="q">{t('browse.searchLabel')}</label><input class="input" id="q" name="q" bind:value={query} placeholder={t('browse.search')} aria-describedby="search-hint" /></div>
+    <div class="field"><label for="script">{t('field.script')}</label><select class="input" id="script" name="script" bind:value={script} onchange={() => applyFilters({ noScroll: true, keepFocus: true })}><option value="">{t('browse.all')}</option>{#each SCRIPTS as item (item.id)}{#if count(`s:${item.id}`) || data.script === item.id}<option value={item.id}>{t(`script.${item.id}`)} ({count(`s:${item.id}`)})</option>{/if}{/each}</select></div>
+    <div class="field"><label for="filter">{t('browse.needs')}</label><select class="input" id="filter" name="filter" bind:value={need} onchange={() => applyFilters({ noScroll: true, keepFocus: true })}><option value="">{t('browse.all')}</option>{#each NEEDS as item}<option value={item}>{t(`needs.${item}`)} ({count(`n:${item}`)})</option>{/each}</select></div>
     {#if pinned}
       <div class="field"><span class="label">{t(pinned.name === 'tag' ? 'field.tags' : 'field.collection')}</span><input type="hidden" name={pinned.name} value={pinned.value} /><a class="pinned" href={unpinned} aria-label="{pinned.label} ×">{pinned.label} <span aria-hidden="true">×</span></a></div>
     {:else}
-      <div class="field"><label for="tag">{t('field.tags')}</label><select class="input" id="tag" name="tag" value={data.tag ?? ''}>
+      <div class="field"><label for="tag">{t('field.tags')}</label><select class="input" id="tag" name="tag" bind:value={tag} onchange={() => applyFilters({ noScroll: true, keepFocus: true })}>
         <option value="">{t('browse.all')}</option>
         {#each tagSections as section (section.type)}{#each section.shelves as shelf (shelf.group?.id ?? 0)}<optgroup label={shelf.group ? `${t(`tagType.${section.type}`)} › ${shelf.group.label}` : t(`tagType.${section.type}`)}>{#each shelf.tags as item (item.name)}<option value={item.name}>{item.label} ({item.n})</option>{/each}</optgroup>{/each}{/each}
       </select></div>
     {/if}
-    <div class="field decade"><label for="decade">{t('browse.decadeLabel')}</label><select class="input" id="decade" name="decade" value={data.decade ?? ''}>
+    <div class="field decade"><label for="decade">{t('browse.decadeLabel')}</label><select class="input" id="decade" name="decade" bind:value={decade} onchange={() => applyFilters({ noScroll: true, keepFocus: true })}>
       <option value="">{t('browse.all')}</option>
-      {#each centuries as [century, decades] (century)}<optgroup label={century}>{#each decades as decade (decade)}<option value={String(decade)}>{decadeName(decade)} ({count(`y:${decade}`)})</option>{/each}</optgroup>{/each}
+      {#each centuries as [century, decades] (century)}<optgroup label={century}>{#each decades as item (item)}<option value={String(item)}>{decadeName(item)} ({count(`y:${item}`)})</option>{/each}</optgroup>{/each}
     </select></div>
     <div class="field radical"><span class="label" id="radical-label">{t('field.radical')}</span>{#if data.radical}{@const radical = [...data.radical].at(-1)}<input type="hidden" name="radical" value={data.radical} /><a class="pinned" href={unfiled} aria-label="{t('field.radical')} {radical} ×"><span class="glyph">{radical}</span> <span aria-hidden="true">×</span></a>{:else}<a class="input choose" id="radical-choice" href={href('/radicals')} aria-labelledby="radical-label radical-choice">{t('browse.all')}<span aria-hidden="true">›</span></a>{/if}</div>
     {#if data.order !== ORDER}<input type="hidden" name="sort" value={data.order} />{/if}

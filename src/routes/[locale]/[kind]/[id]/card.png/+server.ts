@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit'
 import { recordCode, recordName } from '$lib/code'
 import { translate } from '$lib/i18n'
 import { scriptName } from '$lib/scripts'
+import { sourceByline, sourceName } from '$lib/source-name'
 import { getCoverPicture, getEntryRow, getSourceArtwork, getVisibleSource } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
 import { evidenceArtwork, recordArtwork, renderCard } from '$lib/server/social-card'
@@ -31,10 +32,12 @@ export const GET: RequestHandler = async event => {
     }
     if (source) {
       const image = await getSourceArtwork(bindings.DB, id)
+      const label = (key: string) => translate(locale, key)
+      const { text, fields } = sourceName(source, label)
       return await renderCard(event, bindings.ASSETS, {
         key: JSON.stringify([kind, locale, source, image]),
-        label: translate(locale, 'source.title'), title: source.title || source.url || `#${source.id}`,
-        detail: [source.author, source.report_date].filter(Boolean).join(' · '), size: 55,
+        label: label('source.title'), title: text,
+        detail: sourceByline(source, fields, label, ['author', 'report_date']), size: 55,
         art: image ? () => evidenceArtwork(bindings.MEDIA, image) : undefined,
       })
     }

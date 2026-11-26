@@ -198,6 +198,52 @@ export function partClaims(claims: readonly Claim[], gone: ReadonlySet<number>, 
   return left.map(claim => ({ ...claim, under: claim.under.filter(scope => byKey.has(scope) && (!scoped.has(link(claim.key, scope)) || says.has(link(stated(claim), stated(byKey.get(scope)!))))) }))
 }
 
+// What evidence says of its character. A description, a code or a tag is a record's own and stays with it.
+const SAID_BY_EVIDENCE: readonly ClaimKind[] = ['reading', 'meaning', 'relation']
+
+/** What a sighting brought to a record it moved to, by key: the claims the record did not hold before, and
+ * its own claims that rest on the sighting since. */
+export type Brought = { added: string[]; joined: string[] }
+
+/** The claims of two records once a sighting moves from the one to the other, record `to`. What rests on it
+ * alone goes along, with the claims it holds under; what rests on more is stated on both. A claim stays when
+ * the other record states it under other scopes or has no room for it, or is the record it relates to.
+ * `came` is what the sighting brought when it moved to the first record, which goes again with it. */
+export function moveClaims(from: readonly Claim[], into: readonly Claim[], sighting: number, to: number, came: Brought = { added: [], joined: [] }): { from: Claim[]; into: Claim[]; brought: Brought } {
+  const ours = new Map(from.map(claim => [claim.key, claim])), theirs = new Map(into.map(claim => [claim.key, claim]))
+  const same = new Map(into.map(claim => [stated(claim), claim]))
+  const scopes = (claim: Claim, held: Map<string, Claim>) => JSON.stringify(claim.under.flatMap(key => held.get(key) ? [stated(held.get(key)!)] : []).sort())
+  const said = new Set(from.filter(claim => {
+    if (!SAID_BY_EVIDENCE.includes(claim.kind) || !claim.sightings.includes(sighting)) return false
+    const other = same.get(stated(claim))
+    return !(claim.kind === 'relation' && codedRecord(claim.value) === to) && (!other || scopes(other, theirs) === scopes(claim, ours))
+  }).map(claim => claim.key))
+  // A claim that holds under others takes them along, resting on nothing there.
+  const carried = new Set(said)
+  for (const key of carried) for (const scope of ours.get(key)?.under ?? []) carried.add(scope)
+  const joined = joinClaims(into, from.filter(claim => carried.has(claim.key)).map(claim => ({ ...claim, sightings: said.has(claim.key) ? [sighting] : [], under: same.has(stated(claim)) ? [] : claim.under })))
+  // A scope whose claim had no room there is not kept for itself.
+  const added = new Set(joined.added)
+  let claims = joined.claims
+  for (let idle = true; idle;) {
+    const used = new Set(claims.flatMap(claim => claim.under))
+    const left = claims.filter(claim => !added.has(claim.key) || claim.sightings.length || used.has(claim.key))
+    idle = left.length < claims.length
+    claims = left
+  }
+  const taken = new Set(claims.filter(claim => claim.sightings.includes(sighting)).map(stated))
+  const brought = { added: claims.filter(claim => added.has(claim.key)).map(claim => claim.key), joined: claims.filter(claim => theirs.has(claim.key) && !theirs.get(claim.key)!.sightings.includes(sighting) && claim.sightings.includes(sighting)).map(claim => claim.key) }
+  const gone = new Set(from.filter(claim => {
+    if (came.joined.includes(claim.key) || claim.sightings.some(id => id !== sighting)) return false
+    return claim.sightings.length ? said.has(claim.key) && taken.has(stated(claim)) : came.added.includes(claim.key)
+  }).map(claim => claim.key))
+  for (let more = true; more;) {
+    more = false
+    for (const claim of from) if (!gone.has(claim.key)) for (const scope of claim.under) more = gone.delete(scope) || more
+  }
+  return { from: from.filter(claim => !gone.has(claim.key)).map(claim => ({ ...claim, sightings: claim.sightings.filter(id => id !== sighting) })), into: claims, brought }
+}
+
 export const claimsOf = (claims: readonly Claim[], kind: ClaimKind) => claims.filter(claim => claim.kind === kind)
 export const valuesOf = (claims: readonly Claim[], kind: ClaimKind) => claimsOf(claims, kind).map(claim => claim.value)
 

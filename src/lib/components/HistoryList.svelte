@@ -13,6 +13,7 @@
     fields: EntryFields | null; sightingFields: SightingFields | null; sightingRev?: number | null
     redacted?: boolean; redacted_at?: string | null; removed?: boolean | number
     merge?: { from: number } | { into: number } | null
+    moved?: { sighting: number; to?: number; from?: number } | null
   }
 
   let { rows, tags, dates, currentRev = null, duplicates = [], showEntry = false, showActor = true, restore = false, redact = false, thank = false, thanked = [], viewer = null, empty, next = null }: {
@@ -49,6 +50,7 @@
       {#if row.sighting_id && row.removed}<span class="revision-number">#{row.sighting_id}</span>
       {:else if row.sighting_id}<a class="revision-number" href={href(`/entry/${row.entry_id}#sighting-${row.sighting_id}`)} onclick={stop}>#{row.sighting_id}</a>{/if}
       {#if row.merge}{@const other = 'from' in row.merge ? row.merge.from : row.merge.into}<a class="revision-number" href={href(`/entry/${other}`)} onclick={stop}>{t('from' in row.merge ? 'history.mergedFrom' : 'history.mergedTo', { id: recordCode(other) })}</a>{/if}
+      {#if row.moved}{@const holder = row.moved.to ?? row.entry_id}<a class="revision-number" href={href(`/entry/${holder}#sighting-${row.moved.sighting}`)} onclick={stop}>#{row.moved.sighting}</a><a class="revision-number" href={href(`/entry/${row.moved.to ?? row.moved.from}`)} onclick={stop}>{t(row.moved.to ? 'history.movedTo' : 'history.movedFrom', { id: recordCode((row.moved.to ?? row.moved.from)!) })}</a>{/if}
     </span>
     {#if row.redacted || row.redacted_at}<span class="revision-comment">{t('history.redacted')}</span>{:else if row.summary}<span class="revision-comment">{row.summary}</span>{/if}
   </span>

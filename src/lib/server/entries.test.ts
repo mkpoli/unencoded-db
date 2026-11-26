@@ -1,7 +1,7 @@
 import { containerSuggestions } from './containers'
 import { hashHex } from './image'
 import { copyOfSource, copyPage, matchingCopies } from './digitized-copies'
-import { editSourceAlias, sourceAliases, suggestSources } from './source-aliases'
+import { sourceMatches, sourceMatchParams, editSourceAlias, sourceAliases, suggestSources } from './source-aliases'
 import { publicPublisher, publisherDirectory, publisherSuggestions } from './publishers'
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
@@ -440,28 +440,28 @@ describe('the wiki', () => {
   test('merging moves the sightings, drops the record from lists, and undoing brings all of it back', async () => {
     const a = await createEntry(db, fields(), seen({ place: 'one' }), [], who)
     const b = await createEntry(db, fields(), seen({ place: 'two' }), [], who)
-    expect((await mergeEntry(db, a, b, who, null)).ok).toBe(true)
-    expect((await getEntry(db, b))!.sightings).toHaveLength(2)
-    expect((await list(db, {}))!.tiles.map(tile => tile.id)).toEqual([b])
+    expect((await mergeEntry(db, b, a, who, null)).ok).toBe(true)
+    expect((await getEntry(db, a))!.sightings).toHaveLength(2)
+    expect((await list(db, {}))!.tiles.map(tile => tile.id)).toEqual([a])
     expect(await counts(db)).toMatchObject({ all: 1 })
-    expect(await unmergeEntry(db, a, who)).toBe(true)
-    expect((await getEntry(db, b))!.sightings).toHaveLength(1)
+    expect(await unmergeEntry(db, b, who)).toBe(true)
     expect((await getEntry(db, a))!.sightings).toHaveLength(1)
+    expect((await getEntry(db, b))!.sightings).toHaveLength(1)
     expect((await list(db, {}))!.tiles.map(tile => tile.id)).toEqual([b, a])
   })
 
   test('merging joins the claims, and undoing gives each record back its own claims and pictures', async () => {
-    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰木木'), claim('reading', 'tung'), relation('林', 'variant', 'a stroke')] }), seen({ place: 'one' }), [{ ...image, image_key: 'a.jpg', thumb_key: 'a-t.jpg', box: '[[1,2,10,10]]' }], who)
     const b = await createEntry(db, fields({ claims: [claim('ids', '⿱木木'), claim('encoding', 'U+5D20', { charset: 'unicode' })] }), seen({ place: 'two' }), [], who)
+    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰木木'), claim('reading', 'tung'), relation('林', 'variant', 'a stroke')] }), seen({ place: 'one' }), [{ ...image, image_key: 'a.jpg', thumb_key: 'a-t.jpg', box: '[[1,2,10,10]]' }], who)
     const claimsOf = async (id: number) => (await getEntry(db, id))!.claims
     const [aClaims, bClaims] = [await claimsOf(a), await claimsOf(b)]
     await mergeEntry(db, a, b, who, null)
     expect(await claimsOf(a)).toEqual(aClaims)
     expect(await claimsOf(b)).toEqual([...bClaims, ...aClaims])
     const merged = (await getEntry(db, b))!
-    expect(merged.sightings.map(item => item.media.map(picture => picture.image_key))).toEqual([['a.jpg'], []])
+    expect(merged.sightings.map(item => item.media.map(picture => picture.image_key))).toEqual([[], ['a.jpg']])
     expect(merged.entry).toMatchObject({ cover_key: 'a-t.jpg', cover_place: 'one', sightings: 2 })
-    expect(merged.sightings[0].media[0].box).toBe('[[1,2,10,10]]')
+    expect(merged.sightings[1].media[0].box).toBe('[[1,2,10,10]]')
     expect((await claimedBy(db, 'ids', '⿰木木')).map(row => row.id)).toEqual([b])
     expect((await list(db, { query: 'tung' }))!.tiles.map(tile => tile.id)).toEqual([b])
     expect(await mediaVisible(db, 'a.jpg')).toBe(true)
@@ -565,13 +565,30 @@ describe('the wiki', () => {
     expect((await getEntry(db, c))!.sightings.map(sighting => sighting.place)).toEqual(['c'])
   })
 
-  test('a record cannot merge into itself or into a merged record', async () => {
+  test('a record cannot merge into itself, into a later record, or into a merged record', async () => {
     const a = await createEntry(db, fields(), seen(), [], who)
     const b = await createEntry(db, fields(), seen(), [], who)
     const c = await createEntry(db, fields(), seen(), [], who)
     expect(await mergeEntry(db, a, a, who, null)).toEqual({ ok: false, code: 'self' })
-    await mergeEntry(db, a, b, who, null)
-    expect(await mergeEntry(db, c, a, who, null)).toEqual({ ok: false, code: 'missing' })
+    expect(await mergeEntry(db, a, b, who, null)).toEqual({ ok: false, code: 'order' })
+    expect((await getEntry(db, a))!.entry.merged_into).toBeNull()
+    expect((await mergeEntry(db, b, a, who, null)).ok).toBe(true)
+    expect(await mergeEntry(db, c, b, who, null)).toEqual({ ok: false, code: 'missing' })
+  })
+
+  test('the database guards record code permanence and merge direction directly', async () => {
+    const a = await createEntry(db, fields(), seen(), [], who)
+    const b = await createEntry(db, fields(), seen(), [], who)
+    expect(() => raw.run('DELETE FROM entries WHERE id = ?', [b])).toThrow('entries cannot be deleted')
+    expect(() => raw.run('UPDATE entries SET id = 999 WHERE id = ?', [b])).toThrow('entry id cannot change')
+    expect(() => raw.run('UPDATE entries SET merged_into = ? WHERE id = ?', [a, a])).toThrow('a record can only merge into an earlier record')
+    expect(() => raw.run('UPDATE entries SET merged_into = ? WHERE id = ?', [b, a])).toThrow('a record can only merge into an earlier record')
+    expect(() => raw.run("INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at) VALUES (10, 'han', 10, ?, '2026', '2026')", [who.actor])).toThrow('a record can only merge into an earlier record')
+    expect(() => raw.run("INSERT INTO entries(script, merged_into, created_by, created_at, updated_at) VALUES ('han', 999, ?, '2026', '2026')", [who.actor])).toThrow('a record can only merge into an earlier record')
+    // Valid inserts with an auto-assigned id and merges into an earlier record succeed.
+    expect(() => raw.run("INSERT INTO entries(script, merged_into, created_by, created_at, updated_at) VALUES ('han', ?, ?, '2026', '2026')", [a, who.actor])).not.toThrow()
+    expect((await getEntry(db, a))!.entry.id).toBe(a)
+    expect((await getEntry(db, b))!.entry.id).toBe(b)
   })
 
   test('hiding rolls back with the index and rejects mismatched targets', async () => {
@@ -2185,6 +2202,53 @@ test('source names find the exact public citation, including via-only works and 
   expect(await editSourceAlias(db, editions[1].id, 'private', false, who.actor)).toBe(false)
 })
 
+test('the Sources page finds a source by its author, container, link and account, and the title field by its name', async () => {
+  const message = via({ author: '甲（1234567）', container: '某討論羣（7654321）', publisher: 'QQ', report_date: '2026-11-17' })
+  const entry = await createEntry(db, fields(), seen({ title: '某字典', author: '乙、丙', url: 'https://example.org/dict', vias: [message, via({ author: '丁（@Someone）', url: 'https://x.com/Someone/status/1' })] }), [], who)
+  const found = async (query: string) => (await sourceList(db, 'new', null, null, query)).sources.map(source => source.author)
+  for (const query of ['甲', '甲（1234567）', '甲(123', '1234567', '某討論', '7654321']) expect(await found(query)).toEqual(['甲（1234567）'])
+  for (const query of ['乙', '丙', '某字', 'example.org/d', 'https://example.org/dict']) expect(await found(query)).toEqual(['乙、丙'])
+  for (const query of ['丁', 'someone', '@someone', 'x.com/someone']) expect(await found(query)).toEqual(['丁（@Someone）'])
+  // Publishers have a filter of their own, and the middle of a name finds nothing.
+  for (const query of ['QQ', '討論羣', '234567']) expect(await found(query)).toEqual([])
+  // Each way a source is found is a range of an index.
+  const plan = (raw.query(`EXPLAIN QUERY PLAN ${sourceMatches}`).all(...sourceMatchParams('甲')) as { detail: string }[]).map(row => row.detail)
+  expect(plan.some(detail => /SEARCH k USING PRIMARY KEY \(lookup>\? AND lookup<\?\)/.test(detail))).toBe(true)
+  expect(plan.filter(detail => /^SCAN|TEMP B-TREE/.test(detail))).toEqual([])
+  // A group's name in the title field offers none of its messages.
+  for (const query of ['某討論', '7654321', '丙']) expect(await suggestSources(db, query)).toEqual([])
+  await setHidden(db, { entry }, true, who, null)
+  for (const query of ['甲', '7654321', '乙']) expect(await found(query)).toEqual([])
+  await setHidden(db, { entry }, false, who, null)
+  // The keys of a source go with it, as D1 enforces foreign keys.
+  raw.exec('PRAGMA foreign_keys = ON')
+  const sighting = (await getEntry(db, entry))!.sightings[0]
+  await editSighting(db, sighting.id, sighting.rev, seen({ title: '某字典' }), null, who, null, entry)
+  expect(raw.query('SELECT author FROM sources').all()).toEqual([{ author: null }])
+  expect(raw.query('SELECT * FROM source_keys').all()).toEqual([])
+})
+
+test('a search reads the sightings of the sources on its page alone', async () => {
+  const insert = raw.prepare('INSERT INTO sources(hash, title, name_lookup, records) VALUES (?, ?, ?, 1)'), key = raw.prepare("INSERT INTO source_keys VALUES ('某討論羣', ?)")
+  raw.transaction(() => { for (let id = 1; id <= 4000; id++) { insert.run(String(id), `${id}`, `${id}`); key.run(id) } })()
+  const statements: { sql: string; values: unknown[] }[] = []
+  const traced = { prepare(sql: string) {
+    const statement = db.prepare(sql)
+    return { bind(...values: unknown[]) { statements.push({ sql, values }); return statement.bind(...values) } }
+  }, batch: (list: D1PreparedStatement[]) => db.batch(list) } as D1Database
+  for (const sort of ['new', 'most', 'earliest'] as const) {
+    statements.length = 0
+    expect((await sourceList(traced, sort, null, null, '某討論羣')).sources.length).toBe(SOURCES_PAGE)
+    for (const { sql, values } of statements.filter(statement => statement.sql.includes('source_keys'))) {
+      const plan = (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
+      const chosen = plan.findIndex(detail => /USE TEMP B-TREE FOR ORDER BY/.test(detail)), read = plan.findIndex(detail => /sightings_by_source/.test(detail))
+      expect(plan[0]).toBe('MATERIALIZE page')
+      expect(chosen).toBeGreaterThan(0)
+      expect(chosen).toBeLessThan(read)
+    }
+  }
+})
+
 test('the picker pages through shared spellings by normalized name and source id', async () => {
   const insert = raw.prepare('INSERT INTO sources(hash, title, name_lookup, records) VALUES (?, ?, ?, 1)')
   for (let id = 1; id <= 30; id++) insert.run(String(id), 'École ＡＢＣ', 'école abc')
@@ -2254,7 +2318,8 @@ describe('digitized copy filter', () => {
       const matches = await suggestSources(db, q)
       expect(matches.map(row => row.title)).toEqual([title, title])
       expect(new Set(matches.map(row => row.evidence?.entry))).toEqual(new Set([book, print]))
-      expect((await sourceList(db, 'new', null, null, q)).sources.map(row => row.title)).toEqual([title, title])
+      // A source is found by its author as written; only a title has readings.
+      expect((await sourceList(db, 'new', null, null, q)).sources.map(row => row.title)).toEqual(q === title ? ['Another book', title, title] : [title, title])
       expect((await matchingCopies(db, q)).map(copy => copy.slug)).toEqual([slug])
     }
     const [edition] = await suggestSources(db, '汇音字典')

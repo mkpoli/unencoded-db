@@ -10,10 +10,10 @@ const layout = '{"0":[1,0,0,1,40,0]}'
 
 function fixture() {
   const { db, raw } = openTestDb()
-  raw.exec(`INSERT INTO entries(id,script,ids,created_by,created_at,updated_at) VALUES(1,'han','${first}','a','2026','2026');
+  raw.exec(`INSERT INTO entries(id,script,ids,created_by,created_at,updated_at) VALUES(2,'han','${first}','a','2026','2026');
     INSERT INTO claims(entry_id,position,key,kind,value,data) VALUES
-      (1,0,'ids00001','ids','${first}',NULL),
-      (1,1,'ids00002','ids','${second}','{"layout":${layout}}');`)
+      (2,0,'ids00001','ids','${first}',NULL),
+      (2,1,'ids00002','ids','${second}','{"layout":${layout}}');`)
   const drawings = new Map<string, string>()
   const bucket = {
     get: async (name: string) => drawings.has(name) ? { text: async () => drawings.get(name)! } : null,
@@ -56,7 +56,7 @@ test('a description no visible record states does not draw', async () => {
   expect((await glyph(event(ask('⿰木木')))).status).toBe(404)
   raw.exec("UPDATE entries SET hidden_at = '2026'")
   expect((await glyph(event(ask(first)))).status).toBe(404)
-  raw.exec("UPDATE entries SET hidden_at = NULL, merged_into = 2")
+  raw.exec("INSERT INTO entries(id,script,created_by,created_at,updated_at) VALUES(1,'han','a','2026','2026'); UPDATE entries SET hidden_at = NULL, merged_into = 1 WHERE id = 2")
   expect((await glyph(event(ask(first)))).status).toBe(404)
 })
 

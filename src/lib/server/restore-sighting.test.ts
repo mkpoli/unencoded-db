@@ -39,8 +39,11 @@ test('rejects stale, hidden and unrelated sightings', async () => {
 
 test('visibility and ownership changes immediately before the batch prevent restoration', async () => {
   for (const change of ['sighting hidden', 'entry hidden', 'entry merged', 'moved'] as const) {
-    const { db, raw, who, id, sighting } = await fixture()
+    const { db, raw } = openTestDb()
+    const who = { actor: (await createPerson(db)).id, ip: null }
     const other = await createEntry(db, entry, seen('other'), [], who)
+    const id = await createEntry(db, entry, seen('original'), [], who)
+    const sighting = (await getEntry(db, id))!.sightings[0].id
     const batch = db.batch.bind(db)
     let injected = false
     db.batch = (async (statements: D1PreparedStatement[]) => {

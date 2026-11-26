@@ -1,16 +1,13 @@
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
-import { parseRecordCode } from '$lib/code'
 import { valuesOf } from '$lib/claims'
-import { claimedBy, getEntry, mergeEntry, tilesOf } from '$lib/server/entries'
+import { isRelationKind } from '$lib/related'
+import { claimedBy, getEntry, mergeEntry, relateEntry, tilesOf } from '$lib/server/entries'
 import { tileGlyphs } from '$lib/server/glyphs'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
-import { positiveId } from '../../../../_submission.server'
+import { positiveId, recordNamed } from '../../../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
-
-// A record as a reader names it: its number, its code in either spelling, or the address of its page.
-const recordOf = (text: string) => positiveId(text.trim()) ?? parseRecordCode(text) ?? positiveId(/\/entry\/(\d+)/.exec(text)?.[1])
 
 async function record(event: RequestEvent) {
   const id = positiveId(event.params.id)
@@ -25,7 +22,7 @@ export const load: PageServerLoad = async (event) => {
   const { id, found } = await record(event)
   const db = env(event).DB
   const typed = event.url.searchParams.get('of') ?? ''
-  const of = typed ? recordOf(typed) : null
+  const of = typed ? recordNamed(typed) : null
   // The records described by a sequence this record is described by are the likeliest to repeat it.
   const alike = of ? [] : (await Promise.all(valuesOf(found.claims, 'ids').map(ids => claimedBy(db, 'ids', ids)))).flat().map(row => row.id).filter(other => other !== id)
   const tiles = await tilesOf(db, [...new Set([id, ...(of ? [of] : alike)])])
@@ -36,11 +33,11 @@ export const load: PageServerLoad = async (event) => {
 
 export const actions: Actions = {
   // The later record joins the earlier one, whichever of the two the form was opened from.
-  default: async (event) => {
+  merge: async (event) => {
     await guardWrite(event, 'EDITS')
     const { id } = await record(event)
     const form = await event.request.formData()
-    const of = recordOf(String(form.get('of') ?? ''))
+    const of = recordNamed(String(form.get('of') ?? ''))
     if (!of) return fail(400, { error: 'missing' })
     const summary = String(form.get('summary') ?? '').trim().slice(0, 500) || null
     const db = env(event).DB
@@ -50,5 +47,21 @@ export const actions: Actions = {
     if (!result.ok) return fail(result.code === 'missing' ? 404 : 400, { error: result.code })
     notifyIndexNow(event, { entries: [from, into] })
     redirect(303, `/${event.params.locale}/entry/${into}`)
+  },  // The later record states how it relates to the earlier one, as it would have joined it.
+  apart: async (event) => {
+    await guardWrite(event, 'EDITS')
+    const { id } = await record(event)
+    const form = await event.request.formData()
+    const of = recordNamed(String(form.get('of') ?? ''))
+    const relationship = form.get('relationship'), difference = String(form.get('difference') ?? '').trim()
+    if (!of) return fail(400, { error: 'missing' })
+    if (!isRelationKind(relationship) || difference.length > 5000) return fail(400, { error: 'relatedCharacters' })
+    const db = env(event).DB
+    const person = await writer(event, db)
+    const later = Math.max(id, of), earlier = Math.min(id, of)
+    const result = await relateEntry(db, later, earlier, { relationship, ...(difference ? { difference } : {}) }, { actor: person.id, ip: await ipHash(event) }, null)
+    if (!result.ok) return fail(result.code === 'missing' ? 404 : result.code === 'conflict' ? 409 : 400, { error: result.code })
+    notifyIndexNow(event, { entries: [later, earlier] })
+    redirect(303, `/${event.params.locale}/entry/${later}`)
   },
 }

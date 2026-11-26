@@ -1,6 +1,7 @@
 import { createLocalJWKSet, jwtVerify } from 'jose'
 import { error, type RequestEvent } from '@sveltejs/kit'
 import { isLocale } from '$lib/i18n'
+import { boundedBody } from './body-limit'
 import { hashHex } from './image'
 import { secureOrigin, sessionName } from './people'
 
@@ -59,4 +60,24 @@ export async function identity(token: string, jwksUri: string, issuer: string, c
   const { payload } = await jwtVerify(token, keys, { issuer, audience: clientId, algorithms: ['RS256'], requiredClaims: ['sub', 'exp', 'iat', 'nonce'] })
   if (payload.nonce !== nonce || typeof payload.sub !== 'string' || !payload.sub || payload.sub.length > 255 || typeof payload.iat !== 'number' || payload.iat > Math.floor(Date.now() / 1000) + 60 || (payload.azp !== undefined && payload.azp !== clientId) || (Array.isArray(payload.aud) && payload.aud.length > 1 && payload.azp !== clientId)) throw new Error('Invalid identity')
   return { sub: payload.sub, name: typeof payload.name === 'string' ? payload.name : '' }
+}
+
+const PICTURE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const PICTURE_MAX = 1024 * 1024
+const PICTURE_WAIT = 5000
+
+/** The picture an account has now, null when it has none to show, and undefined when that cannot be told. */
+export async function atlasPicture(event: RequestEvent, sub: string): Promise<{ body: Blob; type: string } | null | undefined> {
+  const issuer = event.platform?.env.ATLAS_ISSUER
+  if (!issuer) return null
+  try {
+    const response = await fetch(new URL(`/api/avatars/${encodeURIComponent(sub)}`, issuer), { headers: { accept: PICTURE_TYPES.join(', ') }, signal: AbortSignal.timeout(PICTURE_WAIT) })
+    const type = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase() ?? ''
+    if (!response.ok || !response.body || !PICTURE_TYPES.includes(type)) {
+      void response.body?.cancel().catch(() => {})
+      return response.ok || response.status === 404 ? null : undefined
+    }
+    const body = await boundedBody(response.body, PICTURE_MAX)
+    return body && { body, type }
+  } catch { return undefined }
 }

@@ -23,11 +23,14 @@
   import IdsGlyph from './IdsGlyph.svelte'
   import IdsLine from './IdsLine.svelte'
 
-  let { values = [], primary = $bindable(''), chosen = $bindable(null), exclude = null, sighting = null, anchor, onfill }: {
-    values?: string[]; primary?: string; chosen?: number[] | null; exclude?: number | null; sighting?: number | null; anchor?: string; onfill?: (fill: Fill) => void
+  let { values = [], primary = $bindable(''), chosen = $bindable(null), exclude = null, placed, sighting = null, anchor, onfill }: {
+    values?: string[]; primary?: string; chosen?: number[] | null; exclude?: number | null; placed?: (id: number) => string; sighting?: number | null; anchor?: string; onfill?: (fill: Fill) => void
   } = $props()
 
-  const addSightingHref = (id: number) => href(`/entry/${id}/sighting/new${sighting ? `?sighting=${sighting}` : ''}`)
+  // `placed` answers where the evidence at hand moves to a record that describes it already;
+  // `sighting` carries a seeded sighting to an existing record's add-evidence form.
+  const evidenceHref = (id: number) => placed?.(id) ?? href(`/entry/${id}/sighting/new${sighting ? `?sighting=${sighting}` : ''}`)
+  const evidenceTab = $derived(placed || sighting ? undefined : '_blank')
 
   const uid = $props.id()
   let next = 0
@@ -187,7 +190,7 @@
           <span class="body"><span class="line">{lone.facts.code}</span><span class="ids">{lone.facts.ids ?? ''}</span></span>
           <span class="choices">
             {#each lone.records as record (record.id)}
-              <a class="button" href={addSightingHref(record.id)} target={sighting ? undefined : '_blank'}>{t('field.encodedSame')} · {recordCode(record.id)}</a>
+              <a class="button" href={evidenceHref(record.id)} target={evidenceTab}>{t(placed ? 'sighting.moveThere' : 'field.encodedSame')} · {recordCode(record.id)}</a>
             {:else}
               <button type="button" class="button" onclick={() => take(lone!.facts, false)}>{t('field.encodedSame')}</button>
             {/each}
@@ -211,7 +214,7 @@
                     {:else if item.record.cover_key}<img src={media(item.record.cover_key)} alt="" loading="lazy" decoding="async" />{/if}
                   </span>
                   <span class="body">
-                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier !== 'similar' || sighting} <a class="text-link" href={addSightingHref(item.record.id)} target={sighting ? undefined : '_blank'}>{t('field.candidateAdd')}</a>{/if}{#if whole && group.tier !== 'same'} <a class="text-link" href={href(`/entry/${item.record.id}?ids_add=${encodeURIComponent(sequence)}#edit-ids`)} target="_blank">{t('field.candidateAddIds')}</a>{/if}</span>
+                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier !== 'similar' || (!placed && sighting)} <a class="text-link" href={evidenceHref(item.record.id)} target={evidenceTab}>{t(placed ? 'sighting.moveThere' : 'field.candidateAdd')}</a>{/if}{#if whole && group.tier !== 'same' && !placed} <a class="text-link" href={href(`/entry/${item.record.id}?ids_add=${encodeURIComponent(sequence)}#edit-ids`)} target="_blank">{t('field.candidateAddIds')}</a>{/if}</span>
                     <span class="ids">{item.record.ids ?? ''}</span>
                   </span>
                 {:else}
