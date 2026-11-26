@@ -43,7 +43,9 @@
   import { snippet } from '$lib/seo'
   import { recordData } from '$lib/structured-data'
   import type { Sighting, StoredImage } from '$lib/server/entries'
-  import { href, locale, media, t, day } from '$lib/t'
+  import { href, locale, media, t, day, yearName } from '$lib/t'
+  import { browseReturnHref, canReturnViaHistory } from '$lib/browse-return.svelte'
+  import { kindName } from '$lib/source-kind'
   import { recordCode, recordName } from '$lib/code'
   let { data, form } = $props()
   const entry = $derived(data.entry)
@@ -155,6 +157,7 @@
     { key: 'author', label: 'field.author' },
     { key: 'title', label: 'field.title' },
     { key: 'container', label: 'field.container' },
+    { key: 'source_kind', label: 'field.sourceKind' },
     { key: 'publisher', label: 'field.publisher' },
     { key: 'report_date', label: 'field.reportDate' },
     { key: 'original_date', label: 'field.originalDate' },
@@ -176,13 +179,20 @@
       setTimeout(() => URL.revokeObjectURL(link.href), 1000)
     } finally { preparing = null }
   }
+  const backHref = $derived(browseReturnHref(href()))
+  function returnToBrowse(event: MouseEvent) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    if (!canReturnViaHistory()) return
+    event.preventDefault()
+    history.back()
+  }
 </script>
 
 <svelte:window onclick={edit} />
 <Seo data={structured} title={seoTitle} description={seoDescription} image={href(`/entry/${entry.id}/card.png?v=${encodeURIComponent(entry.updated_at)}`)} imageAlt={seoTitle} />
 <div class="page narrow stack">
-  <div class="row"><a class="text-link back" href={href()}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href="#discussion">{t('discussion.title')}{#if shownComments} <span class="count">{shownComments}</span>{/if}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
-  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: data.earliest.year })}</a>{/if}</div></div><div class="row"><ShareRecord id={entry.id} /><FavouriteButton id={entry.id} initial={data.favourites.includes(entry.id)} onerror={message => favError = message} /></div></div>
+  <div class="row"><a class="text-link back" href={backHref} onclick={returnToBrowse}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href="#discussion">{t('discussion.title')}{#if shownComments} <span class="count">{shownComments}</span>{/if}</a><a class="text-link" href={href(`/entry/${entry.id}/duplicate`)}>{t('entry.duplicate')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
+  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: yearName(Number(data.earliest.year), true) })}</a>{/if}</div></div><div class="row"><ShareRecord id={entry.id} /><FavouriteButton id={entry.id} initial={data.favourites.includes(entry.id)} onerror={message => favError = message} /></div></div>
   {#if favError}<p class="notice bad" role="alert">{favError}</p>{/if}
   {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
   {#if entry.merged_into}<p class="notice quiet"><a class="text-link" href={href(`/entry/${entry.merged_into}`)}>{t('entry.mergedInto', { id: recordCode(entry.merged_into) })}</a></p>{/if}
@@ -309,7 +319,7 @@
         {#if types.length || data.earliest?.sighting === sighting.id}<div class="row badges">{#if data.earliest?.sighting === sighting.id}<span class="badge earliest">{t('entry.earliest')}</span>{/if}{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
         {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} />{/if}
-        <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
+        <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else if field.key === 'source_kind'}{kindName(sighting.source_kind)}{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
           {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
         </dl>

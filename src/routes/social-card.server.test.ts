@@ -58,24 +58,24 @@ test('a copy preview uses public evidence from that copy and checks visibility b
   const slug = 'ntcu-848'
   raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026');
     INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES
-      (1, 'han', '永', 'p', '2026', '2026'), (2, 'han', '木', 'p', '2026', '2026');
+      (1, 'han', NULL, 'p', '2026', '2026'), (2, 'han', '永', 'p', '2026', '2026'), (3, 'han', '木', 'p', '2026', '2026');
     INSERT INTO sources(id, hash, url) VALUES
       (1, 'page', 'https://ip194097.ntcu.edu.tw/memory/TGB/thak.asp?id=848&page=7');
     INSERT INTO sightings(id, entry_id, first_entry, source_id, place, created_by, created_at, updated_at) VALUES
-      (1, 1, 1, NULL, 'Via the book', 'p', '2026', '2026'),
-      (2, 2, 2, 1, 'In the book', 'p', '2026', '2026');
+      (1, 2, 2, NULL, 'Via the book', 'p', '2026', '2026'),
+      (2, 3, 3, 1, 'In the book', 'p', '2026', '2026');
     INSERT INTO sighting_vias(sighting_id, position, source_id) VALUES (1, 0, 1);
     INSERT INTO sighting_media(sighting_id, position, image_key, image_type, image_w, image_h, thumb_key) VALUES
       (1, 0, 'other.png', 'image/png', 1, 1, 'shared-thumb.png'),
       (2, 0, 'book.png', 'image/png', 1, 1, 'shared-thumb.png');`)
-  expect(await copyCardSpecimen(db, slug)).toMatchObject({ title: '彙音字典', collection: 'NTCU', entry_id: 2, thumb_key: 'shared-thumb.png', image_key: 'book.png' })
+  expect(await copyCardSpecimen(db, slug)).toMatchObject({ title: '彙音字典', collection: 'NTCU', entry_id: 3, thumb_key: 'shared-thumb.png', image_key: 'book.png' })
   const initialVersion = (await copyPage(db, slug, 0))!.cardVersion
-  raw.exec("DELETE FROM sighting_media WHERE sighting_id = 2; UPDATE entries SET ids = NULL WHERE id = 2")
-  expect(await copyCardSpecimen(db, slug)).toMatchObject({ entry_id: 1, ids: '永', image_key: null })
+  raw.exec("DELETE FROM sighting_media WHERE sighting_id = 2; UPDATE entries SET ids = NULL WHERE id = 3")
+  expect(await copyCardSpecimen(db, slug)).toMatchObject({ entry_id: 2, ids: '永', image_key: null })
   expect((await copyPage(db, slug, 0))!.cardVersion).not.toBe(initialVersion)
   raw.exec("UPDATE sightings SET hidden_at = 'now' WHERE id = 2")
-  expect(await copyCardSpecimen(db, slug)).toMatchObject({ entry_id: 1, ids: '永', image_key: null, thumb_key: null })
-  raw.exec('UPDATE entries SET merged_into = 2 WHERE id = 1')
+  expect(await copyCardSpecimen(db, slug)).toMatchObject({ entry_id: 2, ids: '永', image_key: null, thumb_key: null })
+  raw.exec('UPDATE entries SET merged_into = 1 WHERE id = 2')
   for (const name of [slug, 'unknown-copy']) {
     await expect(Promise.resolve(copyCard({
       params: { locale: 'en', slug: name }, platform: { env: { DB: db } },

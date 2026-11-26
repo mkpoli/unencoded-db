@@ -6,17 +6,20 @@
   import MarkedPicture from '$lib/components/MarkedPicture.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
   import { href, locale, t, when } from '$lib/t'
+  import { kindName } from '$lib/source-kind'
+  import { sourceHeading } from '$lib/source-name'
   import { recordCode } from '$lib/code'
   import { pictureAlt } from '$lib/picture'
   import { sourceData } from '$lib/structured-data'
   let { data, form } = $props()
   const source = $derived(data.source)
-  const heading = $derived(source.title || (source.container && [source.author, source.container].filter(Boolean).join(' · ')) || source.url || source.author || t('source.title'))
+  const heading = $derived(sourceHeading(source, t))
   const structured = $derived(sourceData({ locale: locale(), source, name: heading, siteName: t('app.name'), sourcesName: t('nav.sources') }))
   const facts = [
     { key: 'title', label: 'field.title' },
     { key: 'author', label: 'field.author' },
     { key: 'container', label: 'field.container' },
+    { key: 'source_kind', label: 'field.sourceKind' },
     { key: 'publisher', label: 'field.publisher' },
     { key: 'report_date', label: 'field.reportDate' },
   ] as const
@@ -37,7 +40,7 @@
     <span class="badge">{t('source.title')}</span>
     <h1>{heading}</h1>
     {#if source.url && /^https?:\/\//i.test(source.url)}<a class="text-link url" href={source.url} target="_blank" rel="noopener noreferrer">{source.url} ↗</a>{/if}
-    <dl class="facts">{#each facts as fact}{#if source[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{#if fact.key === 'report_date'}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} />{:else}{source[fact.key]}{/if}</dd></div>{/if}{/each}</dl>
+    <dl class="facts">{#each facts as fact}{#if source[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{#if fact.key === 'report_date'}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} />{:else if fact.key === 'source_kind'}{kindName(source.source_kind)}{:else}{source[fact.key]}{/if}</dd></div>{/if}{/each}</dl>
     {#if data.copy}<a class="text-link" href={href(`/sources/copy/${data.copy.slug}`)}>{t('sources.digitizedCopy')} · {data.copy.title} · {data.copy.collection}</a>{/if}
     <details class="aliases" open={form != null || data.aliases.length > 0 || data.before !== null}>
       <summary>{t('source.aliases')}{#if data.aliases.length} ({data.aliases.length}){/if}</summary>

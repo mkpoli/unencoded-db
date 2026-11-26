@@ -2,8 +2,8 @@ import { expect, test } from 'bun:test'
 import { newClaim } from '$lib/claims'
 import { addComment, setCommentHidden } from './comments'
 import { addSighting, createEntry, editEntry, editSighting, getEntry, getSighting, mergeEntry, setHidden, type EntryFields, type SightingFields } from './entries'
-import { latestNotice, markRead, notificationsOf, unreadCount } from './notifications'
-import { createPerson } from './people'
+import { latestNotice, markRead, notificationsOf, thank, thankedOf, unreadCount } from './notifications'
+import { createPerson, joinAtlas, startSession } from './people'
 import { openTestDb } from './testdb'
 import { Database } from 'bun:sqlite'
 import { readdirSync, readFileSync } from 'node:fs'
@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { d1Over } from './testdb'
 
 const fields = (ids: string): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', ids)] })
-const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
+const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
 
 async function scene() {
   const { db, raw } = openTestDb()
@@ -85,8 +85,8 @@ test('changes made before notices existed are queued for the recorder', async ()
   const raw = new Database(':memory:')
   const migrations = join(import.meta.dir, '../../../migrations')
   const names = readdirSync(migrations).sort()
-  // The code under test writes the source and sighting columns and reads the tag aliases of today, so their migrations run first.
-  const early = (name: string) => name < '0035' || name === '0041_source_container.sql' || name === '0045_tag_aliases.sql' || name === '0047_sighting_contexts.sql'
+  // The code under test writes the source and sighting columns and the forms, and reads the tag aliases and source keys, of today, so their migrations run first.
+  const early = (name: string) => name < '0035' || name === '0041_source_container.sql' || name === '0045_tag_aliases.sql' || name === '0047_sighting_contexts.sql' || name === '0048_source_kind.sql' || name === '0054_source_keys.sql' || name === '0056_forms.sql'
   for (const name of names.filter(early)) raw.exec(readFileSync(join(migrations, name), 'utf8'))
   const db = d1Over(raw)
   const recorder = await createPerson(db), second = await createPerson(db), maintenance = await createPerson(db, null, 'Catalogue maintenance')
@@ -106,11 +106,11 @@ test('changes made before notices existed are queued for the recorder', async ()
 test('a merge tells each recorder once, and reading stops at what the page held', async () => {
   const { db, recorder, second, reader, who, entry } = await scene()
   const other = await createEntry(db, fields('⿰山西'), sighting, [], who(second))
-  expect((await mergeEntry(db, entry, other, who(reader), null)).ok).toBe(true)
+  expect((await mergeEntry(db, other, entry, who(reader), null)).ok).toBe(true)
   expect(await unreadCount(db, recorder.id)).toBe(1)
   expect(await unreadCount(db, second.id)).toBe(1)
   const held = await latestNotice(db, recorder.id)
-  await addComment(db, { entry: other }, 'after the page was shown', who(reader))
+  await addComment(db, { entry }, 'after the page was shown', who(reader))
   await markRead(db, recorder.id, held)
   expect(await unreadCount(db, recorder.id)).toBe(1)
 })
@@ -123,4 +123,54 @@ test('an edit of evidence since hidden is not listed', async () => {
   expect(await kinds(recorder)).toEqual(['sighting_edit'])
   await setHidden(db, { entry, sighting: 2 }, true, who(second), null)
   expect(await kinds(recorder)).toEqual([])
+})
+
+test('a thank tells whoever made the change, once, and never for one of their own changes', async () => {
+  const { db, raw, recorder, second, reader, who, entry, kinds } = await scene()
+  const found = (await getEntry(db, entry))!
+  expect((await editEntry(db, entry, found.entry.rev, { ...fields('⿰山東'), description: 'checked' }, who(second), 'gloss corrected')).ok).toBe(true)
+  const edit = (raw.query("SELECT id FROM revisions WHERE kind = 'edit'").get() as { id: number }).id
+  expect(await thank(db, entry, edit, who(second))).toBe(false)
+  expect(await thank(db, entry + 1, edit, who(recorder))).toBe(false)
+  expect(await thank(db, entry, edit, who(recorder))).toBe(true)
+  expect(await thank(db, entry, edit, who(recorder))).toBe(true)
+  expect(await kinds(second)).toEqual(['thank'])
+  expect((await notificationsOf(db, second.id)).notifications[0]).toMatchObject({ entry_id: entry, by_id: recorder.id, text: 'gloss corrected', read_at: null })
+  expect(await thankedOf(db, recorder.id, [edit, edit + 1])).toEqual([edit])
+  expect(await thankedOf(db, second.id, [edit])).toEqual([])
+  expect(await thank(db, entry, edit, { actor: reader.id, ip: 'address' })).toBe(true)
+  expect(await thank(db, entry, edit, { actor: (await createPerson(db)).id, ip: 'address' })).toBe(true)
+  expect(await unreadCount(db, second.id)).toBe(2)
+})
+
+test('the rebuilt table keeps the notices it held', async () => {
+  const { raw } = openTestDb()
+  const migrations = join(import.meta.dir, '../../../migrations')
+  const names = readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()
+  const old = new Database(':memory:')
+  for (const name of names.filter(name => name < '0049' || name === '0056_forms.sql')) old.exec(readFileSync(join(migrations, name), 'utf8'))
+  const db = d1Over(old)
+  const recorder = await createPerson(db), second = await createPerson(db)
+  const entry = await createEntry(db, fields('⿰山東'), sighting, [], { actor: recorder.id, ip: null })
+  await addSighting(db, entry, { ...sighting, place: 'Another book' }, [], { actor: second.id, ip: null })
+  await markRead(db, recorder.id, 1)
+  const before = old.query('SELECT id, person, comment_id, revision_id, at, read_at FROM notifications').all()
+  for (const name of names.filter(name => name >= '0049' && name !== '0056_forms.sql')) old.exec(readFileSync(join(migrations, name), 'utf8'))
+  expect(before.length).toBe(1)
+  expect(old.query('SELECT id, person, comment_id, revision_id, at, read_at FROM notifications').all()).toEqual(before)
+  expect(old.query("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all()).toEqual(raw.query("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all())
+})
+
+test('thanks said before signing in join the account, except those for its own changes', async () => {
+  const { db, raw, recorder, who, entry } = await scene()
+  const account = await createPerson(db, 'atlas-1', 'Named'), anon = await createPerson(db)
+  const found = (await getEntry(db, entry))!
+  expect((await editEntry(db, entry, found.entry.rev, { ...fields('⿰山東'), description: 'checked' }, who(account), null)).ok).toBe(true)
+  const edit = (raw.query("SELECT id FROM revisions WHERE kind = 'edit'").get() as { id: number }).id
+  expect(await thank(db, entry, edit, who(anon))).toBe(true)
+  expect(await thank(db, entry, 1, who(anon))).toBe(true)
+  expect(await joinAtlas(db, anon, 'atlas-1', 'Named', await startSession(db, anon.id))).toBe(account.id)
+  expect(await thankedOf(db, account.id, [1, edit])).toEqual([1])
+  expect((await notificationsOf(db, account.id)).notifications.map(notice => notice.kind)).toEqual([])
+  expect((await notificationsOf(db, recorder.id)).notifications.map(notice => [notice.kind, notice.by_id])).toEqual([['thank', account.id], ['edit', account.id]])
 })

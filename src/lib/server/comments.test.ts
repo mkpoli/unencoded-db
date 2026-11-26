@@ -6,7 +6,7 @@ import { createPerson } from './people'
 import { openTestDb } from './testdb'
 
 const fields = (ids: string): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', ids)] })
-const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
+const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
 
 test('a comment is trimmed and bounded', () => {
   expect(cleanComment('  one\r\ntwo  ')).toBe('one\ntwo')
@@ -36,12 +36,12 @@ test('comments follow a merged record and return when it is taken apart', async 
   const a = await createEntry(db, fields('⿰山東'), sighting, [], who), b = await createEntry(db, fields('⿰山西'), sighting, [], who)
   await addComment(db, { entry: a }, 'on a', who)
   await addComment(db, { entry: b }, 'on b', who)
-  await mergeEntry(db, a, b, who, null)
-  expect((await commentsOf(db, b)).map(comment => comment.body)).toEqual(['on a', 'on b'])
-  await addComment(db, { entry: b, sighting: 1 }, 'on the evidence a brought', who)
-  await unmergeEntry(db, a, who)
-  expect((await commentsOf(db, a)).map(comment => comment.body)).toEqual(['on a', 'on the evidence a brought'])
-  expect((await commentsOf(db, b)).map(comment => comment.body)).toEqual(['on b'])
+  await mergeEntry(db, b, a, who, null)
+  expect((await commentsOf(db, a)).map(comment => comment.body)).toEqual(['on a', 'on b'])
+  await addComment(db, { entry: a, sighting: 2 }, 'on the evidence b brought', who)
+  await unmergeEntry(db, b, who)
+  expect((await commentsOf(db, b)).map(comment => comment.body)).toEqual(['on b', 'on the evidence b brought'])
+  expect((await commentsOf(db, a)).map(comment => comment.body)).toEqual(['on a'])
 })
 
 test('a record reads its comments through the index', () => {

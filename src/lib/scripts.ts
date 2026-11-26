@@ -62,6 +62,11 @@ export const STYLES = ['regular', 'semi_cursive', 'seal', 'clerical', 'other'] a
 export const SIGHTING_TYPES = ['mention', 'attestation', 'description', 'definition', 'reading', 'relation'] as const
 export type SightingType = (typeof SIGHTING_TYPES)[number]
 
+// A source nobody else can look up: a letter, a private message, a conversation. Other sources have no kind.
+export const SOURCE_KINDS = ['personal'] as const
+export type SourceKind = (typeof SOURCE_KINDS)[number]
+export const sourceKind = (raw: string | null | undefined): SourceKind | null => SOURCE_KINDS.find(kind => kind === raw) ?? null
+
 // A sighting stores the options chosen from a list as a JSON array in the order of the list, or null for none.
 function parseChosen<T extends string>(options: readonly T[], raw: string | null | undefined): T[] {
   try {

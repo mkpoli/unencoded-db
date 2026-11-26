@@ -39,8 +39,10 @@
     </section>
     {#if form?.error === 'conflict'}<button class="button" type="submit" disabled>{t('form.save')}</button>{:else}<SubmitBar {busy} cancel={href(`/entry/${data.id}`)} />{/if}
   </form>
+  <div class="row elsewhere"><a class="text-link" href={href(`/entry/${data.id}/sighting/${data.sighting.id}/move`)}>{t('sighting.moveLink')}</a><a class="text-link remove" href={href(`/entry/${data.id}/sighting/${data.sighting.id}/remove`)}>{t('sighting.removeLink')}</a></div>
 </div>
 <style>
+  .elsewhere { gap:8px 20px } .remove { color:var(--wrong) }
   .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
   .current { display:flex; flex-direction:column; gap:16px }
   @media(max-width:700px) { .panel { padding:16px } }

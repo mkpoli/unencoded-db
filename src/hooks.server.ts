@@ -24,8 +24,15 @@ function foreignForm(event: Pick<RequestEvent, 'request' | 'url' | 'route'>) {
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname, search } = event.url
   // A session cookie is only set over HTTPS, and every other origin than loopback is refused by `secureOrigin`,
-  // so a plain-http request would end in a 500. It goes to the same address over HTTPS first.
+  // so a plain-http request would end in a 500. Authenticated MCP requests must not redirect, since clients drop
+  // Authorization across schemes and would fall through to the anonymous session; other requests go to HTTPS.
   if (event.url.protocol === 'http:' && !loopback(event.url)) {
+    if ((event.route.id === '/mcp' || pathname === '/mcp') && event.request.headers.has('authorization')) {
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'HTTPS is required for authenticated MCP requests' } }), {
+        status: 426,
+        headers: { 'content-type': 'application/json', upgrade: 'TLS/1.2' },
+      })
+    }
     const secure = new URL(event.url)
     secure.protocol = 'https:'
     redirect(308, secure.href)

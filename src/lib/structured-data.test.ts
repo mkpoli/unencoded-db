@@ -42,6 +42,16 @@ test('a source keeps free-text dates out of datePublished', () => {
   expect(trail.itemListElement.map((item: any) => item.item).at(1)).toBe('https://rare.glyphatlas.org/en/sources')
 })
 
+test('a source names what it appeared in', () => {
+  const message = { id: 9, author: '貓村', publisher: 'QQ', report_date: '2026-11-14', container: 'zi.tools討論羣' }
+  const group = { '@type': 'CreativeWork', name: 'zi.tools討論羣' }
+  const [record] = recordData({ locale: 'en', id: 1, name: 'n', description: 'd', siteName: 's', sources: [message] }) as any[]
+  expect(record.citation).toEqual([{ '@type': 'CreativeWork', creator: '貓村', publisher: 'QQ', datePublished: '2026-11-14', isPartOf: group, url: 'https://rare.glyphatlas.org/en/source/9' }])
+  const page = (facts: typeof message | typeof source) => (sourceData({ locale: 'en', source: facts, name: 'n', siteName: 's', sourcesName: 'Sources' }) as any[])[0].isPartOf
+  expect(page(message)).toEqual([record.isPartOf, group])
+  expect(page(source)).toEqual(record.isPartOf)
+})
+
 test('script text cannot close its element', () => {
   expect(jsonLdScript({ name: '</script><b>' })).not.toContain('</script><b>')
 })
