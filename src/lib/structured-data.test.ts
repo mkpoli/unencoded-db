@@ -51,6 +51,14 @@ test('a source keeps free-text dates out of datePublished', () => {
   expect(trail.itemListElement.map((item: any) => item.item).at(1)).toBe('https://rare.glyphatlas.org/en/sources')
 })
 
+test('a source lists its archived copies as archivedAt', () => {
+  const build = (archives?: string[]) => (sourceData({ locale: 'en', source, archives, name: 'n', siteName: 's', sourcesName: 'Sources' }) as any[])[0]
+  const copy = 'https://web.archive.org/web/2024/https://example.org/kx'
+  expect(build([copy, 'javascript:alert(1)'])).toMatchObject({ sameAs: 'https://example.org/kx', archivedAt: [copy] })
+  expect('archivedAt' in build([])).toBe(false)
+  expect('archivedAt' in build()).toBe(false)
+})
+
 test('a source names what it appeared in', () => {
   const message = { id: 9, author: '貓村', publisher: 'QQ', report_date: '2026-11-14', container: 'zi.tools討論羣' }
   const group = { '@type': 'CreativeWork', name: 'zi.tools討論羣' }

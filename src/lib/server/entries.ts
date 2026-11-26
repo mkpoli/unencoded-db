@@ -717,7 +717,7 @@ async function writeSighting(db: D1Database, id: number, baseRev: number, sent: 
         db.prepare('DELETE FROM sighting_vias WHERE sighting_id = ?').bind(id),
         ...insertVias(db, id, source.vias),
         // A source no sighting cites any more, as its work or as a via, is not kept.
-        ...[...new Set([current.source_id, ...current.vias.map(via => via.id)])].filter(id => id !== null).map(id => db.prepare('DELETE FROM sources WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM sightings WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM sighting_vias WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_aliases WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_alias_changes WHERE source_id = ?1)').bind(id)),
+        ...[...new Set([current.source_id, ...current.vias.map(via => via.id)])].filter(id => id !== null).map(id => db.prepare('DELETE FROM sources WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM sightings WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM sighting_vias WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_aliases WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_alias_changes WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_archives WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_archive_changes WHERE source_id = ?1)').bind(id)),
         ...(media ? [db.prepare('DELETE FROM sighting_media WHERE sighting_id = ?').bind(id), insertMedia(db, id, media)] : []),
         db.prepare('UPDATE entries SET updated_at = ? WHERE id = ?').bind(now(), current.entry_id),
         revision(db, who, { entry: current.entry_id, sighting: id, kind: 'sighting_edit', rev, snapshot: sightingSnapshot(fields, kept), summary }),
