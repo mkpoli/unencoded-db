@@ -1698,7 +1698,7 @@ export function personRevisionsStatement(db: D1Database, id: string, before?: nu
 }
 
 export async function ofPerson(db: D1Database, id: string, before?: number | null) {
-  const person = await db.prepare('SELECT id, name, atlas_sub, created_at, merged_into FROM people WHERE id = ?').bind(id).first<{ id: string; name: string; atlas_sub: string | null; created_at: string; merged_into: string | null }>()
+  const person = await db.prepare('SELECT id, name, atlas_sub, created_at, merged_into, banned_at FROM people WHERE id = ?').bind(id).first<{ id: string; name: string; atlas_sub: string | null; created_at: string; merged_into: string | null; banned_at: string | null }>()
   if (!person) return null
   const { results } = await personRevisionsStatement(db, id, before).all<Revision & { visible: number }>()
   const rows = results.slice(0, HISTORY_PAGE).filter(row => row.visible).map(({ visible, ...row }) => row)
