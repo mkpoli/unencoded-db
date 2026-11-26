@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { sniff } from './image'
-import { isPdf, PDF_SIDE, renderPdfPage } from './pdf'
+import { isPdf, PDF_PIXELS, PDF_SIDE, renderPdfPage } from './pdf'
 
 /** A PDF of blank pages, each `[width, height]` in points, with a filled square on the first. */
 export function pdfOf(sizes: readonly (readonly [number, number])[]) {
@@ -25,6 +25,10 @@ test('a PDF page is drawn as a WebP whose longer side is fixed', async () => {
   expect(first).toMatchObject({ width: PDF_SIDE, height: PDF_SIDE / 2, pages: 2 })
   expect(sniff(first!.bytes)).toEqual({ type: 'image/webp', width: PDF_SIDE, height: PDF_SIDE / 2 })
   expect(await renderPdfPage(pdf, 2)).toMatchObject({ width: PDF_SIDE / 2, height: PDF_SIDE })
+  // A square page is held to the pixel allowance.
+  const square = await renderPdfPage(pdfOf([[500, 500]]))
+  expect(square!.width).toBe(Math.round(Math.sqrt(PDF_PIXELS)))
+  expect(square!.width * square!.height).toBeLessThanOrEqual(PDF_PIXELS * 1.001)
 }, 30_000)
 
 test('a page the file lacks, or a file that is no PDF, draws nothing', async () => {

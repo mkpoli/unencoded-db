@@ -2,15 +2,15 @@ import { PDFiumLibrary } from '@hyzyla/pdfium'
 import encodeWebp, { init as initWebp } from '@jsquash/webp/encode.js'
 
 // A PDF page given as a picture is drawn once, here, and kept as the WebP it draws to. The page's longer
-// side comes out at PDF_SIDE pixels, so marks can be measured on any rendering made to that size.
+// side comes out at PDF_SIDE pixels, so marks can be measured on any rendering made to that size. A page
+// nearer to square than a sheet of paper is drawn smaller, to PDF_PIXELS in all: the drawing and its
+// encoding each hold the whole bitmap in a Worker's memory.
 export const PDF_SIDE = 2400
+export const PDF_PIXELS = 4_200_000
 export const PDF_QUALITY = 85
 
-export const isPdf = (bytes: Uint8Array) => {
-  // The header may follow a few bytes of padding.
-  const head = String.fromCharCode(...bytes.subarray(0, 1024))
-  return head.includes('%PDF-')
-}
+// The header may follow a few bytes of padding.
+export const isPdf = (bytes: Uint8Array) => String.fromCharCode(...bytes.subarray(0, 1024)).includes('%PDF-')
 
 // Wrangler hands a `.wasm` import over compiled. A test runner hands over the file's path.
 async function compiled(imported: unknown) {
@@ -58,7 +58,7 @@ export async function renderPdfPage(pdf: Uint8Array, page = 1): Promise<PdfPage 
     const sheet = document.getPage(page - 1)
     const { originalWidth, originalHeight } = sheet.getOriginalSize()
     if (!(originalWidth > 0) || !(originalHeight > 0)) return null
-    const scale = PDF_SIDE / Math.max(originalWidth, originalHeight)
+    const scale = Math.min(PDF_SIDE / Math.max(originalWidth, originalHeight), Math.sqrt(PDF_PIXELS / (originalWidth * originalHeight)))
     const width = Math.max(1, Math.round(originalWidth * scale))
     const height = Math.max(1, Math.round(originalHeight * scale))
     const drawn = await sheet.render({ width, height, render: 'bitmap', colorSpace: 'RGBA' })

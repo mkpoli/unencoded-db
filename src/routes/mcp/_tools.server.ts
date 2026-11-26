@@ -23,7 +23,7 @@ import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { MAX_WRITE_BODY } from '$lib/server/body-limit'
-import { MAX_IMAGE, prepareImage } from '$lib/server/image'
+import { MAX_IMAGE, prepareImage, sniff } from '$lib/server/image'
 import { isPdf, PDF_SIDE, renderPdfPage } from '$lib/server/pdf'
 import { agentWriter } from '$lib/server/people'
 import { described, storeImages, type ReadImage } from '../_submission.server'
@@ -81,9 +81,11 @@ const PICTURE_WAIT = 20_000
 const REDIRECTS_MAX = 3
 /** The most pictures one call has the site fetch from other sites. */
 export const FETCHES_MAX = 10
+/** The most PDF pages one call has the site draw; each takes about a second of the request's time. */
+export const PDF_PAGES_MAX = 4
 
 // What one call may still take in: bytes held in memory, and fetches from other sites.
-type Budget = { bytes: number; fetches: number; seen?: Map<string, ReadImage['image']> }
+type Budget = { bytes: number; fetches: number; pages?: number; seen?: Map<string, ReadImage['image']> }
 
 // The bytes behind a picture's address, within what the call has left. A picture this site already shows
 // comes from its own store. Another site's is fetched, following a few redirects by hand so that each
@@ -254,12 +256,16 @@ function marksOn(marks: unknown, width: number, height: number) {
 
 async function readPicture(event: RequestEvent, { address, marks, page }: { address: string; marks: unknown; page?: number }, budget: Budget): Promise<ReadImage> {
   // An address asked twice in one call is fetched once; a PDF, once for each page asked.
-  const asked = page === undefined ? address : `${address}#page=${page}`
+  const asked = `${page ?? ''} ${address}`
   let image = budget.seen?.get(asked)
   if (!image) {
     let bytes: Uint8Array = await pictureBytes(event, address, budget)
     budget.bytes -= bytes.byteLength
-    if (isPdf(bytes)) {
+    // An image is told by its own first bytes before anything in it is read as a PDF's header.
+    if (!sniff(bytes) && isPdf(bytes)) {
+      budget.pages ??= PDF_PAGES_MAX
+      if (budget.pages < 1) throw new Refusal(`One call draws up to ${PDF_PAGES_MAX} PDF pages.`)
+      budget.pages--
       // The page is drawn here and kept as a picture; the PDF itself is not kept.
       const drawn = await renderPdfPage(bytes, page ?? 1)
       if (!drawn) throw new Refusal(`Page ${page ?? 1} of this PDF could not be drawn: ${address}`)
@@ -546,6 +552,7 @@ async function editedPictures(event: RequestEvent, held: readonly StoredImage[],
     const key = ownKey(event, picture.address)
     const candidates = unkept.filter(stored => stored.image_key === key)
     const marked = picture.marks === undefined ? undefined : JSON.stringify(picture.marks)
+    if (key && picture.page !== undefined) throw new Refusal(`page is for a PDF, and this address is not one: ${picture.address}`)
     const kept = candidates.find(stored => marked !== undefined && JSON.stringify(stored.box ? JSON.parse(stored.box) : []) === marked) ?? candidates[0]
     if (!kept) { pictures.push(await readPicture(event, picture, budget)); continue }
     unkept.splice(unkept.indexOf(kept), 1)
@@ -641,12 +648,12 @@ const SIGHTING = {
   note: { type: 'string', description: 'A note on this source.' },
   vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' }, pictures: { type: 'array', maxItems: MEDIA_MAX, description: `Pictures of this source, such as a screenshot of the post, from their addresses, without marks. A picture belongs to one source, the chain holds ${MEDIA_MAX} in all, and the source needs a citation.`, items: { oneOf: [{ type: 'string' }, { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string' } } }], description: 'Address of the image file itself.' } } } } },
   pictures: {
-    type: 'array', maxItems: MEDIA_MAX, description: `Evidence pictures, fetched from their addresses and kept by the site. JPEG, PNG or WebP, or one page of a PDF, up to ${FETCHES_MAX} from other sites in one call.`,
+    type: 'array', maxItems: MEDIA_MAX, description: `Evidence pictures, fetched from their addresses and kept by the site. JPEG, PNG or WebP, or one page of a PDF, up to ${FETCHES_MAX} from other sites and ${PDF_PAGES_MAX} PDF pages in one call.`,
     items: {
       type: 'object', required: ['url'],
       properties: {
         url: { type: 'string', description: 'Address of the image file itself, or of a PDF.' },
-        page: { type: 'integer', minimum: 1, description: `For a PDF: the page to draw, counted from 1; the first when left out. The page is kept as a picture whose longer side is ${PDF_SIDE} pixels, and marks are in pixels of that picture.` },
+        page: { type: 'integer', minimum: 1, description: `For a PDF: the page to draw, counted from 1; the first when left out. The page is kept as a picture whose longer side is ${PDF_SIDE} pixels, fewer for a page nearer to square than a sheet of paper, and marks are in pixels of that picture.` },
         marks: { type: 'array', maxItems: BOXES_MAX, description: 'Boxes around the character, each [x, y, width, height] in pixels of the picture.', items: { type: 'array', items: { type: 'number' }, minItems: 4, maxItems: 4 } },
       },
     },

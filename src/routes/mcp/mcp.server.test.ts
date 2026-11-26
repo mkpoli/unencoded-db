@@ -6,7 +6,7 @@ import { personOf } from '$lib/server/people'
 import { MEDIA_MAX } from '$lib/limits'
 import { PDF_SIDE } from '$lib/server/pdf'
 import { pdfOf } from '$lib/server/pdf.test'
-import { FETCHES_MAX } from './_tools.server'
+import { FETCHES_MAX, PDF_PAGES_MAX } from './_tools.server'
 import { POST } from './+server'
 
 const png = new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,10,0,0,0,10,8,6,0,0,0,0,0,0,0])
@@ -221,7 +221,7 @@ test('what cannot be saved is refused whole', async () => {
 test('a PDF address is kept as a picture of the page asked for', async () => {
   const { call, objects } = fixture()
   const pdf = pdfOf([[600, 300], [200, 400]])
-  const asked = pictures(url => url.endsWith('.pdf') ? new Response(pdf, { headers: { 'content-type': 'application/pdf' } }) : new Response(png))
+  const asked = pictures(url => url.includes('.pdf') ? new Response(pdf, { headers: { 'content-type': 'application/pdf' } }) : new Response(png))
   const added = await call('add_record', { ids: ['⿰山東'], sightings: [{ place: 'A leaflet', pictures: [
     { url: 'https://img.example/leaflet.pdf', marks: [[100, 100, 200, 200]] },
     { url: 'https://img.example/leaflet.pdf', page: 2 },
@@ -238,6 +238,12 @@ test('a PDF address is kept as a picture of the page asked for', async () => {
   expect(await refused({ url: 'https://img.example/leaflet.pdf', page: 3 })).toContain('Page 3')
   expect(await refused({ url: 'https://img.example/leaflet.pdf', page: 0 })).toContain('counted from 1')
   expect(await refused({ url: 'https://img.example/sign.png', page: 1 })).toContain('not one')
+  // An address ending like a page mark is its own address, and a call draws a bounded number of pages.
+  const both = await call('add_sighting', { record: 1, pictures: [{ url: 'https://img.example/leaflet.pdf#page=2' }, { url: 'https://img.example/leaflet.pdf', page: 2 }] })
+  expect(both.failed).toBe(false)
+  expect((await call('get_record', { record: 1 })).value.sightings[1].pictures).toMatchObject([{ width: PDF_SIDE }, { height: PDF_SIDE }])
+  const many = Array.from({ length: PDF_PAGES_MAX + 1 }, (_, index) => ({ url: `https://img.example/${index}.pdf` }))
+  expect((await call('add_sighting', { record: 1, pictures: many })).value).toContain(`up to ${PDF_PAGES_MAX} PDF pages`)
   expect(await refused({ url: 'https://img.example/leaflet.pdf', marks: [[0, 0, 2, 2]] })).toContain(`${PDF_SIDE} × ${PDF_SIDE / 2}`)
 }, 60_000)
 
