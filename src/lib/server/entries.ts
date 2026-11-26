@@ -819,9 +819,23 @@ export async function moveSighting(db: D1Database, from: number, id: number, bas
   return typeof result === 'string' ? result : 'done'
 }
 
-/** Moves a sighting to a record made for it in the same write, and answers that record. */
-export async function splitSighting(db: D1Database, from: number, id: number, baseRev: number, fields: EntryFields, who: Who, summary: string | null): Promise<{ id: number } | Exclude<MoveResult, 'done' | 'same'>> {
-  return relocate(db, from, id, baseRev, { ...fields, claims: mapSightings(fields.claims, () => null) }, who, summary)
+/** Moves a sighting to a record made for it in the same write, and answers that record. A record is made
+ * only for a form no live record states: one that does is answered as `{ described }`, where the evidence
+ * belongs. Tags are given on the record's page. */
+export async function splitSighting(db: D1Database, from: number, id: number, baseRev: number, fields: EntryFields, who: Who, summary: string | null): Promise<{ id: number } | { described: number } | Exclude<MoveResult, 'done' | 'same'>> {
+  const described = await describedBy(db, fields.claims)
+  if (described !== null) return { described }
+  return relocate(db, from, id, baseRev, { ...fields, claims: mapSightings(fields.claims.filter(claim => claim.kind !== 'tag'), () => null) }, who, summary)
+}
+
+/** The first live record that states one of these descriptions or Unicode code points, or null. */
+export async function describedBy(db: D1Database, claims: readonly Claim[]) {
+  const asked = claims.filter(claim => claim.kind === 'ids' || (claim.kind === 'encoding' && claim.data?.charset === 'unicode'))
+  for (const claim of asked) {
+    const [found] = await claimedBy(db, claim.kind, claim.value, 1)
+    if (found) return found.id
+  }
+  return null
 }
 
 const nextEntry = async (db: D1Database) => ((await db.prepare(`SELECT ${ENTRY_SEQ} AS seq`).first<{ seq: number | null }>())?.seq ?? 0) + 1

@@ -189,7 +189,7 @@
           <span class="body"><span class="line">{lone.facts.code}</span><span class="ids">{lone.facts.ids ?? ''}</span></span>
           <span class="choices">
             {#each lone.records as record (record.id)}
-              <a class="button" href={evidenceHref(record.id)} target={evidenceTab}>{t('field.encodedSame')} · {recordCode(record.id)}</a>
+              <a class="button" href={evidenceHref(record.id)} target={evidenceTab}>{t(placed ? 'sighting.moveThere' : 'field.encodedSame')} · {recordCode(record.id)}</a>
             {:else}
               <button type="button" class="button" onclick={() => take(lone!.facts, false)}>{t('field.encodedSame')}</button>
             {/each}

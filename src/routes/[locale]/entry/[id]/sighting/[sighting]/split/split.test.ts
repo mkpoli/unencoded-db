@@ -40,6 +40,9 @@ async function fixture() {
 test('splitting makes a record of the evidence with the number that follows, and both histories say so', async () => {
   const { db, a, s, first, event, rows, agree, count } = await fixture()
   expect(await load(event())).toMatchObject({ id: a, only: false, script: 'han', sighting: { id: s, place: 'A two' } })
+  // A form that a record states already goes there, the first record's own too, and one left undescribed is ticked.
+  expect(await actions.default(event({ rev: '1', ids: '⿰木木', script: 'han' }))).toMatchObject({ status: 409, data: { error: 'same', described: a } })
+  expect(await actions.default(event({ rev: '1', script: 'han' }))).toMatchObject({ status: 400, data: { error: 'undescribed' } })
   await expect(actions.default(event({ rev: '1', ids: '⿱木木', script: 'han', summary: ' another form ' }))).rejects.toMatchObject({ status: 303, location: `/en/entry/${a + 1}#sighting-${s}` })
   const made = (await getEntry(db, a + 1))!
   expect(made.entry).toMatchObject({ rev: 1, ids: '⿱木木', sightings: 1, first_year: '1500', first_sighting: s })
@@ -59,6 +62,12 @@ test('splitting makes a record of the evidence with the number that follows, and
   expect((await getEntry(db, a))!.sightings.map(x => [x.id, x.first_entry])).toEqual([[first, a], [s, a]])
   await agree()
   expect(count('entries')).toBe(3)
+  // Now ⿱木木 has a record, and a second split of that form is sent there.
+  const again = (await addSighting(db, a, seen('A three'), [], { actor: (await createPerson(db)).id, ip: null }))!
+  expect(await actions.default(event({ rev: '1', ids: '⿱木木', script: 'han' }, again))).toMatchObject({ status: 409, data: { error: 'described', described: a + 1 } })
+  expect(await splitSighting(db, a, again, 1, fields([newClaim('encoding', 'U+6797', { charset: 'unicode' })]), { actor: (await createPerson(db)).id, ip: null }, null)).toMatchObject({ id: a + 3 })
+  expect(await splitSighting(db, a + 3, again, 1, fields([newClaim('encoding', 'U+6797', { charset: 'unicode' })]), { actor: (await createPerson(db)).id, ip: null }, null)).toEqual({ described: a + 3 })
+  expect(count('entries')).toBe(4)
 })
 
 test('what rests on the evidence alone goes to the new record, beside what the form states of it', async () => {
@@ -68,9 +77,9 @@ test('what rests on the evidence alone goes to the new record, beside what the f
   const result = await splitSighting(db, a, s, 1, fields([{ ...newClaim('ids', '⿱木木'), sightings: [1] }, newClaim('tag', '合字')]), who, null)
   const id = (result as { id: number }).id
   const claims = (await getEntry(db, id))!.claims
-  expect(claims.map(c => [c.kind, c.value, c.sightings, c.under.map(key => claims.find(x => x.key === key)!.value)])).toEqual([['ids', '⿱木木', [], []], ['tag', '合字', [], []], ['meaning', 'a fish', [s], []], ['reading', 'sou', [s], ['a fish']], ['reading', 'bak6', [s], []]])
+  expect(claims.map(c => [c.kind, c.value, c.sightings, c.under.map(key => claims.find(x => x.key === key)!.value)])).toEqual([['ids', '⿱木木', [], []], ['meaning', 'a fish', [s], []], ['reading', 'sou', [s], ['a fish']], ['reading', 'bak6', [s], []]])
   expect((await getEntry(db, a))!.claims.map(c => [c.value, c.sightings])).toEqual([['⿰木木', []], ['bak6', [first]]])
-  expect(raw.query("SELECT n FROM tag_counts WHERE tag = 't:合字'").get()).toEqual({ n: 1 })
+  expect(raw.query("SELECT count(*) AS n FROM tag_counts WHERE tag = 't:合字'").get()).toEqual({ n: 0 })
 })
 
 test('a split that cannot be made makes no record', async () => {
@@ -78,13 +87,15 @@ test('a split that cannot be made makes no record', async () => {
   expect(await actions.default(event({ rev: '9', ids: '⿱木木' }))).toMatchObject({ status: 409, data: { error: 'conflict' } })
   expect(await actions.default(event({ ids: '⿱木木' }))).toMatchObject({ status: 409 })
   expect(await actions.default(event({ rev: '1', ids: 'x'.repeat(3000) }))).toMatchObject({ status: 400 })
-  for (const bad of [event({ rev: '1' }, 99), event({ rev: '1' }, 'x'), event({ rev: '1' }, s, 99)]) await expect(actions.default(bad)).rejects.toMatchObject({ status: 404 })
+  for (const bad of [event({ rev: '1', undescribed: '1' }, 99), event({ rev: '1', undescribed: '1' }, 'x'), event({ rev: '1', undescribed: '1' }, s, 99)]) await expect(actions.default(bad)).rejects.toMatchObject({ status: 404 })
+  // A script typed and emptied stays empty in the form that comes back.
+  expect(await actions.default(event({ rev: '9', script: 'other', script_other: '', undescribed: '1' }))).toMatchObject({ status: 409, data: { values: { script_other: null } } })
   // Nothing is made for a split that is refused, not even a tag.
   expect(await splitSighting(db, a, s, 9, fields([newClaim('tag', 'ghost')]), who, null)).toBe('conflict')
   expect(raw.query("SELECT count(*) AS n FROM tags WHERE name = 'ghost'").get()).toEqual({ n: 0 })
-  // A script typed and emptied stays empty in the form that comes back.
-  expect(await actions.default(event({ rev: '9', script: 'other', script_other: '' }))).toMatchObject({ status: 409, data: { values: { script_other: null } } })
-  expect(await splitSighting(db, a, s, 1, fields(), who, null)).toEqual({ id: a + 1 })
+  expect(await splitSighting(db, a, s, 1, fields([newClaim('ids', '⿱林木'), newClaim('tag', 'ghost')]), who, null)).toEqual({ id: a + 1 })
+  expect((await getEntry(db, a + 1))!.claims.map(c => c.kind)).toEqual(['ids'])
+  expect(raw.query("SELECT count(*) AS n FROM tags WHERE name = 'ghost'").get()).toEqual({ n: 0 })
   expect(await load(event({}, first))).toMatchObject({ only: true })
   expect(await splitSighting(db, a, first, 1, fields(), who, null)).toBe('only')
   await setHidden(db, { entry: a }, true, who, null)
