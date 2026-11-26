@@ -3,12 +3,12 @@
   // as `via_keep`, and new ones sent as `via_image` with a thumbnail in `via_thumb`. The file input works
   // alone; with scripts a picture can also be dropped, or pasted into any field of the go-between.
   import { onDestroy, untrack } from 'svelte'
-  import { prepare, thumbnail } from '$lib/picture'
-  import { VIA_MEDIA_MAX } from '$lib/limits'
+  import { prepare, TALL, thumbnail } from '$lib/picture'
+  import { MEDIA_MAX } from '$lib/limits'
   import { media, t } from '$lib/t'
   import type { ViaPicture } from '$lib/server/entries'
 
-  let { stored = [], onready }: { stored?: readonly ViaPicture[]; onready?: (busy: boolean) => void } = $props()
+  let { stored = [], room, oncount, onready }: { stored?: readonly ViaPicture[]; room: number; oncount?: (count: number) => void; onready?: (busy: boolean) => void } = $props()
 
   const uid = $props.id()
   type Added = { key: number; file: File; thumb: File; url: string }
@@ -16,12 +16,13 @@
   let added = $state<Added[]>([])
   let working = $state(0)
   let bad = $state(false), most = $state(false), over = $state(false)
-  // Raised when the pictures are cleared or the row goes, so one still being prepared is not added after.
+  // Raised when the row goes, so a picture still being prepared is not added after.
   let turn = 0
   let input = $state<HTMLInputElement>(), thumbs = $state<HTMLInputElement>()
   let next = 0
   const count = $derived(kept.length + added.length)
-  const full = $derived(count + working >= VIA_MEDIA_MAX)
+  const full = $derived(count + working >= room)
+  $effect(() => oncount?.(count + working))
 
   function send() {
     for (const [target, files] of [[input, added.map(item => item.file)], [thumbs, added.map(item => item.thumb)]] as const) {
@@ -36,26 +37,18 @@
     bad = most = false
     const started = turn
     for (const source of files) {
-      if (count + working >= VIA_MEDIA_MAX) { most = true; break }
+      if (count + working >= room) { most = true; break }
       working++; onready?.(true)
       try {
-        const { file, bitmap } = await prepare(source)
-        const thumb = await thumbnail(bitmap, null)
+        const { file, bitmap, width, height } = await prepare(source)
+        // A long screenshot is shown by its top, where the sender and the time are.
+        const thumb = await thumbnail(bitmap, height > width * TALL ? [0, 0, width, Math.round(width * TALL)] : null)
+        bitmap.close()
         if (turn !== started) return
         added.push({ key: next++, file, thumb, url: URL.createObjectURL(file) })
       } catch { bad = true }
       finally { working--; onready?.(false); send() }
     }
-    send()
-  }
-
-  /** Takes every picture away: they are of a source the row no longer names. */
-  export function clear() {
-    turn++
-    kept = []
-    for (const item of added) URL.revokeObjectURL(item.url)
-    added = []
-    bad = most = false
     send()
   }
 
@@ -96,7 +89,7 @@
     {:else if working}<span class="hint" role="status">{t('field.imageWorking')}</span>{/if}
   </div>
   {#if bad}<p class="notice bad small" role="alert">{t('field.imageBad')}</p>{/if}
-  {#if most}<p class="hint" role="status">{t('field.viaPicturesMax', { max: VIA_MEDIA_MAX })}</p>{/if}
+  {#if most}<p class="hint" role="status">{t('field.viaPicturesMax', { max: MEDIA_MAX })}</p>{/if}
 </div>
 
 <style>

@@ -1,7 +1,7 @@
 import { parseRecordCode } from '$lib/code'
 import { namedVias, readBoxes, SIGHTING_FIELDS, VIA_INPUTS, type StoredImage, type Via, type ViaPicture } from '$lib/server/entries'
 import { MAX_IMAGE, MAX_THUMB, prepareImage, storeImage } from '$lib/server/image'
-import { MEDIA_MAX, VIA_MEDIA_MAX } from '$lib/limits'
+import { MEDIA_MAX } from '$lib/limits'
 import { SIGHTING_START } from '$lib/scripts'
 
 const SIGHTING_NAMES = new Set<string>([...SIGHTING_FIELDS, ...VIA_INPUTS, 'quote_text', 'quote_locator', 'image', 'thumb', 'box', 'via_keep', 'via_drop', 'via_image', 'via_thumb'])
@@ -72,14 +72,15 @@ export async function readViaPictures(form: FormData, stored: readonly Via[] = [
       continue
     }
     const picture = name === 'via_keep' && !dropped.has(value) && held.get(value)
-    if (picture) row.kept.push(picture)
+    if (picture && !row.kept.includes(picture)) row.kept.push(picture)
   }
   const kept = rows.map(row => row.kept), named = namedVias(form)
   const refused = (error: 'viaImage' | 'viaSource'): ViaPictures => ({ kept, all: kept, files: [], error })
   if (rows.some((row, index) => !named[index] && (row.kept.length || row.images.length))) return refused('viaSource')
+  // The chain shares one allowance, so one long message can take most of it.
+  if (rows.reduce((sum, row) => sum + row.kept.length + row.images.length, 0) > MEDIA_MAX) return refused('viaImage')
   const all: ViaPicture[][] = [], files: ReadImage[] = []
   for (const row of rows) {
-    if (row.kept.length + row.images.length > VIA_MEDIA_MAX) return refused('viaImage')
     const own = new FormData()
     for (const image of row.images) own.append('image', image)
     for (const thumb of row.thumbs) own.append('thumb', thumb)

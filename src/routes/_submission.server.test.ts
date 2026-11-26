@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { MEDIA_MAX, VIA_MEDIA_MAX } from '$lib/limits'
+import { MEDIA_MAX } from '$lib/limits'
 import { SIGHTING_START } from '$lib/scripts'
 import { readSightingFields, type ViaPicture } from '$lib/server/entries'
 import { readViaPictures, sightingForms, uploadedImages } from './_submission.server'
@@ -162,7 +162,12 @@ describe('the pictures of the go-betweens of a form', () => {
     expect(await refused('', [imageFile()])).toBe('viaSource')
     expect(await refused('', [])).toBe('viaSource')
     expect(await refused('乙', [new File(['no'], 'a.png')])).toBe('viaImage')
-    expect(await refused('乙', Array.from({ length: VIA_MEDIA_MAX }, (_, index) => sized(21 + index)))).toBe('viaImage')
+    // The chain shares one allowance: the stored ones of both rows count.
+    expect(await refused('乙', Array.from({ length: MEDIA_MAX - 1 }, (_, index) => sized(21 + index)))).toBe('viaImage')
+    const room = new FormData(); row(room, '甲', ['a']); row(room, '乙', ['b'], Array.from({ length: MEDIA_MAX - 2 }, (_, index) => sized(21 + index)))
+    expect((await readViaPictures(room, held)).all.map(pictures => pictures.length)).toEqual([1, MEDIA_MAX - 1])
+    const twice = new FormData(); row(twice, '甲', ['a', 'a'])
+    expect((await readViaPictures(twice, held)).all).toEqual([[stored('a')]])
     // A link that is no web address names nothing once it is cleaned.
     const scheme = new FormData(); row(scheme, '', [], [imageFile()]); scheme.set('via_url', 'discord://channel/1')
     expect((await readViaPictures(scheme)).error).toBe('viaSource')

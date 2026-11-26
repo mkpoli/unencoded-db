@@ -16,6 +16,7 @@
   import { eraRead, t } from '$lib/t'
   import type { Citation, SightingFields, Via, ViaPicture } from '$lib/server/entries'
   import { VIAS_MAX } from '$lib/scripts'
+  import { MEDIA_MAX } from '$lib/limits'
 
   let { values = {}, onphotos, onready }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void; onready?: (busy: boolean) => void } = $props()
   const uid = $props.id()
@@ -38,9 +39,9 @@
   let kind = $state(untrack(() => values.source_kind ?? ''))
 
   // The chain, nearest the cited work first. One empty row is always there to fill.
-  type Row = { key: number; url: string; title: string; author: string; publisher: string; date: string; container: string; kind: string; quote: string; pictures: readonly ViaPicture[]; settled: boolean }
+  type Row = { key: number; url: string; title: string; author: string; publisher: string; date: string; container: string; kind: string; quote: string; pictures: readonly ViaPicture[] }
   let nextKey = 0
-  const via = (from?: Partial<Via>): Row => ({ key: nextKey++, url: from?.url ?? '', title: from?.title ?? '', author: from?.author ?? '', publisher: from?.publisher ?? '', date: from?.report_date ?? '', container: from?.container ?? '', kind: from?.source_kind ?? '', quote: from?.quote ?? '', pictures: from?.pictures ?? [], settled: Boolean(from) })
+  const via = (from?: Partial<Via>): Row => ({ key: nextKey++, url: from?.url ?? '', title: from?.title ?? '', author: from?.author ?? '', publisher: from?.publisher ?? '', date: from?.report_date ?? '', container: from?.container ?? '', kind: from?.source_kind ?? '', quote: from?.quote ?? '', pictures: from?.pictures ?? [] })
   const passage = (from?: Quotation) => ({ key: nextKey++, text: from?.text ?? '', locator: from?.locator ?? '' })
   let passages = $state(untrack(() => {
     const saved = quotations(values.quotes)
@@ -52,6 +53,9 @@
   const blankVia = (row: Row) => !(row.url || row.title || row.author || row.publisher || row.date || row.container)
   // A picture pasted into a field of a go-between is a picture of it.
   const shots: Record<number, ViaPictures | null> = {}
+  // The chain shares one allowance of pictures; each row may take what the others leave.
+  let held = $state<Record<number, number>>({})
+  const room = (key: number) => MEDIA_MAX - vias.reduce((sum, row) => sum + (row.key === key ? 0 : held[row.key] ?? 0), 0)
   let preparing = 0
   const ready = (busy: boolean) => { preparing = Math.max(0, preparing + (busy ? 1 : -1)); onready?.(preparing > 0) }
   function pasteVia(event: ClipboardEvent, key: number) {
@@ -62,6 +66,7 @@
   }
   function removeVia(key: number) {
     vias = vias.filter(row => row.key !== key)
+    delete held[key]
     if (!vias.length) vias = [via()]
   }
   async function moveVia(key: number, by: -1 | 1, button: 'earlier' | 'later' | 'grip') {
@@ -171,10 +176,9 @@
       if (found && !hadSource) row.kind = ''
       row.url = keep(row.url, 'viaUrl'); row.title = keep(row.title, 'viaTitle'); row.author = keep(row.author, 'viaAuthor')
       row.publisher = keep(row.publisher, 'viaPublisher'); row.date = keep(row.date, 'viaDate')
-      // Words and pictures of the source this row held no longer belong to it once a post replaces it. A row
+      // Words written for the source this row held no longer belong to it once a post replaces it. A row
       // that held no source is being filled, so words already in it are for this post.
-      if (hadSource && [row.url, row.title, row.author, row.publisher, row.date].join('\u0000') !== before) { row.quote = ''; row.kind = ''; if (row.settled) shots[row.key]?.clear() }
-      if (found) row.settled = true
+      if (hadSource && [row.url, row.title, row.author, row.publisher, row.date].join('\u0000') !== before) { row.quote = ''; row.kind = '' }
       if (!next?.viaUrl || row.url === next.viaUrl) row.quote = keep(row.quote, 'viaQuote')
       postedKey = found ? row.key : null
       if (row.url) viaOpen = true
@@ -213,9 +217,6 @@
       && row.publisher === (source.publisher ?? '') && row.date === (source.report_date ?? '') && row.container === (source.container ?? '') && row.kind === (source.source_kind ?? '')
     )
     if (!blankVia(row) && !sameSource) row.quote = ''
-    // A name typed to find the source is no other source, so pictures put in before it was chosen stay.
-    if (row.settled && !sameSource) shots[row.key]?.clear()
-    row.settled = true
     if (row.key === postedKey) postedKey = null
     row.url = source.url ?? ''
     row.title = source.title ?? ''
@@ -328,7 +329,7 @@
         <div class="field"><label for="{uid}-via_report_date-{row.key}">{t('field.reportDate')}</label><input id="{uid}-via_report_date-{row.key}" class="input" name="via_report_date" bind:value={row.date} aria-describedby="{uid}-via_report_date-{row.key}-read" />{@render yearRead(`${uid}-via_report_date-${row.key}`, row.date)}</div>
       </div>
       <div class="field"><label for="{uid}-via_quote-{row.key}">{t('field.quote')}</label><textarea id="{uid}-via_quote-{row.key}" class="input" name="via_quote" rows="2" maxlength="5000" bind:value={row.quote}></textarea></div>
-      <ViaPictures bind:this={shots[row.key]} stored={row.pictures} onready={ready} />
+      <ViaPictures bind:this={shots[row.key]} stored={row.pictures} room={room(row.key)} oncount={count => held[row.key] = count} onready={ready} />
       <div class="via-actions">
         {#if vias.length > 1}
           <button type="button" id="{uid}-via-earlier-{row.key}" class="text-button" disabled={index === 0} onclick={() => moveVia(row.key, -1, 'earlier')}><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6" /></svg>{t('field.viaEarlier')}</button>
