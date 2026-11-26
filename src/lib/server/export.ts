@@ -180,7 +180,7 @@ export type MediaRow = {
   source_kind: string | null
 }
 
-const MEDIA_COLUMNS = ['record_code', 'entry_id', 'sighting_id', 'image_key', 'image_url', 'thumb_key', 'thumb_url', 'image_type', 'image_w', 'image_h', 'box', 'via_position', 'source_id', 'source_title', 'source_author', 'source_publisher', 'source_report_date', 'source_container', 'source_kind', 'source_url'] as const
+const MEDIA_COLUMNS = ['record_code', 'entry_id', 'sighting_id', 'image_key', 'image_url', 'thumb_key', 'thumb_url', 'image_type', 'image_w', 'image_h', 'box', 'source_id', 'source_title', 'source_author', 'source_publisher', 'source_report_date', 'source_container', 'source_kind', 'source_url', 'via_position'] as const
 
 const mediaUrl = (origin: string, key: string) => new URL(`/media/v2/${key}`, origin).href
 
@@ -201,7 +201,6 @@ export function mediaCsvRows(rows: readonly MediaRow[], origin: string) {
     row.image_w,
     row.image_h,
     row.box,
-    row.via_position,
     row.source_id,
     row.source_title,
     row.source_author,
@@ -210,6 +209,7 @@ export function mediaCsvRows(rows: readonly MediaRow[], origin: string) {
     row.source_container,
     row.source_kind,
     row.source_url,
+    row.via_position,
   ].map(csvCell).join(',')).join('\r\n') + (rows.length ? '\r\n' : '')
 }
 
