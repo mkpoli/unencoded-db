@@ -3,7 +3,7 @@ import { compatibilitySequences } from 'ids-input'
 // formation those roles imply. The parsed parts are a starting point: an editor may replace them,
 // type a role outside the standard ones, and name a formation the roles cannot express.
 import { isNode, parse, write, type IdsPart } from 'ids-input'
-import { IDS_LENGTH_MAX, splitIds } from './ids'
+import { canonicalizeIds, IDS_LENGTH_MAX, splitIds } from './ids'
 
 // `initial` and `final` are the two spellers of a 切身字: the part read for its initial and the part read for its final.
 export const ROLES = ['semantic', 'phonetic', 'symbol', 'initial', 'final'] as const
@@ -59,7 +59,7 @@ export function parseComposition(value: unknown): Composition | null {
   try { data = JSON.parse(value) } catch { return null }
   if (!data || typeof data !== 'object') return null
   const stored = data as { ids?: unknown; parts?: unknown; roles?: unknown; formation?: unknown }
-  const partText = (value: unknown, max: number) => typeof value === 'string' ? clean(compatibilitySequences(value), max) : ''
+  const partText = (value: unknown, max: number) => typeof value === 'string' ? clean(canonicalizeIds(compatibilitySequences(value)), max) : ''
   const ids = partText(stored.ids, IDS_LENGTH_MAX)
   if (!ids) return null
   const roles = cleanList(stored.roles, ROLE_MAX) ?? []

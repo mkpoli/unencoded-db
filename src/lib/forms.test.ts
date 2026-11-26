@@ -6,6 +6,9 @@ test('spellings of one form and IWDS-equivalent parts share a key', () => {
   expect(formOf('⿱ 赤相')).toBe(formOf('⿱赤相'))
   expect(formOf('⿰⺅路')).toBe(formOf('⿰亻路'))
   expect(formOf('⿰王甲')).toBe(formOf('⿰壬甲'))
+  expect(formOf('⿱田⿺儿厶')).toBe(formOf('⿷⿱田儿厶'))
+  expect(formOf('⿰云⿱田⿺儿厶')).toBe(formOf('⿰云⿷⿱田儿厶'))
+  expect(formOf('⿰云⿱⽥⿺⼉⼛')).toBe(formOf('⿰云⿷⿱田儿厶'))
 })
 
 test('another structure, another part and a part written out do not', () => {

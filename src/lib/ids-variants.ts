@@ -31,13 +31,24 @@ function looseEncoded(table: Table): Map<string, string> {
   return found
 }
 
-// The trees one step from a tree: one leaf written out or swapped for an IWDS mate, or one node folded into its character.
+// Known alternate structural spellings of the same part (headless 鬼: ⿷⿱田儿厶 <-> ⿱田⿺儿厶).
+function structuralAlternates(tree: Exclude<Tree, string>): Tree[] {
+  if (tree.op === '⿷' && tree.parts.length === 2 && typeof tree.parts[0] !== 'string' && tree.parts[0].op === '⿱' && tree.parts[0].parts.length === 2 && tree.parts[0].parts[0] === '田' && tree.parts[0].parts[1] === '儿' && tree.parts[1] === '厶') {
+    return [{ op: '⿱', parts: ['田', { op: '⿺', parts: ['儿', '厶'] }] }]
+  }
+  if (tree.op === '⿱' && tree.parts.length === 2 && tree.parts[0] === '田' && typeof tree.parts[1] !== 'string' && tree.parts[1].op === '⿺' && tree.parts[1].parts.length === 2 && tree.parts[1].parts[0] === '儿' && tree.parts[1].parts[1] === '厶') {
+    return [{ op: '⿷', parts: [{ op: '⿱', parts: ['田', '儿'] }, '厶'] }]
+  }
+  return []
+}
+
+// The trees one step from a tree: one leaf written out or swapped for an IWDS mate, a known structural alternate, or one node folded into its character.
 function steps(tree: Tree, table: Table, mates: boolean, root = true): Tree[] {
   if (typeof tree === 'string') {
     const inner = wholeOf(tree, table)
     return [...(inner ? [inner] : []), ...(mates ? groupMates(tree) : [])]
   }
-  const found: Tree[] = []
+  const found: Tree[] = structuralAlternates(tree)
   tree.parts.forEach((part, at) => {
     for (const next of steps(part, table, mates, false)) found.push({ op: tree.op, parts: tree.parts.map((other, i) => i === at ? next : other) })
   })

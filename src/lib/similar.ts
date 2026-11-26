@@ -57,8 +57,21 @@ export function typedTree(text: string): Tree | null {
   return found.problem || found.tree === undefined ? null : toTree(found.tree)
 }
 
-/** A description as a tree with radical code points mapped, or null when it is no description. */
-export const treeOf = (text: string): Tree | null => typedTree(mapRadicals(text))
+// Rewrite known alternate subtree spellings to one canonical shape (headless 鬼: ⿱田⿺儿厶 -> ⿷⿱田儿厶).
+function canonicalTree(tree: Tree): Tree {
+  if (typeof tree === 'string') return tree
+  const parts = tree.parts.map(canonicalTree)
+  if (tree.op === '⿱' && parts.length === 2 && parts[0] === '田' && typeof parts[1] !== 'string' && parts[1].op === '⿺' && parts[1].parts.length === 2 && parts[1].parts[0] === '儿' && parts[1].parts[1] === '厶') {
+    return { op: '⿷', parts: [{ op: '⿱', parts: ['田', '儿'] }, '厶'] }
+  }
+  return { op: tree.op, parts }
+}
+
+/** A description as a tree with radical code points mapped and alternate part spellings normalized, or null when it is no description. */
+export const treeOf = (text: string): Tree | null => {
+  const tree = typedTree(mapRadicals(text))
+  return tree === null ? null : canonicalTree(tree)
+}
 
 export const hasOverlay = (tree: Tree): boolean => typeof tree !== 'string' && (tree.op === '⿻' || tree.parts.some(hasOverlay))
 export const hasStroke = (tree: Tree): boolean => typeof tree === 'string' ? isStroke(tree) : tree.parts.some(hasStroke)

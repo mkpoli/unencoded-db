@@ -13,7 +13,7 @@ import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
 import { decadeOf } from '$lib/dates'
-import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, sameIds, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { PAGE, PAGE_SIZES, pageSizeOf } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
@@ -2554,4 +2554,23 @@ test('a numbered page starts where the pages before it end', async () => {
   // Every size fits in one read of a search.
   for (const limit of PAGE_SIZES) expect(limit).toBeLessThan(SEARCH_WINDOW)
   expect([null, '24', '96', '192', '48', '25', '024', '193'].map(pageSizeOf)).toEqual([PAGE, 24, 96, 192, null, null, null, null])
+})
+
+test('headless 鬼 normalises on write and matches either spelling on search and sameIds', async () => {
+  const form = new FormData()
+  form.set('ids', '⿰云⿱田⿺儿厶')
+  const { fields: read, error } = readEntryFields(form, [])
+  expect(error).toBeNull()
+  const canonical = await createEntry(db, read, seen(), [], who)
+  expect((await getEntry(db, canonical))!.entry.ids).toBe('⿰云⿷⿱田儿厶')
+
+  // Even a legacy row storing the un-migrated alternate spelling is found by either spelling.
+  const legacy = await createEntry(db, fields({ claims: [newClaim('ids', '⿰木木')] }), seen(), [], who)
+  raw.prepare("UPDATE entries SET ids = '⿰云⿱田⿺儿厶' WHERE id = ?").run(legacy)
+  raw.prepare("UPDATE claims SET value = '⿰云⿱田⿺儿厶' WHERE entry_id = ? AND kind = 'ids'").run(legacy)
+
+  for (const query of ['⿰云⿷⿱田儿厶', '⿰云⿱田⿺儿厶']) {
+    expect((await list(db, { query }))!.tiles.map(tile => tile.id).sort((a, b) => a - b)).toEqual([canonical, legacy])
+    expect((await sameIds(db, query)).map(record => record.id)).toEqual([canonical, legacy])
+  }
 })
