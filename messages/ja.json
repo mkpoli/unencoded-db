@@ -710,7 +710,7 @@
   "tags.groupChange.name": "中分類の名前を設定",
   "footer.mcp": "MCP",
   "mcp.title": "MCPサーバー",
-  "mcp.intro": "Model Context Protocol経由で、エージェントから記録を検索したり文字や証拠を追加したりできます。",
+  "mcp.intro": "Model Context Protocol経由で、エージェントから記録の検索、文字や証拠の追加、その修正ができます。",
   "mcp.setupLink": "エージェントを接続",
   "mcp.endpoint": "エンドポイント",
   "mcp.transport": "トランスポート",

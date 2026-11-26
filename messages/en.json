@@ -710,7 +710,7 @@
   "tags.groupChange.name": "Group name set",
   "footer.mcp": "MCP",
   "mcp.title": "MCP server",
-  "mcp.intro": "Search records and add characters or evidence from an agent over the Model Context Protocol.",
+  "mcp.intro": "Search records, add characters and evidence, and correct them from an agent over the Model Context Protocol.",
   "mcp.setupLink": "Connect an agent",
   "mcp.endpoint": "Endpoint",
   "mcp.transport": "Transport",

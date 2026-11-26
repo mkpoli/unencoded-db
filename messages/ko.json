@@ -710,7 +710,7 @@
   "tags.groupChange.name": "중분류 이름 설정",
   "footer.mcp": "MCP",
   "mcp.title": "MCP 서버",
-  "mcp.intro": "Model Context Protocol로 에이전트에서 기록을 검색하고 문자나 증거를 추가할 수 있습니다.",
+  "mcp.intro": "Model Context Protocol로 에이전트에서 기록을 검색하고, 문자와 증거를 추가하거나 고칠 수 있습니다.",
   "mcp.setupLink": "에이전트 연결",
   "mcp.endpoint": "엔드포인트",
   "mcp.transport": "전송 방식",
