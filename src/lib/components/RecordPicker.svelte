@@ -13,13 +13,15 @@
   import { cleanIds } from '$lib/ids'
   import { equivalentSpellings, isParts, partSpellings } from '$lib/ids-variants'
   import { isDescription } from 'ids-input'
-  import { media } from '$lib/t'
+  import { media, t } from '$lib/t'
 
   let { id, name, value = '', exclude, placeholder, label }: { id: string; name: string; value?: string; exclude: number; placeholder: string; label: string } = $props()
   // The field starts from what the page was given and is the reader's from then on.
   // svelte-ignore state_referenced_locally
   let typed = $state(value)
   let found = $state<PickedRecord[]>([])
+  // The text the records found answer, once they have come.
+  let answered = $state<string | null>(null)
   let timer: ReturnType<typeof setTimeout> | undefined
   let asking: AbortController | undefined
 
@@ -42,7 +44,7 @@
     clearTimeout(timer)
     asking?.abort()
     const wanted = text.trim()
-    if (!wanted) { found = []; return }
+    if (!wanted) { found = []; answered = null; return }
     timer = setTimeout(async () => {
       const controller = new AbortController()
       asking = controller
@@ -51,14 +53,14 @@
       const params = new URLSearchParams({ q: wanted, exclude: String(exclude) })
       for (const spelling of also) params.append('also', spelling)
       const answer = await fetch(`/api/records?${params}`, { signal: controller.signal }).then(response => response.ok ? response.json() : null).catch(() => null)
-      if (asking === controller && Array.isArray(answer)) found = answer
+      if (asking === controller && Array.isArray(answer)) { found = answer; answered = wanted }
     }, 200)
   }
 </script>
 
 <div class="picker">
 <span class="sr-only" id="{id}-label">{label}</span>
-<Combobox {id} {name} bind:value={typed} {options} {placeholder} labelledby="{id}-label" filter={false} maxlength={200} required takeFirst onquery={query} onopen={() => query(typed)}>
+<Combobox {id} {name} bind:value={typed} {options} {placeholder} labelledby="{id}-label" filter={false} maxlength={200} required takeFirst empty={answered === typed.trim() && !found.length ? t('browse.empty') : undefined} onquery={query} onopen={() => query(typed)}>
   {#snippet optionContent(option)}
     {@const record = byKey.get(option.key ?? '')}
     <span class="plate" aria-hidden="true">
