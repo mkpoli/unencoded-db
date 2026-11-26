@@ -14,7 +14,8 @@ export const load: PageServerLoad = async (event) => {
   const { DB } = env(event)
   const found = await getEntry(DB, id)
   if (!found || found.entry.hidden_at || found.entry.merged_into) error(404)
-  const seed = await loadSightingSeed(DB, event.url.searchParams.get('sighting'))
+  const loaded = await loadSightingSeed(DB, event.url.searchParams.get('sighting'))
+  const seed = loaded && loaded.entry !== id ? loaded : null
   return { id, ids: found.entry.ids, seed }
 }
 

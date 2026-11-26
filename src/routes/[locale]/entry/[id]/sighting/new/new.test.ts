@@ -46,12 +46,14 @@ test('starts from a visible sighting of another record', async () => {
   const seeded = await load(event(undefined, '1', '?sighting=2')) as any
   expect(seeded.id).toBe(1)
   expect(seeded.seed.id).toBe(2)
+  expect(seeded.seed.entry).toBe(2)
   expect(seeded.seed.values).toEqual({
     url: 'https://example.test/book', title: 'Book', author: null, publisher: null, report_date: null,
     container: null, source_kind: null, place: 'Page 12', original_date: '1617', page: '12',
     vias: [{ url: 'https://example.test/post', title: 'Post', author: null, publisher: null, report_date: null, container: null, source_kind: null, quote: null }],
   })
   expect(seeded.seed.pictures).toHaveLength(1)
+  expect((await load(event(undefined, '2', '?sighting=2')) as any).seed).toBeNull()
   expect((await load(event(undefined, '1', '?sighting=99')) as any).seed).toBeNull()
   expect((await load(event(undefined, '1', '?sighting=bad')) as any).seed).toBeNull()
 

@@ -4,6 +4,7 @@
   import SightingFields from '$lib/components/SightingFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { MEDIA_MAX } from '$lib/limits'
+  import { loadSeedPictures } from '$lib/seed-pictures'
   import { href, media, t } from '$lib/t'
   import { recordCode } from '$lib/code'
   import { onMount } from 'svelte'
@@ -17,20 +18,7 @@
   // The pictures of the sighting the form starts from, fetched so that a new box can be drawn on each.
   onMount(() => {
     if (form || !data.seed?.pictures.length) return
-    const controller = new AbortController()
-    seeding = true
-    void (async () => {
-      try {
-        for (const key of data.seed?.pictures ?? []) {
-          const response = await fetch(media(key), { signal: controller.signal }).catch(() => null)
-          if (controller.signal.aborted) return
-          if (response?.ok) await pictures?.add(await response.blob())
-        }
-      } finally {
-        if (!controller.signal.aborted) seeding = false
-      }
-    })()
-    return () => controller.abort()
+    return loadSeedPictures(data.seed.pictures.map(media), blob => pictures?.add(blob), working => seeding = working)
   })
 </script>
 

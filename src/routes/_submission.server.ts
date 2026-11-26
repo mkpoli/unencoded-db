@@ -112,7 +112,7 @@ export function positiveId(value: string | null | undefined): number | null {
 /** A record as a reader names it: its number, its code in either spelling, or the address of its page. */
 export const recordNamed = (text: string) => positiveId(text.trim()) ?? parseRecordCode(text) ?? positiveId(/\/entry\/(\d+)/.exec(text)?.[1])
 
-export type SightingSeed = { id: number; values: Partial<SightingFields>; pictures: string[] }
+export type SightingSeed = { id: number; entry: number; values: Partial<SightingFields>; pictures: string[] }
 
 // A visible sighting's citation, where it was found and its pictures, to pre-fill another form from it.
 export async function loadSightingSeed(db: D1Database, raw: string | null): Promise<SightingSeed | null> {
@@ -125,5 +125,5 @@ export async function loadSightingSeed(db: D1Database, raw: string | null): Prom
     ...Object.fromEntries((['place', 'original_date', 'page', ...CITATION_FIELDS] as const).map(field => [field, sighting[field]])),
     vias: sighting.vias.map(({ id: _, ...via }) => via),
   }
-  return { id, values, pictures: sighting.media.map(picture => picture.image_key) }
+  return { id, entry: sighting.entry_id, values, pictures: sighting.media.map(picture => picture.image_key) }
 }
