@@ -97,7 +97,9 @@ export const viaKey = (via: Via) => citationKey(via) + '\u0000' + (via.quote ?? 
 // picture the sighting still holds goes where the version had it, so undoing a change to a link's words brings its
 // pictures back to it; a link with the same words keeps its own; any other link with pictures left stays in the chain
 // with them, after the links of the version. A link whose words `stated` names (by `viaKey`) gets exactly the
-// pictures listed there, and the pictures it held and left out are let go.
+// pictures listed there, and the pictures it held and left out are let go. When `stated` names any link it
+// declares the chain's pictures: the links of `vias` keep their own by their words, and the pictures of a link
+// that `vias` no longer names go with it.
 export function heldPictures(vias: readonly Via[], current: readonly Via[], stated: ReadonlyMap<string, readonly ViaPicture[]> = new Map()): Via[] {
   const live = new Map(current.flatMap(via => via.pictures ?? []).map(picture => [picture.image_key, picture]))
   const placed = new Set<string>([...stated.values()].flatMap(pictures => pictures.map(picture => picture.image_key)))
@@ -110,7 +112,7 @@ export function heldPictures(vias: readonly Via[], current: readonly Via[], stat
     const pictures = own ? [...own] : [...was[index], ...place((same.get(viaKey(via))?.pictures ?? []).map(picture => picture.image_key))]
     return { ...via, pictures: pictures.length ? pictures : undefined }
   })
-  const kept = current.flatMap(via => {
+  const kept = stated.size ? [] : current.flatMap(via => {
     const pictures = place((via.pictures ?? []).map(picture => picture.image_key))
     return pictures.length ? [{ ...snapshotOf(via, CITATION_FIELDS), quote: via.quote, pictures } as Via] : []
   })
@@ -471,7 +473,7 @@ function insertVias(db: D1Database, sighting: number | string, vias: readonly { 
 
 const snapshotOf = <T extends object>(row: T, fields: readonly (keyof T)[]) => Object.fromEntries(fields.map(field => [field, row[field] ?? null]))
 const entrySnapshot = (fields: EntryFields) => JSON.stringify({ ...snapshotOf(fields, ENTRY_FIELDS), claims: fields.claims })
-const sightingSnapshot = (row: SightingFields, media: readonly StoredImage[]) => JSON.stringify({ ...snapshotOf(row, SIGHTING_FIELDS), vias: row.vias.map(via => ({ ...snapshotOf(via, CITATION_FIELDS), quote: via.quote ?? null, ...(via.pictures?.length ? { pictures: via.pictures.map(picture => snapshotOf(picture, VIA_IMAGE_FIELDS)) } : {}) })), media })
+const sightingSnapshot = (row: SightingFields, media: readonly StoredImage[]) => JSON.stringify({ ...snapshotOf(row, SIGHTING_FIELDS), vias: tidyVias(row.vias).map(via => ({ ...snapshotOf(via, CITATION_FIELDS), quote: via.quote ?? null, ...(via.pictures?.length ? { pictures: via.pictures.map(picture => snapshotOf(picture, VIA_IMAGE_FIELDS)) } : {}) })), media })
 
 type Who = { actor: string; ip: string | null }
 function revision(db: D1Database, who: Who, row: { entry: number; sighting?: number | null; kind: string; rev: number; snapshot: string; summary?: string | null }) {

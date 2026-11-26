@@ -82,7 +82,7 @@ const REDIRECTS_MAX = 3
 export const FETCHES_MAX = 10
 
 // What one call may still take in: bytes held in memory, and fetches from other sites.
-type Budget = { bytes: number; fetches: number }
+type Budget = { bytes: number; fetches: number; seen?: Map<string, ReadImage['image']> }
 
 // The bytes behind a picture's address, within what the call has left. A picture this site already shows
 // comes from its own store. Another site's is fetched, following a few redirects by hand so that each
@@ -158,18 +158,30 @@ async function readPictures(event: RequestEvent, value: unknown, budget: Budget)
   return read
 }
 
-// The pictures each via sends, as addresses without marks; undefined for a via that sends none. The chain
-// shares one allowance, and a picture shows a source, so a via with pictures needs a citation. Nothing is
-// fetched here.
+// The pictures each via sends, as addresses; undefined for a via that sends none. A picture shows a source,
+// so a via with pictures needs a citation, and a picture belongs to one via of the chain, which shares one
+// allowance. Nothing is fetched here.
 function viaPictureItems(vias: readonly Json[], form: FormData) {
   const named = namedVias(form)
+  const given = new Set<string>()
   const rows = vias.map((via, index) => {
     if (via.pictures === undefined) return undefined
-    const own = pictureItems(via.pictures).map(({ address }) => ({ address, marks: undefined }))
-    if (own.length && !named[index]) throw new Refusal(said('viaSource'))
-    return own
+    const own = new Set<string>()
+    for (const item of items(via.pictures)) {
+      const picture = typeof item === 'string' ? { url: item } : record(item)
+      if (picture.marks !== undefined) throw new Refusal('The pictures of a via take no marks.')
+      const address = text(picture.url).trim()
+      if (!address) throw new Refusal('Each picture needs a url.')
+      own.add(address)
+    }
+    if (own.size && !named[index]) throw new Refusal(said('viaSourceAt', { position: index + 1 }))
+    for (const address of own) {
+      if (given.has(address)) throw new Refusal(said('viaPictureTwice'))
+      given.add(address)
+    }
+    return [...own]
   })
-  if (rows.reduce((sum, row) => sum + (row?.length ?? 0), 0) > MEDIA_MAX) throw new Refusal(said('viaImage', { most: MEDIA_MAX }))
+  if (given.size > MEDIA_MAX) throw new Refusal(said('viaPictureCount', { most: MEDIA_MAX }))
   return rows
 }
 
@@ -180,21 +192,40 @@ function ownKey(event: RequestEvent, address: string) {
   return url?.origin === event.url.origin ? OWN_PICTURE.exec(url.pathname)?.[1] : undefined
 }
 
-// The pictures of each via, fetched and not yet stored. An address of a picture in `held` keeps it without a
-// fetch; the fetched ones are in `files`.
-async function readViaPictures(event: RequestEvent, rows: ReturnType<typeof viaPictureItems>, budget: Budget, held: ReadonlyMap<string, ViaPicture> = new Map()) {
+type PlannedVia = ({ address: string; kept?: ViaPicture }[] | undefined)[]
+// Each address as the picture `held` keeps it, which needs no fetch, or as one to fetch. A picture held
+// twice in a via counts once and is refused in two.
+function planViaPictures(event: RequestEvent, rows: ReturnType<typeof viaPictureItems>, held: ReadonlyMap<string, ViaPicture> = new Map()): PlannedVia {
+  const owner = new Map<string, number>()
+  return rows.map((row, index) => row?.flatMap(address => {
+    const key = ownKey(event, address)
+    const kept = key ? held.get(key) : undefined
+    if (!kept) return [{ address }]
+    if (owner.get(kept.image_key) === index) return []
+    if (owner.has(kept.image_key)) throw new Refusal(said('viaPictureTwice'))
+    owner.set(kept.image_key, index)
+    return [{ address, kept }]
+  }))
+}
+
+// The pictures of each via, fetched and not yet stored; those of `planned` that are kept are not fetched, and
+// the fetched are in `files`.
+async function readViaPictures(event: RequestEvent, planned: PlannedVia, budget: Budget) {
   const files: ReadImage[] = []
+  const owner = new Map(planned.flatMap((row, index) => (row ?? []).flatMap(({ kept }) => kept ? [[kept.image_key, index] as const] : [])))
   const pictures: (ViaPicture[] | undefined)[] = []
-  for (const row of rows) {
+  for (const [index, row] of planned.entries()) {
     if (!row) { pictures.push(undefined); continue }
     const own: ViaPicture[] = []
-    for (const picture of row) {
-      const key = ownKey(event, picture.address)
-      const kept = key ? held.get(key) : undefined
-      if (kept) { if (!own.includes(kept)) own.push(kept); continue }
-      const read = await readPicture(event, picture, budget)
+    for (const { address, kept } of row) {
+      if (kept) { own.push(kept); continue }
+      const read = await readPicture(event, { address, marks: undefined }, budget)
+      const picture = described(read)
+      if (own.some(held => held.image_key === picture.image_key)) continue
+      if (owner.has(picture.image_key) && owner.get(picture.image_key) !== index) throw new Refusal(said('viaPictureTwice'))
+      owner.set(picture.image_key, index)
       files.push(read)
-      own.push(described(read))
+      own.push(picture)
     }
     pictures.push(own)
   }
@@ -220,10 +251,15 @@ function marksOn(marks: unknown, width: number, height: number) {
 }
 
 async function readPicture(event: RequestEvent, { address, marks }: { address: string; marks: unknown }, budget: Budget): Promise<ReadImage> {
-  const bytes = await pictureBytes(event, address, budget)
-  budget.bytes -= bytes.byteLength
-  const image = await prepareImage(new File([bytes as BlobPart], 'picture'), MAX_IMAGE)
-  if (!image) throw new Refusal(`${said('image')} (${address})`)
+  // An address asked twice in one call is fetched once.
+  let image = budget.seen?.get(address)
+  if (!image) {
+    const bytes = await pictureBytes(event, address, budget)
+    budget.bytes -= bytes.byteLength
+    image = await prepareImage(new File([bytes as BlobPart], 'picture'), MAX_IMAGE) ?? undefined
+    if (!image) throw new Refusal(`${said('image')} (${address})`)
+    ;(budget.seen ??= new Map()).set(address, image)
+  }
   return { image, thumb: image, box: marksOn(marks, image.width, image.height) }
 }
 
@@ -367,7 +403,7 @@ async function addRecord(event: RequestEvent, input: Json) {
   const read = []
   for (const { form, vias, pictures } of stated) {
     const own = await readPictures(event, pictures, budget)
-    const via = await readViaPictures(event, vias, budget)
+    const via = await readViaPictures(event, planViaPictures(event, vias), budget)
     read.push({ fields: readSightingFields(form, via.pictures.map(row => row ?? [])), pictures: own, files: via.files })
   }
   const { DB, MEDIA } = env(event)
@@ -394,7 +430,7 @@ async function addSightingTo(event: RequestEvent, input: Json) {
   // One sighting takes what its form takes in one request, its pictures and those of its vias together.
   const budget = { bytes: MAX_WRITE_BODY, fetches: FETCHES_MAX }
   const pictures = await readPictures(event, input.pictures, budget)
-  const via = await readViaPictures(event, vias, budget)
+  const via = await readViaPictures(event, planViaPictures(event, vias), budget)
   const fields = readSightingFields(form, via.pictures.map(row => row ?? []))
   await storeImages(MEDIA, via.files)
   const media = await storeImages(MEDIA, pictures)
@@ -451,17 +487,24 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   // A via that states pictures gets those; any other keeps its own, as a restore does.
   const form = sightingForm({ ...now, ...stated })
   const rows = viaPictureItems(stated.vias === undefined ? [] : items(stated.vias).map(record), form)
+  const planned = planViaPictures(event, rows, new Map(sighting.vias.flatMap(via => via.pictures ?? []).map(picture => [picture.image_key, picture])))
+  const read = readSightingFields(form)
+  const chain = (pictures: readonly (ViaPicture[] | undefined)[]) => {
+    const stating = new Map<string, ViaPicture[]>()
+    for (const [index, row] of viaRows(form).entries()) {
+      const own = pictures[index]
+      if (own) stating.set(viaKey(row), [...stating.get(viaKey(row)) ?? [], ...own])
+    }
+    const vias = heldPictures(read.vias, sighting.vias, stating)
+    if (vias.reduce((sum, via) => sum + (via.pictures?.length ?? 0), 0) > MEDIA_MAX) throw new Refusal(said('viaPictureCount', { most: MEDIA_MAX }))
+    return vias
+  }
+  // The count is known before anything is fetched, each address to fetch standing for one picture.
+  chain(planned.map(row => row?.map(({ address, kept }) => kept ?? { image_key: `fetch:${address}`, image_type: '', image_w: 0, image_h: 0, thumb_key: '' })))
   const budget = { bytes: MAX_WRITE_BODY, fetches: FETCHES_MAX }
   const pictures = input.pictures === undefined ? null : await editedPictures(event, sighting.media, input.pictures, budget)
-  const via = await readViaPictures(event, rows, budget, new Map(sighting.vias.flatMap(via => via.pictures ?? []).map(picture => [picture.image_key, picture])))
-  const read = readSightingFields(form)
-  const stating = new Map<string, ViaPicture[]>()
-  for (const [index, row] of viaRows(form).entries()) {
-    const own = via.pictures[index]
-    if (own) stating.set(viaKey(row), [...stating.get(viaKey(row)) ?? [], ...own])
-  }
-  const fields = { ...read, vias: heldPictures(read.vias, sighting.vias, stating) }
-  if (fields.vias.reduce((sum, via) => sum + (via.pictures?.length ?? 0), 0) > MEDIA_MAX) throw new Refusal(said('viaImage', { most: MEDIA_MAX }))
+  const via = await readViaPictures(event, planned, budget)
+  const fields = { ...read, vias: chain(via.pictures) }
   if (!(pictures ?? sighting.media).length && !citesEvidence(fields) && !fields.place) throw new Refusal(said('evidence'))
   const { DB, MEDIA } = env(event)
   await storeImages(MEDIA, via.files)
@@ -580,7 +623,7 @@ const SIGHTING = {
   types: { type: 'array', items: { type: 'string', enum: SIGHTING_TYPES }, description: 'What the source provides: mention (discusses the character), attestation (uses it in a text), description (says how it is written), definition (gives a meaning), reading (gives a pronunciation), relation (names a variant or the same character).' },
   quotes: { type: 'array', maxItems: QUOTATIONS_MAX, items: { type: 'object', required: ['text'], properties: { text: { type: 'string' }, locator: { type: 'string' } } }, description: 'Quoted passages, each with an optional attribution or location in the source.' },
   note: { type: 'string', description: 'A note on this source.' },
-  vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' }, pictures: { type: 'array', maxItems: MEDIA_MAX, description: `Pictures of this source, such as a screenshot of the post, from their addresses. They share the ${MEDIA_MAX} the chain may hold, and the source needs a citation.`, items: { type: 'string', description: 'Address of the image file itself.' } } } } },
+  vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' }, pictures: { type: 'array', maxItems: MEDIA_MAX, description: `Pictures of this source, such as a screenshot of the post, from their addresses, without marks. A picture belongs to one source, the chain holds ${MEDIA_MAX} in all, and the source needs a citation.`, items: { oneOf: [{ type: 'string' }, { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string' } } }], description: 'Address of the image file itself.' } } } } },
   pictures: {
     type: 'array', maxItems: MEDIA_MAX, description: `Evidence pictures, fetched from their addresses and kept by the site. JPEG, PNG or WebP, up to ${FETCHES_MAX} from other sites in one call.`,
     items: {
@@ -687,7 +730,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'edit_sighting', title: 'Edit evidence on a record', annotations: EDITS, run: editSightingOf,
-    description: `Change one sighting of a record. A field left out stays as it is; quotes, vias and pictures given replace the whole list. Keep a picture by giving its address from get_record. A via that gives pictures holds exactly those; a via that leaves them out keeps its own, even when it is left out of vias. ${SIGHTING_RULE} Answers the new rev.`,
+    description: `Change one sighting of a record. A field left out stays as it is; quotes, vias and pictures given replace the whole list. Keep a picture by giving its address from get_record. When a via gives pictures, the chain's pictures are those given: a via holds exactly its own list, and a via that leaves them out keeps the ones it has. When no via gives pictures, each via keeps its own, even one left out of vias. ${SIGHTING_RULE} Answers the new rev.`,
     inputSchema: { type: 'object', required: ['record', 'sighting', 'rev'], properties: {
       record: RECORD, sighting: { type: 'integer', minimum: 1, description: 'The sighting\'s id in get_record.' }, rev: REV, summary: SUMMARY, ...SIGHTING,
     } },
