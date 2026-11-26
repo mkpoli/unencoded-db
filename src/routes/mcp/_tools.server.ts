@@ -210,7 +210,7 @@ function sightingForm(input: Json) {
 }
 
 // The record's own fields as its form sends them. A field the input leaves out is left out of the form, so
-// an edit keeps it; a list the input gives replaces the record's. A row of meanings, readings or related
+// an edit keeps it; a list the input gives replaces the record's. A row of meanings, readings, creators or related
 // characters keeps the key of the claim it names by `key`, or gets a new one, so a later row can name it and
 // each row can name the sightings behind it. `cite` reads the sightings a row names; a row that names none
 // keeps those of the claim it continues.
@@ -234,7 +234,7 @@ function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) 
   const same = (value: unknown) => text(value).normalize('NFC').trim()
   const repeats = (kind: ClaimKind, row: Json) => (claim: Claim) => claim.kind === kind && !taken.has(claim.key) && (
     kind === 'relation' ? claim.value === same(row.character) && claim.data?.relationship === same(row.relationship)
-    : claim.value === same(row.text) && (kind !== 'reading' || (claim.data?.doculect ?? '') === same(row.doculect)))
+    : claim.value === same(kind === 'creator' ? row.name : row.text) && (kind !== 'reading' || (claim.data?.doculect ?? '') === same(row.doculect)))
   const rows = (value: unknown, field: string, kind: ClaimKind) => items(value).map(row => typeof row === 'string' ? { [field]: row } : record(row)).map(row => {
     const named = held.get(text(row.key))
     const kept = named?.kind === kind && !taken.has(named.key) ? named : row.key === undefined ? current.find(repeats(kind, row)) : undefined
@@ -267,6 +267,12 @@ function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) 
     form.append('related_difference', text(row.difference)); form.append('related_evidence', text(row.basis)); form.append('related_key', key)
     under(key, row.meanings, meanings, 'meanings', 'meaning', kept)
     under(key, row.readings, readings, 'readings', 'reading', kept)
+    evidence(key, row, kept)
+  }
+
+  if (given('creators')) form.set('creators_present', '1')
+  for (const { row, key, kept } of rows(input.creators, 'name', 'creator')) {
+    form.append('creator', text(row.name)); form.append('creator_key', key)
     evidence(key, row, kept)
   }
 
@@ -494,7 +500,7 @@ To add a character:
 
 To correct a record or a sighting, read it with get_record and call edit_record or edit_sighting with the rev it shows, giving only what changes. Say what changed and why in summary.
 
-Record every attested form, whether or not Unicode encodes it; an encoded character takes an encoding with charset "unicode". State only the readings, meanings and relations the evidence gives.`
+Record every attested form, whether or not Unicode encodes it; an encoded character takes an encoding with charset "unicode". State only the readings, meanings, creators and relations the evidence gives.`
 
 const CITATION = {
   url: { type: 'string', description: 'Web address, http or https.' },
@@ -550,6 +556,7 @@ function recordFields(evidence: Json, key?: Json) {
       meanings: { type: 'array', items: { type: 'integer', minimum: 1 }, description: 'The meanings this reading goes with, by their place in `meanings`, from 1.' },
       evidence,
     } } },
+    creators: { type: 'array', description: 'Who made the character, when a source says so: each person by name as the source writes it.', items: { type: 'object', required: ['name'], properties: { ...own, name: { type: 'string' }, evidence } } },
     encodings: { type: 'array', description: 'The character sets, dictionaries and glyph registries that hold the character.', items: { type: 'object', required: ['charset', 'code'], properties: {
       charset: { type: 'string', description: `One of ${REGISTRIES.map(registry => registry.id).join(', ')}, or another work's name.` },
       code: { type: 'string', description: 'The code as the work writes it, such as U+2D6DD for unicode.' },
@@ -594,7 +601,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'get_record', title: 'Read a record', annotations: READS, run: getRecord,
-    description: 'A record with its claims (descriptions, readings, meanings, codes, relations) and its sightings, each with its citation and picture addresses.',
+    description: 'A record with its claims (descriptions, readings, meanings, creators, codes, relations) and its sightings, each with its citation and picture addresses.',
     inputSchema: { type: 'object', required: ['record'], properties: { record: RECORD } },
   },
   {

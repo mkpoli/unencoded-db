@@ -90,6 +90,7 @@
     encodings: ['input[name="encoding_charset"]', 'input[name="encoding_code"]', 'select[name="encoding_charset"]'],
     relatedCharacters: ['input[name="related_character"][required]'],
     ivd: ['input[name="ivd_sequence"]', 'select[name="ivd_status"]'],
+    creators: ['input[name="creator"]'],
     tags: ['input[name="tags"]'],
     tag: ['input[name="tag_new"]', 'input[name="tags"]'],
   }
