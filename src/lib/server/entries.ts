@@ -41,7 +41,7 @@ export type StoredImage = { image_key: string; image_type: string; image_w: numb
 export type ViaPicture = Omit<StoredImage, 'box'>
 export type YearKind = 'report' | 'original'
 export type Entry = Omit<EntryFields, 'claims'> & { status: Status | null; id: number; rev: number; ids: string | null; layout: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
-export type Sighting = Omit<SightingFields, 'vias'> & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; vias: (Via & { id: number })[]; media: StoredImage[]; hidden_at: string | null; removed_by: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
+export type Sighting = Omit<SightingFields, 'vias'> & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; vias: (Via & { id: number })[]; media: StoredImage[]; hidden_at: string | null; removed_by: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string; by_agent?: string | null }
 
 // What an entry has one of. What it has several of is in `claims`.
 export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical', 'strokes'] as const
@@ -1096,7 +1096,7 @@ export async function resolveReport(db: D1Database, id: number, by: string) {
 
 export const SIGHTINGS_MAX = 200
 const WHO = (column: string) => `LEFT JOIN people p ON p.id = ${column} LEFT JOIN people m ON m.id = p.merged_into`
-const WHO_COLUMNS = 'COALESCE(m.id, p.id) AS by_id, COALESCE(m.name, p.name) AS by_name'
+const WHO_COLUMNS = 'COALESCE(m.id, p.id) AS by_id, COALESCE(m.name, p.name) AS by_name, CASE WHEN p.agent = 1 THEN p.name END AS by_agent'
 const CITATION_COLUMNS = CITATION_FIELDS.map(field => `c.${field}`).join(', ')
 const CITATION = 'LEFT JOIN sources c ON c.id = s.source_id'
 
@@ -1150,7 +1150,7 @@ async function sightingRows(db: D1Database, id: number, who = false) {
 const sightingRow = (db: D1Database, id: number) => db.prepare('SELECT id, entry_id, rev, hidden_at FROM sightings WHERE id = ?').bind(id).first<Pick<Sighting, 'id' | 'entry_id' | 'rev' | 'hidden_at'>>()
 
 export async function getEntry(db: D1Database, id: number) {
-  const entry = await db.prepare(`SELECT e.*, ${WHO_COLUMNS} FROM entries e ${WHO('e.created_by')} WHERE e.id = ?`).bind(id).first<Entry & { by_id: string; by_name: string }>()
+  const entry = await db.prepare(`SELECT e.*, ${WHO_COLUMNS} FROM entries e ${WHO('e.created_by')} WHERE e.id = ?`).bind(id).first<Entry & { by_id: string; by_name: string; by_agent: string | null }>()
   if (!entry) return null
   return { entry, claims: await claimRows(db, id), sightings: await sightingRows(db, id, true) }
 }
@@ -1740,7 +1740,7 @@ export async function encodedAs(db: D1Database, char: string, limit = 6) {
 // Records already described by exactly this sequence, offered while someone is adding one.
 export const sameIds = (db: D1Database, ids: string, limit = 6) => claimedBy(db, 'ids', ids, limit)
 
-export type Revision = { id: number; entry_id: number; sighting_id: number | null; kind: string; rev: number; snapshot: string; summary: string | null; at: string; redacted_at: string | null; by_id: string; by_name: string; cover_key?: string | null; ids?: string | null; sighting_rev?: number | null }
+export type Revision = { id: number; entry_id: number; sighting_id: number | null; kind: string; rev: number; snapshot: string; summary: string | null; at: string; redacted_at: string | null; by_id: string; by_name: string; by_agent: string | null; cover_key?: string | null; ids?: string | null; sighting_rev?: number | null }
 
 export const HISTORY_PAGE = 60
 const REVISION_COLUMNS = 'r.id, r.entry_id, r.sighting_id, r.kind, r.rev, r.snapshot, r.summary, r.at, r.redacted_at'
@@ -1785,7 +1785,7 @@ export async function ofPerson(db: D1Database, id: string, before?: number | nul
 export const REPORT_PAGE = 100
 
 export async function openReports(db: D1Database, after = 0) {
-  const { results } = await db.prepare(`SELECT x.id, x.entry_id, x.sighting_id, x.reason, x.at, ${WHO_COLUMNS}, e.cover_key, e.ids, e.hidden_at, CASE WHEN x.sighting_id IS NULL THEN e.hidden_at WHEN s.removed_by IS NULL THEN s.hidden_at END AS target_hidden_at FROM reports x ${WHO('x.reporter')} JOIN entries e ON e.id = x.entry_id LEFT JOIN sightings s ON s.id = x.sighting_id AND s.entry_id = x.entry_id WHERE x.resolved_at IS NULL AND x.id > ? ORDER BY x.id LIMIT ?`).bind(after, REPORT_PAGE + 1).all<{ id: number; entry_id: number; sighting_id: number | null; reason: string; at: string; by_id: string; by_name: string; cover_key: string | null; ids: string | null; hidden_at: string | null; target_hidden_at: string | null }>()
+  const { results } = await db.prepare(`SELECT x.id, x.entry_id, x.sighting_id, x.reason, x.at, ${WHO_COLUMNS}, e.cover_key, e.ids, e.hidden_at, CASE WHEN x.sighting_id IS NULL THEN e.hidden_at WHEN s.removed_by IS NULL THEN s.hidden_at END AS target_hidden_at FROM reports x ${WHO('x.reporter')} JOIN entries e ON e.id = x.entry_id LEFT JOIN sightings s ON s.id = x.sighting_id AND s.entry_id = x.entry_id WHERE x.resolved_at IS NULL AND x.id > ? ORDER BY x.id LIMIT ?`).bind(after, REPORT_PAGE + 1).all<{ id: number; entry_id: number; sighting_id: number | null; reason: string; at: string; by_id: string; by_name: string; by_agent: string | null; cover_key: string | null; ids: string | null; hidden_at: string | null; target_hidden_at: string | null }>()
   return { reports: results.slice(0, REPORT_PAGE), next: results.length > REPORT_PAGE ? results[REPORT_PAGE - 1].id : null }
 }
 
@@ -1795,11 +1795,12 @@ export const EXPORT_PAGE_MAX = 200
 const EXPORT_SIGHTING_COLUMNS = ['id', 'entry_id', 'first_entry', 'rev', 'source_id', ...OCCURRENCE_FIELDS, 'hidden_at', 'created_by', 'created_at', 'updated_at'] as const
 const EXPORT_MEDIA = `(SELECT json_group_array(json_object(${IMAGE_FIELDS.map(field => `'${field}', x.${field}`).join(', ')})) FROM (SELECT * FROM sighting_media WHERE sighting_id = s.id ORDER BY position) x)`
 const EXPORT_VIAS = `(SELECT json_group_array(CASE x.pictures WHEN '[]' THEN json_object('id', x.id, 'quote', x.quote, ${CITATION_FIELDS.map(field => `'${field}', x.${field}`).join(', ')}) ELSE json_object('id', x.id, 'quote', x.quote, ${CITATION_FIELDS.map(field => `'${field}', x.${field}`).join(', ')}, 'pictures', json(x.pictures)) END) FROM (SELECT c.*, v.quote, ${VIA_PICTURES} AS pictures FROM sighting_vias v JOIN sources c ON c.id = v.source_id WHERE v.sighting_id = s.id ORDER BY v.position) x)`
-const EXPORT_EVIDENCE = `CASE WHEN s.id IS NULL THEN NULL ELSE json_object(${EXPORT_SIGHTING_COLUMNS.map(column => `'${column}', s.${column}`).join(', ')}, ${CITATION_FIELDS.map(field => `'${field}', c.${field}`).join(', ')}, 'vias', json(${EXPORT_VIAS}), 'media', json(${EXPORT_MEDIA}), 'by_id', COALESCE(m.id, p.id), 'by_name', COALESCE(m.name, p.name)) END AS evidence_json`
-// The name a record is credited to, after the anonymous people merged into an account take its name.
-const EXPORT_AUTHOR = `(SELECT COALESCE(am.name, ap.name) FROM people ap LEFT JOIN people am ON am.id = ap.merged_into WHERE ap.id = e.created_by) AS created_by_name`
-type ExportRow = Entry & { evidence_json: string | null; created_by_name: string | null }
-export type ExportEntry = Entry & { claims: Claim[]; evidence: Sighting[]; created_by_name: string | null }
+const EXPORT_EVIDENCE = `CASE WHEN s.id IS NULL THEN NULL ELSE json_object(${EXPORT_SIGHTING_COLUMNS.map(column => `'${column}', s.${column}`).join(', ')}, ${CITATION_FIELDS.map(field => `'${field}', c.${field}`).join(', ')}, 'vias', json(${EXPORT_VIAS}), 'media', json(${EXPORT_MEDIA}), 'by_id', COALESCE(m.id, p.id), 'by_name', COALESCE(m.name, p.name), 'by_agent', CASE WHEN p.agent = 1 THEN p.name END) END AS evidence_json`
+// The name a record is credited to, after the anonymous people merged into an account take its name,
+// together with the agent name when created by an agent.
+const EXPORT_AUTHOR = `(SELECT COALESCE(am.name, ap.name) FROM people ap LEFT JOIN people am ON am.id = ap.merged_into WHERE ap.id = e.created_by) AS created_by_name, (SELECT CASE WHEN ap.agent = 1 THEN ap.name END FROM people ap WHERE ap.id = e.created_by) AS created_by_agent`
+type ExportRow = Entry & { evidence_json: string | null; created_by_name: string | null; created_by_agent: string | null }
+export type ExportEntry = Entry & { claims: Claim[]; evidence: Sighting[]; created_by_name: string | null; created_by_agent: string | null }
 export async function exportPage(db: D1Database, after: number, limit: number, sightingAfter: number | null = null) {
   const rows: ExportRow[] = []
   if (sightingAfter !== null) {

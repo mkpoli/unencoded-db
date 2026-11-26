@@ -2226,7 +2226,7 @@ describe('search total', () => {
 })
 
 test('source names find the exact public citation, including via-only works and shared aliases', async () => {
-  const citations = [via({ title: 'Dictionary', publisher: 'Press A', report_date: '明萬曆34年' }), via({ title: 'Dictionary', publisher: 'Press B' })]
+  const citations = [via({ title: 'Dictionary', publisher: 'Press A', report_date: '1606' }), via({ title: 'Dictionary', publisher: 'Press B' })]
   const entry = await createEntry(db, fields(), seen({ ...citations[0], vias: [citations[1]] }), [], who)
   const editions = await suggestSources(db, 'dict')
   expect(editions).toHaveLength(2)
@@ -2237,7 +2237,7 @@ test('source names find the exact public citation, including via-only works and 
   }
   const matches = await suggestSources(db, 'dic 甲')
   expect(matches.map(s => s.id)).toEqual(editions.map(s => s.id))
-  expect(matches.find(s => s.publisher === 'Press A')?.report_date).toBe('明萬曆34年')
+  expect(matches.find(s => s.publisher === 'Press A')?.report_date).toBe('1606')
   const press = await publicPublisher(db, 'Press B')
   expect((await sourceList(db, 'earliest', null, press!.id, 'dic 甲')).sources.map(s => s.publisher)).toEqual(['Press B'])
   expect(await editSourceAlias(db, editions[0].id, 'dic 甲', true, who.actor)).toBe(true)

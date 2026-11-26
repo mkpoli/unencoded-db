@@ -1,5 +1,6 @@
 <script lang="ts">
   import Seo from '$lib/components/Seo.svelte'
+  import RecordPicker from '$lib/components/RecordPicker.svelte'
   import SightingCard from '$lib/components/SightingCard.svelte'
   import Tile from '$lib/components/Tile.svelte'
   import { recordCode } from '$lib/code'
@@ -39,8 +40,7 @@
       </form>
     {:else}
       <form method="GET" class="row find">
-        <label class="sr-only" for="to">{t('duplicate.of')}</label>
-        <input class="input" id="to" name="to" value={data.typed} placeholder={t('duplicate.of')} required />
+        <RecordPicker id="to" name="to" value={data.typed} exclude={data.id} label={t('duplicate.of')} placeholder={t('duplicate.of')} />
         <button class="button primary" type="submit">{t('duplicate.compare')}</button>
       </form>
       <a class="text-link split" href={href(`/entry/${data.id}/sighting/${data.sighting.id}/split`)}>{t('sighting.splitLink')}</a>
@@ -51,7 +51,6 @@
 <style>
   .back { align-self:start; color:var(--muted) }
   .split { align-self:start }
-  .find .input { flex:1 1 0; width:auto; min-width:0 }
   .pair { display:grid; grid-template-columns:repeat(2,minmax(0,240px)); gap:24px }
   .pair figure { margin:0; min-width:0 }
   .pair figcaption { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px }
