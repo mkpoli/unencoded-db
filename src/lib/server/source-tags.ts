@@ -9,7 +9,7 @@ export const SOURCE_TAG_SOURCES_MAX = 5
 export type SourceTagRow = { entry_id: number; tag: string | null }
 
 export const sourceTagStatement = (db: D1Database, sourceId: number, excludeEntryId: number | null = null) =>
-  db.prepare(`SELECT e.id AS entry_id, k.value AS tag
+  db.prepare(`SELECT e.id AS entry_id, COALESCE((SELECT a.tag FROM tag_aliases a WHERE a.alias = k.value), k.value) AS tag
     FROM (
       SELECT s.entry_id, s.hidden_at
       FROM sightings s INDEXED BY sightings_by_source

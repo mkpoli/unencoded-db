@@ -167,3 +167,12 @@ describe('source tag hints', () => {
     expect(await (await call(`?source=${sourceId}&exclude=${e1}`)).json()).toEqual({ tags: [] })
   })
 })
+
+test('a merged tag counts as the tag it was merged into', async () => {
+  const book = { title: '方言志' }
+  const e1 = await createEntry(db, fields(['minnan']), seen(book), [], who)
+  await createEntry(db, fields(['hakka']), seen(book), [], who)
+  await createEntry(db, fields(['wu']), seen(book), [], who)
+  raw.exec(`INSERT INTO tag_aliases(alias, tag) VALUES ('hakka', 'minnan')`)
+  expect(await sourceTagHints(db, sourceIdOf(e1))).toEqual(['minnan'])
+})
