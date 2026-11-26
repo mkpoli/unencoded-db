@@ -559,7 +559,7 @@
   "source.remove": "移除",
   "source.removeAlias": "移除“{alias}”",
   "source.aliasError": "无法保存更改，请检查输入的名称和已登记的别名。",
-  "sources.name": "书名或别名",
+  "sources.name": "书名、作者、刊物、群组或链接",
   "sources.noMatches": "找不到符合条件的来源。",
   "source.title": "出处",
   "source.view": "出处详情",

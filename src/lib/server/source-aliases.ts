@@ -2,16 +2,17 @@ import { sourceNameKey, titleReadingKey } from '../name-key'
 import { sampledSightings } from './source-sightings'
 import type { Source } from './entries'
 
-// Read both indexed prefix ranges. A source may match several readings and its literal name.
+// Read every indexed prefix range. A source may match several readings, its literal name and its other keys.
 const prefix = "lookup >= ? AND lookup < CAST(? || X'FF' AS TEXT)"
 const readingMatches = `SELECT r.lookup, c.id AS source_id FROM source_title_readings r
   CROSS JOIN sources c ON c.title = r.title AND c.records > 0 WHERE ${prefix}`
 export const sourceMatches = `SELECT source_id FROM source_search_names WHERE ${prefix}
-  UNION ALL SELECT source_id FROM (${readingMatches})`
+  UNION ALL SELECT source_id FROM (${readingMatches})
+  UNION ALL SELECT k.source_id FROM source_keys k CROSS JOIN sources c ON c.id = k.source_id AND c.records > 0 WHERE ${prefix}`
 
 export function sourceMatchParams(text: string) {
   const literal = sourceNameKey(text), reading = titleReadingKey(text) || null
-  return [literal, literal, reading, reading]
+  return [literal, literal, reading, reading, literal, literal]
 }
 
 export const SOURCE_SUGGESTIONS = 24

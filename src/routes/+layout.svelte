@@ -2,9 +2,10 @@
   import '../app.css'
   import { afterNavigate } from '$app/navigation'
   import { page } from '$app/state'
-  import { tick } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import { LOCALES, LOCALE_NAMES, LOCALE_COOKIE } from '$lib/i18n'
   import { href, locale, t } from '$lib/t'
+  import { clearDirectBrowseBack, hydrateBrowseReturn, trackBrowseNavigation } from '$lib/browse-return.svelte'
   import { syncFavourites } from '$lib/favourites.svelte'
   import { UNREAD_SHOWN } from '$lib/notifications'
   import ChatLinks from '$lib/components/ChatLinks.svelte'
@@ -68,7 +69,12 @@
     return () => { live = false; observer.disconnect(); document.fonts.removeEventListener('loadingdone', fit) }
   })
 
-  afterNavigate(() => {
+  onMount(() => {
+    hydrateBrowseReturn()
+  })
+
+  afterNavigate(navigation => {
+    trackBrowseNavigation(navigation)
     if (navLinks?.hasAttribute('popover')) navLinks.hidePopover?.()
     if (menu) menu.open = false
   })
@@ -95,7 +101,7 @@
   const closeMenu = (event: PointerEvent) => { if (menu?.open && !menu.contains(event.target as Node)) menu.open = false }
 </script>
 
-<svelte:window onpointerdown={closeMenu} onkeydown={dismissSettings} />
+<svelte:window onpointerdown={closeMenu} onkeydown={dismissSettings} onhashchange={clearDirectBrowseBack} />
 
 {#snippet primaryLinks()}
   <a class:active={section === 'browse'} aria-current={section === 'browse' ? 'page' : undefined} href={href()}>{t('nav.browse')}</a>

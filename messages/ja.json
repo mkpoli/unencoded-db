@@ -559,7 +559,7 @@
   "source.remove": "削除",
   "source.removeAlias": "「{alias}」を削除",
   "source.aliasError": "変更を保存できませんでした。入力した名前と登録済みの別名を確認してください。",
-  "sources.name": "書名・別名",
+  "sources.name": "書名・著者・掲載先・リンク",
   "sources.noMatches": "条件に一致する出典はありません。",
   "source.title": "出典",
   "source.view": "出典の詳細",
