@@ -289,7 +289,7 @@
     </dl>
     <div class="senses">
       <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} records={data.related} />
-      {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
+      {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation' || claim.kind === 'creator')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
       {:else}<EditLink field="senses" name={t('entry.addSenses')} add />{/if}
     </div>
     {#if entry.by_name && entry.created_at}

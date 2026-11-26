@@ -12,7 +12,7 @@ import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
-import { encodingsOf, joinClaims, mapSightings, moveClaims, newClaim, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, relationsTo, restoreClaims, valuesOf, type Brought, type Claim, type ClaimError } from '$lib/claims'
+import { creatorKey, encodingsOf, joinClaims, mapSightings, moveClaims, newClaim, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, relationsTo, restoreClaims, validCreator, valuesOf, type Brought, type Claim, type ClaimError } from '$lib/claims'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { FILE_ROWS, ensureTags, filedUnder } from './tags'
@@ -248,6 +248,7 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   const own = new Set<string>()
   for (const claim of claims) {
     if (claim.kind === 'collection') own.add(`c:${claim.value}`)
+    if (claim.kind === 'creator') own.add(`m:${creatorKey(claim.value)}`)
   }
   // A record is counted in or out of every marked work, so a list of either is one range.
   const held = marksHeld(claims)
@@ -261,7 +262,7 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks, ...filed, ...decade]
 }
 
-const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'tag']
+const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'tag', 'creator']
 function wordTags(entry: TagInput, claims: readonly Claim[], sightings: SightingFields[]) {
   const words = new Set<string>()
   const add = (value: unknown) => { if (typeof value === 'string') for (const term of terms(value)) words.add(term) }
@@ -1171,7 +1172,7 @@ export async function mediaVisible(db: D1Database, key: string) {
     UNION ALL SELECT 1 FROM sighting_via_media x INDEXED BY sighting_via_media_by_image ${live} AND x.image_key = ?1 UNION ALL SELECT 1 FROM sighting_via_media x INDEXED BY sighting_via_media_by_thumb ${live} AND x.thumb_key = ?1 LIMIT 1`).bind(key).first())
 }
 
-export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; radical?: string | null; decade?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; also?: readonly string[]; order?: Order; seed?: number | null; after?: string | null; limit?: number }
+export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; creator?: string | null; radical?: string | null; decade?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; also?: readonly string[]; order?: Order; seed?: number | null; after?: string | null; limit?: number }
 export const SEARCH_WINDOW = 256
 
 // The one key a script and a filter name, or null for a filter that is not one.
@@ -1186,6 +1187,13 @@ export function facetTag(facet?: string | null) {
   if (!facet) return null
   const match = /^([ct]):([^|\s]{1,40})$/u.exec(facet.normalize('NFC'))
   return match ? `${match[1]}:${match[2]}` : undefined
+}
+
+// Who made a character (`m:`), as the key the records that name them are listed under.
+export function creatorTag(creator?: string | null) {
+  if (!creator) return null
+  const name = creatorKey(creator.normalize('NFC').trim())
+  return validCreator(name) ? `m:${name}` : undefined
 }
 
 // A radical's path (`b:`), as the key its records and its branches' records are listed under.
@@ -1257,15 +1265,15 @@ export const alsoSearch = (query: string, values: readonly string[] = []) => exa
 
 // The keys every row of a listing holds and the words it is searched for. Each word is the rows any of which
 // holds it; `spelt` are the other spellings of a query of parts, each the rows of its parts. Null names a listing that is not one.
-function listPlan({ script, filter, facet, radical, decade, within, without, query, also }: Listing) {
-  const base = listTag(script, filter), own = facetTag(facet), filed = radicalTag(radical), period = decadeTag(decade), marks = markTags(within, without)
-  if (!base || own === undefined || filed === undefined || period === undefined || !marks) return null
+function listPlan({ script, filter, facet, creator, radical, decade, within, without, query, also }: Listing) {
+  const base = listTag(script, filter), own = facetTag(facet), maker = creatorTag(creator), filed = radicalTag(radical), period = decadeTag(decade), marks = markTags(within, without)
+  if (!base || own === undefined || maker === undefined || filed === undefined || period === undefined || !marks) return null
   if ((query?.trim().length ?? 0) > SEARCH_LENGTH_MAX) return null
   const typed = exactSearchIds(query ?? '')
   const exact = typed ? [typed, ...alsoSearchIds(query ?? '', also)] : null
   const words = exact ? [] : [...new Set(terms(query ?? ''))]
   if (!exact && (words.length > SEARCH_TERMS_MAX || (query?.trim() && !words.length))) return null
-  const keys = [...(own ? [own] : []), ...(filed ? [filed] : []), ...(period ? [period] : []), ...marks, ...(base !== 'all' ? [base] : [])]
+  const keys = [...(own ? [own] : []), ...(maker ? [maker] : []), ...(filed ? [filed] : []), ...(period ? [period] : []), ...marks, ...(base !== 'all' ? [base] : [])]
   // A spelling that is one character, the one the parts make, is found wherever a record names it: as a
   // part, a related character, a code, or a word of its notes and sources.
   const spelt = exact ? [] : alsoSearchParts(query ?? '', also).map(run => [...run]).map(run => run.map(part => run.length === 1 ? [`w:${part}`, ...partRows(part)] : partRows(part)))
@@ -1550,7 +1558,7 @@ export function chroniclePlace(at: string | null, before: string | null, from: s
 
 // The counts a page shows beside its filters. Tags are counted too, and read where they are listed. The
 // radical paths (`b!`, `b:`) are stepped over by key, so the read does not grow with them.
-export const countsStatement = (db: D1Database) => db.prepare(`SELECT tag, n FROM tag_counts WHERE (tag < 'b!' OR tag >= 'b;') AND n > 0 AND tag NOT LIKE '%|%' AND tag NOT LIKE 't:%'`)
+export const countsStatement = (db: D1Database) => db.prepare(`SELECT tag, n FROM tag_counts WHERE (tag < 'b!' OR tag >= 'b;') AND n > 0 AND tag NOT LIKE '%|%' AND tag NOT LIKE 't:%' AND tag NOT LIKE 'm:%'`)
 export async function counts(db: D1Database) {
   const { results } = await countsStatement(db).all<{ tag: string; n: number }>()
   return Object.fromEntries(results.map(row => [row.tag, row.n])) as Record<string, number>
@@ -1572,6 +1580,14 @@ export function radicalCountsStatement(db: D1Database, under?: string) {
 export async function radicalCounts(db: D1Database, under?: string) {
   const { results } = await radicalCountsStatement(db, under).all<{ stated: number; path: string; n: number }>()
   return { counts: new Map(results.filter(row => !row.stated).map(row => [row.path, row.n])), stated: new Set(results.filter(row => row.stated).map(row => row.path)) }
+}
+
+/** The people records name as the maker of their character, those named most first, and how many records name each. */
+export const CREATORS_MAX = 200
+export const creatorCountsStatement = (db: D1Database) => db.prepare(`SELECT substr(tag, 3) AS name, n FROM tag_counts WHERE tag >= 'm:' AND tag < 'm;' AND n > 0 ORDER BY n DESC, tag LIMIT ${CREATORS_MAX}`)
+export async function creatorCounts(db: D1Database) {
+  const { results } = await creatorCountsStatement(db).all<{ name: string; n: number }>()
+  return results
 }
 
 export const TAGS_MAX = 200
