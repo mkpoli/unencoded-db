@@ -24,6 +24,7 @@
   {#if message}<p class="notice bad" role="alert">{message}</p>{/if}
   <form class="stack" method="POST" enctype="multipart/form-data">
     <section class="panel stack">
+      <div class="field"><label for="import-name">{t('field.importName')}</label><input id="import-name" class="input" name="import_name" value={values?.import_name ?? ''} maxlength="200" /></div>
       <ScriptPicker value={values?.script} other={values?.script_other} />
       <SightingFields {values} />
     </section>

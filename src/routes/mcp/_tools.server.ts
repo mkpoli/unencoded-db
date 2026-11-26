@@ -20,6 +20,7 @@ import { candidates } from '$lib/server/candidates'
 import { tagList } from '$lib/server/tags'
 import { addSighting, CITATION_FIELDS, createEntry, getEntry, hasLink, list, mediaVisible, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
+import { findOrCreateImport, IMPORT_NAME_MAX } from '$lib/server/imports'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { MAX_WRITE_BODY } from '$lib/server/body-limit'
 import { MAX_IMAGE, prepareImage } from '$lib/server/image'
@@ -247,6 +248,9 @@ function entryForm(input: Json, sightings: number, tags: readonly string[]) {
 // fetched, so the window also bounds how many addresses a caller can make the site fetch.
 async function addRecord(event: RequestEvent, input: Json) {
   await guard(event, 'ADDS')
+  const rawImportName = text(input.import_name).normalize('NFC').trim()
+  if (rawImportName.length > IMPORT_NAME_MAX) throw new Refusal(`import_name is at most ${IMPORT_NAME_MAX} characters.`)
+  const importName = rawImportName || null
   const inputs = items(input.sightings).map(record)
   if (!inputs.length) throw new Refusal('A record starts with at least one sighting.')
   if (inputs.length > ADD_SIGHTINGS_MAX) throw new Refusal(said('sightingsMax', { max: ADD_SIGHTINGS_MAX }))
@@ -266,7 +270,9 @@ async function addRecord(event: RequestEvent, input: Json) {
   const drafts = []
   for (const { fields, pictures } of read) drafts.push({ fields, media: await storeImages(MEDIA, pictures) })
   const person = await agentWriter(event, DB)
-  const id = await createEntry(DB, entry, drafts[0].fields, drafts[0].media, { actor: person.id, ip: await ipHash(event) }, drafts.slice(1))
+  const who = { actor: person.id, ip: await ipHash(event) }
+  const batchImport = importName ? await findOrCreateImport(DB, importName, who) : null
+  const id = await createEntry(DB, entry, drafts[0].fields, drafts[0].media, who, drafts.slice(1), batchImport?.id ?? null)
   notifyIndexNow(event, { entries: [id] })
   return shown(event, id)
 }
@@ -332,6 +338,7 @@ async function getRecord(event: RequestEvent, input: Json) {
     ...shown(event, id),
     script: entry.script === 'other' ? entry.script_other ?? 'other' : entry.script,
     status: entry.status, description: entry.description, radical: entry.radical, strokes: entry.strokes,
+    ...(entry.import_id !== null ? { import: { id: entry.import_id, name: entry.import_name }, awaiting_review: entry.reviewed_at === null } : {}),
     claims: found.claims.map(claim => ({ key: claim.key, kind: claim.kind, value: claim.value, ...(claim.data ? { data: claim.data } : {}), ...(claim.under.length ? { under: claim.under } : {}), evidence: claim.sightings.filter(sighting => visible.has(sighting)) })),
     date_readings: Object.fromEntries(await readDates(env(event).DB, sightingDates(sightings))),
     sightings: sightings.map(sighting => ({
@@ -449,6 +456,7 @@ const TOOLS: Tool[] = [
       categories: { type: 'array', items: { type: 'string' } },
       collections: { type: 'array', items: { type: 'string', enum: COLLECTIONS.map(collection => collection.slug) } },
       tags: { type: 'array', items: { type: 'string' } },
+      import_name: { type: 'string', maxLength: IMPORT_NAME_MAX, description: 'Name of the bulk import this record belongs to. Records added with an import name are marked awaiting review until checked.' },
       sightings: { type: 'array', minItems: 1, maxItems: ADD_SIGHTINGS_MAX, items: { type: 'object', properties: SIGHTING } },
     } },
   },

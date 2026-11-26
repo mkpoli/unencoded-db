@@ -153,10 +153,10 @@ describe('write body limit', () => {
     expect(body.request.bodyUsed).toBe(false)
   })
 
-  test('maps each existing guarded action to its limiter', () => {
+  test('maps each existing guarded action to its limiter', async () => {
     const routes: [string, string, 'ADDS' | 'EDITS'][] = [
       ['/[locale]/new', '', 'ADDS'], ['/[locale]/batch', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/new', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/[sighting]/split', '', 'ADDS'],
-      ['/[locale]/entry/[id]', '?/edit', 'EDITS'], ['/[locale]/entry/[id]', '?/comment', 'EDITS'], ['/[locale]/entry/[id]', '?/hideComment', 'EDITS'], ['/[locale]/entry/[id]', '?/unhideComment', 'EDITS'], ['/[locale]/me', '', 'EDITS'], ['/[locale]/notifications', '', 'EDITS'], ['/api/tags', '', 'EDITS'],
+      ['/[locale]/entry/[id]', '?/edit', 'EDITS'], ['/[locale]/entry/[id]', '?/comment', 'EDITS'], ['/[locale]/entry/[id]', '?/hideComment', 'EDITS'], ['/[locale]/entry/[id]', '?/unhideComment', 'EDITS'], ['/[locale]/entry/[id]', '?/review', 'EDITS'], ['/[locale]/imports/[id]', '?/review', 'EDITS'], ['/[locale]/me', '', 'EDITS'], ['/[locale]/notifications', '', 'EDITS'], ['/api/tags', '', 'EDITS'],
       ['/[locale]/entry/[id]/report', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/edit', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/remove', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/move', '', 'EDITS'],
       ['/[locale]/entry/[id]/history', '?/restore', 'EDITS'],
       ['/[locale]/entry/[id]/history', '?/thank', 'EDITS'], ['/[locale]/entry/[id]/history', '?/putBack', 'EDITS'],
@@ -165,6 +165,10 @@ describe('write body limit', () => {
     for (const [id, search, expected] of routes) {
       const request = new Request(`https://example.test/en${search}`, { method: 'POST' })
       expect(writeLimitFor({ request, url: new URL(request.url), route: { id } } as any)).toBe(expected)
+    }
+    for (const [path, id] of [['entry/1?/review', '/[locale]/entry/[id]'], ['imports/1?/review', '/[locale]/imports/[id]']] as const) {
+      const request = new Request(`https://example.test/en/${path}`, { method: 'POST', body: 'reviewed=1' })
+      expect((await runHook(request, async () => new Response('ok'), { route: { id } })).status).toBe(200)
     }
     const request = new Request('https://example.test/en?/bogus&/sighting', { method: 'POST' })
     expect(writeLimitFor({ request, url: new URL(request.url), route: { id: '/[locale]/entry/[id]' } } as any)).toBeNull()

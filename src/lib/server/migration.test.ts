@@ -184,7 +184,7 @@ test('0005 gives every claim a key, a list of sightings and a scope, in claims a
   expect(journal.filter(row => !versions.some(version => version.id === row.id)).map(row => row.snapshot)).toEqual([sighting, '{}', '{"revision":4}', '{}', '{"from":3}'])
 
   // An old version is restored through the store, with its keys and the sighting it rested on.
-  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0019_via_chain.sql', '0016_tag_year.sql', '0018_first_sighting.sql', '0023_categories.sql', '0024_category_rows.sql', '0026_typed_tags.sql', '0027_date_readings.sql', '0028_publishers.sql', '0029_via_quote.sql', '0031_sighting_quotations.sql', '0041_source_container.sql', '0048_source_kind.sql', '0045_tag_aliases.sql', '0056_forms.sql']) raw.exec(migration(name))
+  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0019_via_chain.sql', '0016_tag_year.sql', '0018_first_sighting.sql', '0023_categories.sql', '0024_category_rows.sql', '0026_typed_tags.sql', '0027_date_readings.sql', '0028_publishers.sql', '0029_via_quote.sql', '0031_sighting_quotations.sql', '0041_source_container.sql', '0048_source_kind.sql', '0045_tag_aliases.sql', '0056_forms.sql', '0057_import_review.sql']) raw.exec(migration(name))
   const db = d1Over(raw)
   expect(await revertEntry(db, 1, 1, { actor: 'p', ip: null })).toEqual({ ok: true, rev: 5 })
   expect((await getEntry(db, 1))!.claims).toEqual(first)
@@ -617,4 +617,22 @@ test('0047 turns each context into a list of one, in the rows and in past versio
   expect(rows.slice(0, 2).map(row => sightingSnapshot(row))).toMatchObject([{ contexts: '["heading"]', style: 'regular', types: '["mention"]' }, { contexts: null }])
   expect(JSON.parse(rows[0])).not.toHaveProperty('context')
   expect(rows.slice(2)).toEqual(['{}', '{"script":"han"}'])
+})
+
+test('0057 adds named imports and awaiting-review columns and indexes', () => {
+  const raw = new Database(':memory:')
+  raw.exec('PRAGMA foreign_keys = ON')
+  for (const name of readdirSync(join(import.meta.dir, '../../../migrations')).sort().filter(name => name < '0057')) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec("INSERT INTO entries(script, created_by, created_at, updated_at) VALUES ('han', 'p', '2026', '2026')")
+  raw.exec(migration('0057_import_review.sql'))
+
+  const columns = (raw.query("SELECT name FROM pragma_table_info('entries')").all() as { name: string }[]).map(column => column.name)
+  expect(columns).toContain('import_id')
+  expect(columns).toContain('reviewed_at')
+  expect(columns).toContain('reviewed_by')
+  const indexes = (raw.query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'entries' AND name LIKE 'entries_%import%' ORDER BY name").all() as { name: string }[]).map(row => row.name)
+  expect(indexes).toEqual(['entries_by_import', 'entries_import_pending'])
+  expect(raw.query('SELECT import_id, reviewed_at, reviewed_by FROM entries WHERE id = 1').get()).toEqual({ import_id: null, reviewed_at: null, reviewed_by: null })
+  expect(raw.query('PRAGMA foreign_key_check').all()).toEqual([])
 })

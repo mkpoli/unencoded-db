@@ -94,5 +94,5 @@ export const isStoredContexts = (raw: string | null) => isStoredChosen(CONTEXTS,
 // the next one, are read as that sighting's.
 export const SIGHTING_START = 'sighting_start'
 
-export const NEEDS = ['image', 'ids', 'source'] as const
+export const NEEDS = ['image', 'ids', 'source', 'review'] as const
 export type Need = (typeof NEEDS)[number]

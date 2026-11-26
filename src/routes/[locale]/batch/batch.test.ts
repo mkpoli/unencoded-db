@@ -84,3 +84,32 @@ test('every row is charged to the add allowance before anything is saved', async
   expect(result.data.values.rows).toHaveLength(3)
   expect(count('entries')).toBe(0)
 })
+
+test('an import name groups batch records, marks them awaiting review, and is reused across batches', async () => {
+  const { event, count, raw } = fixture()
+  await expect(actions.default(event(form(
+    [{ ids: '⿰山東', picture: true }, { ids: '⿱木木', picture: true }],
+    { place: 'A list', import_name: '  2026-11-26 bulk list  ' },
+  )))).rejects.toMatchObject({ status: 303, location: '/en/imports/1' })
+  expect(count('imports')).toBe(1)
+  expect(raw.query('SELECT id, name, total, pending FROM imports').get()).toEqual({ id: 1, name: '2026-11-26 bulk list', total: 2, pending: 2 })
+  expect(raw.query('SELECT id, import_id, reviewed_at FROM entries ORDER BY id').all()).toEqual([
+    { id: 1, import_id: 1, reviewed_at: null },
+    { id: 2, import_id: 1, reviewed_at: null },
+  ])
+  expect(raw.query("SELECT n FROM tag_counts WHERE tag = 'n:review'").get()).toEqual({ n: 2 })
+
+  // A second batch with the same import name attaches to the existing import.
+  await expect(actions.default(event(form(
+    [{ ids: '⿰木木', picture: true }],
+    { place: 'A list', import_name: '2026-11-26 bulk list' },
+  )))).rejects.toMatchObject({ status: 303, location: '/en/imports/1' })
+  expect(count('imports')).toBe(1)
+  expect(raw.query('SELECT total, pending FROM imports WHERE id = 1').get()).toEqual({ total: 3, pending: 3 })
+
+  // A rejected batch preserves the typed import_name without creating an import row.
+  const rejected = await actions.default(event(form([{ ids: '⿰水木' }], { place: 'No link', import_name: 'Uncreated import' }))) as any
+  expect(rejected.status).toBe(400)
+  expect(rejected.data.values.import_name).toBe('Uncreated import')
+  expect(count('imports')).toBe(1)
+})

@@ -38,7 +38,7 @@ export type Via = Citation & { quote: string | null }
 export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; source_kind: string | null; vias: Via[]; original_date: string | null; page: string | null; contexts: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type YearKind = 'report' | 'original'
-export type Entry = Omit<EntryFields, 'claims'> & { status: Status | null; id: number; rev: number; ids: string | null; layout: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
+export type Entry = Omit<EntryFields, 'claims'> & { status: Status | null; id: number; rev: number; ids: string | null; layout: string | null; cover_key: string | null; cover_place: string | null; sightings: number; types: string | null; first_year: string | null; first_year_kind: YearKind | null; marks: string | null; import_id: number | null; reviewed_at: string | null; reviewed_by: string | null; review_rev: number; merged_into: number | null; hidden_at: string | null; created_by: string; created_at: string; updated_at: string }
 export type Sighting = Omit<SightingFields, 'vias'> & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; vias: (Via & { id: number })[]; media: StoredImage[]; hidden_at: string | null; removed_by: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string }
 
 // What an entry has one of. What it has several of is in `claims`.
@@ -197,11 +197,12 @@ export function parseMarks(raw: string | null | undefined): string[] {
 type TagInput = Pick<Entry, 'script' | 'status' | 'description' | 'script_other'>
 // A record's tag rows (`t:`) are written by `tagRows` from the tags and implications as its batch finds
 // them, and are left out here.
-export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key' | 'radical' | 'first_year'>, hasSource: boolean, claims: readonly Claim[] = []) {
+export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key' | 'radical' | 'first_year'> & Partial<Pick<Entry, 'import_id' | 'reviewed_at'>>, hasSource: boolean, claims: readonly Claim[] = []) {
   const filters = entry.status ? [`f:${entry.status}`] : []
   if (!entry.cover_key) filters.push('n:image')
   if (!entry.ids) filters.push('n:ids')
   if (!hasSource) filters.push('n:source')
+  if (entry.import_id != null && !entry.reviewed_at) filters.push('n:review')
   const own = new Set<string>()
   for (const claim of claims) {
     if (claim.kind === 'collection') own.add(`c:${claim.value}`)
@@ -332,7 +333,7 @@ const summaryValues = (claims: readonly Claim[], summary: ReturnType<typeof summ
 
 // Brings a record's tags, counts and summary up to date. It answers the statements, to run with the
 // write they belong to.
-async function reindex(db: D1Database, id: number, entry: Entry, claims: readonly Claim[], sightings: SightingState[], prepared?: DateBook) {
+export async function reindex(db: D1Database, id: number, entry: Entry, claims: readonly Claim[], sightings: SightingState[], prepared?: DateBook) {
   const dates = await readDates(db, sightingDates(sightings))
   for (const [text, reading] of prepared ?? []) dates.set(text, reading)
   const summary = summarize(sightings, dates)
@@ -428,7 +429,7 @@ const snapshotOf = <T extends object>(row: T, fields: readonly (keyof T)[]) => O
 const entrySnapshot = (fields: EntryFields) => JSON.stringify({ ...snapshotOf(fields, ENTRY_FIELDS), claims: fields.claims })
 const sightingSnapshot = (row: SightingFields, media: readonly StoredImage[]) => JSON.stringify({ ...snapshotOf(row, SIGHTING_FIELDS), vias: row.vias.map(via => ({ ...snapshotOf(via, CITATION_FIELDS), quote: via.quote ?? null })), media })
 
-type Who = { actor: string; ip: string | null }
+export type Who = { actor: string; ip: string | null }
 function revision(db: D1Database, who: Who, row: { entry: number; sighting?: number | null; kind: string; rev: number; snapshot: string; summary?: string | null }) {
   return db.prepare('INSERT INTO revisions(entry_id, sighting_id, kind, rev, snapshot, summary, actor, at, ip_hash) VALUES(?,?,?,?,?,?,?,?,?)')
     .bind(row.entry, row.sighting ?? null, row.kind, row.rev, row.snapshot, row.summary ?? null, who.actor, now(), who.ip)
@@ -452,11 +453,25 @@ function recount(db: D1Database, entry: number | string, also: (number | null)[]
     .bind(...values, ...values, JSON.stringify(also.filter(id => id !== null)))
 }
 
+// Adjusts one bulk import's live record and pending review counts in O(1) inside the mutating transaction.
+export function adjustImportCounts(db: D1Database, importId: number, totalDelta: number, pendingDelta: number) {
+  return db.prepare('UPDATE imports SET total = MAX(0, total + ?), pending = MAX(0, pending + ?) WHERE id = ?')
+    .bind(totalDelta, pendingDelta, importId)
+}
+
+// Recomputes one bulk import's live counts from its partial indexes (for maintenance/verification).
+export function recountImport(db: D1Database, importId: number) {
+  return db.prepare(`UPDATE imports SET
+    total = (SELECT count(*) FROM entries INDEXED BY entries_by_import WHERE import_id = ?1 AND import_id IS NOT NULL AND merged_into IS NULL AND hidden_at IS NULL),
+    pending = (SELECT count(*) FROM entries INDEXED BY entries_import_pending WHERE import_id = ?1 AND import_id IS NOT NULL AND reviewed_at IS NULL AND merged_into IS NULL AND hidden_at IS NULL)
+    WHERE id = ?1`).bind(importId)
+}
+
 // `more` are further sightings the record starts with. They go in the same batch as the record and its
 // first sighting, so all of them are saved or none is. The sightings have no ids before this write, so a
 // claim of `fields` names the ones that support it by their place among them: 1 is `sighting`, 2 the
 // first of `more`.
-export async function createEntry(db: D1Database, fields: EntryFields, sighting: SightingFields, media: StoredImage[], who: Who, more: SightingDraft[] = []) {
+export async function createEntry(db: D1Database, fields: EntryFields, sighting: SightingFields, media: StoredImage[], who: Who, more: SightingDraft[] = [], importId: number | null = null) {
   return withDateIndex(db, async guard => {
     const at = now()
     const drafts = [{ fields: sighting, media }, ...more]
@@ -465,11 +480,11 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
     const sources = await Promise.all(drafts.map(draft => sourceOf(db, draft.fields, dates.book)))
     const summary = summarize(drafts.map(draft => ({ ...draft.fields, media: draft.media })), dates.book)
     await ensureTags(db, valuesOf(claims, 'tag'), who)
-    const tags = [...new Set(tagsOf({ ...fields, merged_into: null, hidden_at: null } as unknown as Entry, claims, summary))]
+    const tags = [...new Set(tagsOf({ ...fields, import_id: importId, reviewed_at: null, merged_into: null, hidden_at: null } as unknown as Entry, claims, summary))]
     // AUTOINCREMENT sequences are read inside the same transaction as the inserts.
     const results = await db.batch<{ id: number }>([
-      db.prepare(`INSERT INTO entries(${ENTRY_FIELDS.join(', ')}, created_by, created_at, updated_at) VALUES(${ENTRY_FIELDS.map(() => '?').join(', ')}, ?, ?, ?) RETURNING id`)
-        .bind(...ENTRY_FIELDS.map(field => fields[field]), who.actor, at, at),
+      db.prepare(`INSERT INTO entries(${ENTRY_FIELDS.join(', ')}, import_id, created_by, created_at, updated_at) VALUES(${ENTRY_FIELDS.map(() => '?').join(', ')}, ?, ?, ?, ?) RETURNING id`)
+        .bind(...ENTRY_FIELDS.map(field => fields[field]), importId, who.actor, at, at),
       guard,
       ...dates.save,
       insertClaims(db, ENTRY_SEQ, claims),
@@ -491,6 +506,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
       ...tagRows(db, ENTRY_SEQ),
       ...formRows(db, ENTRY_SEQ, formsOf(claims)),
       recount(db, ENTRY_SEQ),
+      ...(importId !== null ? [adjustImportCounts(db, importId, 1, 1)] : []),
       ...dates.reindex,
     ])
     return results[0].results[0].id
@@ -500,8 +516,8 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
 export type EditResult = { ok: true; rev: number } | { ok: false; code: 'missing' | 'conflict' | 'merged' }
 
 const generation = '(SELECT generation FROM date_index_state)'
-const markSql = `SELECT COALESCE(MAX(id), 0) + ${generation} AS mark FROM revisions WHERE entry_id = ?`
-const revisionMark = async (db: D1Database, id: number) => (await db.prepare(markSql).bind(id).first<{ mark: number }>())!.mark
+const markSql = `SELECT COALESCE((SELECT MAX(id) FROM revisions WHERE entry_id = p.id), 0) + ${generation} + COALESCE((SELECT review_rev FROM entries WHERE id = p.id), 0) AS mark FROM (SELECT ? AS id) p`
+export const revisionMark = async (db: D1Database, id: number) => (await db.prepare(markSql).bind(id).first<{ mark: number }>())!.mark
 // Create and refresh have no edited revision to guard. Compare the date index inside their write batch.
 async function withDateIndex<T>(db: D1Database, write: (guard: D1PreparedStatement) => Promise<T>): Promise<T> {
   const current = () => db.prepare('SELECT generation FROM date_index_state').first<{ generation: number }>()
@@ -516,8 +532,8 @@ async function withDateIndex<T>(db: D1Database, write: (guard: D1PreparedStateme
 }
 // A row of an unknown kind breaks the journal's CHECK, which undoes the whole batch.
 const abort = "'conflict', 0, '{}'"
-const checkMark = (db: D1Database, id: number, mark: number, who: Who) => db.prepare(`INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) SELECT ?, ${abort}, ?, ? WHERE (${markSql}) != ?`).bind(id, who.actor, now(), id, mark)
-const checkChanged = (db: D1Database, id: number, who: Who) => db.prepare(`INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) SELECT ?, ${abort}, ?, ? WHERE changes() = 0`).bind(id, who.actor, now())
+export const checkMark = (db: D1Database, id: number, mark: number, who: Who) => db.prepare(`INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) SELECT ?, ${abort}, ?, ? WHERE (${markSql}) != ?`).bind(id, who.actor, now(), id, mark)
+export const checkChanged = (db: D1Database, id: number, who: Who) => db.prepare(`INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) SELECT ?, ${abort}, ?, ? WHERE changes() = 0`).bind(id, who.actor, now())
 
 // A redaction writes to the journal, so one made after the mark is read stops the batch; this catches
 // one made before it. `from` is the revision a restore copies.
@@ -761,6 +777,7 @@ export async function mergeEntry(db: D1Database, from: number, into: number, who
         insertClaims(db, into, joined.claims),
         revision(db, who, { entry: from, kind: 'merge', rev: source.rev, snapshot: JSON.stringify({ into }), summary }),
         revision(db, who, { entry: into, kind: 'merge', rev, snapshot: JSON.stringify({ ...JSON.parse(entrySnapshot(fields)), from, added: joined.added, scoped: joined.scoped, filled }), summary }),
+        ...(source.import_id !== null ? [adjustImportCounts(db, source.import_id, -1, source.reviewed_at ? 0 : -1)] : []),
       ])
     } catch (error) {
       if (attempt < 4 && ((await revisionMark(db, from)) !== marks[0] || (await revisionMark(db, into)) !== marks[1])) continue
@@ -821,6 +838,7 @@ export async function unmergeEntry(db: D1Database, id: number, who: Who) {
         insertClaims(db, into, claims),
         revision(db, who, { entry: id, kind: 'unmerge', rev: entry.rev, snapshot: JSON.stringify({ into }) }),
         revision(db, who, { entry: into, kind: 'unmerge', rev, snapshot: JSON.stringify({ ...JSON.parse(entrySnapshot(fields)), from: id }) }),
+        ...(entry.import_id !== null ? [adjustImportCounts(db, entry.import_id, 1, entry.reviewed_at ? 0 : 1)] : []),
       ])
     } catch (error) {
       if (attempt < 4 && ((await revisionMark(db, id)) !== marks[0] || (await revisionMark(db, into)) !== marks[1])) continue
@@ -880,7 +898,7 @@ async function relocate(db: D1Database, from: number, id: number, baseRev: numbe
     const into = typeof to === 'number' ? to : await nextEntry(db)
     const marks = [await revisionMark(db, from), await revisionMark(db, into)]
     const source = await getEntryRow(db, from)
-    const target = made ? { ...snapshotOf(made, ENTRY_FIELDS), id: into, rev: 0, merged_into: null, hidden_at: null } as unknown as Entry : await getEntryRow(db, into)
+    const target = made ? { ...snapshotOf(made, ENTRY_FIELDS), id: into, rev: 0, import_id: null, reviewed_at: null, reviewed_by: null, review_rev: 0, merged_into: null, hidden_at: null } as unknown as Entry : await getEntryRow(db, into)
     if (!source || source.hidden_at || !target || target.hidden_at) return 'missing'
     if (source.merged_into || target.merged_into) return 'merged'
     const [leaving, staying] = [await sightingRows(db, from), made ? [] : await sightingRows(db, into)]
@@ -969,6 +987,9 @@ async function setVisible<R>(db: D1Database, target: { entry: number; sighting?:
         revision(db, who, { entry: target.entry, sighting: target.sighting, kind: hidden ? 'hide' : 'unhide', rev: 0, snapshot: removed ? '{"removed":true}' : '{}', summary }),
         ...index,
         recount(db, target.entry),
+        ...(!sighting && entry.import_id !== null && !entry.merged_into && Boolean(entry.hidden_at) !== hidden
+          ? [adjustImportCounts(db, entry.import_id, hidden ? -1 : 1, entry.reviewed_at ? 0 : (hidden ? -1 : 1))]
+          : []),
       ])
       return 'done'
     } catch (error) {
@@ -1062,7 +1083,7 @@ const VIAS_OF_ENTRY = `SELECT ${VIA_COLUMNS} FROM sightings s JOIN sighting_vias
 const MEDIA_OF_ENTRY = `SELECT x.sighting_id, ${IMAGE_FIELDS.map(field => `x.${field}`).join(', ')} FROM sightings s JOIN sighting_media x ON x.sighting_id = s.id WHERE s.entry_id = ? ORDER BY x.sighting_id, x.position`
 
 // A record's sightings, each with its citation and pictures.
-async function sightingRows(db: D1Database, id: number, who = false) {
+export async function sightingRows(db: D1Database, id: number, who = false) {
   const [rows, media, vias] = await db.batch<unknown>([
     db.prepare(`SELECT s.*, ${CITATION_COLUMNS}${who ? `, ${WHO_COLUMNS}` : ''} FROM sightings s ${CITATION} ${who ? WHO('s.created_by') : ''} WHERE s.entry_id = ? ORDER BY s.id LIMIT ${SIGHTINGS_MAX}`).bind(id),
     db.prepare(MEDIA_OF_ENTRY).bind(id),
@@ -1074,7 +1095,7 @@ async function sightingRows(db: D1Database, id: number, who = false) {
 const sightingRow = (db: D1Database, id: number) => db.prepare('SELECT id, entry_id, rev, hidden_at FROM sightings WHERE id = ?').bind(id).first<Pick<Sighting, 'id' | 'entry_id' | 'rev' | 'hidden_at'>>()
 
 export async function getEntry(db: D1Database, id: number) {
-  const entry = await db.prepare(`SELECT e.*, ${WHO_COLUMNS} FROM entries e ${WHO('e.created_by')} WHERE e.id = ?`).bind(id).first<Entry & { by_id: string; by_name: string }>()
+  const entry = await db.prepare(`SELECT e.*, ${WHO_COLUMNS}, i.name AS import_name, COALESCE(rm.id, rp.id) AS reviewed_by_id, COALESCE(rm.name, rp.name) AS reviewed_by_name FROM entries e ${WHO('e.created_by')} LEFT JOIN imports i ON i.id = e.import_id LEFT JOIN people rp ON rp.id = e.reviewed_by LEFT JOIN people rm ON rm.id = rp.merged_into WHERE e.id = ?`).bind(id).first<Entry & { by_id: string; by_name: string; import_name: string | null; reviewed_by_id: string | null; reviewed_by_name: string | null }>()
   if (!entry) return null
   return { entry, claims: await claimRows(db, id), sightings: await sightingRows(db, id, true) }
 }
@@ -1212,7 +1233,7 @@ function listRead(plan: Plan, range = plan.keys[0] ?? 'all') {
   return { tag: range, tests, values: [...words.values, ...keys], searching: plan.exact !== null || tests.length > 0 }
 }
 
-export const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind, e.marks'
+export const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind, e.marks, e.import_id, e.reviewed_at'
 
 // Where each order reads its range, and the place a cursor names in it: the record alone for the orders
 // by record, the count and the record for the orders by count. Null names a cursor that is not one.
@@ -1271,9 +1292,9 @@ export function listStatement(db: D1Database, listing: Listing, range?: string, 
     .bind(...(plan.exact ?? []), ...read.values, read.tag, ...(ranks ?? cursor), (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1 - taken)
 }
 
-export type TileRow = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind' | 'marks'>
-export type Tile = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status'> & { types: SightingType[]; firstYear: string | null; firstYearKind: YearKind | null; marks: string[] }
-export const toTile = ({ types, first_year, first_year_kind, marks, ...row }: TileRow): Tile => ({ ...row, types: parseSightingTypes(types), firstYear: first_year, firstYearKind: first_year_kind, marks: parseMarks(marks) })
+export type TileRow = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind' | 'marks' | 'import_id' | 'reviewed_at'>
+export type Tile = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status'> & { types: SightingType[]; firstYear: string | null; firstYearKind: YearKind | null; marks: string[]; awaitingReview: boolean }
+export const toTile = ({ types, first_year, first_year_kind, marks, import_id, reviewed_at, ...row }: TileRow): Tile => ({ ...row, types: parseSightingTypes(types), firstYear: first_year, firstYearKind: first_year_kind, marks: parseMarks(marks), awaitingReview: import_id !== null && reviewed_at === null })
 
 export async function list(db: D1Database, listing: Listing) {
   const plan = listPlan(listing)

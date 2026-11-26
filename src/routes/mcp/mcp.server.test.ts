@@ -322,3 +322,26 @@ test('a banned name cannot write through its connection', async () => {
   expect(asked).toEqual([])
   expect(count('entries')).toBe(1)
 })
+
+test('add_record with import_name attaches records to a named import awaiting review', async () => {
+  const { call, raw, count } = fixture()
+  const first = await call('add_record', { ids: ['⿰山東'], sightings: [sighting], import_name: 'WS2026 list' })
+  const second = await call('add_record', { ids: ['⿰山西'], sightings: [sighting], import_name: 'WS2026 list' })
+  expect(first.failed).toBe(false)
+  expect(second.failed).toBe(false)
+  expect(count('imports')).toBe(1)
+  expect(raw.query('SELECT name, total, pending FROM imports WHERE id = 1').get()).toEqual({ name: 'WS2026 list', total: 2, pending: 2 })
+  expect(raw.query('SELECT id, import_id, reviewed_at FROM entries ORDER BY id').all()).toEqual([
+    { id: 1, import_id: 1, reviewed_at: null },
+    { id: 2, import_id: 1, reviewed_at: null },
+  ])
+  expect(raw.query("SELECT n FROM tag_counts WHERE tag = 'n:review'").get()).toEqual({ n: 2 })
+  expect((await call('get_record', { record: 1 })).value).toMatchObject({
+    id: 1,
+    import: { id: 1, name: 'WS2026 list' },
+    awaiting_review: true,
+  })
+  const tooLong = await call('add_record', { ids: ['⿰山南'], sightings: [sighting], import_name: 'a'.repeat(201) })
+  expect(tooLong.failed).toBe(true)
+  expect(tooLong.value).toContain('import_name')
+})

@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit'
 import { BATCH_ROWS_MAX } from '$lib/limits'
 import { createEntry, hasLink, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
+import { cleanImportName, findOrCreateImport } from '$lib/server/imports'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
 import { uploadedImages } from '../../_submission.server'
@@ -22,11 +23,13 @@ export const actions: Actions = {
     const form = await event.request.formData()
     // A batch names no category, so no list of them is read.
     const { fields: base } = readEntryFields(form, []), shared = readSightingFields(form)
+    const rawImportName = String(form.get('import_name') ?? '')
+    const importName = cleanImportName(rawImportName)
     const ids = form.getAll('ids').map(String), notes = form.getAll('row_note').map(String)
     const files = form.getAll('image'), thumbs = form.getAll('thumb'), boxes = form.getAll('box')
     const count = Math.max(ids.length, notes.length, files.length)
     const typed = Array.from({ length: Math.min(count, BATCH_ROWS_MAX) }, (_, i) => ({ ids: ids[i] ?? '', note: notes[i] ?? '' }))
-    const values = { script: base.script, script_other: base.script_other, ...shared, rows: typed }
+    const values = { script: base.script, script_other: base.script_other, import_name: rawImportName, ...shared, rows: typed }
     if (count > BATCH_ROWS_MAX) return reject(400, 'batchTooMany', values)
     // A row with nothing in it is skipped, so a spare row costs nothing.
     const chosen = typed.map((row, index) => ({ ...row, index, picture: filled(files[index]) })).filter(row => row.ids.trim() || row.note.trim() || row.picture)
@@ -60,14 +63,15 @@ export const actions: Actions = {
 
     const person = await writer(event, DB)
     const who = { actor: person.id, ip: await ipHash(event) }
+    const batchImport = importName ? await findOrCreateImport(DB, importName, who) : null
     let first = 0
     const created: number[] = []
     for (const [i, row] of rows.entries()) {
-      const id = await createEntry(DB, row.fields, { ...shared, note: row.note.trim() || shared.note }, pictures[i], who)
+      const id = await createEntry(DB, row.fields, { ...shared, note: row.note.trim() || shared.note }, pictures[i], who, [], batchImport?.id ?? null)
       first ||= id
       created.push(id)
     }
     notifyIndexNow(event, { entries: created })
-    redirect(303, `/${event.params.locale}/entry/${first}`)
+    redirect(303, batchImport ? `/${event.params.locale}/imports/${batchImport.id}` : `/${event.params.locale}/entry/${first}`)
   },
 }

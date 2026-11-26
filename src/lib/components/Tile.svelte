@@ -21,8 +21,9 @@
     {:else}<span class="blank"><span class="small">{t('browse.noImage')}</span></span>{/if}
   </span>
   <span class="ids-line">{tile.ids ?? ''}</span>
-  {#if tile.types.length || tile.status}
+  {#if tile.awaitingReview || tile.types.length || tile.status}
     <span class="tags">
+      {#if tile.awaitingReview}<span class="tag state review">{t('review.awaiting')}</span>{/if}
       {#if tile.status}<span class="tag state {tile.status}">{t(`browse.${tile.status}`)}</span>{/if}
       {#each shown as type}<span class="tag">{label(type)}</span>{/each}
       {#if hidden > 0}<span class="tag" title={tile.types.map(label).join(' · ')}>+{hidden}</span>{/if}
@@ -48,6 +49,7 @@
   .tag { max-width: 100%; padding: 0 5px; border-radius: 4px; background: var(--surface-sunken); font-size: 10.5px; line-height: 1.6; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
   .tag.state { flex: none; background: var(--surface-selected); color: var(--ink); font-weight: 550 }
   .tag.work { flex: none; background: var(--good-light); color: var(--good) }
+  .tag.review { background: var(--uncertain-badge); color: var(--uncertain-ink) }
   .tag.unifiable { background: var(--accent-light); color: var(--accent) }
   .meta { display: flex; align-items: baseline; gap: 5px; min-width: 0; min-height: 18px; font-size: 12px; color: var(--muted) }
   .meta time { flex: none; font-variant-numeric: tabular-nums }

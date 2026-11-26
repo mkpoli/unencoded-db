@@ -192,10 +192,27 @@
 <Seo data={structured} title={seoTitle} description={seoDescription} image={href(`/entry/${entry.id}/card.png?v=${encodeURIComponent(entry.updated_at)}`)} imageAlt={seoTitle} />
 <div class="page narrow stack">
   <div class="row"><a class="text-link back" href={backHref} onclick={returnToBrowse}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href="#discussion">{t('discussion.title')}{#if shownComments} <span class="count">{shownComments}</span>{/if}</a><a class="text-link" href={href(`/entry/${entry.id}/duplicate`)}>{t('entry.duplicate')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
-  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: yearName(Number(data.earliest.year), true) })}</a>{/if}</div></div><div class="row"><ShareRecord id={entry.id} /><FavouriteButton id={entry.id} initial={data.favourites.includes(entry.id)} onerror={message => favError = message} /></div></div>
+  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if entry.import_id !== null && entry.reviewed_at === null}<span class="badge review">{t('review.awaiting')}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: yearName(Number(data.earliest.year), true) })}</a>{/if}</div></div><div class="row"><ShareRecord id={entry.id} /><FavouriteButton id={entry.id} initial={data.favourites.includes(entry.id)} onerror={message => favError = message} /></div></div>
   {#if favError}<p class="notice bad" role="alert">{favError}</p>{/if}
   {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
   {#if entry.merged_into}<p class="notice quiet"><a class="text-link" href={href(`/entry/${entry.merged_into}`)}>{t('entry.mergedInto', { id: recordCode(entry.merged_into) })}</a></p>{/if}
+  {#if entry.import_id !== null && entry.import_name}
+    <div class="import-bar" class:pending={entry.reviewed_at === null}>
+      <div class="import-info">
+        <span class="import-label">{t('imports.from')}</span>
+        <a class="text-link" href={href(`/imports/${entry.import_id}`)}>{entry.import_name}</a>
+        {#if entry.reviewed_at}
+          <span class="badge reviewed">{t('review.reviewed')}</span>
+        {:else}
+          <span class="badge review">{t('review.awaiting')}</span>
+        {/if}
+      </div>
+      <form method="POST" action="?/review">
+        <input type="hidden" name="reviewed" value={entry.reviewed_at ? '0' : '1'} />
+        <button class="button small" class:primary={!entry.reviewed_at} type="submit">{t(entry.reviewed_at ? 'review.unmark' : 'review.markReviewed')}</button>
+      </form>
+    </div>
+  {/if}
   <section class="panel stack">
     <div class="head"><h2>{t('entry.about')}</h2><a class="button small" href="#edit-ids" data-edit="ids">{t('entry.edit')}</a></div>
     {#if sequences.length}
@@ -394,4 +411,11 @@
   .first-seen { align-self:center; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; text-decoration:underline; text-decoration-color:var(--line-strong); text-underline-offset:3px }
   .first-seen:hover { color:var(--ink) }
   .badge.earliest { background:var(--accent-light); color:var(--accent) }
+  .badge.review { background:var(--uncertain-badge); color:var(--uncertain-ink) }
+  .badge.reviewed { background:var(--good-light); color:var(--good) }
+  .import-bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 16px; padding:11px 14px; border:1px solid var(--line); border-radius:8px; background:var(--surface-sunken) }
+  .import-bar.pending { border-color:color-mix(in srgb, var(--uncertain-ink) 30%, var(--line)); background:var(--uncertain-badge) }
+  .import-info { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; min-width:0 }
+  .import-label { color:var(--muted); font-size:12.5px }
+  .import-bar.pending .import-label { color:var(--uncertain-ink) }
 </style>
