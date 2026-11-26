@@ -1,12 +1,13 @@
 export const MCP_SERVER_NAME = 'rare'
 export const MCP_ENDPOINT_PATH = '/mcp'
 
-export const MCP_CLIENT_IDS = ['claude-code', 'codex', 'gemini', 'cursor', 'vscode', 'claude', 'chatgpt', 'json'] as const
+export const MCP_CLIENT_IDS = ['claude-code', 'codex', 'antigravity', 'cursor', 'vscode', 'claude', 'chatgpt', 'json'] as const
 export type McpClientId = (typeof MCP_CLIENT_IDS)[number]
 
 export const CODEX_LOGIN_COMMAND = `codex mcp login ${MCP_SERVER_NAME}`
-export const GEMINI_AUTH_COMMAND = `/mcp auth ${MCP_SERVER_NAME}`
 export const CLAUDE_CODE_AUTH_PATH = `/mcp → ${MCP_SERVER_NAME} → Authenticate`
+// Antigravity CLI signs in to an MCP server from its /mcp panel.
+export const ANTIGRAVITY_AUTH_PATH = '/mcp'
 
 export const CLAUDE_CONNECTOR_DOCS = 'https://support.claude.com/en/articles/11176164-use-connectors-to-extend-claude-s-capabilities'
 export const CHATGPT_MCP_DOCS = 'https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt'
@@ -19,8 +20,8 @@ export const claudeCodeCommand = (endpoint: string) =>
 export const codexCommand = (endpoint: string) =>
   `codex mcp add ${MCP_SERVER_NAME} --url ${endpoint}`
 
-export const geminiCommand = (endpoint: string) =>
-  `gemini mcp add --scope user --transport http ${MCP_SERVER_NAME} ${endpoint}`
+export const antigravityCommand = (endpoint: string) =>
+  `agy mcp add ${MCP_SERVER_NAME} ${endpoint}`
 
 export function cursorInstallUrl(endpoint: string) {
   const encoded = btoa(JSON.stringify({ url: endpoint }))

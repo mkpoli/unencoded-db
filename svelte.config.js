@@ -6,5 +6,5 @@ export default {
   compilerOptions: { runes: true },
   // The origin of a form post is checked in `src/hooks.server.ts`, which lets the OAuth token endpoints through:
   // a client posts a form to them from outside any browser.
-  kit: { adapter: adapter(), version: { pollInterval: 5 * 60 * 1000 }, csrf: { trustedOrigins: ['*'] } },
+  kit: { adapter: adapter({ config: 'site.wrangler.jsonc', platformProxy: { configPath: 'wrangler.jsonc' } }), version: { pollInterval: 5 * 60 * 1000 }, csrf: { trustedOrigins: ['*'] } },
 }

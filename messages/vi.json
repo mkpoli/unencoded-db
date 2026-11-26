@@ -714,7 +714,7 @@
   "tags.groupChange.name": "Đã đặt tên nhóm",
   "footer.mcp": "MCP",
   "mcp.title": "Máy chủ MCP",
-  "mcp.intro": "Tra cứu mục từ và thêm chữ hay bằng chứng từ tác nhân qua Model Context Protocol.",
+  "mcp.intro": "Tra cứu mục từ, thêm và sửa chữ hay bằng chứng từ tác nhân qua Model Context Protocol.",
   "mcp.setupLink": "Kết nối tác nhân",
   "mcp.endpoint": "Điểm cuối",
   "mcp.transport": "Giao thức truyền",

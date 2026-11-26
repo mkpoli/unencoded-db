@@ -714,7 +714,7 @@
   "tags.groupChange.name": "設定中分類名稱",
   "footer.mcp": "MCP",
   "mcp.title": "MCP伺服器",
-  "mcp.intro": "透過Model Context Protocol，從代理程式搜尋記錄，或新增字與證據。",
+  "mcp.intro": "透過Model Context Protocol，從代理程式搜尋記錄，新增或修改字與證據。",
   "mcp.setupLink": "連結代理程式",
   "mcp.endpoint": "端點",
   "mcp.transport": "傳輸協定",

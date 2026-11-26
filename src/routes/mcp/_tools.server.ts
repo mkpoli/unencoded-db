@@ -20,6 +20,7 @@ import { candidates } from '$lib/server/candidates'
 import { tagList } from '$lib/server/tags'
 import { addSighting, CITATION_FIELDS, citesEvidence, createEntry, editEntry, editSighting, getEntry, heldPictures, list, mediaVisible, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, type StoredImage, type ViaPicture } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
+import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { MAX_WRITE_BODY } from '$lib/server/body-limit'
 import { MAX_IMAGE, prepareImage } from '$lib/server/image'
@@ -327,6 +328,7 @@ async function addRecord(event: RequestEvent, input: Json) {
   const person = await agentWriter(event, DB)
   const id = await createEntry(DB, entry, drafts[0].fields, drafts[0].media, { actor: person.id, ip: await ipHash(event) }, drafts.slice(1))
   notifyIndexNow(event, { entries: [id] })
+  scheduleAtlasSync(event, [id])
   return shown(event, id)
 }
 
@@ -371,6 +373,7 @@ async function editRecordOf(event: RequestEvent, input: Json) {
   const result = await editEntry(DB, id, rev, fields, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
   if (!result.ok) throw result.code === 'conflict' ? changed((await getEntry(DB, id))?.entry.rev ?? rev) : new Refusal(said(result.code))
   notifyIndexNow(event, { entries: [id] })
+  scheduleAtlasSync(event, [id], { onlyIfChanged: true })
   return { record: shown(event, id), rev: result.rev }
 }
 
@@ -535,7 +538,7 @@ function recordFields(evidence: Json, key?: Json) {
   const own = key ? { key } : {}
   return {
     script: { type: 'string', description: `The script: one of ${SCRIPTS.map(script => script.id).filter(id => id !== 'other').join(', ')}, or another script's name. Han when left out.` },
-    ids: { type: 'array', minItems: 1, items: { type: 'string' }, description: 'Ideographic description sequences of the form as the picture shows it. The first one draws the glyph; the others are further ways to describe the same form.' },
+    ids: { type: 'array', minItems: 1, items: { type: 'string' }, description: 'Ideographic description sequences of the form as the picture shows it. The first one draws the glyph; the others are further ways to describe the same form. Leave it out when the form cannot be described: the record then shows its picture.' },
     description: { type: 'string', description: 'What is notable about the form, in prose.' },
     radical: { type: 'string', description: 'The radical, when the source states one.' },
     strokes: { type: 'integer', minimum: 0, description: 'Total strokes.' },
@@ -596,8 +599,8 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'add_record', title: 'Add a character', annotations: ADDS, run: addRecord,
-    description: `Add a record for a form no record shows yet, with the sightings it starts from. ${SIGHTING_RULE} Answers the new record's id, code and page.`,
-    inputSchema: { type: 'object', required: ['ids', 'sightings'], properties: {
+    description: `Add a record for a form no record shows yet, with the sightings it starts from. A form that cannot be described is added without ids and with a picture. ${SIGHTING_RULE} Answers the new record's id, code and page.`,
+    inputSchema: { type: 'object', required: ['sightings'], properties: {
       ...recordFields({ type: 'array', items: { type: 'integer', minimum: 1 }, description: 'The sightings that support this, by their place in `sightings`, from 1.' }),
       sightings: { type: 'array', minItems: 1, maxItems: ADD_SIGHTINGS_MAX, items: { type: 'object', properties: SIGHTING } },
     } },

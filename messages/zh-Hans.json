@@ -714,7 +714,7 @@
   "tags.groupChange.name": "设置中分类名称",
   "footer.mcp": "MCP",
   "mcp.title": "MCP服务器",
-  "mcp.intro": "通过Model Context Protocol，从智能体搜索记录，或添加字与证据。",
+  "mcp.intro": "通过Model Context Protocol，从智能体搜索记录，添加或修改字与证据。",
   "mcp.setupLink": "连接智能体",
   "mcp.endpoint": "端点",
   "mcp.transport": "传输协议",
