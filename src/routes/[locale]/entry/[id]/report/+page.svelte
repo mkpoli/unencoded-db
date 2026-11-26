@@ -1,5 +1,6 @@
 <script lang="ts">
   import Seo from '$lib/components/Seo.svelte'
+  import RecordPicker from '$lib/components/RecordPicker.svelte'
   import { href, t } from '$lib/t'
   let { data, form } = $props()
 </script>
@@ -13,8 +14,7 @@
   {:else}
     <h2>{t('duplicate.title')}</h2>
     <form method="POST" action={`${href(`/entry/${data.target.entry}/duplicate`)}?/merge`} class="row find">
-      <label class="sr-only" for="of">{t('duplicate.of')}</label>
-      <input class="input" id="of" name="of" placeholder={t('duplicate.of')} required />
+      <RecordPicker id="of" name="of" exclude={data.target.entry} label={t('duplicate.of')} placeholder={t('duplicate.of')} />
       <button class="button primary" type="submit">{t('duplicate.merge')}</button>
     </form>
     <p class="muted">{t('report.hint')}</p>
@@ -31,5 +31,4 @@
 <style>
   .back { align-self: start; color: var(--muted) }
   h2 { font-size: 16px; font-weight: 600 }
-  .find .input { flex: 1 1 0; width: auto; min-width: 0 }
 </style>
