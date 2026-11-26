@@ -339,6 +339,8 @@
   "ready.rules": "Quy định của IRG",
   "edit.title": "Sửa mục từ {id}",
   "edit.identity": "Chữ",
+  "duplicates.title": "Mục từ có thể trùng lặp",
+  "duplicates.empty": "Không có mục từ nào có thể trùng lặp.",
   "duplicate.title": "Trùng với mục từ khác",
   "duplicate.compare": "So sánh",
   "duplicate.other": "Mục từ khác",

@@ -339,6 +339,8 @@
   "ready.rules": "IRG规则",
   "edit.title": "编辑记录{id}",
   "edit.identity": "字",
+  "duplicates.title": "可能重复的记录",
+  "duplicates.empty": "没有可能重复的记录。",
   "duplicate.title": "与另一条记录重复",
   "duplicate.compare": "比较",
   "duplicate.other": "另一条记录",

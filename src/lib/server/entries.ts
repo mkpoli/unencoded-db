@@ -22,6 +22,7 @@ import { groupMates } from '$lib/similar'
 import { PART_RUN_MAX, PART_SPELLINGS_MAX } from '$lib/ids-variants'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
+import { formsOf } from '$lib/forms'
 import { compareDays, dateText, decadeOf, decadeStart, isDecade } from '$lib/dates'
 import { datedYear, prepareDates, readDates, sightingDates, type DateBook } from './date-readings'
 import { hashHex } from './image'
@@ -313,6 +314,14 @@ function tagRows(db: D1Database, owner: number | string) {
 }
 // Word and part rows are looked up by key and are no list of their own: they keep no count, year or tag count.
 const facet = (tag: string) => !/^[wp]:/.test(tag)
+/** The forms of a record, brought to `forms`; triggers keep the count of each. `owner` is as for `owned`. */
+function formRows(db: D1Database, owner: number | string, forms: readonly string[]) {
+  const { sql, values } = owned(owner)
+  return [
+    db.prepare(`DELETE FROM forms WHERE entry_id = ${sql} AND form NOT IN (SELECT value FROM json_each(?))`).bind(...values, JSON.stringify(forms)),
+    db.prepare(`INSERT INTO forms(form, entry_id) SELECT value, ${sql} FROM json_each(?) WHERE NOT EXISTS (SELECT 1 FROM forms WHERE form = value AND entry_id = ${sql})`).bind(...values, JSON.stringify(forms), ...values),
+  ]
+}
 const SIGHTING_SEQ = "(SELECT seq FROM sqlite_sequence WHERE name = 'sightings')"
 // A summary names the sighting that holds the record's year by its id (1), or, for one the same write
 // inserts, by how many inserted sightings follow it (2).
@@ -339,6 +348,7 @@ async function reindex(db: D1Database, id: number, entry: Entry, claims: readonl
     db.prepare('UPDATE tag_counts SET n = n - 1 WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(gone.filter(facet))),
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(added.filter(facet))),
     ...tagRows(db, id),
+    ...formRows(db, id, live ? formsOf(claims) : []),
   ]
 }
 
@@ -477,6 +487,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
       db.prepare(`INSERT INTO entry_tags(tag, entry_id, sightings, year) SELECT value, ${ENTRY_SEQ}, CASE WHEN value GLOB '[wp]:*' THEN 0 ELSE ? END, CASE WHEN value GLOB '[wp]:*' THEN NULL ELSE ? END FROM json_each(?)`).bind(summary.visible.length, yearOf(summary.first_year), JSON.stringify(tags)),
       db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),
       ...tagRows(db, ENTRY_SEQ),
+      ...formRows(db, ENTRY_SEQ, formsOf(claims)),
       recount(db, ENTRY_SEQ),
       ...dates.reindex,
     ])

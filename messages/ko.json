@@ -339,6 +339,8 @@
   "ready.rules": "IRG 규정",
   "edit.title": "기록 {id} 편집",
   "edit.identity": "문자",
+  "duplicates.title": "중복 가능성이 있는 기록",
+  "duplicates.empty": "중복 가능성이 있는 기록이 없습니다.",
   "duplicate.title": "다른 기록과 중복",
   "duplicate.compare": "비교",
   "duplicate.other": "다른 기록",
