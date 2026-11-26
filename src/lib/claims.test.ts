@@ -484,6 +484,11 @@ describe('creators', () => {
       .toEqual({ claims: [claim('creator', '陸貫一', null, { sightings: [7] }), claim('creator', 'Lu Guanyi')] })
   })
 
+  test('two spellings of one name are one claim that rests on the evidence of both', () => {
+    expect(read([['creator', 'Ａlice'], ['creator_key', 'aaaaaaa1'], ['sightings.aaaaaaa1', '1'], ['creator', 'Alice'], ['creator_key', 'aaaaaaa2'], ['sightings.aaaaaaa2', '2']]))
+      .toEqual({ claims: [claim('creator', 'Ａlice', null, { sightings: [1, 2] })] })
+  })
+
   test('a name with a bar, or more names than a record holds, is refused', () => {
     expect(read([['creator', '陸|貫一']])).toEqual({ error: 'creators' })
     expect(read(Array.from({ length: CLAIM_LIMITS.creator.max + 1 }, (_, index): [string, string] => ['creator', `甲${index}`]))).toEqual({ error: 'creators' })

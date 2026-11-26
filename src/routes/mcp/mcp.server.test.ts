@@ -424,3 +424,14 @@ test('an edit matches rows as the claims store them, and keeps the one of two eq
   expect((await call('edit_sighting', { record: 1, sighting: read.sightings[0].id, rev: 1, pictures: [{ url: second.url, marks: second.marks }] })).failed).toBe(false)
   expect((await call('get_record', { record: 1 })).value.sightings[0].pictures.map((picture: { marks: number[][] }) => picture.marks)).toEqual([[[2, 2, 5, 5]]])
 })
+
+test('a creator named again without a key keeps its claim and evidence, whatever its spacing', async () => {
+  const { call } = fixture()
+  pictures()
+  await call('add_record', { ids: ['⿻十〇'], creators: [{ name: 'Lu  Guanyi', evidence: [1] }], sightings: [sighting] })
+  const before = (await call('get_record', { record: 1 })).value.claims.find((claim: { kind: string }) => claim.kind === 'creator')
+  expect(before).toMatchObject({ value: 'Lu Guanyi', evidence: [1] })
+  await call('edit_record', { record: 1, rev: 1, creators: ['Lu  Guanyi'], summary: 'Same maker.' })
+  const after = (await call('get_record', { record: 1 })).value.claims.find((claim: { kind: string }) => claim.kind === 'creator')
+  expect(after).toEqual(before)
+})

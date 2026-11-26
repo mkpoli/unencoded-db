@@ -234,7 +234,7 @@ function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) 
   const same = (value: unknown) => text(value).normalize('NFC').trim()
   const repeats = (kind: ClaimKind, row: Json) => (claim: Claim) => claim.kind === kind && !taken.has(claim.key) && (
     kind === 'relation' ? claim.value === same(row.character) && claim.data?.relationship === same(row.relationship)
-    : claim.value === same(kind === 'creator' ? row.name : row.text) && (kind !== 'reading' || (claim.data?.doculect ?? '') === same(row.doculect)))
+    : claim.value === (kind === 'creator' ? same(row.name).replace(/\s+/gu, ' ') : same(row.text)) && (kind !== 'reading' || (claim.data?.doculect ?? '') === same(row.doculect)))
   const rows = (value: unknown, field: string, kind: ClaimKind) => items(value).map(row => typeof row === 'string' ? { [field]: row } : record(row)).map(row => {
     const named = held.get(text(row.key))
     const kept = named?.kind === kind && !taken.has(named.key) ? named : row.key === undefined ? current.find(repeats(kind, row)) : undefined

@@ -441,7 +441,15 @@ export function readClaims(form: FormData, tags: readonly Pick<Tag, 'name' | 'la
       if (!value) continue
       if (!validCreator(value)) { bad = true; break }
       const repeated = seen.get(creatorKey(value))
-      if (repeated) { if (isClaimKey(given)) repeats.set(given, repeated); continue }
+      if (repeated) {
+        // A name written twice is one claim, which rests on what either row rests on.
+        if (isClaimKey(given)) {
+          repeats.set(given, repeated)
+          const kept = out.find(claim => claim.key === repeated)!
+          kept.sightings = [...new Set([...kept.sightings, ...(linksOf(given).sightings ?? [])])].sort((a, b) => a - b)
+        }
+        continue
+      }
       const claim = made('creator', value, null, given)
       seen.set(creatorKey(value), claim.key)
       out.push(claim)
