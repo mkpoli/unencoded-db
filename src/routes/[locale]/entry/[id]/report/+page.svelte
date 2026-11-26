@@ -11,6 +11,12 @@
   {#if form?.sent}
     <p role="status">{t('report.sent')}</p>
   {:else}
+    <h2>{t('duplicate.title')}</h2>
+    <form method="POST" action={href(`/entry/${data.target.entry}/duplicate`)} class="row find">
+      <label class="sr-only" for="of">{t('duplicate.of')}</label>
+      <input class="input" id="of" name="of" placeholder={t('duplicate.of')} required />
+      <button class="button primary" type="submit">{t('duplicate.merge')}</button>
+    </form>
     <p class="muted">{t('report.hint')}</p>
     {#if form?.error}<p class="notice bad" role="alert">{t(`error.${form.error}`)}</p>{/if}
     <form method="POST" class="stack">
@@ -24,4 +30,6 @@
 </div>
 <style>
   .back { align-self: start; color: var(--muted) }
+  h2 { font-size: 16px; font-weight: 600 }
+  .find .input { flex: 1 1 0; width: auto; min-width: 0 }
 </style>

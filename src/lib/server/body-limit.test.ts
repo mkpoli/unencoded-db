@@ -159,7 +159,7 @@ describe('write body limit', () => {
       ['/[locale]/entry/[id]', '?/edit', 'EDITS'], ['/[locale]/entry/[id]', '?/comment', 'EDITS'], ['/[locale]/entry/[id]', '?/hideComment', 'EDITS'], ['/[locale]/entry/[id]', '?/unhideComment', 'EDITS'], ['/[locale]/me', '', 'EDITS'], ['/[locale]/notifications', '', 'EDITS'], ['/api/tags', '', 'EDITS'],
       ['/[locale]/entry/[id]/report', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/edit', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/remove', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/move', '', 'EDITS'],
       ['/[locale]/entry/[id]/history', '?/restore', 'EDITS'],
-      ['/[locale]/entry/[id]/history', '?/thank', 'EDITS'], ['/[locale]/entry/[id]/history', '?/putBack', 'EDITS'],
+      ['/[locale]/entry/[id]/history', '?/thank', 'EDITS'], ['/[locale]/u/[id]', '?/merge', 'EDITS'], ['/[locale]/entry/[id]/history', '?/putBack', 'EDITS'],
       ...['restoreEntry', 'restoreSighting', 'hide', 'unhide', 'resolve'].map(action => ['/[locale]/moderate', `?/${action}`, 'EDITS'] as [string, string, 'ADDS' | 'EDITS']),
     ]
     for (const [id, search, expected] of routes) {
@@ -177,6 +177,10 @@ describe('write body limit', () => {
     expect((await runHook(request('entry/1?/hideComment'), async () => new Response('ok'), options('moderator'))).status).toBe(200)
     await expect(runHook(request('entry/1?/hideComment'), async () => new Response('ok'), options('member'))).rejects.toMatchObject({ status: 403 })
     await expect(runHook(request('entry/1?/comment'), async () => new Response('ok'), options('moderator'))).rejects.toMatchObject({ status: 503 })
+    const person = (role: string) => ({ ...options(role), route: { id: '/[locale]/u/[id]' } })
+    expect((await runHook(request('u/abcdefabcdef?/merge'), async () => new Response('ok'), person('moderator'))).status).toBe(200)
+    await expect(runHook(request('u/abcdefabcdef?/merge'), async () => new Response('ok'), person('member'))).rejects.toMatchObject({ status: 403 })
+    expect((await runHook(request('u/abcdefabcdef?/other'), async () => new Response('ok'), person('moderator'))).status).toBe(404)
   })
 
   test('pause allows only authorized, rate-limited moderation actions through the hook', async () => {

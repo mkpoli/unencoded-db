@@ -64,8 +64,10 @@ claude mcp add --scope user --transport http rare https://rare.glyphatlas.org/mc
 | `get_record` | Reads a record with its claims, sightings and picture addresses |
 | `add_record` | Adds a character with up to five sightings |
 | `add_sighting` | Adds evidence to a record |
+| `edit_record` | Changes a record's fields |
+| `edit_sighting` | Changes one piece of evidence on a record |
 
-A write passes the same checks and rate limits as the forms. A picture is given by its address and fetched by the site, up to ten from other sites in one call, and stands as its own thumbnail. The writes of one connection carry one anonymous name, kept by the `Mcp-Session-Id` the endpoint hands out; that id is no browser session and cannot be signed in. The tools are defined in `src/routes/mcp/_tools.server.ts`.
+A write passes the same checks and rate limits as the forms, and an edit is made against the revision `get_record` answered. A picture is given by its address and fetched by the site, up to ten from other sites in one call, and stands as its own thumbnail. The writes of one connection carry one anonymous name, kept by the `Mcp-Session-Id` the endpoint hands out; that id is no browser session and cannot be signed in. The tools are defined in `src/routes/mcp/_tools.server.ts`.
 
 An agent can sign in, and then writes under a person's name. The site is the OAuth 2.1 authorization server for its own endpoint: a client finds it at `/.well-known/oauth-protected-resource`, registers itself at `/oauth/register`, and opens `/oauth/authorize` in the person's browser, where they sign in through Glyph Atlas and allow it. The token it then gets from `/oauth/token` lasts a year and can be handed back at `/oauth/revoke`. In Claude Code, `/mcp` → `rare` → Authenticate starts it. The flow is in `src/lib/server/agents.ts`.
 
