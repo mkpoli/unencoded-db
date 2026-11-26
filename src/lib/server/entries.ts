@@ -8,7 +8,7 @@ import { nameKey, nameLabel, sourceKeys, sourceNameKey } from '../name-key'
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
 import { CONTEXTS, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
-import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
+import { cleanIds, codePoints, encodedCharacter, idsSpellingVariants } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
@@ -1185,7 +1185,7 @@ function listPlan({ script, filter, facet, radical, decade, within, without, que
   if (!base || own === undefined || filed === undefined || period === undefined || !marks) return null
   if ((query?.trim().length ?? 0) > SEARCH_LENGTH_MAX) return null
   const typed = exactSearchIds(query ?? '')
-  const exact = typed ? [typed, ...alsoSearchIds(query ?? '', also)] : null
+  const exact = typed ? [...new Set([...idsSpellingVariants(typed), ...alsoSearchIds(query ?? '', also)])].slice(0, ALSO_MAX + 1) : null
   const words = exact ? [] : [...new Set(terms(query ?? ''))]
   if (!exact && (words.length > SEARCH_TERMS_MAX || (query?.trim() && !words.length))) return null
   const keys = [...(own ? [own] : []), ...(filed ? [filed] : []), ...(period ? [period] : []), ...marks, ...(base !== 'all' ? [base] : [])]
@@ -1660,8 +1660,15 @@ export async function encodedAs(db: D1Database, char: string, limit = 6) {
   return [...records.values()].sort((a, b) => a.id - b.id).slice(0, limit)
 }
 
-// Records already described by exactly this sequence, offered while someone is adding one.
-export const sameIds = (db: D1Database, ids: string, limit = 6) => claimedBy(db, 'ids', ids, limit)
+// Records already described by this sequence (or a known alternate spelling), offered while someone is adding one.
+export async function sameIds(db: D1Database, ids: string, limit = 6) {
+  const variants = idsSpellingVariants(ids)
+  if (variants.length === 1) return claimedBy(db, 'ids', variants[0], limit)
+  const read = (value: string) => db.prepare('SELECT e.id, e.ids, e.layout, e.cover_key FROM claims k CROSS JOIN entries e ON e.id = k.entry_id WHERE k.kind = ? AND k.value = ? AND e.merged_into IS NULL AND e.hidden_at IS NULL ORDER BY k.entry_id LIMIT ?').bind('ids', value, limit)
+  const found = await db.batch<{ id: number; ids: string | null; layout: string | null; cover_key: string | null }>(variants.map(read))
+  const records = new Map(found.flatMap(({ results }) => results).map(record => [record.id, record]))
+  return [...records.values()].sort((a, b) => a.id - b.id).slice(0, limit)
+}
 
 export type Revision = { id: number; entry_id: number; sighting_id: number | null; kind: string; rev: number; snapshot: string; summary: string | null; at: string; redacted_at: string | null; by_id: string; by_name: string; cover_key?: string | null; ids?: string | null; sighting_rev?: number | null }
 

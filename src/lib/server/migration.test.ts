@@ -618,3 +618,53 @@ test('0047 turns each context into a list of one, in the rows and in past versio
   expect(JSON.parse(rows[0])).not.toHaveProperty('context')
   expect(rows.slice(2)).toEqual(['{}', '{"script":"han"}'])
 })
+
+test('0057 normalizes ⿱田⿺儿厶 to ⿷⿱田儿厶 across claims, entries, compositions and forms without touching IWDS mates', () => {
+  const raw = new Database(':memory:')
+  raw.exec('PRAGMA foreign_keys = ON')
+  const all = readdirSync(join(import.meta.dir, '../../../migrations')).sort()
+  for (const name of all.filter(name => name < '0057')) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec(`INSERT INTO entries(id, script, ids, layout, created_by, created_at, updated_at) VALUES
+    (1, 'han', '⿰云⿱田⿺儿厶', '{"0":[1,0,0,1,10,0],"1.1.0":[1,0,0,1,5,0]}', 'p', '2026', '2026'),
+    (2, 'han', '⿷⿱田儿厶', NULL, 'p', '2026', '2026'),
+    (3, 'han', '⿱田⿺儿厶', NULL, 'p', '2026', '2026'),
+    (4, 'han', '⿱毌⿺儿厶', NULL, 'p', '2026', '2026')`)
+  raw.exec(`INSERT INTO claims(entry_id, position, key, kind, value, data, sightings) VALUES
+    (1, 0, 'aaaaaaaa', 'ids', '⿰云⿱田⿺儿厶', '{"layout":{"0":[1,0,0,1,10,0],"1.1.0":[1,0,0,1,5,0]}}', '[1]'),
+    (1, 1, 'bbbbbbbb', 'composition', '⿰云⿱田⿺儿厶', '{"parts":["云","⿱田⿺儿厶"],"roles":["phonetic","semantic"],"formation":null}', '[]'),
+    (2, 0, 'cccccccc', 'ids', '⿷⿱田儿厶', NULL, '[1]'),
+    (2, 1, 'dddddddd', 'ids', '⿱田⿺儿厶', NULL, '[2]'),
+    (3, 0, 'eeeeeeee', 'ids', '⿱田⿺儿厶', NULL, '[]'),
+    (4, 0, 'ffffffff', 'ids', '⿱毌⿺儿厶', NULL, '[]')`)
+  const oldForm = '⿱\u000183⿺\u0001119厶', newForm = '⿷⿱\u000183\u0001119厶'
+  raw.prepare('INSERT INTO forms(form, entry_id) VALUES (?, ?), (?, ?), (?, ?), (?, ?), (?, ?)').run(`⿰云${oldForm}`, 1, newForm, 2, oldForm, 2, oldForm, 3, oldForm, 4)
+
+  raw.exec(migration('0057_normalize_headless_gui.sql'))
+
+  expect(raw.query('SELECT id, ids, layout FROM entries ORDER BY id').all()).toEqual([
+    { id: 1, ids: '⿰云⿷⿱田儿厶', layout: '{"0":[1,0,0,1,10,0]}' },
+    { id: 2, ids: '⿷⿱田儿厶', layout: null },
+    { id: 3, ids: '⿷⿱田儿厶', layout: null },
+    { id: 4, ids: '⿱毌⿺儿厶', layout: null },
+  ])
+  expect(raw.query('SELECT entry_id, kind, value, data, sightings FROM claims ORDER BY entry_id, position').all()).toEqual([
+    { entry_id: 1, kind: 'ids', value: '⿰云⿷⿱田儿厶', data: '{"layout":{"0":[1,0,0,1,10,0]}}', sightings: '[1]' },
+    { entry_id: 1, kind: 'composition', value: '⿰云⿷⿱田儿厶', data: '{"parts":["云","⿷⿱田儿厶"],"roles":["phonetic","semantic"],"formation":null}', sightings: '[]' },
+    { entry_id: 2, kind: 'ids', value: '⿷⿱田儿厶', data: null, sightings: '[1,2]' },
+    { entry_id: 3, kind: 'ids', value: '⿷⿱田儿厶', data: null, sightings: '[]' },
+    { entry_id: 4, kind: 'ids', value: '⿱毌⿺儿厶', data: null, sightings: '[]' },
+  ])
+  expect(raw.query('SELECT form, entry_id FROM forms ORDER BY entry_id, form').all()).toEqual([
+    { form: `⿰云${newForm}`, entry_id: 1 },
+    { form: newForm, entry_id: 2 },
+    { form: newForm, entry_id: 3 },
+    { form: oldForm, entry_id: 4 },
+  ])
+  expect(raw.query('SELECT form, n, latest FROM form_counts ORDER BY form').all()).toEqual([
+    { form: `⿰云${newForm}`, n: 1, latest: 1 },
+    { form: oldForm, n: 1, latest: 4 },
+    { form: newForm, n: 2, latest: 3 },
+  ])
+  expect(raw.query('PRAGMA foreign_key_check').all()).toEqual([])
+})

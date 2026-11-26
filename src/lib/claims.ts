@@ -7,7 +7,7 @@ import { codedRecord, recordCode } from './code'
 import { analyze, parseComposition, type Composition } from './composition'
 import { cleanCode, isRegistry, type Encoding } from './registries'
 import { cleanTag, isCollection, validTagName, type Tag } from './tags'
-import { IDS_LENGTH_MAX, IDS_MAX, splitIds } from './ids'
+import { cleanIds, IDS_LENGTH_MAX, IDS_MAX, normalizeIdsRaw, splitIds } from './ids'
 import { carryLayout, cleanLayout, validLayout, type Layout } from './layout'
 import { ivdSequence } from './ivd'
 import { cleanDoculect } from './doculects'
@@ -98,18 +98,52 @@ export function parseClaims(raw: unknown): Claim[] | null {
   let value = raw
   if (typeof raw === 'string') { try { value = JSON.parse(raw) } catch { return null } }
   if (!Array.isArray(value) || value.length > CLAIMS_MAX) return null
-  // Older snapshots stored categories as `genre` claims; fold them into unified `tag` claims.
+  // Older snapshots stored categories as `genre` claims or alternate IDS spellings; fold them into canonical form.
   const seenTags = new Set<string>()
-  const normalized = value.flatMap(item => {
-    if (!plain(item)) return [item]
+  const seenIds = new Map<string, Record<string, unknown>>()
+  const normalized: unknown[] = []
+  for (const item of value) {
+    if (!plain(item)) { normalized.push(item); continue }
     if ((item.kind === 'genre' || item.kind === 'tag') && typeof item.value === 'string') {
       const cleaned = item.kind === 'tag' ? item.value.replace(/^#+/, '') : item.value
-      if (seenTags.has(cleaned)) return []
+      if (seenTags.has(cleaned)) continue
       seenTags.add(cleaned)
-      return [{ ...item, kind: 'tag', value: cleaned }]
+      normalized.push({ ...item, kind: 'tag', value: cleaned })
+      continue
     }
-    return [item]
-  })
+    if (item.kind === 'ids' && typeof item.value === 'string') {
+      const cleaned = cleanIds(item.value)
+      const prior = seenIds.get(cleaned)
+      if (prior) {
+        // Merge sightings from duplicate spellings onto the kept claim without exceeding the limit.
+        if (Array.isArray(prior.sightings) && Array.isArray(item.sightings)) {
+          prior.sightings = [...new Set([...prior.sightings, ...item.sightings])].slice(0, CLAIM_SIGHTINGS_MAX)
+        }
+        continue
+      }
+      const nextItem: Record<string, unknown> = cleaned !== item.value
+        ? (() => {
+            const carried = plain(item.data) && item.data.layout ? carryLayout(cleanLayout(item.data.layout, item.value), item.value, cleaned) : null
+            return { ...item, value: cleaned, data: carried ? { layout: carried } : null, ...(Array.isArray(item.sightings) ? { sightings: [...item.sightings] } : {}) }
+          })()
+        : { ...item, ...(Array.isArray(item.sightings) ? { sightings: [...item.sightings] } : {}) }
+      seenIds.set(cleaned, nextItem)
+      normalized.push(nextItem)
+      continue
+    }
+    if (item.kind === 'composition' && typeof item.value === 'string') {
+      const cleaned = cleanIds(item.value)
+      if (cleaned !== item.value) {
+        const parsed = parseComposition(JSON.stringify({ ...(plain(item.data) ? item.data : {}), ids: cleaned }))
+        if (parsed) {
+          const { ids: _, ...rest } = parsed
+          normalized.push({ ...item, value: cleaned, data: rest })
+          continue
+        }
+      }
+    }
+    normalized.push(item)
+  }
   if (!normalized.every(validClaim)) return null
   const claims = normalized.map(claim => one(claim.kind, claim.value, claim.data ?? null, { key: claim.key, sightings: [...claim.sightings], under: [...claim.under] }))
   // A key names one claim, and a claim holds only under claims of the same list whose kind can be its scope.
@@ -359,8 +393,9 @@ export function readClaims(form: FormData, tags: readonly Pick<Tag, 'name' | 'la
     // every description the form does not speak for, keeps its own.
     const kept = new Map(claimsOf(base, 'ids').map(claim => [claim.value, claim.data]))
     const layoutIds = form.get('layout_ids')
-    const drawn = typeof layoutIds === 'string' ? splitIds(layoutIds)[0] : undefined
-    const spoken = form.has('layout') && drawn && sequences.length > 0 && (drawn === sequences[0] || !kept.has(sequences[0]))
+    // Keep the un-canonicalized sequence that the layout was drawn over so carryLayout compares the real tree paths.
+    const drawn = typeof layoutIds === 'string' ? layoutIds.split(/[\s,，、]+/u).map(normalizeIdsRaw).find(Boolean) : undefined
+    const spoken = form.has('layout') && drawn && sequences.length > 0 && (cleanIds(drawn) === sequences[0] || !kept.has(sequences[0]))
     const stated = spoken ? carryLayout(cleanLayout(clean(form.get('layout')), drawn), drawn, sequences[0]) : undefined
     next.set('ids', sequences.map((sequence, index) => made('ids', sequence, index === 0 && stated !== undefined ? stated && { layout: stated } : kept.get(sequence) ?? null)))
   }

@@ -477,3 +477,32 @@ describe('joining a duplicate', () => {
     expect(partClaims(joined.claims, new Set(), joined)).toEqual(kept)
   })
 })
+
+describe('headless 鬼 normalization', () => {
+  test('readClaims normalizes ⿱田⿺儿厶 to ⿷⿱田儿厶, deduplicates both, and carries layout from raw layout_ids', () => {
+    const result = read([
+      ['ids', '⿰云⿱田⿺儿厶'],
+      ['ids', '⿰云⿷⿱田儿厶'],
+      ['layout_ids', '⿰云⿱田⿺儿厶'],
+      ['layout', JSON.stringify({ '0': [1, 0, 0, 1, 12, 0], '1.0': [1, 0, 0, 1, 8, 0] })],
+    ])
+    // Path 0 (云) carries over; path 1.0 (田 in ⿱田⿺儿厶 vs ⿱田儿 in ⿷⿱田儿厶) is dropped rather than misapplied.
+    expect(result).toEqual({ claims: [claim('ids', '⿰云⿷⿱田儿厶', { layout: { '0': [1, 0, 0, 1, 12, 0] } })] })
+  })
+
+  test('parseClaims upgrades legacy snapshots containing ⿱田⿺儿厶, carries valid layout, and merges sightings on dedup', () => {
+    const legacy = [
+      { key: 'aaaaaaaa', kind: 'ids', value: '⿰云⿱田⿺儿厶', data: { layout: { '0': [1, 0, 0, 1, 10, 0], '1.1.0': [1, 0, 0, 1, 5, 0] } }, sightings: [1], under: [] },
+      { key: 'bbbbbbbb', kind: 'ids', value: '⿰云⿷⿱田儿厶', data: null, sightings: [2], under: [] },
+      { key: 'cccccccc', kind: 'composition', value: '⿰云⿱田⿺儿厶', data: { parts: ['云', '⿱田⿺儿厶'], roles: ['phonetic', 'semantic'], formation: null }, sightings: [], under: [] },
+    ]
+    const parsed = parseClaims(legacy)
+    expect(parsed).not.toBeNull()
+    expect(parsed!.filter(c => c.kind === 'ids')).toEqual([
+      { key: 'aaaaaaaa', kind: 'ids', value: '⿰云⿷⿱田儿厶', data: { layout: { '0': [1, 0, 0, 1, 10, 0] } }, sightings: [1, 2], under: [] },
+    ])
+    expect(parsed!.find(c => c.kind === 'composition')).toEqual({
+      key: 'cccccccc', kind: 'composition', value: '⿰云⿷⿱田儿厶', data: { parts: ['云', '⿷⿱田儿厶'], roles: ['phonetic', 'semantic'], formation: null }, sightings: [], under: [],
+    })
+  })
+})

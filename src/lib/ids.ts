@@ -1,7 +1,41 @@
 import { compatibilitySequences } from 'ids-input'
+
+// Alternate descriptions for the same part, mapped to the canonical form drawn by han-compose.
+// Headless 鬼 (鬼 without its top stroke) is drawn natively as ⿷⿱田儿厶 (mkpoli/han-compose#385).
+export const IDS_SPELLING_ALIASES: readonly (readonly [string, string])[] = [['⿱田⿺儿厶', '⿷⿱田儿厶']]
+const HEADLESS_GUI_PATTERN = /(?:⿱[田⽥]⿺[儿⼉][厶⼛]|⿷⿱[田⽥][儿⼉][厶⼛])/gu
+
+/** Rewrite known alternate component descriptions (including Kangxi radical spellings) to their canonical form. */
+export function canonicalizeIds(text: string): string {
+  return text.replace(HEADLESS_GUI_PATTERN, '⿷⿱田儿厶')
+}
+
+/** Normalize compatibility glyphs and strip whitespace without rewriting structural spelling aliases. */
+export const normalizeIdsRaw = (text: string) => compatibilitySequences(text).normalize('NFC').replace(/\s+/gu, '')
+
 // A description sequence as a person types it: the operators and the parts, with spaces taken out.
-// Encode compatibility glyphs as their standardized sequences before normalizing the field.
-export const cleanIds = (text: string) => compatibilitySequences(text).normalize('NFC').replace(/\s+/gu, '')
+// Encode compatibility glyphs as their standardized sequences and normalize known alternate spellings.
+export const cleanIds = (text: string) => canonicalizeIds(normalizeIdsRaw(text))
+
+/** All known alternate spellings for a description (canonical first), for matching records across spellings. */
+export function idsSpellingVariants(ids: string, limit = 16): string[] {
+  const start = cleanIds(ids)
+  const found = [start], seen = new Set(found)
+  for (let at = 0; at < found.length && found.length < limit; at++) {
+    const current = found[at]
+    for (const [alias, canonical] of IDS_SPELLING_ALIASES) {
+      for (const [from, to] of [[canonical, alias], [alias, canonical]] as const) {
+        let pos = current.indexOf(from)
+        while (pos !== -1 && found.length < limit) {
+          const next = current.slice(0, pos) + to + current.slice(pos + from.length)
+          if (!seen.has(next)) { seen.add(next); found.push(next) }
+          pos = current.indexOf(from, pos + 1)
+        }
+      }
+    }
+  }
+  return found
+}
 
 export const IDS_MAX = 20
 export const IDS_LENGTH_MAX = 200

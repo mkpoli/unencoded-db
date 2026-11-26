@@ -86,3 +86,11 @@ test('parts typed with no structure are also the parts written out and the chara
   expect(isParts('艹時')).toBe(true)
   for (const text of ['⿱艹時', '艹 時', 'word', '']) expect(isParts(text)).toBe(false)
 })
+
+test('headless 鬼 spellings equivalent in both directions and group together', () => {
+  expect(equivalentSpellings('⿷⿱田儿厶', table, 16, false)).toEqual(['⿷⿱田儿厶', '⿱田⿺儿厶'])
+  expect(equivalentSpellings('⿱田⿺儿厶', table, 16, false)).toEqual(['⿱田⿺儿厶', '⿷⿱田儿厶'])
+  expect(equivalentSpellings('⿰云⿷⿱田儿厶', table, 16, false)).toContain('⿰云⿱田⿺儿厶')
+  expect(equivalentSpellings('⿰云⿱田⿺儿厶', table, 16, false)).toContain('⿰云⿷⿱田儿厶')
+  expect(spellingGroups([{ ids: '⿰云⿷⿱田儿厶', n: 1 }, { ids: '⿰云⿱田⿺儿厶', n: 2 }], table).map(group => group.map(item => item.n))).toEqual([[1, 2]])
+})
