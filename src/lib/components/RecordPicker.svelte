@@ -9,6 +9,10 @@
   import Combobox from './Combobox.svelte'
   import IdsGlyph from './IdsGlyph.svelte'
   import { recordCode } from '$lib/code'
+  import { describedTable } from '$lib/encoded'
+  import { cleanIds } from '$lib/ids'
+  import { equivalentSpellings, isParts, partSpellings } from '$lib/ids-variants'
+  import { isDescription } from 'ids-input'
   import { media } from '$lib/t'
 
   let { id, name, value = '', exclude, placeholder, label }: { id: string; name: string; value?: string; exclude: number; placeholder: string; label: string } = $props()
@@ -22,6 +26,18 @@
   const options = $derived(found.map(record => ({ key: String(record.id), label: recordCode(record.id), hint: record.ids ?? '' })))
   const byKey = $derived(new Map(found.map(record => [String(record.id), record])))
 
+  // A whole description, or parts typed with no structure (艹時), is also searched under its other spellings,
+  // as on the browse page. Without the table it is searched as typed.
+  async function spellingsOf(text: string) {
+    const cleaned = cleanIds(text)
+    const whole = isDescription(cleaned)
+    if (!whole && !isParts(cleaned)) return []
+    try {
+      const table = await describedTable()
+      return (whole ? equivalentSpellings(cleaned, table) : partSpellings(cleaned, table)).slice(1)
+    } catch { return [] }
+  }
+
   function query(text: string) {
     clearTimeout(timer)
     asking?.abort()
@@ -30,7 +46,11 @@
     timer = setTimeout(async () => {
       const controller = new AbortController()
       asking = controller
-      const answer = await fetch(`/api/records?q=${encodeURIComponent(wanted)}&exclude=${exclude}`, { signal: controller.signal }).then(response => response.ok ? response.json() : null).catch(() => null)
+      const also = await spellingsOf(wanted)
+      if (asking !== controller) return
+      const params = new URLSearchParams({ q: wanted, exclude: String(exclude) })
+      for (const spelling of also) params.append('also', spelling)
+      const answer = await fetch(`/api/records?${params}`, { signal: controller.signal }).then(response => response.ok ? response.json() : null).catch(() => null)
       if (asking === controller && Array.isArray(answer)) found = answer
     }, 200)
   }
