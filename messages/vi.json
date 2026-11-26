@@ -719,6 +719,8 @@
   "mcp.tool.get_record": "Đọc các nhận định, nguồn và địa chỉ hình ảnh của một mục từ.",
   "mcp.tool.add_record": "Thêm một chữ mới cùng bằng chứng.",
   "mcp.tool.add_sighting": "Thêm bằng chứng vào một mục từ đã có.",
+  "mcp.tool.edit_record": "Sửa nội dung của một mục từ.",
+  "mcp.tool.edit_sighting": "Sửa một bằng chứng của mục từ.",
   "mcp.authTitle": "Đăng nhập và ghi dữ liệu",
   "mcp.authBody": "Có thể dùng không cần đăng nhập; mỗi kết nối nhận một tên ẩn danh mới. Ứng dụng hỗ trợ OAuth 2.1 có thể đăng nhập qua Glyph Atlas để mọi đóng góp gắn với tài khoản của bạn.",
   "mcp.writesBody": "Dữ liệu ghi qua MCP tuân theo cùng quy tắc kiểm tra như biểu mẫu web; ảnh bằng chứng được tải từ địa chỉ công khai."

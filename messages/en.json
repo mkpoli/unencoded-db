@@ -719,6 +719,8 @@
   "mcp.tool.get_record": "Read a record's claims, sources and image addresses.",
   "mcp.tool.add_record": "Add a character and its evidence.",
   "mcp.tool.add_sighting": "Add evidence to an existing record.",
+  "mcp.tool.edit_record": "Change a record's fields.",
+  "mcp.tool.edit_sighting": "Change one piece of evidence on a record.",
   "mcp.authTitle": "Sign-in and writes",
   "mcp.authBody": "Works without signing in, under a new anonymous name per connection. Clients that support OAuth 2.1 can sign in through Glyph Atlas to credit writes to your account.",
   "mcp.writesBody": "Writes pass the same checks as the web forms; evidence pictures are fetched from public URLs."

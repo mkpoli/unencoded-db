@@ -67,7 +67,7 @@ test('the protocol answers its own methods and refuses the rest', async () => {
   expect((await send({ jsonrpc: '2.0', method: 'notifications/initialized' })).status).toBe(202)
   expect(await (await send({ jsonrpc: '2.0', id: 'a', method: 'ping' })).json()).toEqual({ jsonrpc: '2.0', id: 'a', result: {} })
   const { result } = await (await send({ jsonrpc: '2.0', id: 2, method: 'tools/list' })).json() as any
-  expect(result.tools.map((tool: { name: string }) => tool.name)).toEqual(['find_similar_records', 'search_records', 'get_record', 'add_record', 'add_sighting'])
+  expect(result.tools.map((tool: { name: string }) => tool.name)).toEqual(['find_similar_records', 'search_records', 'get_record', 'add_record', 'add_sighting', 'edit_record', 'edit_sighting'])
   expect(result.tools.every((tool: Record<string, unknown>) => !('run' in tool) && (tool.inputSchema as any).type === 'object')).toBe(true)
   expect((await (await send({ jsonrpc: '2.0', id: 3, method: 'resources/list' })).json() as any).error.code).toBe(-32601)
   expect((await (await send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'drop_everything' } })).json() as any).error.code).toBe(-32602)
@@ -321,4 +321,62 @@ test('a banned name cannot write through its connection', async () => {
   expect(await call('add_record', { ids: ['⿰山西'], sightings: [{ place: 'A sign', pictures: [{ url: 'https://img.example/sign.png' }] }] }, token)).toMatchObject({ failed: true, value: expect.stringContaining('no longer save') })
   expect(asked).toEqual([])
   expect(count('entries')).toBe(1)
+})
+
+test('a record is edited field by field, against the revision read', async () => {
+  const { call, raw } = fixture()
+  pictures()
+  await call('add_record', {
+    ids: ['⿰身花'], meanings: [{ text: 'manners', evidence: [1] }], readings: [{ text: 'しつけ', doculect: 'ja', meanings: [1], evidence: [1] }],
+    categories: ['kokuji'], sightings: [sighting],
+  })
+  const read = (await call('get_record', { record: 1 })).value
+  expect(read.rev).toBe(1)
+  const meaning = read.claims.find((claim: { kind: string }) => claim.kind === 'meaning')
+  // Only the codes change; the readings, meanings and their evidence stay.
+  expect(await call('edit_record', { record: 'R+0001', rev: 1, encodings: [{ charset: 'unicode', code: 'U+2C9E7' }], summary: 'Encoded as U+2C9E7.' })).toEqual({ failed: false, value: { record: { id: 1, code: 'R+0001', url: `${ORIGIN}/entry/1` }, rev: 2 } })
+  const after = (await call('get_record', { record: 1 })).value
+  expect(after.rev).toBe(2)
+  expect(after.claims.filter((claim: { kind: string }) => claim.kind !== 'encoding')).toEqual(read.claims)
+  expect(after.claims.find((claim: { kind: string }) => claim.kind === 'encoding')).toMatchObject({ value: 'U+2C9E7', data: { charset: 'unicode' } })
+  expect(raw.query("SELECT summary FROM revisions WHERE kind = 'edit'").get()).toEqual({ summary: 'Encoded as U+2C9E7.' })
+  // An edit against the revision before is refused and names the one to read.
+  expect(await call('edit_record', { record: 1, rev: 1, description: 'Stale.' })).toMatchObject({ failed: true, value: expect.stringContaining('rev 2') })
+  // A list replaces the record's: a row that repeats one keeps its evidence, a changed row continues one by its key.
+  expect((await call('edit_record', { record: 1, rev: 2, meanings: [{ key: meaning.key, text: 'discipline' }, { text: 'upbringing' }], readings: [{ text: 'しつけ', doculect: 'ja' }] })).failed).toBe(false)
+  const claims = (await call('get_record', { record: 1 })).value.claims as { key: string; kind: string; value: string; evidence: number[]; under?: string[] }[]
+  const sightingId = read.sightings[0].id
+  expect(claims.filter(claim => claim.kind === 'meaning').map(claim => [claim.key === meaning.key, claim.value, claim.evidence])).toEqual([[true, 'discipline', [sightingId]], [false, 'upbringing', []]])
+  expect(claims.find(claim => claim.kind === 'reading')).toMatchObject({ value: 'しつけ', evidence: [sightingId], under: [meaning.key] })
+  expect(claims.some(claim => claim.kind === 'tag' && claim.value === 'kokuji')).toBe(true)
+  // Evidence names the record's own sightings by id.
+  expect(await call('edit_record', { record: 1, rev: 3, meanings: [{ text: 'x', evidence: [999] }] })).toMatchObject({ failed: true, value: expect.stringContaining(`by id: ${sightingId}`) })
+  expect(await call('edit_record', { record: 1, rev: 3, ids: [] })).toMatchObject({ failed: true })
+  expect(await call('edit_record', { record: 9, rev: 1, description: 'x' })).toMatchObject({ failed: true, value: expect.stringContaining('does not exist') })
+})
+
+test('a sighting is edited field by field, keeping or replacing its pictures', async () => {
+  const { call, objects } = fixture()
+  const asked = pictures()
+  await call('add_record', { ids: ['⿰舟覽'], sightings: [{ place: 'A page', title: 'Book', report_date: '1816', quotes: [{ text: '⿰舟覽を解' }], vias: [{ url: 'https://x.example/1', author: '@poster' }], pictures: [{ url: 'https://img.example/page.png', marks: [[1, 1, 6, 6]] }] }] })
+  const read = (await call('get_record', { record: 1 })).value.sightings[0]
+  expect(read.rev).toBe(1)
+  // Fields left out stay, the picture is untouched and nothing more is fetched.
+  expect(await call('edit_sighting', { record: 1, sighting: read.id, rev: 1, note: 'Cursive; the right side is read as 覽.', author: 'Someone' })).toMatchObject({ failed: false, value: { sighting: read.id, rev: 2 } })
+  let now = (await call('get_record', { record: 1 })).value.sightings[0]
+  expect(now).toMatchObject({ rev: 2, title: 'Book', author: 'Someone', report_date: '1816', note: 'Cursive; the right side is read as 覽.', quotes: read.quotes, vias: read.vias, pictures: read.pictures })
+  expect(asked).toHaveLength(1)
+  // A held picture is kept by its address with new marks, and a new one is fetched after it.
+  expect((await call('edit_sighting', { record: 1, sighting: read.id, rev: 2, pictures: [{ url: read.pictures[0].url, marks: [[2, 2, 5, 5]] }, { url: 'https://img.example/other.png' }] })).failed).toBe(false)
+  now = (await call('get_record', { record: 1 })).value.sightings[0]
+  expect(now.pictures.map((picture: { marks: number[][] }) => picture.marks)).toEqual([[[2, 2, 5, 5]], []])
+  expect(now.pictures[0].url).toBe(read.pictures[0].url)
+  expect(asked).toHaveLength(2)
+  expect(objects.size).toBe(1)
+  // A cleared field is cleared, and a sighting left with no picture, link or place is refused.
+  expect((await call('edit_sighting', { record: 1, sighting: read.id, rev: 3, title: '' })).failed).toBe(false)
+  expect((await call('get_record', { record: 1 })).value.sightings[0].title).toBeNull()
+  expect(await call('edit_sighting', { record: 1, sighting: read.id, rev: 4, pictures: [], vias: [], place: '' })).toMatchObject({ failed: true, value: expect.stringContaining('picture or a link') })
+  expect(await call('edit_sighting', { record: 1, sighting: read.id, rev: 1, note: 'Stale.' })).toMatchObject({ failed: true, value: expect.stringContaining('rev 4') })
+  expect(await call('edit_sighting', { record: 1, sighting: 999, rev: 1 })).toMatchObject({ failed: true, value: expect.stringContaining(`Its sightings: ${read.id}`) })
 })
