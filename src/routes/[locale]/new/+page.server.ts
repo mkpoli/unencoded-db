@@ -20,11 +20,17 @@ export const load: PageServerLoad = async (event) => {
   const sighting = await getSighting(DB, id)
   const entry = sighting && !sighting.hidden_at ? await getEntryRow(DB, sighting.entry_id) : null
   if (!sighting || !entry || entry.hidden_at || entry.merged_into) return { seed: null, tags, groups }
-  const values: Partial<SightingFields> = { ...Object.fromEntries((['place', 'original_date', 'page', ...CITATION_FIELDS] as const).map(field => [field, sighting[field]])), vias: sighting.vias.map(({ id: _, pictures: __, ...via }) => via) }
-  return { seed: { values, pictures: sighting.media.map(picture => picture.image_key) }, tags, groups }
+  const values: Partial<SightingFields> = { ...Object.fromEntries((['place', 'original_date', 'page', ...CITATION_FIELDS] as const).map(field => [field, sighting[field]])), vias: sighting.vias.map(({ id: _, ...via }) => via) }
+  return { seed: { sighting: sighting.id, values, pictures: sighting.media.map(picture => picture.image_key) }, tags, groups }
 }
 
 const filled = (form: FormData, fields: SightingFields) => Object.values({ ...fields, vias: fields.vias.length }).some(Boolean) || [...form.getAll('image'), ...form.getAll('via_image')].some(file => file instanceof File && file.size > 0)
+
+async function seedVias(db: D1Database, id: number | null) {
+  const sighting = id ? await getSighting(db, id) : null
+  const entry = sighting && !sighting.hidden_at ? await getEntryRow(db, sighting.entry_id) : null
+  return sighting && entry && !entry.hidden_at && !entry.merged_into ? sighting.vias : []
+}
 
 export const actions: Actions = {
   // A record and the sightings it starts with. Each sighting needs a picture or a link, and all of them are read and checked before a picture is stored or a row written; the record
@@ -57,9 +63,11 @@ export const actions: Actions = {
     if (!sections.length) return reject(400, 'evidence', 1)
     if (sections.length > ADD_SIGHTINGS_MAX) return reject(400, 'sightingsMax')
 
+    // A form started from a sighting may keep the pictures of its chain, while that sighting can be seen.
+    const seed = await seedVias(DB, positiveId(String(form.get('seed') ?? '')))
     const pictures: ReadImage[][] = [], cited: { fields: SightingFields; files: ReadImage[] }[] = []
     for (const [index, section] of sections.entries()) {
-      const shots = await readViaPictures(section.form)
+      const shots = await readViaPictures(section.form, seed)
       if (shots.error) return reject(400, shots.error, index + 1)
       const fields = readSightingFields(section.form, shots.all)
       const images = await readImages(section.form)
