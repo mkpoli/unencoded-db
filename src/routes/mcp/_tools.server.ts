@@ -24,6 +24,7 @@ import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { MAX_WRITE_BODY } from '$lib/server/body-limit'
 import { MAX_IMAGE, prepareImage } from '$lib/server/image'
+import { isPdf, PDF_SIDE, renderPdfPage } from '$lib/server/pdf'
 import { agentWriter } from '$lib/server/people'
 import { described, storeImages, type ReadImage } from '../_submission.server'
 
@@ -110,7 +111,7 @@ async function pictureBytes(event: RequestEvent, address: string, budget: Budget
   let response: Response
   try {
     for (let hop = 0; ; hop++) {
-      response = await fetch(url, { headers: { accept: 'image/jpeg, image/png, image/webp' }, redirect: 'manual', signal })
+      response = await fetch(url, { headers: { accept: 'image/jpeg, image/png, image/webp, application/pdf' }, redirect: 'manual', signal })
       const next = response.status >= 300 && response.status < 400 ? response.headers.get('location') : null
       if (!next) break
       void response.body?.cancel().catch(() => {})
@@ -235,10 +236,11 @@ async function readViaPictures(event: RequestEvent, planned: PlannedVia, budget:
 function pictureItems(value: unknown) {
   const pictures = items(value).map(item => typeof item === 'string' ? { url: item } : record(item))
   if (pictures.length > MEDIA_MAX) throw new Refusal(`A sighting holds up to ${MEDIA_MAX} pictures.`)
-  return pictures.map(({ url, marks }) => {
+  return pictures.map(({ url, marks, page }) => {
     const address = text(url).trim()
     if (!address) throw new Refusal('Each picture needs a url.')
-    return { address, marks }
+    if (page !== undefined && !(Number.isInteger(page) && (page as number) >= 1)) throw new Refusal('page is a whole number counted from 1.')
+    return { address, marks, page: page as number | undefined }
   })
 }
 
@@ -250,15 +252,22 @@ function marksOn(marks: unknown, width: number, height: number) {
   return box
 }
 
-async function readPicture(event: RequestEvent, { address, marks }: { address: string; marks: unknown }, budget: Budget): Promise<ReadImage> {
-  // An address asked twice in one call is fetched once.
-  let image = budget.seen?.get(address)
+async function readPicture(event: RequestEvent, { address, marks, page }: { address: string; marks: unknown; page?: number }, budget: Budget): Promise<ReadImage> {
+  // An address asked twice in one call is fetched once; a PDF, once for each page asked.
+  const asked = page === undefined ? address : `${address}#page=${page}`
+  let image = budget.seen?.get(asked)
   if (!image) {
-    const bytes = await pictureBytes(event, address, budget)
+    let bytes: Uint8Array = await pictureBytes(event, address, budget)
     budget.bytes -= bytes.byteLength
+    if (isPdf(bytes)) {
+      // The page is drawn here and kept as a picture; the PDF itself is not kept.
+      const drawn = await renderPdfPage(bytes, page ?? 1)
+      if (!drawn) throw new Refusal(`Page ${page ?? 1} of this PDF could not be drawn: ${address}`)
+      bytes = drawn.bytes
+    } else if (page !== undefined) throw new Refusal(`page is for a PDF, and this address is not one: ${address}`)
     image = await prepareImage(new File([bytes as BlobPart], 'picture'), MAX_IMAGE) ?? undefined
     if (!image) throw new Refusal(`${said('image')} (${address})`)
-    ;(budget.seen ??= new Map()).set(address, image)
+    ;(budget.seen ??= new Map()).set(asked, image)
   }
   return { image, thumb: image, box: marksOn(marks, image.width, image.height) }
 }
@@ -632,11 +641,12 @@ const SIGHTING = {
   note: { type: 'string', description: 'A note on this source.' },
   vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' }, pictures: { type: 'array', maxItems: MEDIA_MAX, description: `Pictures of this source, such as a screenshot of the post, from their addresses, without marks. A picture belongs to one source, the chain holds ${MEDIA_MAX} in all, and the source needs a citation.`, items: { oneOf: [{ type: 'string' }, { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string' } } }], description: 'Address of the image file itself.' } } } } },
   pictures: {
-    type: 'array', maxItems: MEDIA_MAX, description: `Evidence pictures, fetched from their addresses and kept by the site. JPEG, PNG or WebP, up to ${FETCHES_MAX} from other sites in one call.`,
+    type: 'array', maxItems: MEDIA_MAX, description: `Evidence pictures, fetched from their addresses and kept by the site. JPEG, PNG or WebP, or one page of a PDF, up to ${FETCHES_MAX} from other sites in one call.`,
     items: {
       type: 'object', required: ['url'],
       properties: {
-        url: { type: 'string', description: 'Address of the image file itself.' },
+        url: { type: 'string', description: 'Address of the image file itself, or of a PDF.' },
+        page: { type: 'integer', minimum: 1, description: `For a PDF: the page to draw, counted from 1; the first when left out. The page is kept as a picture whose longer side is ${PDF_SIDE} pixels, and marks are in pixels of that picture.` },
         marks: { type: 'array', maxItems: BOXES_MAX, description: 'Boxes around the character, each [x, y, width, height] in pixels of the picture.', items: { type: 'array', items: { type: 'number' }, minItems: 4, maxItems: 4 } },
       },
     },

@@ -4,6 +4,8 @@ import { openTestDb } from '$lib/server/testdb'
 import { mergeEntry } from '$lib/server/entries'
 import { personOf } from '$lib/server/people'
 import { MEDIA_MAX } from '$lib/limits'
+import { PDF_SIDE } from '$lib/server/pdf'
+import { pdfOf } from '$lib/server/pdf.test'
 import { FETCHES_MAX } from './_tools.server'
 import { POST } from './+server'
 
@@ -215,6 +217,29 @@ test('what cannot be saved is refused whole', async () => {
   expect(count('people')).toBe(0)
   expect(objects.size).toBe(0)
 })
+
+test('a PDF address is kept as a picture of the page asked for', async () => {
+  const { call, objects } = fixture()
+  const pdf = pdfOf([[600, 300], [200, 400]])
+  const asked = pictures(url => url.endsWith('.pdf') ? new Response(pdf, { headers: { 'content-type': 'application/pdf' } }) : new Response(png))
+  const added = await call('add_record', { ids: ['⿰山東'], sightings: [{ place: 'A leaflet', pictures: [
+    { url: 'https://img.example/leaflet.pdf', marks: [[100, 100, 200, 200]] },
+    { url: 'https://img.example/leaflet.pdf', page: 2 },
+  ] }] })
+  expect(added.failed).toBe(false)
+  // Each page is fetched for itself, and neither keeps the PDF.
+  expect(asked).toHaveLength(2)
+  expect([...objects.keys()].every(key => key.endsWith('.webp'))).toBe(true)
+  expect((await call('get_record', { record: 1 })).value.sightings[0].pictures).toMatchObject([
+    { url: expect.stringMatching(/\.webp$/), width: PDF_SIDE, height: PDF_SIDE / 2, marks: [[100, 100, 200, 200]] },
+    { url: expect.stringMatching(/\.webp$/), width: PDF_SIDE / 2, height: PDF_SIDE },
+  ])
+  const refused = async (picture: Record<string, unknown>) => (await call('add_sighting', { record: 1, pictures: [picture] })).value as string
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', page: 3 })).toContain('Page 3')
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', page: 0 })).toContain('counted from 1')
+  expect(await refused({ url: 'https://img.example/sign.png', page: 1 })).toContain('not one')
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', marks: [[0, 0, 2, 2]] })).toContain(`${PDF_SIDE} × ${PDF_SIDE / 2}`)
+}, 60_000)
 
 test('a picture larger than the limit is not read to its end', async () => {
   const { call, count, objects } = fixture()
