@@ -13,7 +13,7 @@
   import GlyphFace from '$lib/components/GlyphFace.svelte'
   import SpellingReport from '$lib/components/SpellingReport.svelte'
   import { GLYPH_STYLES } from '$lib/composer'
-  import MarkedPicture from '$lib/components/MarkedPicture.svelte'
+  import EvidencePictures from '$lib/components/EvidencePictures.svelte'
   import CopyButton from '$lib/components/CopyButton.svelte'
   import EditLink from '$lib/components/EditLink.svelte'
   import FavouriteButton from '$lib/components/FavouriteButton.svelte'
@@ -317,16 +317,7 @@
       {@const types = parseSightingTypes(sighting.types)}
       {@const contexts = parseContexts(sighting.contexts)}
       <article class="panel stack" id="sighting-{sighting.id}">
-        {#if sighting.media.length}
-          <div class="pictures" class:single={sighting.media.length === 1}>
-            {#each sighting.media as picture, position (picture.image_key)}
-              <figure>
-                <MarkedPicture {picture} alt={pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} />
-                <figcaption><button class="button small" type="button" title={t('sighting.evidenceHint')} disabled={preparing === picture.image_key} onclick={() => download(sighting, picture, position)}>{t('sighting.evidence')}</button></figcaption>
-              </figure>
-            {/each}
-          </div>
-        {/if}
+        <EvidencePictures pictures={sighting.media} alt={position => pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} {preparing} ondownload={(picture, position) => download(sighting, picture, position)} />
         {#if sighting.place}<h3>{sighting.place}</h3>{/if}
         {#if types.length || data.earliest?.sighting === sighting.id}<div class="row badges">{#if data.earliest?.sighting === sighting.id}<span class="badge earliest">{t('entry.earliest')}</span>{/if}{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
@@ -404,9 +395,6 @@
   article:target { outline:2px solid var(--accent); outline-offset:2px } article { scroll-margin-block:16px }
   .checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr)); gap:6px 16px; margin:0; padding:0; list-style:none; color:var(--muted) }
   .checks li { display:flex; gap:8px } .checks li.done { color:var(--ink) } .checks li.done .tick { color:var(--good) } .tick { flex:none; width:1em; text-align:center }
-  .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr)); gap:12px } .pictures.single { grid-template-columns:minmax(0,1fr) }
-  figure { display:flex; flex-direction:column; gap:6px; margin:0; min-width:0 }
-  .pictures:not(.single) { --picture-height: 260px }
   .button.small { min-height:32px; padding:4px 10px; font-size:12.5px }
   .url { overflow-wrap:anywhere }
   @media(max-width:700px) { .panel { padding:16px } .styles { --face-size:64px; gap:8px } }
