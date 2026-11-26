@@ -2,6 +2,8 @@
 // drops what the camera recorded. The thumbnail is the first marked character, or the whole picture when none is marked.
 export const LONG_SIDE = 3200
 export const THUMB_SIDE = 640
+/** How much taller than wide a picture of a go-between is shown: a longer one is shown by its top. */
+export const TALL = 1.5
 
 export type Box = [number, number, number, number]
 

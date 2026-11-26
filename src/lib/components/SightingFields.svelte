@@ -6,6 +6,7 @@
   import SourceTitleField from './SourceTitleField.svelte'
   import PublisherField from './PublisherField.svelte'
   import ContainerField from './ContainerField.svelte'
+  import ViaPictures from './ViaPictures.svelte'
   import { tick, untrack } from 'svelte'
   import { flip } from 'svelte/animate'
   import { CONTEXTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, parseContexts, parseSightingTypes } from '$lib/scripts'
@@ -13,10 +14,11 @@
   import { fetchPost, postId, type PostInfo } from '$lib/source-url'
   import { westernDate } from '$lib/dates'
   import { eraRead, t } from '$lib/t'
-  import type { Citation, SightingFields, Via } from '$lib/server/entries'
+  import type { Citation, SightingFields, Via, ViaPicture } from '$lib/server/entries'
   import { VIAS_MAX } from '$lib/scripts'
+  import { MEDIA_MAX } from '$lib/limits'
 
-  let { values = {}, onphotos, onsource }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void; onsource?: (sourceId: number | null) => void } = $props()
+  let { values = {}, onphotos, onsource, onready }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void; onsource?: (sourceId: number | null) => void; onready?: (busy: boolean) => void } = $props()
   const uid = $props.id()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
   const appears = $derived(new Set(parseContexts(values.contexts)))
@@ -37,9 +39,9 @@
   let kind = $state(untrack(() => values.source_kind ?? ''))
 
   // The chain, nearest the cited work first. One empty row is always there to fill.
-  type Row = { key: number; url: string; title: string; author: string; publisher: string; date: string; container: string; kind: string; quote: string }
+  type Row = { key: number; url: string; title: string; author: string; publisher: string; date: string; container: string; kind: string; quote: string; pictures: readonly ViaPicture[] }
   let nextKey = 0
-  const via = (from?: Partial<Via>): Row => ({ key: nextKey++, url: from?.url ?? '', title: from?.title ?? '', author: from?.author ?? '', publisher: from?.publisher ?? '', date: from?.report_date ?? '', container: from?.container ?? '', kind: from?.source_kind ?? '', quote: from?.quote ?? '' })
+  const via = (from?: Partial<Via>): Row => ({ key: nextKey++, url: from?.url ?? '', title: from?.title ?? '', author: from?.author ?? '', publisher: from?.publisher ?? '', date: from?.report_date ?? '', container: from?.container ?? '', kind: from?.source_kind ?? '', quote: from?.quote ?? '', pictures: from?.pictures ?? [] })
   const passage = (from?: Quotation) => ({ key: nextKey++, text: from?.text ?? '', locator: from?.locator ?? '' })
   let passages = $state(untrack(() => {
     const saved = quotations(values.quotes)
@@ -49,8 +51,22 @@
   let vias = $state<Row[]>(untrack(() => values.vias?.length ? values.vias.map(via) : [via()]))
   let viaOpen = $state(untrack(() => Boolean(values.vias?.length)))
   const blankVia = (row: Row) => !(row.url || row.title || row.author || row.publisher || row.date || row.container)
+  // A picture pasted into a field of a go-between is a picture of it.
+  const shots: Record<number, ViaPictures | null> = {}
+  // The chain shares one allowance of pictures; each row may take what the others leave.
+  let held = $state<Record<number, number>>({})
+  const room = (key: number) => MEDIA_MAX - vias.reduce((sum, row) => sum + (row.key === key ? 0 : held[row.key] ?? 0), 0)
+  let preparing = 0
+  const ready = (busy: boolean) => { preparing = Math.max(0, preparing + (busy ? 1 : -1)); onready?.(preparing > 0) }
+  function pasteVia(event: ClipboardEvent, key: number) {
+    const files = [...(event.clipboardData?.files ?? [])].filter(file => file.type.startsWith('image/'))
+    if (!files.length) return
+    event.preventDefault()
+    void shots[key]?.take(files)
+  }
   function removeVia(key: number) {
     vias = vias.filter(row => row.key !== key)
+    delete held[key]
     if (!vias.length) vias = [via()]
   }
   async function moveVia(key: number, by: -1 | 1, button: 'earlier' | 'later' | 'grip') {
@@ -299,7 +315,7 @@
   <p class="hint">{t('field.viaHint')}</p>
   <div class="via-list" class:sorting={dragged !== null} bind:this={viaList}>
   {#each vias as row, index (row.key)}
-    <fieldset class="via" class:dragged={dragged === row.key} animate:flip={{ duration: still ? 0 : 160 }}>
+    <fieldset class="via" class:dragged={dragged === row.key} onpaste={event => pasteVia(event, row.key)} animate:flip={{ duration: still ? 0 : 160 }}>
       {#if vias.length > 1}
         <button type="button" id="{uid}-via-grip-{row.key}" class="grip" aria-label="{t('field.viaDrag')} {index + 1}" title={t('field.viaDrag')} onpointerdown={event => dragVia(event, row.key)} onkeydown={event => gripKey(event, row.key)}><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg><span class="order">{index + 1}</span></button>
       {/if}
@@ -313,6 +329,7 @@
         <div class="field"><label for="{uid}-via_report_date-{row.key}">{t('field.reportDate')}</label><input id="{uid}-via_report_date-{row.key}" class="input" name="via_report_date" bind:value={row.date} aria-describedby="{uid}-via_report_date-{row.key}-read" />{@render yearRead(`${uid}-via_report_date-${row.key}`, row.date)}</div>
       </div>
       <div class="field"><label for="{uid}-via_quote-{row.key}">{t('field.quote')}</label><textarea id="{uid}-via_quote-{row.key}" class="input" name="via_quote" rows="2" maxlength="5000" bind:value={row.quote}></textarea></div>
+      <ViaPictures bind:this={shots[row.key]} stored={row.pictures} room={room(row.key)} oncount={count => held[row.key] = count} onready={ready} />
       <div class="via-actions">
         {#if vias.length > 1}
           <button type="button" id="{uid}-via-earlier-{row.key}" class="text-button" disabled={index === 0} onclick={() => moveVia(row.key, -1, 'earlier')}><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6" /></svg>{t('field.viaEarlier')}</button>
@@ -336,6 +353,7 @@
         {@render kindField(`${uid}-via_source_kind-next`, 'via_source_kind', '', () => {})}
       </div>
       <div class="field"><label for="{uid}-via_quote-next">{t('field.quote')}</label><textarea id="{uid}-via_quote-next" class="input" name="via_quote" rows="2" maxlength="5000"></textarea></div>
+      <div class="field"><label for="{uid}-via_image-next">{t('field.viaPictures')}</label><input id="{uid}-via_image-next" type="file" name="via_image" accept="image/*" multiple /></div>
     </fieldset></noscript>
   {/if}
   {#if vias.length < VIAS_MAX}<div><button type="button" class="button" onclick={() => vias.push(via())}>{t('field.viaAdd')}</button></div>{/if}

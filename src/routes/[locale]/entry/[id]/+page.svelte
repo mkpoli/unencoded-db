@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AgentBadge from '$lib/components/AgentBadge.svelte'
   import RelatedRecords from '$lib/components/RelatedRecords.svelte'
   import SourceQuotations from '$lib/components/SourceQuotations.svelte'
   import EvidenceDate from '$lib/components/EvidenceDate.svelte'
@@ -229,7 +230,10 @@
       </div>
       <p class="sites">{#each descriptionLinks(sequences[0], at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</p>
     {:else}
-      <p><EditLink field="ids" name={t('entry.addIds')} add /></p>
+      <div class="identity">
+        {#if entry.cover_key}<a class="pictured" href={media(entry.cover_key)} target="_blank" rel="noopener"><img src={media(entry.cover_key)} alt={t('entry.record', { id: recordCode(entry.id) })} decoding="async" /></a>{/if}
+        <EditLink field="ids" name={t('entry.addIds')} add />
+      </div>
     {/if}
     {#if analysis?.tagged}
       <p class="formation"><span class="label">{t('field.formation')}</span><span class="method">{formationLabel(at, analysis.formation)}</span>{#each analysis.parts.filter(part => part.role) as part, index (index)}<span class="part">{part.part} · {roleLabel(at, part.role)}</span>{/each}</p>
@@ -287,7 +291,12 @@
       {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
       {:else}<EditLink field="senses" name={t('entry.addSenses')} add />{/if}
     </div>
-    {#if entry.by_name && entry.created_at}<p class="hint">{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</p>{/if}
+    {#if entry.by_name && entry.created_at}
+      <p class="hint attribution">
+        <span>{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</span>
+        {#if entry.by_agent}<AgentBadge name={entry.by_agent} standalone={entry.by_agent === entry.by_name} />{/if}
+      </p>
+    {/if}
   </section>
   <details class="panel" id="edit" bind:open={editOpen}>
     <summary>{t('entry.edit')}</summary>
@@ -338,7 +347,7 @@
         {#if sighting.place}<h3>{sighting.place}</h3>{/if}
         {#if types.length || data.earliest?.sighting === sighting.id}<div class="row badges">{#if data.earliest?.sighting === sighting.id}<span class="badge earliest">{t('entry.earliest')}</span>{/if}{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
-        {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} />{/if}
+        {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} pictures />{/if}
         <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else if field.key === 'source_kind'}{kindName(sighting.source_kind)}{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
           {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
@@ -350,7 +359,12 @@
             {#each supportedBy(claims, sighting.id) as claim (claim.key)}<a class="supported" href="#claim-{claim.key}"><span class="kind">{t(claim.kind === 'relation' ? 'field.relatedCharacter' : `field.${claim.kind}`)}</span><span class="text">{claimLabel(claim)}</span></a>{/each}
           </p>
         {/if}
-        {#if sighting.by_name}<p class="hint">{t('sighting.by', { name: sighting.by_name })}</p>{/if}
+        {#if sighting.by_name}
+          <p class="hint attribution">
+            <span>{t('sighting.by', { name: sighting.by_name })}</span>
+            {#if sighting.by_agent}<AgentBadge name={sighting.by_agent} standalone={sighting.by_agent === sighting.by_name} />{/if}
+          </p>
+        {/if}
         <div class="row">
           {#if sighting.source_id}<a class="text-link small" href={href(`/source/${sighting.source_id}`)}>{t('source.view')}</a>{/if}
           <a class="text-link small" href={href(`/entry/${entry.id}/sighting/${sighting.id}/edit`)}>{t('sighting.edit')}</a>
@@ -377,6 +391,8 @@
   .back { align-self:start; color:var(--muted) } .title { gap:8px } .code { font-variant-numeric:tabular-nums } .code-name { margin-inline-start:6px; font-weight:400; color:var(--muted) } .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
   h3 { font-size:14px; font-weight:600 }
   .identity { display:flex; flex-wrap:wrap; align-items:center; gap:12px 18px; min-width:0 }
+  .pictured { display:grid; place-items:center; width:160px; aspect-ratio:1; overflow:hidden; border-radius:6px; background:var(--surface-tile) }
+  .pictured img { max-width:100%; max-height:100%; object-fit:contain }
   /* The description drawn in each style the site composes, side by side, in place of one plate. */
   .forms { display:flex; flex-wrap:wrap; align-items:flex-start; gap:14px 22px; min-width:0; margin:0; padding:0; list-style:none }
   .form { display:flex; flex-direction:column; gap:6px; min-width:0 }
@@ -414,4 +430,5 @@
   .first-seen { align-self:center; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; text-decoration:underline; text-decoration-color:var(--line-strong); text-underline-offset:3px }
   .first-seen:hover { color:var(--ink) }
   .badge.earliest { background:var(--accent-light); color:var(--accent) }
+  .attribution { display:flex; flex-wrap:wrap; align-items:center; gap:6px }
 </style>

@@ -42,6 +42,7 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
     case '/[locale]/entry/[id]/sighting/[sighting]/edit': return action === 'default' ? 'EDITS' : null
     case '/[locale]/entry/[id]/duplicate': return action === 'merge' || action === 'apart' ? 'EDITS' : null
     case '/[locale]/entry/[id]/history': return ['restore', 'redact', 'thank', 'putBack', 'unmerge'].includes(action) ? 'EDITS' : null
+    case '/[locale]/u/[id]': return action === 'merge' ? 'EDITS' : null
     case '/[locale]/moderate': return ['restoreEntry', 'restoreSighting', 'hide', 'unhide', 'resolve'].includes(action) ? 'EDITS' : null
     default: return null
   }
@@ -50,8 +51,9 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
 // The actions only a moderator takes. Keep this in step with the actions that guard themselves as moderation.
 export function moderationAction(event: RequestEvent) {
   if (event.route?.id === '/[locale]/moderate') return true
-  if (event.route?.id !== '/[locale]/entry/[id]') return false
-  for (const [key] of event.url.searchParams) if (key.startsWith('/')) return key === '/hideComment' || key === '/unhideComment'
+  const route = event.route?.id
+  if (route !== '/[locale]/entry/[id]' && route !== '/[locale]/u/[id]') return false
+  for (const [key] of event.url.searchParams) if (key.startsWith('/')) return route === '/[locale]/u/[id]' ? key === '/merge' : key === '/hideComment' || key === '/unhideComment'
   return false
 }
 

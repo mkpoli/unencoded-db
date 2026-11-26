@@ -12,8 +12,10 @@
   import TagFields from '$lib/components/TagFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { compositionOf, primaryLayoutOf, valuesOf } from '$lib/claims'
-  import { ADD_SIGHTINGS_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
+  import { ADD_SIGHTINGS_MAX, MEDIA_MAX } from '$lib/limits'
+  import { overweight } from '$lib/weigh'
   import { SIGHTING_START } from '$lib/scripts'
+  import { loadSeedPictures } from '$lib/seed-pictures'
   import { href, media, t } from '$lib/t'
   import type { Fill } from '$lib/encoded'
   import type { SightingFields as SightingValues } from '$lib/server/entries'
@@ -30,9 +32,10 @@
   let sightings = $state(typed.length ? typed.map(sighting) : [sighting(untrack(() => form ? {} : data.seed?.values ?? {}))])
   const lists: Record<number, PictureList | null> = {}
   const sections: Record<number, HTMLElement | null> = {}
-  let preparing = $state<Record<number, boolean>>({})
+  let preparing = $state<Record<number, boolean>>({}), found = $state<Record<number, boolean>>({})
+  let seeding = $state(false)
+  const busy = $derived(seeding || sightings.some(item => preparing[item.key] || found[item.key]))
   let sightingSources = $state<Record<number, number | null>>({})
-  const busy = $derived(sightings.some(item => preparing[item.key]))
   const activeSourceIds = $derived([...new Set(sightings.map(item => sightingSources[item.key]).filter((id): id is number => id != null))])
   let sourceTags = $state<string[]>([])
   $effect(() => {
@@ -65,12 +68,9 @@
   }
 
   // The pictures of the sighting the form starts from, fetched so that a new box can be drawn on each.
-  onMount(async () => {
-    if (form) return
-    for (const key of data.seed?.pictures ?? []) {
-      const response = await fetch(media(key)).catch(() => null)
-      if (response?.ok) await lists[sightings[0].key]?.add(await response.blob())
-    }
+  onMount(() => {
+    if (form || !data.seed?.pictures.length) return
+    return loadSeedPictures(data.seed.pictures.map(media), blob => lists[sightings[0].key]?.add(blob), working => seeding = working)
   })
   const claims = $derived(values?.claims ?? [])
   const descriptions = untrack(() => valuesOf(form?.values.claims ?? [], 'ids'))
@@ -89,14 +89,13 @@
   let formEl = $state<HTMLFormElement>()
   async function weigh(event: SubmitEvent) {
     invalidRevealed = false
-    const files = [...(event.currentTarget as HTMLFormElement).querySelectorAll<HTMLInputElement>('input[type=file]')].flatMap(input => [...(input.files ?? [])])
-    heavy = files.reduce((sum, file) => sum + file.size, 0) > PICTURES_BODY_MAX - 1024 * 1024
+    heavy = overweight(event.currentTarget as HTMLFormElement)
     if (!heavy) return
     event.preventDefault()
     await tick()
     notice?.scrollIntoView({ block: 'center' })
   }
-  const message = $derived(heavy ? t('error.tooLarge') : form?.error ? `${form.sighting ? `${t('add.sighting', { n: form.sighting })} · ` : ''}${t(`error.${form.error}`, { max: ADD_SIGHTINGS_MAX })}` : null)
+  const message = $derived(heavy ? t('error.tooLarge') : form?.error ? `${form.sighting ? `${t('add.sighting', { n: form.sighting })} · ` : ''}${t(`error.${form.error}`, { max: ADD_SIGHTINGS_MAX, most: MEDIA_MAX })}` : null)
 
   // A field the browser rejects, or one the server names, is marked and brought into view. The server
   // error arrives with the rejected form, so the page opens the line and section that holds the field.
@@ -128,6 +127,10 @@
       if (!pictures) return null
       const files = [...pictures.querySelectorAll<HTMLInputElement>('input[type="file"]')]
       return { target: files[0] ?? pictures, marks: [pictures, ...files] }
+    }
+    if (error === 'viaSource' || error === 'viaImage') {
+      const field = inSighting(`input[name="${error === 'viaSource' ? 'via_author' : 'via_image'}"]`)
+      return field ? { target: field, marks: [field] } : null
     }
     if (error === 'ivd' && formEl) {
       const sequence = formEl.querySelector<HTMLElement>('input[name="ivd_sequence"]')
@@ -223,8 +226,9 @@
   <header class="heading"><h1>{t('add.title')}</h1><a class="text-link" href={href('/batch')}>{t('batch.link')}</a></header>
   {#if message}<p class="notice bad" role="alert" tabindex="-1" bind:this={notice}>{message}</p>{/if}
   <form class="form" method="POST" enctype="multipart/form-data" bind:this={formEl} onsubmit={weigh} oninvalidcapture={invalid} oninput={clearInvalid} onchange={clearInvalid}>
+    {#if data.seed}<input type="hidden" name="seed" value={data.seed.id} />{/if}
     <section class="panel character">
-      <CharacterFields values={descriptions} {layout} bind:primary onfill={facts => filled = facts}>
+      <CharacterFields values={descriptions} {layout} bind:primary seed={data.seed ? { id: data.seed.id, entry: data.seed.entry } : null} onfill={facts => filled = facts}>
         <div class="sheet">
           <CompositionField ids={primary} value={composition} />
           <ScriptPicker value={values?.script} other={values?.script_other} />
@@ -241,7 +245,7 @@
           {#if index > 0}<button type="button" class="text-button remove" aria-label={t('add.sightingRemove', { n: index + 1 })} onclick={() => remove(item.key)}>{t('form.remove')}</button>{/if}
           <input type="hidden" name={SIGHTING_START} />
           <PictureList bind:this={lists[item.key]} max={MEDIA_MAX} onready={working => preparing[item.key] = working} />
-          <SightingFields values={item.seen} onphotos={files => lists[item.key]?.offer(files)} onsource={id => sightingSources[item.key] = id} />
+          <SightingFields values={item.seen} onphotos={files => lists[item.key]?.offer(files)} onsource={id => sightingSources[item.key] = id} onready={working => found[item.key] = working} />
         </fieldset>
       {/each}
       {#if sightings.length < ADD_SIGHTINGS_MAX}<div><button type="button" class="text-button" onclick={add}>+ {t('entry.addSighting')}</button></div>{/if}

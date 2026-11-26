@@ -1,6 +1,6 @@
-// The Model Context Protocol endpoint: an agent connects here to search the records and to add characters
-// and sightings. It speaks the Streamable HTTP transport without a stream, so each POST is one JSON-RPC
-// message answered with one JSON body (https://modelcontextprotocol.io/specification/2025-11-25/basic/transports).
+// The Model Context Protocol endpoint: an agent connects here to search the records, add characters and
+// sightings, and edit them. It speaks the Streamable HTTP transport without a stream, so each POST is one
+// JSON-RPC message answered with one JSON body (https://modelcontextprotocol.io/specification/2025-11-25/basic/transports).
 //
 // The site takes anonymous writes and names each writer by a token: a browser keeps it in a cookie, and an
 // agent keeps the `Mcp-Session-Id` it is handed on `initialize`. The id decides only whose name a write
