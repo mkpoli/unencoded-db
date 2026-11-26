@@ -46,12 +46,14 @@ export function hydrateBrowseReturn() {
 
 /** Updates remembered browse query and whether history.back() returns directly to it. */
 export function trackBrowseNavigation(navigation: AfterNavigate) {
+  const fromId = Number(navigation.from?.params?.id)
   const toPersist = tracker.track({
     type: navigation.type,
     delta: navigation.delta,
     fromRoute: navigation.from?.route.id ?? null,
     fromLocale: navigation.from?.params?.locale ?? null,
     fromSearch: navigation.from?.url.search ?? '',
+    fromEntryId: Number.isInteger(fromId) && fromId > 0 ? fromId : null,
     toRoute: navigation.to?.route.id ?? null,
     toLocale: navigation.to?.params?.locale ?? null,
     toSearch: navigation.to?.url.search ?? '',
@@ -64,6 +66,16 @@ export function trackBrowseNavigation(navigation: AfterNavigate) {
 export function clearDirectBrowseBack() {
   tracker.clearDirect()
   syncState()
+}
+
+/** Marks the record the user is returning from so the browse grid can highlight (and scroll to) it. */
+export function markReturningFrom(id: number, scroll: boolean) {
+  tracker.markReturning(id, scroll)
+}
+
+/** Consumes the record id being returned from, if any. */
+export function consumeReturningEntry() {
+  return tracker.consumeReturning()
 }
 
 /** Returns the browse link target for the current locale, preserving the last search params. */
