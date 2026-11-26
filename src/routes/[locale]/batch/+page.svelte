@@ -5,7 +5,7 @@
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import SightingFields from '$lib/components/SightingFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
-  import { BATCH_ROWS_MAX } from '$lib/limits'
+  import { BATCH_ROWS_MAX, MEDIA_MAX } from '$lib/limits'
   import { href, t } from '$lib/t'
   let { form } = $props()
   const values = $derived(form?.values)
@@ -15,7 +15,7 @@
   const row = (ids = '', note = '') => ({ key: next++, ids, note })
   const typed = untrack(() => form?.values?.rows ?? [])
   let rows = $state(typed.length ? typed.map(item => row(item.ids, item.note)) : [row(), row(), row()])
-  const message = $derived(form?.error ? `${form.row ? `${t('batch.row', { n: form.row })} · ` : ''}${t(`error.${form.error}`, { max: BATCH_ROWS_MAX, n: form.row ?? 0 })}` : null)
+  const message = $derived(form?.error ? `${form.row ? `${t('batch.row', { n: form.row })} · ` : ''}${t(`error.${form.error}`, { most: MEDIA_MAX, max: BATCH_ROWS_MAX, n: form.row ?? 0 })}` : null)
 </script>
 
 <Seo title={t('batch.title')} />

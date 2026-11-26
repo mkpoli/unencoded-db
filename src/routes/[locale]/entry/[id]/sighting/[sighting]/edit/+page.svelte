@@ -6,6 +6,8 @@
   import SightingFields from '$lib/components/SightingFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { MEDIA_MAX } from '$lib/limits'
+  import { overweight } from '$lib/weigh'
+  import { tick } from 'svelte'
   import { href, t } from '$lib/t'
   import { recordCode } from '$lib/code'
   let { data, form } = $props()
@@ -17,13 +19,23 @@
   let removed = $state<string[]>(untrack(() => form?.removeMedia ?? []))
   const drawn = $derived(form?.marks?.length === data.sighting.media.length ? form.marks : null)
   const room = $derived(MEDIA_MAX - data.sighting.media.length + removed.length)
+  // A form heavier than the server takes is stopped here, where what was typed is still on the page.
+  let heavy = $state(false)
+  let notice = $state<HTMLElement>()
+  async function weigh(event: SubmitEvent) {
+    heavy = overweight(event.currentTarget as HTMLFormElement)
+    if (!heavy) return
+    event.preventDefault()
+    await tick()
+    notice?.scrollIntoView({ block: 'center' })
+  }
 </script>
 
 <Seo {title} />
 <div class="page narrow stack">
   <h1>{title}</h1>
-  {#if form?.error}<p class="notice bad" role="alert">{t(`error.${form.error}`)}</p>{/if}
-  <form class="stack" method="POST" enctype="multipart/form-data">
+  {#if heavy || form?.error}<p class="notice bad" role="alert" bind:this={notice}>{heavy ? t('error.tooLarge') : t(`error.${form?.error}`, { most: MEDIA_MAX })}</p>{/if}
+  <form class="stack" method="POST" enctype="multipart/form-data" onsubmit={weigh}>
     <input type="hidden" name="rev" value={data.sighting.rev} />
     <section class="panel stack">
       {#if data.sighting.media.length}

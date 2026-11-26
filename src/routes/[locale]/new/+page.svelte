@@ -12,7 +12,8 @@
   import TagFields from '$lib/components/TagFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { compositionOf, primaryLayoutOf, valuesOf } from '$lib/claims'
-  import { ADD_SIGHTINGS_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
+  import { ADD_SIGHTINGS_MAX, MEDIA_MAX } from '$lib/limits'
+  import { overweight } from '$lib/weigh'
   import { SIGHTING_START } from '$lib/scripts'
   import { href, media, t } from '$lib/t'
   import type { Fill } from '$lib/encoded'
@@ -73,14 +74,13 @@
   let formEl = $state<HTMLFormElement>()
   async function weigh(event: SubmitEvent) {
     invalidRevealed = false
-    const files = [...(event.currentTarget as HTMLFormElement).querySelectorAll<HTMLInputElement>('input[type=file]')].flatMap(input => [...(input.files ?? [])])
-    heavy = files.reduce((sum, file) => sum + file.size, 0) > PICTURES_BODY_MAX - 1024 * 1024
+    heavy = overweight(event.currentTarget as HTMLFormElement)
     if (!heavy) return
     event.preventDefault()
     await tick()
     notice?.scrollIntoView({ block: 'center' })
   }
-  const message = $derived(heavy ? t('error.tooLarge') : form?.error ? `${form.sighting ? `${t('add.sighting', { n: form.sighting })} · ` : ''}${t(`error.${form.error}`, { max: ADD_SIGHTINGS_MAX })}` : null)
+  const message = $derived(heavy ? t('error.tooLarge') : form?.error ? `${form.sighting ? `${t('add.sighting', { n: form.sighting })} · ` : ''}${t(`error.${form.error}`, { max: ADD_SIGHTINGS_MAX, most: MEDIA_MAX })}` : null)
 
   // A field the browser rejects, or one the server names, is marked and brought into view. The server
   // error arrives with the rejected form, so the page opens the line and section that holds the field.
@@ -211,6 +211,7 @@
   <header class="heading"><h1>{t('add.title')}</h1><a class="text-link" href={href('/batch')}>{t('batch.link')}</a></header>
   {#if message}<p class="notice bad" role="alert" tabindex="-1" bind:this={notice}>{message}</p>{/if}
   <form class="form" method="POST" enctype="multipart/form-data" bind:this={formEl} onsubmit={weigh} oninvalidcapture={invalid} oninput={clearInvalid} onchange={clearInvalid}>
+    {#if data.seed}<input type="hidden" name="seed" value={data.seed.sighting} />{/if}
     <section class="panel character">
       <CharacterFields values={descriptions} {layout} bind:primary onfill={facts => filled = facts}>
         <div class="sheet">
