@@ -3,15 +3,20 @@ import { addSighting, citesEvidence, getEntry, readSightingFields, SightingLimit
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
-import { positiveId, readViaPictures, storeImages, uploadedImages } from '../../../../../_submission.server'
+import { loadSightingSeed, positiveId, readViaPictures, storeImages, uploadedImages } from '../../../../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
+// `?sighting=` starts the form from a visible sighting: its citation, where it was found and its pictures,
+// so evidence from another record can be attached here.
 export const load: PageServerLoad = async (event) => {
   const id = positiveId(event.params.id)
   if (!id) error(404)
-  const found = await getEntry(env(event).DB, id)
+  const { DB } = env(event)
+  const found = await getEntry(DB, id)
   if (!found || found.entry.hidden_at || found.entry.merged_into) error(404)
-  return { id, ids: found.entry.ids }
+  const loaded = await loadSightingSeed(DB, event.url.searchParams.get('sighting'))
+  const seed = loaded && loaded.entry !== id ? loaded : null
+  return { id, ids: found.entry.ids, seed }
 }
 
 export const actions: Actions = {
@@ -23,8 +28,10 @@ export const actions: Actions = {
     const found = await getEntry(DB, id)
     if (!found || found.entry.hidden_at || found.entry.merged_into) error(404)
     const form = await event.request.formData()
-    const values = readSightingFields(form)
-    const shots = await readViaPictures(form)
+    // The pictures of the chain of the sighting the form started from may be kept, while it can be seen.
+    const seed = await loadSightingSeed(DB, String(form.get('seed') ?? ''))
+    const shots = await readViaPictures(form, seed?.values.vias)
+    const values = readSightingFields(form, shots.kept)
     if (found.sightings.length >= SIGHTINGS_MAX) return fail(400, { error: 'sightingLimit', values })
     if (shots.error) return fail(400, { error: shots.error, values })
     const fields = readSightingFields(form, shots.all)

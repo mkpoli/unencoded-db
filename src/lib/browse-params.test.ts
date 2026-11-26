@@ -192,3 +192,29 @@ test('BrowseReturnTracker handles hashchange, multi-hop history links, and reloa
   expect(reloaded.savedSearch).toBe('?q=wood&script=han')
   expect(reloaded.directFromBrowse).toBe(false)
 })
+
+test('BrowseReturnTracker records returning entry for highlight and multi-hop scroll', () => {
+  const tracker = new BrowseReturnTracker()
+  tracker.track({ type: 'enter', fromRoute: null, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '?q=wood' })
+  tracker.track({ type: 'link', fromRoute: '/[locale]', fromLocale: 'zh-Hant', fromSearch: '?q=wood', toRoute: '/[locale]/entry/[id]', toLocale: 'zh-Hant' })
+
+  // Direct return via ← 記錄 highlights without overriding browser/snapshot scroll
+  tracker.markReturning(42, false)
+  tracker.track({ type: 'popstate', delta: -1, fromRoute: '/[locale]/entry/[id]', fromEntryId: 42, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '?q=wood' })
+  expect(tracker.consumeReturning()).toEqual({ id: 42, scroll: false })
+  expect(tracker.consumeReturning()).toBeNull()
+
+  // Browser Back from record without clicking ← 記錄 still highlights the tile
+  tracker.track({ type: 'link', fromRoute: '/[locale]', fromLocale: 'zh-Hant', fromSearch: '?q=wood', toRoute: '/[locale]/entry/[id]', toLocale: 'zh-Hant' })
+  tracker.track({ type: 'popstate', delta: -1, fromRoute: '/[locale]/entry/[id]', fromEntryId: 77, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '?q=wood' })
+  expect(tracker.consumeReturning()).toEqual({ id: 77, scroll: false })
+
+  // Multi-hop return via ← 記錄 marks scroll: true so the browse grid centers the tile
+  tracker.markReturning(99, true)
+  tracker.track({ type: 'link', fromRoute: '/[locale]/entry/[id]', fromEntryId: 99, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '?q=wood' })
+  expect(tracker.consumeReturning()).toEqual({ id: 99, scroll: true })
+
+  // Clicking top-nav Records (plain link without markReturning) does not highlight or scroll
+  tracker.track({ type: 'link', fromRoute: '/[locale]/entry/[id]', fromEntryId: 99, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '' })
+  expect(tracker.consumeReturning()).toBeNull()
+})

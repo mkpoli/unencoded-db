@@ -6,13 +6,21 @@
   import { MEDIA_MAX } from '$lib/limits'
   import { overweight } from '$lib/weigh'
   import { tick } from 'svelte'
-  import { href, t } from '$lib/t'
+  import { loadSeedPictures } from '$lib/seed-pictures'
+  import { href, media, t } from '$lib/t'
   import { recordCode } from '$lib/code'
+  import { onMount } from 'svelte'
   let { data, form } = $props()
-  let adding = $state(false), found = $state(false)
-  const busy = $derived(adding || found)
+  let preparing = $state(false), seeding = $state(false), found = $state(false)
+  const busy = $derived(preparing || seeding || found)
   let pictures = $state<PictureList>()
   const title = $derived(t('sighting.addTitle', { id: recordCode(data.id) }))
+
+  // The pictures of the sighting the form starts from, fetched so that a new box can be drawn on each.
+  onMount(() => {
+    if (form || !data.seed?.pictures.length) return
+    return loadSeedPictures(data.seed.pictures.map(media), blob => pictures?.add(blob), working => seeding = working)
+  })
   // A form heavier than the server takes is stopped here, where what was typed is still on the page.
   let heavy = $state(false)
   let notice = $state<HTMLElement>()
@@ -31,8 +39,9 @@
   {#if heavy || form?.error}<p class="notice bad" role="alert" bind:this={notice}>{heavy ? t('error.tooLarge') : t(`error.${form?.error}`, { most: MEDIA_MAX })}</p>{/if}
   <form class="stack" method="POST" enctype="multipart/form-data" onsubmit={weigh}>
     <section class="panel stack">
-      <PictureList bind:this={pictures} max={MEDIA_MAX} onready={(working) => adding = working} />
-      <SightingFields values={form?.values ?? {}} onphotos={files => pictures?.offer(files)} onready={working => found = working} />
+      {#if data.seed}<input type="hidden" name="seed" value={data.seed.id} />{/if}
+      <PictureList bind:this={pictures} max={MEDIA_MAX} onready={(working) => preparing = working} />
+      <SightingFields values={form?.values ?? data.seed?.values ?? {}} onphotos={files => pictures?.offer(files)} onready={working => found = working} />
     </section>
     <SubmitBar {busy} label={t('entry.addSighting')} cancel={href(`/entry/${data.id}`)} />
   </form>

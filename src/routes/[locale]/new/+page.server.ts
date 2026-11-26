@@ -3,34 +3,22 @@ import { fail, redirect } from '@sveltejs/kit'
 import { mapSightings, newClaim } from '$lib/claims'
 import { readNewTag } from '$lib/tags'
 import { ADD_SIGHTINGS_MAX } from '$lib/limits'
-import { CITATION_FIELDS, citesEvidence, type SightingFields, createEntry, getEntryRow, getSighting, readEntryFields, readSightingFields } from '$lib/server/entries'
+import { citesEvidence, type SightingFields, createEntry, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
-import { positiveId, readImages, readViaPictures, sightingForms, storeImages, type ReadImage } from '../../_submission.server'
+import { loadSightingSeed, readImages, readViaPictures, sightingForms, storeImages, type ReadImage } from '../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
 // `?sighting=` starts the form from a visible sighting: its citation, where it was found and its pictures,
 // for another character seen in the same place.
 export const load: PageServerLoad = async (event) => {
-  const id = positiveId(event.url.searchParams.get('sighting'))
   const { DB } = env(event)
-  const { tags, groups } = await taxonomy(DB)
-  if (!id) return { seed: null, tags, groups }
-  const sighting = await getSighting(DB, id)
-  const entry = sighting && !sighting.hidden_at ? await getEntryRow(DB, sighting.entry_id) : null
-  if (!sighting || !entry || entry.hidden_at || entry.merged_into) return { seed: null, tags, groups }
-  const values: Partial<SightingFields> = { ...Object.fromEntries((['place', 'original_date', 'page', ...CITATION_FIELDS] as const).map(field => [field, sighting[field]])), vias: sighting.vias.map(({ id: _, ...via }) => via) }
-  return { seed: { sighting: sighting.id, values, pictures: sighting.media.map(picture => picture.image_key) }, tags, groups }
+  const [{ tags, groups }, seed] = await Promise.all([taxonomy(DB), loadSightingSeed(DB, event.url.searchParams.get('sighting'))])
+  return { seed, tags, groups }
 }
 
 const filled = (form: FormData, fields: SightingFields) => Object.values({ ...fields, vias: fields.vias.length }).some(Boolean) || [...form.getAll('image'), ...form.getAll('via_image')].some(file => file instanceof File && file.size > 0)
-
-async function seedVias(db: D1Database, id: number | null) {
-  const sighting = id ? await getSighting(db, id) : null
-  const entry = sighting && !sighting.hidden_at ? await getEntryRow(db, sighting.entry_id) : null
-  return sighting && entry && !entry.hidden_at && !entry.merged_into ? sighting.vias : []
-}
 
 export const actions: Actions = {
   // A record and the sightings it starts with. Each sighting needs a picture or a link, and all of them are read and checked before a picture is stored or a row written; the record
@@ -46,7 +34,13 @@ export const actions: Actions = {
     const { DB, MEDIA } = env(event)
     const { tags, groups } = await taxonomy(DB)
     const { fields: read, error: claimError } = readEntryFields(form, tags)
-    const all = sightingForms(form).map(section => ({ form: section, fields: readSightingFields(section) }))
+    // A form started from a sighting may keep the pictures of its chain, while that sighting can be seen. A refused
+    // form shows the ones kept again.
+    const seed = (await loadSightingSeed(DB, String(form.get('seed') ?? '')))?.values.vias ?? []
+    const all = await Promise.all(sightingForms(form).map(async section => {
+      const shots = await readViaPictures(section, seed)
+      return { form: section, shots, fields: readSightingFields(section, shots.kept) }
+    }))
     const sections = all.filter(section => filled(section.form, section.fields))
     // A claim names the sightings behind it by their place on the page, from 1. A sighting left empty is
     // passed over, so each name becomes the place among the ones that are kept.
@@ -63,11 +57,9 @@ export const actions: Actions = {
     if (!sections.length) return reject(400, 'evidence', 1)
     if (sections.length > ADD_SIGHTINGS_MAX) return reject(400, 'sightingsMax')
 
-    // A form started from a sighting may keep the pictures of its chain, while that sighting can be seen.
-    const seed = await seedVias(DB, positiveId(String(form.get('seed') ?? '')))
     const pictures: ReadImage[][] = [], cited: { fields: SightingFields; files: ReadImage[] }[] = []
     for (const [index, section] of sections.entries()) {
-      const shots = await readViaPictures(section.form, seed)
+      const { shots } = section
       if (shots.error) return reject(400, shots.error, index + 1)
       const fields = readSightingFields(section.form, shots.all)
       const images = await readImages(section.form)

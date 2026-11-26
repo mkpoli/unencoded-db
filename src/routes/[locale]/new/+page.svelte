@@ -15,6 +15,7 @@
   import { ADD_SIGHTINGS_MAX, MEDIA_MAX } from '$lib/limits'
   import { overweight } from '$lib/weigh'
   import { SIGHTING_START } from '$lib/scripts'
+  import { loadSeedPictures } from '$lib/seed-pictures'
   import { href, media, t } from '$lib/t'
   import type { Fill } from '$lib/encoded'
   import type { SightingFields as SightingValues } from '$lib/server/entries'
@@ -32,7 +33,8 @@
   const lists: Record<number, PictureList | null> = {}
   const sections: Record<number, HTMLElement | null> = {}
   let preparing = $state<Record<number, boolean>>({}), found = $state<Record<number, boolean>>({})
-  const busy = $derived(sightings.some(item => preparing[item.key] || found[item.key]))
+  let seeding = $state(false)
+  const busy = $derived(seeding || sightings.some(item => preparing[item.key] || found[item.key]))
   // A claim names a sighting of this form by its place on the page, which changes when one is removed.
   const evidence = $derived(sightings.map((item, index) => ({ token: String(item.key), value: String(index + 1), label: t('add.sighting', { n: index + 1 }) })))
 
@@ -50,12 +52,9 @@
   }
 
   // The pictures of the sighting the form starts from, fetched so that a new box can be drawn on each.
-  onMount(async () => {
-    if (form) return
-    for (const key of data.seed?.pictures ?? []) {
-      const response = await fetch(media(key)).catch(() => null)
-      if (response?.ok) await lists[sightings[0].key]?.add(await response.blob())
-    }
+  onMount(() => {
+    if (form || !data.seed?.pictures.length) return
+    return loadSeedPictures(data.seed.pictures.map(media), blob => lists[sightings[0].key]?.add(blob), working => seeding = working)
   })
   const claims = $derived(values?.claims ?? [])
   const descriptions = untrack(() => valuesOf(form?.values.claims ?? [], 'ids'))
@@ -211,9 +210,9 @@
   <header class="heading"><h1>{t('add.title')}</h1><a class="text-link" href={href('/batch')}>{t('batch.link')}</a></header>
   {#if message}<p class="notice bad" role="alert" tabindex="-1" bind:this={notice}>{message}</p>{/if}
   <form class="form" method="POST" enctype="multipart/form-data" bind:this={formEl} onsubmit={weigh} oninvalidcapture={invalid} oninput={clearInvalid} onchange={clearInvalid}>
-    {#if data.seed}<input type="hidden" name="seed" value={data.seed.sighting} />{/if}
+    {#if data.seed}<input type="hidden" name="seed" value={data.seed.id} />{/if}
     <section class="panel character">
-      <CharacterFields values={descriptions} {layout} bind:primary onfill={facts => filled = facts}>
+      <CharacterFields values={descriptions} {layout} bind:primary seed={data.seed ? { id: data.seed.id, entry: data.seed.entry } : null} onfill={facts => filled = facts}>
         <div class="sheet">
           <CompositionField ids={primary} value={composition} />
           <ScriptPicker value={values?.script} other={values?.script_other} />
