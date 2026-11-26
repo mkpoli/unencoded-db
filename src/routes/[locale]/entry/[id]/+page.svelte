@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AgentBadge from '$lib/components/AgentBadge.svelte'
   import RelatedRecords from '$lib/components/RelatedRecords.svelte'
   import SourceQuotations from '$lib/components/SourceQuotations.svelte'
   import EvidenceDate from '$lib/components/EvidenceDate.svelte'
@@ -273,7 +274,12 @@
       {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
       {:else}<EditLink field="senses" name={t('entry.addSenses')} add />{/if}
     </div>
-    {#if entry.by_name && entry.created_at}<p class="hint">{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</p>{/if}
+    {#if entry.by_name && entry.created_at}
+      <p class="hint attribution">
+        <span>{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</span>
+        {#if entry.by_agent}<AgentBadge name={entry.by_agent} standalone={entry.by_agent === entry.by_name} />{/if}
+      </p>
+    {/if}
   </section>
   <details class="panel" id="edit" bind:open={editOpen}>
     <summary>{t('entry.edit')}</summary>
@@ -336,7 +342,12 @@
             {#each supportedBy(claims, sighting.id) as claim (claim.key)}<a class="supported" href="#claim-{claim.key}"><span class="kind">{t(claim.kind === 'relation' ? 'field.relatedCharacter' : `field.${claim.kind}`)}</span><span class="text">{claimLabel(claim)}</span></a>{/each}
           </p>
         {/if}
-        {#if sighting.by_name}<p class="hint">{t('sighting.by', { name: sighting.by_name })}</p>{/if}
+        {#if sighting.by_name}
+          <p class="hint attribution">
+            <span>{t('sighting.by', { name: sighting.by_name })}</span>
+            {#if sighting.by_agent}<AgentBadge name={sighting.by_agent} standalone={sighting.by_agent === sighting.by_name} />{/if}
+          </p>
+        {/if}
         <div class="row">
           {#if sighting.source_id}<a class="text-link small" href={href(`/source/${sighting.source_id}`)}>{t('source.view')}</a>{/if}
           <a class="text-link small" href={href(`/entry/${entry.id}/sighting/${sighting.id}/edit`)}>{t('sighting.edit')}</a>
@@ -402,4 +413,5 @@
   .first-seen { align-self:center; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; text-decoration:underline; text-decoration-color:var(--line-strong); text-underline-offset:3px }
   .first-seen:hover { color:var(--ink) }
   .badge.earliest { background:var(--accent-light); color:var(--accent) }
+  .attribution { display:flex; flex-wrap:wrap; align-items:center; gap:6px }
 </style>
