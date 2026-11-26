@@ -38,7 +38,7 @@
 
 <div class="picker">
 <span class="sr-only" id="{id}-label">{label}</span>
-<Combobox {id} {name} bind:value={typed} {options} {placeholder} labelledby="{id}-label" filter={false} maxlength={200} onquery={query} onopen={() => query(typed)}>
+<Combobox {id} {name} bind:value={typed} {options} {placeholder} labelledby="{id}-label" filter={false} maxlength={200} required takeFirst onquery={query} onopen={() => query(typed)}>
   {#snippet optionContent(option)}
     {@const record = byKey.get(option.key ?? '')}
     <span class="plate" aria-hidden="true">

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { openTestDb } from '$lib/server/testdb'
-import { createEntry, mergeEntry, type EntryFields, type SightingFields } from '$lib/server/entries'
+import { createEntry, mergeEntry, SEARCH_WINDOW, type EntryFields, type SightingFields } from '$lib/server/entries'
 import { newClaim } from '$lib/claims'
 import { createPerson } from '$lib/server/people'
 import { GET } from './records/+server'
@@ -40,4 +40,12 @@ test('a merged record is not offered, by search or by its number', async () => {
   await mergeEntry(db, b, a, who, null)
   expect(await ask('⿱奏騒')).toEqual([a])
   expect(await ask(String(b))).toEqual([])
+})
+
+test('finds a record older than the newest search window', async () => {
+  const { db, who, seen, record, ask } = await setup()
+  const old = await createEntry(db, record('⿱奏騒', 'title of a light novel'), seen, [], who)
+  for (let made = 0; made < SEARCH_WINDOW + 10; made++) await createEntry(db, record('⿰木口'), seen, [], who)
+  expect(await ask('light novel')).toEqual([old])
+  expect(await ask('⿱奏騒')).toEqual([old])
 })
