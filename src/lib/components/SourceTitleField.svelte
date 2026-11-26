@@ -4,6 +4,7 @@
   import Combobox, { type ComboOption } from './Combobox.svelte'
   import { media, t } from '$lib/t'
   import { kindName } from '$lib/source-kind'
+  import { sourceHeading } from '$lib/source-name'
   import { recordCode } from '$lib/code'
   import type { SourceMatch } from '$lib/server/source-aliases'
   import type { Source } from '$lib/server/entries'
@@ -19,7 +20,7 @@
   let page = $state<{ cursor: Cursor | null }>({ cursor: null }), next = $state<Cursor | null>(null)
   const options = $derived<ComboOption[]>([...matches.map(source => ({
     key: String(source.id),
-    label: source.title || (source.container && [source.author, source.container].filter(Boolean).join(' · ')) || source.url || [source.author, kindName(source.source_kind)].filter(Boolean).join(' · ') || source.publisher || source.report_date || `#${source.id}`,
+    label: sourceHeading(source, t),
   })), ...(next !== null ? [{ key: 'more', more: true, label: t('browse.more') }] : [])])
 
   function search(text: string) {

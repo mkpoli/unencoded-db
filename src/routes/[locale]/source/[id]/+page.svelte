@@ -7,12 +7,13 @@
   import ViaChain from '$lib/components/ViaChain.svelte'
   import { href, locale, t, when } from '$lib/t'
   import { kindName } from '$lib/source-kind'
+  import { sourceHeading } from '$lib/source-name'
   import { recordCode } from '$lib/code'
   import { pictureAlt } from '$lib/picture'
   import { sourceData } from '$lib/structured-data'
   let { data, form } = $props()
   const source = $derived(data.source)
-  const heading = $derived(source.title || (source.container && [source.author, source.container].filter(Boolean).join(' · ')) || source.url || [source.author, kindName(source.source_kind)].filter(Boolean).join(' · ') || t('source.title'))
+  const heading = $derived(sourceHeading(source, t))
   const structured = $derived(sourceData({ locale: locale(), source, name: heading, siteName: t('app.name'), sourcesName: t('nav.sources') }))
   const facts = [
     { key: 'title', label: 'field.title' },
