@@ -44,7 +44,8 @@
   import { recordData } from '$lib/structured-data'
   import type { Sighting, StoredImage } from '$lib/server/entries'
   import { href, locale, media, t, day, yearName } from '$lib/t'
-  import { browseReturnHref, canReturnViaHistory } from '$lib/browse-return.svelte'
+  import { browseHref } from '$lib/browse-params'
+  import { browseReturnHref, canReturnViaHistory, markReturningFrom } from '$lib/browse-return.svelte'
   import { kindName } from '$lib/source-kind'
   import { recordCode, recordName } from '$lib/code'
   let { data, form } = $props()
@@ -182,7 +183,9 @@
   const backHref = $derived(browseReturnHref(href()))
   function returnToBrowse(event: MouseEvent) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-    if (!canReturnViaHistory()) return
+    const direct = canReturnViaHistory()
+    markReturningFrom(entry.id, !direct)
+    if (!direct) return
     event.preventDefault()
     history.back()
   }
@@ -222,7 +225,7 @@
       <p class="chips">
         {#each closure.direct as value (value)}
           {@const info = tagsByName.get(value)}
-          <a class="tag-chip" data-tag-type={info?.type ?? 'general'} href={href(`/?tag=${encodeURIComponent(value)}`)}>
+          <a class="tag-chip" data-tag-type={info?.type ?? 'general'} href={browseHref(href(), { tag: value })}>
             {info?.label ?? value}
           </a>
         {/each}
@@ -233,12 +236,12 @@
             class="tag-chip implied"
             data-tag-type={info?.type ?? 'general'}
             title={t('tags.carriedBy', { via: viaNames })}
-            href={href(`/?tag=${encodeURIComponent(implied.name)}`)}
+            href={browseHref(href(), { tag: implied.name })}
           >
             {info?.label ?? implied.name}
           </a>
         {/each}
-        {#each collections as collection (collection.slug)}<a class="chip-link" href={href(`/?collection=${collection.slug}`)}>{collection.label}</a>{/each}
+        {#each collections as collection (collection.slug)}<a class="chip-link" href={browseHref(href(), { collection: collection.slug })}>{collection.label}</a>{/each}
         <EditLink field="filing" name={t('field.filing')} />
       </p>
     {:else}
@@ -259,7 +262,7 @@
         <div><dt>{registryLabel(encoding.charset)}</dt><dd>{#if character}<span class="character encoded">{character}</span><CopyButton text={character} /> {/if}{#if page}<a class="mono text-link" href={page} target="_blank" rel="noopener">{encoding.code} ↗</a>{:else}<span class="mono">{encoding.code}</span>{/if}{#if character}<span class="sites">{#each characterLinks(character, at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</span>{/if}</dd></div>
       {/each}
       {#if ivd}<div><dt>{t('field.ivd')}</dt><dd class:mono={ivd !== 'none'}>{ivd === 'none' ? t('field.ivdNone') : ivd}</dd></div>{/if}
-      {#if data.filed.length}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd class="radicals">{#each data.filed as radical, index (radical.path)}{#if index}<span class="muted" aria-hidden="true">›</span>{/if}<a class="character text-link" href={href(`?radical=${encodeURIComponent(radical.path)}`)}>{radical.radical}</a>{/each}</dd></div>{:else if entry.radical}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd>{entry.radical}</dd></div>{:else}<div><dt>{t('field.radical')}</dt><dd><EditLink field="identity" name={t('entry.addRadical')} add /></dd></div>{/if}
+      {#if data.filed.length}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd class="radicals">{#each data.filed as radical, index (radical.path)}{#if index}<span class="muted" aria-hidden="true">›</span>{/if}<a class="character text-link" href={browseHref(href(), { radical: radical.path })}>{radical.radical}</a>{/each}</dd></div>{:else if entry.radical}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd>{entry.radical}</dd></div>{:else}<div><dt>{t('field.radical')}</dt><dd><EditLink field="identity" name={t('entry.addRadical')} add /></dd></div>{/if}
       {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
     </dl>
     <div class="senses">
