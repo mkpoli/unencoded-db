@@ -38,6 +38,33 @@ describe('plain http', () => {
     expect(response.status).toBe(308)
     expect(response.location).toBe('https://rare.glyphatlas.org/en?q=1')
   })
+
+  test('refuses authenticated plain-http MCP requests instead of redirecting them', async () => {
+    let resolved = false
+    const request = new Request('http://rare.glyphatlas.org/mcp', {
+      method: 'POST',
+      headers: { authorization: 'Bearer secret', 'content-type': 'application/json', 'mcp-session-id': 'anon' },
+      body: '{}',
+    })
+    const response = await runHook(request, async () => { resolved = true; return new Response() }, { route: { id: '/mcp' }, platform: { env: { DB: {} } } })
+    expect(resolved).toBe(false)
+    expect(response.status).toBe(426)
+    expect(response.headers.get('upgrade')).toBe('TLS/1.2')
+    expect(await response.json()).toEqual({
+      jsonrpc: '2.0',
+      id: null,
+      error: { code: -32600, message: 'HTTPS is required for authenticated MCP requests' },
+    })
+  })
+
+  test('still redirects unauthenticated plain-http MCP requests to https', async () => {
+    let resolved = false
+    const request = new Request('http://rare.glyphatlas.org/mcp', { method: 'POST', body: '{}' })
+    const response = await runHook(request, async () => { resolved = true; return new Response() }, { route: { id: '/mcp' }, platform: { env: { DB: {} } } }).catch(thrown => thrown)
+    expect(resolved).toBe(false)
+    expect(response.status).toBe(308)
+    expect(response.location).toBe('https://rare.glyphatlas.org/mcp')
+  })
 })
 
 describe('write body limit', () => {
@@ -128,7 +155,7 @@ describe('write body limit', () => {
 
   test('maps each existing guarded action to its limiter', () => {
     const routes: [string, string, 'ADDS' | 'EDITS'][] = [
-      ['/[locale]/new', '', 'ADDS'], ['/[locale]/batch', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/new', '', 'ADDS'],
+      ['/[locale]/new', '', 'ADDS'], ['/[locale]/batch', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/new', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/[sighting]/split', '', 'ADDS'],
       ['/[locale]/entry/[id]', '?/edit', 'EDITS'], ['/[locale]/entry/[id]', '?/comment', 'EDITS'], ['/[locale]/entry/[id]', '?/hideComment', 'EDITS'], ['/[locale]/entry/[id]', '?/unhideComment', 'EDITS'], ['/[locale]/me', '', 'EDITS'], ['/[locale]/notifications', '', 'EDITS'], ['/api/tags', '', 'EDITS'],
       ['/[locale]/entry/[id]/report', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/edit', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/remove', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/move', '', 'EDITS'],
       ['/[locale]/entry/[id]/history', '?/restore', 'EDITS'],

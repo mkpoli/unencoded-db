@@ -14,7 +14,7 @@
 
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
   const localeSearch = $derived(path === '' ? cleanBrowseSearch(page.url.search) : page.url.search)
-  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path === '/u' || path.startsWith('/u/') ? 'people' : path.startsWith('/mcp') ? 'mcp' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
+  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path === '/u' || path.startsWith('/u/') ? 'people' : path.startsWith('/duplicates') ? 'duplicates' : path.startsWith('/mcp') ? 'mcp' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
   $effect(() => { syncFavourites(data.person?.id ?? null, data.favourites) })
   type NavMode = 'full' | 'priority' | 'compact'
   let navMode = $state<NavMode>()
@@ -151,6 +151,7 @@
         <div class="menu-group">
           <a href={href('/favourites')} class:on={section === 'favourites'} onclick={() => { if (menu) menu.open = false }}>{t('favourites.title')}</a>
           <a href={href('/u')} class:on={section === 'people'} aria-current={path === '/u' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('people.title')}</a>
+          <a href={href('/duplicates')} class:on={section === 'duplicates'} aria-current={section === 'duplicates' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('duplicates.title')}</a>
           <a href={href('/data')} class:on={section === 'data'} aria-current={section === 'data' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('data.title')}</a>
           <a href={href('/mcp')} class:on={section === 'mcp'} aria-current={section === 'mcp' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('mcp.title')}</a>
         </div>
