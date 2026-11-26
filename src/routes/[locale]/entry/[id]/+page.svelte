@@ -212,7 +212,10 @@
       </div>
       <p class="sites">{#each descriptionLinks(sequences[0], at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</p>
     {:else}
-      <p><EditLink field="ids" name={t('entry.addIds')} add /></p>
+      <div class="identity">
+        {#if entry.cover_key}<a class="pictured" href={media(entry.cover_key)} target="_blank" rel="noopener"><img src={media(entry.cover_key)} alt={t('entry.record', { id: recordCode(entry.id) })} decoding="async" /></a>{/if}
+        <EditLink field="ids" name={t('entry.addIds')} add />
+      </div>
     {/if}
     {#if analysis?.tagged}
       <p class="formation"><span class="label">{t('field.formation')}</span><span class="method">{formationLabel(at, analysis.formation)}</span>{#each analysis.parts.filter(part => part.role) as part, index (index)}<span class="part">{part.part} · {roleLabel(at, part.role)}</span>{/each}</p>
@@ -360,6 +363,8 @@
   .back { align-self:start; color:var(--muted) } .title { gap:8px } .code { font-variant-numeric:tabular-nums } .code-name { margin-inline-start:6px; font-weight:400; color:var(--muted) } .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
   h3 { font-size:14px; font-weight:600 }
   .identity { display:flex; flex-wrap:wrap; align-items:center; gap:12px 18px; min-width:0 }
+  .pictured { display:grid; place-items:center; width:160px; aspect-ratio:1; overflow:hidden; border-radius:6px; background:var(--surface-tile) }
+  .pictured img { max-width:100%; max-height:100%; object-fit:contain }
   /* The description drawn in each style the site composes, side by side, in place of one plate. */
   .forms { display:flex; flex-wrap:wrap; align-items:flex-start; gap:14px 22px; min-width:0; margin:0; padding:0; list-style:none }
   .form { display:flex; flex-direction:column; gap:6px; min-width:0 }
