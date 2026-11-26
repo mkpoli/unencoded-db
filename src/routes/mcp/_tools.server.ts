@@ -18,7 +18,7 @@ import { RELATION_KINDS } from '$lib/related'
 import { CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
 import { tagList } from '$lib/server/tags'
-import { addSighting, CITATION_FIELDS, createEntry, editEntry, editSighting, getEntry, hasLink, list, mediaVisible, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, type StoredImage } from '$lib/server/entries'
+import { addSighting, CITATION_FIELDS, citesEvidence, createEntry, editEntry, editSighting, getEntry, heldPictures, list, mediaVisible, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, type StoredImage, type ViaPicture } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { MAX_WRITE_BODY } from '$lib/server/body-limit'
@@ -62,6 +62,7 @@ function recordId(value: unknown) {
   return id && Number.isSafeInteger(id) ? id : null
 }
 // A record's page without a locale opens in the reader's language.
+const shownPicture = (event: RequestEvent, picture: ViaPicture) => ({ url: `${event.url.origin}/media/v2/${picture.image_key}`, width: picture.image_w, height: picture.image_h })
 const shown = (event: RequestEvent, id: number) => ({ id, code: recordCode(id), url: `${event.url.origin}/entry/${id}` })
 
 // ---------- Writes ----------
@@ -313,7 +314,7 @@ async function addRecord(event: RequestEvent, input: Json) {
   if (error) throw new Refusal(said(error))
   const stated = inputs.map((sighting, index) => {
     const fields = readSightingFields(sightingForm(sighting))
-    if (!items(sighting.pictures).length && !hasLink(fields)) throw new Refusal(`Sighting ${index + 1}: ${said('evidence')}`)
+    if (!items(sighting.pictures).length && !citesEvidence(fields)) throw new Refusal(`Sighting ${index + 1}: ${said('evidence')}`)
     return { fields, pictures: sighting.pictures }
   })
   if (!(await chargeWrites(event, 'ADDS', stated.length - 1))) throw new Refusal(said('slow'))
@@ -335,7 +336,7 @@ async function addSightingTo(event: RequestEvent, input: Json) {
   const { DB, MEDIA } = env(event)
   if (found.sightings.length >= SIGHTINGS_MAX) throw new Refusal(said('sightingLimit'))
   const fields = readSightingFields(sightingForm(input))
-  if (!items(input.pictures).length && !hasLink(fields)) throw new Refusal(said('evidence'))
+  if (!items(input.pictures).length && !citesEvidence(fields)) throw new Refusal(said('evidence'))
   // One sighting takes what its form takes in one request.
   const pictures = await readPictures(event, input.pictures, { bytes: MAX_WRITE_BODY, fetches: FETCHES_MAX })
   const media = await storeImages(MEDIA, pictures)
@@ -388,9 +389,11 @@ async function editSightingOf(event: RequestEvent, input: Json) {
     quotes: quotations(sighting.quotes), vias: sighting.vias.map(({ id: _, ...via }) => via),
   }
   const stated = Object.fromEntries(Object.keys(now).filter(name => input[name] !== undefined).map(name => [name, input[name]]))
-  const fields = readSightingFields(sightingForm({ ...now, ...stated }))
+  // An agent sends no pictures of the chain, so each link keeps its own, as a restore does.
+  const read = readSightingFields(sightingForm({ ...now, ...stated }))
+  const fields = { ...read, vias: heldPictures(read.vias, sighting.vias) }
   const pictures = input.pictures === undefined ? null : await editedPictures(event, sighting.media, input.pictures)
-  if (!(pictures ?? sighting.media).length && !hasLink(fields) && !fields.place) throw new Refusal(said('evidence'))
+  if (!(pictures ?? sighting.media).length && !citesEvidence(fields) && !fields.place) throw new Refusal(said('evidence'))
   const { DB, MEDIA } = env(event)
   let media: StoredImage[] | null = null
   if (pictures) {
@@ -470,8 +473,8 @@ async function getRecord(event: RequestEvent, input: Json) {
       id: sighting.id, rev: sighting.rev, place: sighting.place,
       ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
       original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note,
-      vias: sighting.vias.map(({ id: _, ...via }) => via),
-      pictures: sighting.media.map(picture => ({ url: `${event.url.origin}/media/v2/${picture.image_key}`, width: picture.image_w, height: picture.image_h, marks: picture.box ? JSON.parse(picture.box) as number[][] : [] })),
+      vias: sighting.vias.map(({ id: _, pictures, ...via }) => ({ ...via, pictures: (pictures ?? []).map(picture => shownPicture(event, picture)) })),
+      pictures: sighting.media.map(picture => ({ ...shownPicture(event, picture), marks: picture.box ? JSON.parse(picture.box) as number[][] : [] })),
     })),
   }
 }
@@ -617,7 +620,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'edit_sighting', title: 'Edit evidence on a record', annotations: EDITS, run: editSightingOf,
-    description: `Change one sighting of a record. A field left out stays as it is; quotes, vias and pictures given replace the whole list. Keep a picture by giving its address from get_record. ${SIGHTING_RULE} Answers the new rev.`,
+    description: `Change one sighting of a record. A field left out stays as it is; quotes, vias and pictures given replace the whole list. Keep a picture by giving its address from get_record. The pictures of a via stay with it, and are kept even when a via is left out. ${SIGHTING_RULE} Answers the new rev.`,
     inputSchema: { type: 'object', required: ['record', 'sighting', 'rev'], properties: {
       record: RECORD, sighting: { type: 'integer', minimum: 1, description: 'The sighting\'s id in get_record.' }, rev: REV, summary: SUMMARY, ...SIGHTING,
     } },

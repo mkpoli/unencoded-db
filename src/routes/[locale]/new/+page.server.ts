@@ -3,11 +3,11 @@ import { fail, redirect } from '@sveltejs/kit'
 import { mapSightings, newClaim } from '$lib/claims'
 import { readNewTag } from '$lib/tags'
 import { ADD_SIGHTINGS_MAX } from '$lib/limits'
-import { hasLink, type SightingFields, createEntry, readEntryFields, readSightingFields } from '$lib/server/entries'
+import { citesEvidence, type SightingFields, createEntry, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
-import { loadSightingSeed, readImages, sightingForms, storeImages, type ReadImage } from '../../_submission.server'
+import { loadSightingSeed, readImages, readViaPictures, sightingForms, storeImages, type ReadImage } from '../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
 // `?sighting=` starts the form from a visible sighting: its citation, where it was found and its pictures,
@@ -18,7 +18,7 @@ export const load: PageServerLoad = async (event) => {
   return { seed, tags, groups }
 }
 
-const filled = (form: FormData, fields: SightingFields) => Object.values({ ...fields, vias: fields.vias.length }).some(Boolean) || form.getAll('image').some(file => file instanceof File && file.size > 0)
+const filled = (form: FormData, fields: SightingFields) => Object.values({ ...fields, vias: fields.vias.length }).some(Boolean) || [...form.getAll('image'), ...form.getAll('via_image')].some(file => file instanceof File && file.size > 0)
 
 export const actions: Actions = {
   // A record and the sightings it starts with. Each sighting needs a picture or a link, and all of them are read and checked before a picture is stored or a row written; the record
@@ -34,7 +34,13 @@ export const actions: Actions = {
     const { DB, MEDIA } = env(event)
     const { tags, groups } = await taxonomy(DB)
     const { fields: read, error: claimError } = readEntryFields(form, tags)
-    const all = sightingForms(form).map(section => ({ form: section, fields: readSightingFields(section) }))
+    // A form started from a sighting may keep the pictures of its chain, while that sighting can be seen. A refused
+    // form shows the ones kept again.
+    const seed = (await loadSightingSeed(DB, String(form.get('seed') ?? '')))?.values.vias ?? []
+    const all = await Promise.all(sightingForms(form).map(async section => {
+      const shots = await readViaPictures(section, seed)
+      return { form: section, shots, fields: readSightingFields(section, shots.kept) }
+    }))
     const sections = all.filter(section => filled(section.form, section.fields))
     // A claim names the sightings behind it by their place on the page, from 1. A sighting left empty is
     // passed over, so each name becomes the place among the ones that are kept.
@@ -51,17 +57,24 @@ export const actions: Actions = {
     if (!sections.length) return reject(400, 'evidence', 1)
     if (sections.length > ADD_SIGHTINGS_MAX) return reject(400, 'sightingsMax')
 
-    const pictures: ReadImage[][] = []
+    const pictures: ReadImage[][] = [], cited: { fields: SightingFields; files: ReadImage[] }[] = []
     for (const [index, section] of sections.entries()) {
+      const { shots } = section
+      if (shots.error) return reject(400, shots.error, index + 1)
+      const fields = readSightingFields(section.form, shots.all)
       const images = await readImages(section.form)
       if (images === 'invalid') return reject(400, 'image', index + 1)
-      if (!images.length && !hasLink(section.fields)) return reject(400, 'evidence', index + 1)
+      if (!images.length && !citesEvidence(fields)) return reject(400, 'evidence', index + 1)
+      cited.push({ fields, files: shots.files })
       pictures.push(images)
     }
     if (!(await chargeWrites(event, 'ADDS', sections.length - 1))) return reject(429, 'slow')
 
     const drafts = []
-    for (const [index, fields] of sightings.entries()) drafts.push({ fields, media: await storeImages(MEDIA, pictures[index]) })
+    for (const [index, { fields, files }] of cited.entries()) {
+      await storeImages(MEDIA, files)
+      drafts.push({ fields, media: await storeImages(MEDIA, pictures[index]) })
+    }
     const person = await writer(event, DB)
     const who = { actor: person.id, ip: await ipHash(event) }
     if (fresh && !(await createTag(DB, tags, fresh, who, groups)).ok) return reject(400, 'tag')

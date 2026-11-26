@@ -24,7 +24,7 @@ function streamed(chunks: Uint8Array[], length?: string) {
 async function runHook(request: Request, resolve: (event: any) => Promise<Response>, overrides: Record<string, unknown> = {}) {
   const event = {
     request, url: new URL(request.url), cookies: { get: () => undefined }, locals: {},
-    route: { id: '/[locale]/entry/[id]/sighting/new' }, platform: { env: {} }, ...overrides,
+    route: { id: '/[locale]/entry/[id]/report' }, platform: { env: {} }, ...overrides,
   }
   return handle({ event, resolve } as any)
 }
@@ -88,8 +88,8 @@ describe('write body limit', () => {
     })
   }
 
-  test('a form of several pictures has a higher ceiling', async () => {
-    for (const id of ['/[locale]/new', '/[locale]/batch']) {
+  test('a form of pictures has a higher ceiling', async () => {
+    for (const id of ['/[locale]/new', '/[locale]/batch', '/[locale]/entry/[id]/sighting/new', '/[locale]/entry/[id]/sighting/[sighting]/edit']) {
       const within = streamed([new Uint8Array(1)], String(MAX_WRITE_BODY + 1))
       expect((await runHook(within.request, async () => new Response('ok'), { route: { id } })).status).toBe(200)
       const over = streamed([new Uint8Array(1)], String(MAX_PICTURES_BODY + 1))
@@ -135,7 +135,7 @@ describe('write body limit', () => {
 
   test('rejects rate-limited requests before reading the body', async () => {
     const request = streamed([new Uint8Array(1)]).request
-    await expect(runHook(request, async () => new Response(), { platform: { env: { ADDS: { limit: async () => ({ success: false }) } } } })).rejects.toMatchObject({ status: 429 })
+    await expect(runHook(request, async () => new Response(), { route: { id: '/[locale]/entry/[id]/sighting/new' }, platform: { env: { ADDS: { limit: async () => ({ success: false }) } } } })).rejects.toMatchObject({ status: 429 })
     expect(request.bodyUsed).toBe(false)
   })
 

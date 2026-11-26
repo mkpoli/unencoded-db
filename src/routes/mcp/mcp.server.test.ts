@@ -381,6 +381,21 @@ test('a sighting is edited field by field, keeping or replacing its pictures', a
   expect(await call('edit_sighting', { record: 1, sighting: 999, rev: 1 })).toMatchObject({ failed: true, value: expect.stringContaining(`Its sightings: ${read.id}`) })
 })
 
+test('an agent\'s edit keeps the pictures of the chain, which it cannot send', async () => {
+  const { call, raw } = fixture()
+  pictures()
+  await call('add_record', { ids: ['⿰舟覽'], sightings: [{ ...sighting, vias: [{ author: '甲', container: '某討論羣', publisher: 'QQ', quote: '文' }] }] })
+  const read = (await call('get_record', { record: 1 })).value.sightings[0]
+  raw.run("INSERT INTO sighting_via_media VALUES (?, 0, 0, 'shot.png', 'image/png', 10, 10, 'shot-t.png')", [read.id])
+  const held = async () => (await call('get_record', { record: 1 })).value.sightings[0].vias.map((via: { author: string; pictures: { url: string }[] }) => [via.author, via.pictures.map(picture => picture.url.split('/').pop())])
+  expect(await held()).toEqual([['甲', ['shot.png']]])
+  expect((await call('edit_sighting', { record: 1, sighting: read.id, rev: 1, note: 'Checked.' })).failed).toBe(false)
+  expect(await held()).toEqual([['甲', ['shot.png']]])
+  // A via given anew is the agent's text; the one with the picture stays beside it.
+  expect((await call('edit_sighting', { record: 1, sighting: read.id, rev: 2, vias: [{ author: '乙', publisher: 'QQ' }] })).failed).toBe(false)
+  expect(await held()).toEqual([['乙', []], ['甲', ['shot.png']]])
+})
+
 test('an edit matches rows as the claims store them, and keeps the one of two equal pictures its marks name', async () => {
   const { call } = fixture()
   pictures()

@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
-import { addSighting, claimedBy, createEntry, editEntry, editSighting, exportPage, getEntry, getSighting, history, list, mediaVisible, mergeEntry, readSightingFields, redactRevision, restoreSighting, revertEntry, setHidden, sourcePage, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { addSighting, claimedBy, createEntry, editEntry, editSighting, exportPage, getEntry, getSighting, history, list, mediaVisible, mergeEntry, readSightingFields, redactRevision, restoreSighting, revertEntry, setHidden, sourcePage, unmergeEntry, type EntryFields, type SightingFields, type StoredImage, type Via } from './entries'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { sightingSnapshot } from './revisions'
+import { mediaBatches } from './export'
+import { revisionFields, sightingSnapshot } from './revisions'
 import { openTestDb } from './testdb'
 
 const migration = (name: string) => readFileSync(join(import.meta.dir, '../../../migrations', name), 'utf8')
@@ -540,5 +541,84 @@ describe('part rows', () => {
     const { raw } = open()
     const plan = (raw.query("EXPLAIN QUERY PLAN SELECT entry_id FROM entry_tags t WHERE t.tag = ? AND (t.sightings, t.entry_id) < (?, ?) AND t.tag NOT GLOB '[wp]:*' ORDER BY t.sightings DESC, t.entry_id DESC LIMIT 5").all('all', 9, 9) as { detail: string }[]).map(row => row.detail).join('\n')
     expect(plan).toContain('entry_tags_by_sightings')
+  })
+})
+
+describe('the pictures of a go-between', () => {
+  const shot = (name: string) => { const { box: _, ...picture } = image(name); return picture }
+  const message = (author: string, quote: string | null = null, pictures?: ReturnType<typeof shot>[]): Via => ({ url: null, title: null, author, publisher: 'QQ', report_date: '2026-11-14', container: '某討論羣', source_kind: null, quote, ...(pictures ? { pictures } : {}) })
+  const held = async (db: D1Database, id: number) => (await getSighting(db, id))!.vias.map(via => [via.author, (via.pictures ?? []).map(picture => picture.image_key)])
+  const add = async (vias: Via[]) => {
+    const { db, raw } = open()
+    raw.exec('PRAGMA foreign_keys = ON')
+    const id = await createEntry(db, fields(), seen({ vias }), [image('page')], who)
+    return { db, raw, id, sighting: (await getEntry(db, id))!.sightings[0].id }
+  }
+
+  test('follow the go-between through an edit and a reorder, and go with it', async () => {
+    const { db, raw, id, sighting } = await add([message('甲', null, [shot('a'), shot('b')]), message('乙', '文', [shot('c')])])
+    expect(await held(db, sighting)).toEqual([['甲', ['a.jpg', 'b.jpg']], ['乙', ['c.jpg']]])
+    const { vias } = (await getSighting(db, sighting))!
+    await editSighting(db, sighting, 1, seen({ vias: [message('丙'), vias[1], vias[0]] }), null, who, null, id)
+    expect(await held(db, sighting)).toEqual([['丙', []], ['乙', ['c.jpg']], ['甲', ['a.jpg', 'b.jpg']]])
+    // The cover and the pictures of the sighting are its own.
+    expect((await getEntry(db, id))!.entry.cover_key).toBe('page-t.jpg')
+    expect((await getSighting(db, sighting))!.media.map(picture => picture.image_key)).toEqual(['page.jpg'])
+    await editSighting(db, sighting, 2, seen({ vias: [vias[0]] }), null, who, null, id)
+    expect(await held(db, sighting)).toEqual([['甲', ['a.jpg', 'b.jpg']]])
+    expect((raw.query('SELECT count(*) AS n FROM sighting_via_media').get() as { n: number }).n).toBe(2)
+  })
+
+  test('are seen while the sighting is, and no longer once they are gone', async () => {
+    const { db, id, sighting } = await add([message('甲', null, [shot('a')])])
+    for (const key of ['a.jpg', 'a-t.jpg']) expect(await mediaVisible(db, key)).toBe(true)
+    await setHidden(db, { entry: id, sighting }, true, who, null)
+    for (const key of ['a.jpg', 'a-t.jpg']) expect(await mediaVisible(db, key)).toBe(false)
+    await setHidden(db, { entry: id, sighting }, false, who, null)
+    expect(await mediaVisible(db, 'a.jpg')).toBe(true)
+    await editSighting(db, sighting, (await getSighting(db, sighting))!.rev, seen({ vias: [message('甲')] }), null, who, null, id)
+    expect(await mediaVisible(db, 'a.jpg')).toBe(false)
+  })
+
+  test('of rows that repeat one message are kept together', async () => {
+    const { db, sighting } = await add([message('甲', '文', [shot('a'), shot('b')]), message('甲', '文', [shot('b'), shot('c'), shot('d'), shot('e')]), message('甲', '別文')])
+    expect(await held(db, sighting)).toEqual([['甲', ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg', 'e.jpg']], ['甲', []]])
+  })
+
+  test('stay as they are through a restore: none comes back, none is lost, and each goes where the version had it', async () => {
+    const { db, id, sighting } = await add([message('甲', '文', [shot('a')]), message('乙', null, [shot('b')])])
+    const version = async (rev: number) => sightingSnapshot((await history(db, id)).find(row => row.sighting_id === sighting && row.rev === rev)!.snapshot)!
+    const rev = async () => (await getSighting(db, sighting))!.rev
+    const edit = async (vias: Via[]) => editSighting(db, sighting, await rev(), seen({ vias }), null, who, null, id)
+    const restore = async (to: number) => restoreSighting(db, id, sighting, await rev(), await version(to), who, to)
+    const words = async () => (await getSighting(db, sighting))!.vias.map(item => [item.author, item.quote, (item.pictures ?? []).map(picture => picture.image_key)])
+    // Undoing a change to the words of a link brings its pictures back to it.
+    await edit([message('甲', '誤', [shot('a')]), message('乙', null, [shot('b')])])
+    await restore(1)
+    expect(await words()).toEqual([['甲', '文', ['a.jpg']], ['乙', null, ['b.jpg']]])
+    // The history shows the text of a version alone.
+    expect((await history(db, id)).map(row => revisionFields(row).sightingFields).filter(Boolean).every(fields => fields!.vias.every(item => !('pictures' in item)))).toBe(true)
+    // A picture taken away does not come back with the words, even when the citation was corrected since.
+    await edit([{ ...message('甲', '文'), report_date: '2026-11-15' }, message('乙', null, [shot('b')])])
+    await restore(3)
+    expect(await words()).toEqual([['甲', '文', []], ['乙', null, ['b.jpg']]])
+    // A picture given to a corrected link stays with that link, beside the one the version names.
+    await edit([message('甲', '改', [shot('c')])])
+    await restore(3)
+    expect(await words()).toEqual([['甲', '文', []], ['乙', null, []], ['甲', '改', ['c.jpg']]])
+    // In a full chain the links with pictures stay.
+    await edit([message('丙', null, [shot('c')]), message('丁', null, [shot('d')]), message('戊', null, [shot('e')])])
+    await restore(3)
+    expect(await words()).toEqual([['甲', '文', []], ['丙', null, ['c.jpg']], ['丁', null, ['d.jpg']], ['戊', null, ['e.jpg']]])
+  })
+
+  test('are in the export, each with the go-between it shows', async () => {
+    const { db, id, sighting } = await add([message('甲'), message('乙', null, [shot('a'), shot('b')])])
+    expect((await exportPage(db, 0, 10)).entries[0].evidence[0].vias.map(via => via.pictures?.map(picture => picture.image_key))).toEqual([undefined, ['a.jpg', 'b.jpg']])
+    const rows = []
+    for await (const batch of mediaBatches(db, 1)) rows.push(...batch)
+    expect(rows.map(row => [row.sighting_id, row.image_key, row.via_position, row.source_author])).toEqual([[sighting, 'page.jpg', null, null], [sighting, 'a.jpg', 1, '乙'], [sighting, 'b.jpg', 1, '乙']])
+    await setHidden(db, { entry: id, sighting }, true, who, null)
+    for await (const batch of mediaBatches(db, 1)) expect(batch).toEqual([])
   })
 })
