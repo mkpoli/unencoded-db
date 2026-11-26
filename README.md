@@ -94,6 +94,7 @@ An agent can sign in, and then writes under a person's name. The site is the OAu
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
 | `sighting_via_media` | The pictures of a go-between itself, by its place in the chain |
 | `source_aliases`, `source_alias_changes`, `source_search_names` | Alternate names for individual citations, their contributor history, and the lookup index for visible sources |
+| `source_archives`, `source_archive_changes` | Archived copies of a citation's link and their contributor history |
 | `source_keys` | The authors, containers, links and account numbers the Sources page finds a source by |
 | `date_readings`, `evidence_dates` | Calendar readings and the view of transcribed dates in sources, sightings and revision history |
 | `date_index_state` | Generation used to retry writes when their date readings change |
