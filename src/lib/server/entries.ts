@@ -830,9 +830,10 @@ export async function splitSighting(db: D1Database, from: number, id: number, ba
 
 /** The first live record that states one of these descriptions or Unicode code points, or null. */
 export async function describedBy(db: D1Database, claims: readonly Claim[]) {
-  const asked = claims.filter(claim => claim.kind === 'ids' || (claim.kind === 'encoding' && claim.data?.charset === 'unicode'))
-  for (const claim of asked) {
-    const [found] = await claimedBy(db, claim.kind, claim.value, 1)
+  for (const claim of claims) {
+    // A code is found however it was written, as the add form finds it.
+    const char = claim.kind === 'encoding' && claim.data?.charset === 'unicode' ? encodedCharacter(claim.value) : null
+    const [found] = claim.kind === 'ids' ? await claimedBy(db, 'ids', claim.value, 1) : char ? await encodedAs(db, char, 1) : []
     if (found) return found.id
   }
   return null

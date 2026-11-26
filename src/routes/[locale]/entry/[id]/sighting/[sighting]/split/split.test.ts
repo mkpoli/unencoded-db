@@ -43,6 +43,7 @@ test('splitting makes a record of the evidence with the number that follows, and
   // A form that a record states already goes there, the first record's own too, and one left undescribed is ticked.
   expect(await actions.default(event({ rev: '1', ids: '⿰木木', script: 'han' }))).toMatchObject({ status: 409, data: { error: 'same', described: a } })
   expect(await actions.default(event({ rev: '1', script: 'han' }))).toMatchObject({ status: 400, data: { error: 'undescribed' } })
+  expect(await actions.default(event({ rev: '1', ids: '⿱木', script: 'han' }))).toMatchObject({ status: 400, data: { error: 'undescribed' } })
   await expect(actions.default(event({ rev: '1', ids: '⿱木木', script: 'han', summary: ' another form ' }))).rejects.toMatchObject({ status: 303, location: `/en/entry/${a + 1}#sighting-${s}` })
   const made = (await getEntry(db, a + 1))!
   expect(made.entry).toMatchObject({ rev: 1, ids: '⿱木木', sightings: 1, first_year: '1500', first_sighting: s })
@@ -66,7 +67,7 @@ test('splitting makes a record of the evidence with the number that follows, and
   const again = (await addSighting(db, a, seen('A three'), [], { actor: (await createPerson(db)).id, ip: null }))!
   expect(await actions.default(event({ rev: '1', ids: '⿱木木', script: 'han' }, again))).toMatchObject({ status: 409, data: { error: 'described', described: a + 1 } })
   expect(await splitSighting(db, a, again, 1, fields([newClaim('encoding', 'U+6797', { charset: 'unicode' })]), { actor: (await createPerson(db)).id, ip: null }, null)).toMatchObject({ id: a + 3 })
-  expect(await splitSighting(db, a + 3, again, 1, fields([newClaim('encoding', 'U+6797', { charset: 'unicode' })]), { actor: (await createPerson(db)).id, ip: null }, null)).toEqual({ described: a + 3 })
+  expect(await splitSighting(db, a + 3, again, 1, fields([newClaim('encoding', 'u+6797 林', { charset: 'unicode' })]), { actor: (await createPerson(db)).id, ip: null }, null)).toEqual({ described: a + 3 })
   expect(count('entries')).toBe(4)
 })
 

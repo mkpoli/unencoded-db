@@ -1,4 +1,5 @@
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
+import { isDescription } from 'ids-input'
 import { getEntry, readEntryFields, splitSighting, standsAlone } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
@@ -34,7 +35,7 @@ export const actions: Actions = {
     const reject = (status: 400 | 404 | 409, code: string) => fail(status, { error: code, described: null as number | null, values: fields, summary })
     if (claimError) return reject(400, claimError)
     // A record number is never given back, so a form left undescribed is made on purpose.
-    if (!fields.claims.some(claim => claim.kind === 'ids') && !form.has('undescribed')) return reject(400, 'undescribed')
+    if (!fields.claims.some(claim => claim.kind === 'ids' && isDescription(claim.value)) && !form.has('undescribed')) return reject(400, 'undescribed')
     const rev = positiveId(String(form.get('rev') ?? ''))
     if (!rev) return reject(409, 'conflict')
     const person = await writer(event, DB)
