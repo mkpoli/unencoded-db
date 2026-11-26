@@ -20,7 +20,7 @@ import type { Tag } from '$lib/tags'
 import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
 import { groupMates } from '$lib/similar'
 import { PART_RUN_MAX, PART_SPELLINGS_MAX } from '$lib/ids-variants'
-import { BOXES_MAX, MEDIA_MAX, VIA_MEDIA_MAX } from '$lib/limits'
+import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
 import { compareDays, dateText, decadeOf, decadeStart, isDecade } from '$lib/dates'
 import { datedYear, prepareDates, readDates, sightingDates, type DateBook } from './date-readings'
@@ -75,27 +75,38 @@ const citationKey = (citation: Citation) => JSON.stringify(CITATION_FIELDS.map(f
 // The vias of a chain: rows with no field and no picture are dropped, a row that repeats an earlier one is dropped, and
 // at most VIAS_MAX are kept. The quote stays with the link that carries it, and two links to one source
 // that quote different words are two links: two messages one person sent to a group on one day. The pictures
-// of a repeated row join the row it repeats.
+// of a repeated row join the row it repeats; the form has counted them against the chain's allowance already.
 export const tidyVias = (vias: readonly Via[]): Via[] => {
   const kept = new Map<string, Via>()
   for (const [index, via] of vias.entries()) {
     // A row with pictures alone is refused and shown again; `sourceOf` never saves it.
     if (blankCitation(via) && !via.pictures?.length) continue
     const key = blankCitation(via) ? String(index) : viaKey(via), first = kept.get(key)
-    const pictures = [...new Map([...first?.pictures ?? [], ...via.pictures ?? []].map(picture => [picture.image_key, picture])).values()].slice(0, VIA_MEDIA_MAX)
+    const pictures = [...new Map([...first?.pictures ?? [], ...via.pictures ?? []].map(picture => [picture.image_key, picture])).values()]
     const { pictures: _, ...row } = first ?? via
     kept.set(key, pictures.length ? { ...row, pictures } : row)
   }
   return [...kept.values()].slice(0, VIAS_MAX)
 }
 const viaKey = (via: Via) => citationKey(via) + '\u0000' + (via.quote ?? '')
-// A restore brings back the text and leaves the pictures as they are. A link the version names with the same words keeps
-// its pictures; any other link with pictures stays in the chain with them, after the links of the version.
+// A restore brings back the text and leaves the pictures as they are: no picture comes back and none is lost. A
+// picture the sighting still holds goes where the version had it, so undoing a change to a link's words brings its
+// pictures back to it; a link with the same words keeps its own; any other link with pictures left stays in the chain
+// with them, after the links of the version.
 function restoredVias(vias: readonly Via[], current: readonly Via[]): Via[] {
-  const pictured = new Map(current.filter(via => via.pictures?.length).map(via => [viaKey(via), via]))
-  const named = new Set(vias.map(viaKey))
-  const kept = [...pictured].filter(([key]) => !named.has(key)).map(([, via]) => ({ ...snapshotOf(via, CITATION_FIELDS), quote: via.quote, pictures: via.pictures }) as Via)
-  const text = vias.map(via => ({ ...via, pictures: pictured.get(viaKey(via))?.pictures }))
+  const live = new Map(current.flatMap(via => via.pictures ?? []).map(picture => [picture.image_key, picture]))
+  const placed = new Set<string>()
+  const place = (keys: readonly string[]) => keys.flatMap(key => { const picture = live.get(key); if (!picture || placed.has(key)) return []; placed.add(key); return [picture] })
+  const was = vias.map(via => place((via.pictures ?? []).map(picture => picture.image_key)))
+  const same = new Map(current.map(via => [viaKey(via), via]))
+  const text = vias.map((via, index) => {
+    const pictures = [...was[index], ...place((same.get(viaKey(via))?.pictures ?? []).map(picture => picture.image_key))]
+    return { ...via, pictures: pictures.length ? pictures : undefined }
+  })
+  const kept = current.flatMap(via => {
+    const pictures = place((via.pictures ?? []).map(picture => picture.image_key))
+    return pictures.length ? [{ ...snapshotOf(via, CITATION_FIELDS), quote: via.quote, pictures } as Via] : []
+  })
   // Past the most links a chain holds, a link with pictures stays and the last one without gives way.
   for (let over = text.length + kept.length - VIAS_MAX; over > 0; over--) {
     const at = text.findLastIndex(via => !via.pictures)
@@ -1682,7 +1693,7 @@ export async function openReports(db: D1Database, after = 0) {
 export const EXPORT_PAGE_MAX = 200
 const EXPORT_SIGHTING_COLUMNS = ['id', 'entry_id', 'first_entry', 'rev', 'source_id', ...OCCURRENCE_FIELDS, 'hidden_at', 'created_by', 'created_at', 'updated_at'] as const
 const EXPORT_MEDIA = `(SELECT json_group_array(json_object(${IMAGE_FIELDS.map(field => `'${field}', x.${field}`).join(', ')})) FROM (SELECT * FROM sighting_media WHERE sighting_id = s.id ORDER BY position) x)`
-const EXPORT_VIAS = `(SELECT json_group_array(json_object('id', x.id, 'quote', x.quote, ${CITATION_FIELDS.map(field => `'${field}', x.${field}`).join(', ')}, 'pictures', json(x.pictures))) FROM (SELECT c.*, v.quote, ${VIA_PICTURES} AS pictures FROM sighting_vias v JOIN sources c ON c.id = v.source_id WHERE v.sighting_id = s.id ORDER BY v.position) x)`
+const EXPORT_VIAS = `(SELECT json_group_array(CASE x.pictures WHEN '[]' THEN json_object('id', x.id, 'quote', x.quote, ${CITATION_FIELDS.map(field => `'${field}', x.${field}`).join(', ')}) ELSE json_object('id', x.id, 'quote', x.quote, ${CITATION_FIELDS.map(field => `'${field}', x.${field}`).join(', ')}, 'pictures', json(x.pictures)) END) FROM (SELECT c.*, v.quote, ${VIA_PICTURES} AS pictures FROM sighting_vias v JOIN sources c ON c.id = v.source_id WHERE v.sighting_id = s.id ORDER BY v.position) x)`
 const EXPORT_EVIDENCE = `CASE WHEN s.id IS NULL THEN NULL ELSE json_object(${EXPORT_SIGHTING_COLUMNS.map(column => `'${column}', s.${column}`).join(', ')}, ${CITATION_FIELDS.map(field => `'${field}', c.${field}`).join(', ')}, 'vias', json(${EXPORT_VIAS}), 'media', json(${EXPORT_MEDIA}), 'by_id', COALESCE(m.id, p.id), 'by_name', COALESCE(m.name, p.name)) END AS evidence_json`
 // The name a record is credited to, after the anonymous people merged into an account take its name.
 const EXPORT_AUTHOR = `(SELECT COALESCE(am.name, ap.name) FROM people ap LEFT JOIN people am ON am.id = ap.merged_into WHERE ap.id = e.created_by) AS created_by_name`

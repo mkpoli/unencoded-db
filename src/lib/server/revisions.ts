@@ -1,13 +1,15 @@
 import { quotations } from '../quotations'
 import { readDates, sightingDates } from './date-readings'
 import { STYLES, VIAS_MAX, isStoredContexts, isStoredSightingTypes, sourceKind } from '$lib/scripts'
-import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, tidyVias, type EntryFields, type SightingFields, type Via } from './entries'
+import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, VIA_IMAGE_FIELDS, tidyVias, type EntryFields, type SightingFields, type Via, type ViaPicture } from './entries'
 
 // Only entry fields are public; a snapshot can also hold sighting or internal data.
 export const entrySnapshot = (raw: string): EntryFields | null => entryFieldsOf(raw)
 
 // The chain of a snapshot: at most VIAS_MAX objects of the citation fields and an optional quote, each
 // link a web address or null. A snapshot written before quotes, containers or kinds were kept reads as one without them.
+// What a version says a link's pictures were, which only places the pictures a sighting still holds.
+const isPicture = (raw: unknown): raw is ViaPicture => Boolean(raw) && typeof raw === 'object' && VIA_IMAGE_FIELDS.every(field => ['string', 'number'].includes(typeof (raw as Record<string, unknown>)[field]))
 function parseVias(raw: unknown): Via[] | null {
   if (!Array.isArray(raw) || raw.length > VIAS_MAX) return null
   const vias: Via[] = []
@@ -19,7 +21,8 @@ function parseVias(raw: unknown): Via[] | null {
     for (const field of CITATION_FIELDS) if (typeof item[field] !== 'string' && item[field] !== null) return null
     if (typeof item.quote !== 'string' && item.quote !== null && item.quote !== undefined) return null
     if (item.url !== null && !/^https?:\/\//i.test(item.url)) return null
-    vias.push({ ...Object.fromEntries(CITATION_FIELDS.map(field => [field, item[field]])), quote: typeof item.quote === 'string' ? item.quote : null } as Via)
+    if (item.pictures !== undefined && !(Array.isArray(item.pictures) && item.pictures.every(isPicture))) return null
+    vias.push({ ...Object.fromEntries(CITATION_FIELDS.map(field => [field, item[field]])), quote: typeof item.quote === 'string' ? item.quote : null, ...(item.pictures?.length ? { pictures: item.pictures } : {}) } as Via)
   }
   return tidyVias(vias)
 }
@@ -59,6 +62,12 @@ export type SnapshotRow = { sighting_id: number | null; kind: string; snapshot: 
 // Whether a hide or an unhide is a reader's: evidence taken off its record or put back on it.
 const removal = ({ kind, snapshot }: SnapshotRow) => (kind === 'hide' || kind === 'unhide') && snapshot === '{"removed":true}'
 
+// A past version as the history shows it: the text, and none of the pictures it held.
+function shownSnapshot(raw: string) {
+  const fields = sightingSnapshot(raw)
+  return fields && { ...fields, vias: fields.vias.map(({ pictures: _, ...via }) => via) }
+}
+
 // The old version a revision holds, or null for a change that changed no readable text.
 export function revisionFields(row: SnapshotRow) {
   const moved = row.kind === 'edit' ? moveSnapshot(row.snapshot) : null
@@ -66,7 +75,7 @@ export function revisionFields(row: SnapshotRow) {
     kind: removal(row) ? row.kind === 'hide' ? 'remove' : 'put_back' : moved ? 'move' : row.kind,
     moved,
     fields: !row.redacted_at && !row.sighting_id && ENTRY_KINDS.includes(row.kind) ? entrySnapshot(row.snapshot) : null,
-    sightingFields: !row.redacted_at && row.sighting_id && SIGHTING_KINDS.includes(row.kind) ? sightingSnapshot(row.snapshot) : null,
+    sightingFields: !row.redacted_at && row.sighting_id && SIGHTING_KINDS.includes(row.kind) ? shownSnapshot(row.snapshot) : null,
     merge: MERGE_KINDS.includes(row.kind) ? mergeSnapshot(row.snapshot) : null,
   }
 }
