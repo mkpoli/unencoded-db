@@ -12,24 +12,31 @@ const reject = <Values>(status: 400 | 429, error: string, values: Values, row = 
 const filled = (value: FormDataEntryValue | undefined) => value instanceof File && value.size > 0
 
 export const actions: Actions = {
-  // One source and one script, and a row for each character: `ids`, `row_note` and the picker's `image`,
-  // `thumb` and `box` repeat once per row, so the nth of each belongs to the nth row. Each row is saved by
-  // `createEntry`, as a single add is. The request has paid for one add in `guardWrite`; the other rows are
-  // charged to the same allowance below, before anything is written, so a batch never gets past the rate
-  // limit that the same characters added one at a time would meet.
+  // One source and one script, and a row for each character: `ids`, `row_note`, `row_related_character`,
+  // `row_related_relationship` and the picker's `image`, `thumb` and `box` repeat once per row, so the nth
+  // of each belongs to the nth row. Each row is saved by `createEntry`, as a single add is. The request has
+  // paid for one add in `guardWrite`; the other rows are charged to the same allowance below, before anything
+  // is written, so a batch never gets past the rate limit that the same characters added one at a time would meet.
   default: async (event) => {
     await guardWrite(event, 'ADDS')
     const form = await event.request.formData()
     // A batch names no category, so no list of them is read.
     const { fields: base } = readEntryFields(form, []), shared = readSightingFields(form)
     const ids = form.getAll('ids').map(String), notes = form.getAll('row_note').map(String)
+    const related = form.getAll('row_related_character').map(String), relationships = form.getAll('row_related_relationship').map(String)
     const files = form.getAll('image'), thumbs = form.getAll('thumb'), boxes = form.getAll('box')
-    const count = Math.max(ids.length, notes.length, files.length)
-    const typed = Array.from({ length: Math.min(count, BATCH_ROWS_MAX) }, (_, i) => ({ ids: ids[i] ?? '', note: notes[i] ?? '' }))
+    const count = Math.max(ids.length, notes.length, related.length, relationships.length, files.length)
+    const typed = Array.from({ length: Math.min(count, BATCH_ROWS_MAX) }, (_, i) => ({
+      ids: ids[i] ?? '',
+      note: notes[i] ?? '',
+      related: related[i] ?? '',
+      relationship: relationships[i] ?? 'uncertain',
+    }))
     const values = { script: base.script, script_other: base.script_other, ...shared, rows: typed }
     if (count > BATCH_ROWS_MAX) return reject(400, 'batchTooMany', values)
+    if (related.length !== relationships.length) return reject(400, 'relatedCharacters', values)
     // A row with nothing in it is skipped, so a spare row costs nothing.
-    const chosen = typed.map((row, index) => ({ ...row, index, picture: filled(files[index]) })).filter(row => row.ids.trim() || row.note.trim() || row.picture)
+    const chosen = typed.map((row, index) => ({ ...row, index, picture: filled(files[index]) })).filter(row => row.ids.trim() || row.note.trim() || row.related.trim() || row.picture)
     if (!chosen.length) return reject(400, 'batchRows', values)
 
     const rows = []
@@ -37,6 +44,13 @@ export const actions: Actions = {
       const entry = new FormData()
       entry.set('script', base.script_other ?? base.script)
       entry.set('ids', row.ids)
+      if (row.related.trim()) {
+        entry.set('related_characters_present', '1')
+        entry.set('related_character', row.related)
+        entry.set('related_relationship', row.relationship)
+        entry.set('related_difference', '')
+        entry.set('related_evidence', '')
+      }
       const { fields, error } = readEntryFields(entry, [])
       if (error) return reject(400, error, values, row.index + 1)
       if (!row.picture && !hasLink(shared)) return reject(400, 'evidence', values, row.index + 1)
