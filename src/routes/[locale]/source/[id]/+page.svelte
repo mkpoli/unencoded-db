@@ -3,7 +3,7 @@
   import EvidenceDate from '$lib/components/EvidenceDate.svelte'
   import Seo from '$lib/components/Seo.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
-  import MarkedPicture from '$lib/components/MarkedPicture.svelte'
+  import EvidencePictures from '$lib/components/EvidencePictures.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
   import { href, locale, t, when } from '$lib/t'
   import { kindName } from '$lib/source-kind'
@@ -107,11 +107,7 @@
           <span class="small muted">{recordCode(tile.id)}</span>
         </a>
         <div class="stack body">
-          {#if sighting.media.length}
-            <div class="pictures" class:single={sighting.media.length === 1}>
-              {#each sighting.media as picture, position (picture.image_key)}<MarkedPicture {picture} alt={pictureAlt([tile.ids, recordCode(tile.id), sighting.via ? null : source.title, sighting.place], position, sighting.media.length)} />{/each}
-            </div>
-          {/if}
+          <EvidencePictures pictures={sighting.media} alt={position => pictureAlt([tile.ids, recordCode(tile.id), sighting.via ? null : source.title, sighting.place], position, sighting.media.length)} />
           {#if sighting.via}<span class="badge via">{t('source.foundVia')}</span>{/if}
           {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} label={!sighting.via} pictures />{/if}
           {#if sighting.place}<h3>{sighting.place}</h3>{/if}
@@ -145,8 +141,6 @@
   .record .ids { max-width:100%; overflow-wrap:anywhere; text-align:center }
   .record:hover .ids { text-decoration:underline }
   .body { gap:10px; min-width:0 }
-  .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr)); gap:12px } .pictures.single { grid-template-columns:minmax(0,1fr) }
-  .pictures:not(.single) { --picture-height:260px }
   .note { margin:0; white-space:pre-wrap; overflow-wrap:anywhere }
   h3 { margin:0 } .badge.via { align-self:start }
   @media(max-width:600px) { .panel { padding:16px } .seen { grid-template-columns:minmax(0,1fr) } .record { flex-direction:row; justify-content:flex-start; gap:10px } .plate { width:56px; height:56px } }
