@@ -28,7 +28,8 @@ The later record joins the earlier one:
 
 ## Separate records
 
-Keep two records apart, and link them with a relation claim, when:
+Keep two records apart, and link them with a relation claim, when one of these holds. Keep apart, on the
+page that compares the pair, puts the relation on the later record:
 
 - the forms differ in a part, or in how the parts are placed, even if they share a reading or a
   meaning (relation: Variant, Erroneous variant, Similar);

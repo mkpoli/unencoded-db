@@ -349,6 +349,7 @@
   "duplicate.joins": "合并到另一条记录",
   "duplicate.of": "记录编号",
   "duplicate.merge": "合并",
+  "duplicate.apart": "分别保留",
   "history.title": "记录{id}的历史",
   "history.back": "返回记录",
   "history.restore": "恢复此版本",

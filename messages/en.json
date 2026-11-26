@@ -349,6 +349,7 @@
   "duplicate.joins": "Merges into it",
   "duplicate.of": "Record number",
   "duplicate.merge": "Merge",
+  "duplicate.apart": "Keep apart",
   "history.title": "History of record {id}",
   "history.back": "Back to the record",
   "history.restore": "Restore this version",

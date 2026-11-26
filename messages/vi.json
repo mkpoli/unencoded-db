@@ -349,6 +349,7 @@
   "duplicate.joins": "Gộp vào mục từ kia",
   "duplicate.of": "Số mục từ",
   "duplicate.merge": "Gộp",
+  "duplicate.apart": "Giữ riêng",
   "history.title": "Lịch sử mục từ {id}",
   "history.back": "Quay lại mục từ",
   "history.restore": "Khôi phục phiên bản này",

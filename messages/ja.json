@@ -349,6 +349,7 @@
   "duplicate.joins": "統合される記録",
   "duplicate.of": "記録番号",
   "duplicate.merge": "統合",
+  "duplicate.apart": "別々に残す",
   "history.title": "記録{id}の履歴",
   "history.back": "記録に戻る",
   "history.restore": "この版を復元",

@@ -12,13 +12,15 @@ import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
-import { encodingsOf, joinClaims, mapSightings, moveClaims, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, valuesOf, type Brought, type Claim, type ClaimError } from '$lib/claims'
+import { encodingsOf, joinClaims, mapSightings, moveClaims, newClaim, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, valuesOf, type Brought, type Claim, type ClaimError } from '$lib/claims'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { FILE_ROWS, ensureTags, filedUnder } from './tags'
 import type { Tag } from '$lib/tags'
 import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
 import { groupMates } from '$lib/similar'
+import { codedRecord, recordCode } from '$lib/code'
+import type { RelationKind } from '$lib/related'
 import { PART_RUN_MAX, PART_SPELLINGS_MAX } from '$lib/ids-variants'
 import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
@@ -556,6 +558,25 @@ export async function editEntry(db: D1Database, id: number, baseRev: number, fie
       if (await revisionMark(db, id) !== mark && attempt < 4) continue
       throw error
     }
+  }
+}
+
+export type RelateResult = { ok: true } | { ok: false; code: 'self' | 'missing' | 'merged' | 'conflict' | 'relatedCharacters' }
+
+/** States on one record how it relates to another, which keeps the two apart. Stated already, it is not stated again. */
+export async function relateEntry(db: D1Database, id: number, to: number, data: { relationship: RelationKind; difference?: string }, who: Who, summary: string | null): Promise<RelateResult> {
+  if (id === to) return { ok: false, code: 'self' }
+  for (let attempt = 0; ; attempt++) {
+    const entry = await getEntryRow(db, id), other = await getEntryRow(db, to)
+    if (!entry || !other || entry.hidden_at || other.hidden_at) return { ok: false, code: 'missing' }
+    if (entry.merged_into || other.merged_into) return { ok: false, code: 'merged' }
+    const current = await claimRows(db, id)
+    if (current.some(claim => claim.kind === 'relation' && !claim.under.length && codedRecord(claim.value) === to && claim.data?.relationship === data.relationship && (claim.data.difference ?? '') === (data.difference ?? ''))) return { ok: true }
+    const claims = parseClaims([...current, newClaim('relation', recordCode(to), data)])
+    if (!claims) return { ok: false, code: 'relatedCharacters' }
+    const result = await editEntry(db, id, entry.rev, { ...snapshotOf(entry, ENTRY_FIELDS), claims } as EntryFields, who, summary)
+    if (result.ok) return { ok: true }
+    if (result.code !== 'conflict' || attempt >= 4) return result
   }
 }
 
