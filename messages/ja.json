@@ -654,6 +654,7 @@
   "tags.unimply": "{name}から{target}の自動付与を解除",
   "tags.carriedBy": "{via}により自動付与",
   "tags.impliedAuto": "自動で付くタグ:",
+  "tags.fromSource": "同じ出典のタグ:",
   "tags.undo": "元に戻す",
   "tags.change.create": "追加",
   "tags.change.move": "移動",

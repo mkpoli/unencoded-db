@@ -16,7 +16,7 @@
   import type { Citation, SightingFields, Via } from '$lib/server/entries'
   import { VIAS_MAX } from '$lib/scripts'
 
-  let { values = {}, onphotos }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void } = $props()
+  let { values = {}, onphotos, onsource }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void; onsource?: (sourceId: number | null) => void } = $props()
   const uid = $props.id()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
   const appears = $derived(new Set(parseContexts(values.contexts)))
@@ -270,7 +270,7 @@
 <details class="more" bind:open>
   <summary>{t('field.source')}</summary>
   <div class="grid-2">
-    <SourceTitleField id="{uid}-title" name="title" bind:value={title} onselect={chooseSource} />
+    <SourceTitleField id="{uid}-title" name="title" bind:value={title} onselect={chooseSource} {onsource} />
     <div class="field"><label for="{uid}-author">{t('field.author')}</label><input id="{uid}-author" class="input" name="author" bind:value={author} maxlength="300" /></div>
     <ContainerField id="{uid}-container" name="container" bind:value={container} bind:publisher />
     <PublisherField id="{uid}-publisher" name="publisher" bind:value={publisher} />

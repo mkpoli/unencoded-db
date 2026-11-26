@@ -654,6 +654,7 @@
   "tags.unimply": "Bỏ kèm {target} khỏi {name}",
   "tags.carriedBy": "Tự động kèm theo từ {via}",
   "tags.impliedAuto": "Cũng tự động kèm theo:",
+  "tags.fromSource": "Thẻ từ nguồn này:",
   "tags.undo": "Hoàn tác",
   "tags.change.create": "Đã thêm",
   "tags.change.move": "Đã chuyển",

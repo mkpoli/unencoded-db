@@ -654,6 +654,7 @@
   "tags.unimply": "{name}에서 {target} 자동 포함 해제",
   "tags.carriedBy": "{via}에 의해 자동 포함됨",
   "tags.impliedAuto": "자동으로 함께 붙는 태그:",
+  "tags.fromSource": "같은 출처의 태그:",
   "tags.undo": "되돌리기",
   "tags.change.create": "추가",
   "tags.change.move": "이동",

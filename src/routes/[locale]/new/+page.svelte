@@ -31,7 +31,22 @@
   const lists: Record<number, PictureList | null> = {}
   const sections: Record<number, HTMLElement | null> = {}
   let preparing = $state<Record<number, boolean>>({})
+  let sightingSources = $state<Record<number, number | null>>({})
   const busy = $derived(sightings.some(item => preparing[item.key]))
+  const activeSourceIds = $derived([...new Set(sightings.map(item => sightingSources[item.key]).filter((id): id is number => id != null))])
+  let sourceTags = $state<string[]>([])
+  $effect(() => {
+    const ids = activeSourceIds
+    if (!ids.length) { sourceTags = []; return }
+    const params = new URLSearchParams()
+    for (const id of ids) params.append('source', String(id))
+    const controller = new AbortController()
+    fetch('/api/sources/tags?' + params, { signal: controller.signal })
+      .then(response => response.ok ? response.json() as Promise<{ tags?: string[] }> : null)
+      .then(payload => { if (!controller.signal.aborted && payload?.tags) sourceTags = payload.tags })
+      .catch(() => {})
+    return () => controller.abort()
+  })
   // A claim names a sighting of this form by its place on the page, which changes when one is removed.
   const evidence = $derived(sightings.map((item, index) => ({ token: String(item.key), value: String(index + 1), label: t('add.sighting', { n: index + 1 }) })))
 
@@ -44,6 +59,7 @@
   async function remove(key: number) {
     const at = sightings.findIndex(item => item.key === key)
     sightings.splice(at, 1)
+    delete sightingSources[key]
     await tick()
     sections[sightings[Math.max(0, at - 1)].key]?.focus()
   }
@@ -225,14 +241,14 @@
           {#if index > 0}<button type="button" class="text-button remove" aria-label={t('add.sightingRemove', { n: index + 1 })} onclick={() => remove(item.key)}>{t('form.remove')}</button>{/if}
           <input type="hidden" name={SIGHTING_START} />
           <PictureList bind:this={lists[item.key]} max={MEDIA_MAX} onready={working => preparing[item.key] = working} />
-          <SightingFields values={item.seen} onphotos={files => lists[item.key]?.offer(files)} />
+          <SightingFields values={item.seen} onphotos={files => lists[item.key]?.offer(files)} onsource={id => sightingSources[item.key] = id} />
         </fieldset>
       {/each}
       {#if sightings.length < ADD_SIGHTINGS_MAX}<div><button type="button" class="text-button" onclick={add}>+ {t('entry.addSighting')}</button></div>{/if}
     </section>
     <details class="panel filing" open>
       <summary class="section-title">{t('field.filing')}</summary>
-      <div class="group filed"><TagFields tags={data.tags} groups={data.groups} selected={valuesOf(claims, 'tag')} collections={valuesOf(claims, 'collection')} /></div>
+      <div class="group filed"><TagFields tags={data.tags} groups={data.groups} selected={valuesOf(claims, 'tag')} collections={valuesOf(claims, 'collection')} suggested={sourceTags} /></div>
     </details>
     <section class="panel noted">
       <div class="titled"><label class="section-title" for="description">{t('field.notes')}</label><span class="subtitle" id="description-note">{t('field.description')}</span></div>
