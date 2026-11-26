@@ -50,7 +50,7 @@ export async function readImages(form: FormData): Promise<ReadImage[] | 'invalid
   return prepared
 }
 
-const described = ({ image, thumb }: ReadImage): ViaPicture => ({ image_key: image.key, image_type: image.type, image_w: image.width, image_h: image.height, thumb_key: thumb.key })
+export const described = ({ image, thumb }: ReadImage): ViaPicture => ({ image_key: image.key, image_type: image.type, image_w: image.width, image_h: image.height, thumb_key: thumb.key })
 
 // The pictures of the go-betweens a form sends. A row of the chain opens with `via_url`, and the fields up to the
 // next one are its own, so a row dragged elsewhere takes its pictures along: `via_keep` names one the

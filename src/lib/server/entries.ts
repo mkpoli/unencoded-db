@@ -91,20 +91,23 @@ export const tidyVias = (vias: readonly Via[]): Via[] => {
   }
   return [...kept.values()].slice(0, VIAS_MAX)
 }
-const viaKey = (via: Via) => citationKey(via) + '\u0000' + (via.quote ?? '')
+export const viaKey = (via: Via) => citationKey(via) + '\u0000' + (via.quote ?? '')
 // The chain of an edit that names no pictures, a restore or an agent's: the text is the one given, and the pictures
 // stay as they are: no picture comes back and none is lost. A
 // picture the sighting still holds goes where the version had it, so undoing a change to a link's words brings its
 // pictures back to it; a link with the same words keeps its own; any other link with pictures left stays in the chain
-// with them, after the links of the version.
-export function heldPictures(vias: readonly Via[], current: readonly Via[]): Via[] {
+// with them, after the links of the version. A link whose words `stated` names (by `viaKey`) gets exactly the
+// pictures listed there, and the pictures it held and left out are let go.
+export function heldPictures(vias: readonly Via[], current: readonly Via[], stated: ReadonlyMap<string, readonly ViaPicture[]> = new Map()): Via[] {
   const live = new Map(current.flatMap(via => via.pictures ?? []).map(picture => [picture.image_key, picture]))
-  const placed = new Set<string>()
+  const placed = new Set<string>([...stated.values()].flatMap(pictures => pictures.map(picture => picture.image_key)))
+  for (const via of current) if (stated.has(viaKey(via))) for (const picture of via.pictures ?? []) placed.add(picture.image_key)
   const place = (keys: readonly string[]) => keys.flatMap(key => { const picture = live.get(key); if (!picture || placed.has(key)) return []; placed.add(key); return [picture] })
-  const was = vias.map(via => place((via.pictures ?? []).map(picture => picture.image_key)))
+  const was = vias.map(via => stated.has(viaKey(via)) ? [] : place((via.pictures ?? []).map(picture => picture.image_key)))
   const same = new Map(current.map(via => [viaKey(via), via]))
   const text = vias.map((via, index) => {
-    const pictures = [...was[index], ...place((same.get(viaKey(via))?.pictures ?? []).map(picture => picture.image_key))]
+    const own = stated.get(viaKey(via))
+    const pictures = own ? [...own] : [...was[index], ...place((same.get(viaKey(via))?.pictures ?? []).map(picture => picture.image_key))]
     return { ...via, pictures: pictures.length ? pictures : undefined }
   })
   const kept = current.flatMap(via => {
@@ -122,7 +125,7 @@ export function heldPictures(vias: readonly Via[], current: readonly Via[]): Via
 // Whether a sighting names a web address, as its source or in its chain, or pictures a source it was found in.
 export const citesEvidence = (fields: Pick<SightingFields, 'url' | 'vias'>) => Boolean(fields.url) || fields.vias.some(via => via.url || via.pictures?.length)
 // The rows of vias a form sends, in the order of the page.
-function viaRows(form: FormData): Via[] {
+export function viaRows(form: FormData): Via[] {
   const columns = VIA_INPUTS.map(name => form.getAll(name))
   const rows = Math.max(...columns.map(column => column.length))
   return Array.from({ length: rows }, (_, index) => ({

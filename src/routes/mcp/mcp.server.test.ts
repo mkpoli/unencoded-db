@@ -3,6 +3,7 @@ import { handle } from '../../hooks.server'
 import { openTestDb } from '$lib/server/testdb'
 import { mergeEntry } from '$lib/server/entries'
 import { personOf } from '$lib/server/people'
+import { MEDIA_MAX } from '$lib/limits'
 import { FETCHES_MAX } from './_tools.server'
 import { POST } from './+server'
 
@@ -412,4 +413,81 @@ test('an edit matches rows as the claims store them, and keeps the one of two eq
   const [, second] = read.sightings[0].pictures
   expect((await call('edit_sighting', { record: 1, sighting: read.sightings[0].id, rev: 1, pictures: [{ url: second.url, marks: second.marks }] })).failed).toBe(false)
   expect((await call('get_record', { record: 1 })).value.sightings[0].pictures.map((picture: { marks: number[][] }) => picture.marks)).toEqual([[[2, 2, 5, 5]]])
+})
+
+// A second picture, taller than the first, so the two keep different keys.
+const tall = Uint8Array.from(png, (byte, index) => index === 23 ? 12 : byte)
+const wide = Uint8Array.from(png, (byte, index) => index === 19 ? 11 : byte)
+const different = (url: string) => new Response(url.includes('tall') ? tall : url.includes('wide') ? wide : png, { headers: { 'content-type': 'image/png' } })
+const post = { url: 'https://x.example/1', author: '@poster', container: 'Group', publisher: 'QQ' }
+const viaPictures = async (call: Awaited<ReturnType<typeof fixture>>['call']) => (await call('get_record', { record: 1 })).value.sightings[0].vias.map((via: { author: string; pictures: { url: string; height: number }[] }) => [via.author, via.pictures.map(picture => picture.height)])
+
+test('a via sends pictures with add_record and add_sighting, and they are listed by get_record', async () => {
+  const { call, raw, objects, count } = fixture()
+  const asked = pictures(different)
+  expect((await call('add_record', { ids: ['⿰舟覽'], sightings: [{ place: 'A page', vias: [{ ...post, pictures: ['https://img.example/shot.png', 'https://img.example/tall.png'] }] }] })).failed).toBe(false)
+  expect(asked).toHaveLength(2)
+  expect(objects.size).toBe(2)
+  expect(await viaPictures(call)).toEqual([['@poster', [10, 12]]])
+  expect(raw.query('SELECT via_position, position FROM sighting_via_media ORDER BY position').all()).toEqual([{ via_position: 0, position: 0 }, { via_position: 0, position: 1 }])
+  expect((await call('add_sighting', { record: 1, place: 'Another', vias: [{ ...post, author: '@other', pictures: [{ url: 'https://img.example/tall.png', marks: [[1, 1, 6, 6]] }] }] })).failed).toBe(false)
+  expect(count('sighting_via_media')).toBe(3)
+  expect(raw.query('SELECT count(*) AS n FROM sighting_media').get()).toEqual({ n: 0 })
+})
+
+test('a via with pictures and nothing else cites no evidence, and one with no citation is refused', async () => {
+  const { call, count } = fixture()
+  pictures()
+  expect(await call('add_sighting', { record: 1, vias: [{ pictures: ['https://img.example/a.png'] }] })).toMatchObject({ failed: true })
+  expect(await call('add_record', { ids: ['⿰舟覽'], sightings: [{ place: 'A page', vias: [{ pictures: ['https://img.example/a.png'] }] }] })).toMatchObject({ failed: true, value: expect.stringContaining('Found via') })
+  expect(count('entries')).toBe(0)
+})
+
+test('the pictures of a sighting and of its vias share one fetch budget and one allowance', async () => {
+  const { call, count } = fixture()
+  const asked = pictures()
+  const remote = (from: number, n: number) => Array.from({ length: n }, (_, index) => `https://img.example/${from + index}.png`)
+  expect(await call('add_record', { ids: ['⿰舟覽'], sightings: [{ place: 'A', pictures: remote(0, FETCHES_MAX - 1), vias: [{ ...post, pictures: remote(100, 2) }] }] })).toMatchObject({ failed: true, value: expect.stringContaining(`up to ${FETCHES_MAX}`) })
+  expect(asked).toHaveLength(FETCHES_MAX)
+  expect(count('entries')).toBe(0)
+  const before = asked.length
+  // More than the chain holds is refused before anything is fetched, across vias.
+  expect(await call('add_record', { ids: ['⿰舟覽'], sightings: [{ place: 'A', vias: [{ ...post, pictures: remote(0, MEDIA_MAX) }, { ...post, author: '@two', pictures: remote(50, 1) }] }] })).toMatchObject({ failed: true, value: expect.stringContaining(`${MEDIA_MAX}`) })
+  expect(asked).toHaveLength(before)
+})
+
+test('edit_sighting gives a via exactly the pictures it states, and leaves the others as they are', async () => {
+  const { call, objects } = fixture()
+  const asked = pictures(different)
+  await call('add_record', { ids: ['⿰舟覽'], sightings: [{ place: 'A page', vias: [{ ...post, pictures: ['https://img.example/shot.png', 'https://img.example/tall.png'] }, { ...post, author: '@two', pictures: ['https://img.example/wide.png'] }] }] })
+  const read = (await call('get_record', { record: 1 })).value.sightings[0]
+  const second = read.vias[0].pictures[1], moved = read.vias[1].pictures[0]
+  asked.length = 0
+  // Naming one held picture keeps it without a fetch and lets the other go; the second via is untouched.
+  expect((await call('edit_sighting', { record: 1, sighting: read.id, rev: 1, vias: [{ ...post, pictures: [second.url] }, { ...post, author: '@two' }] })).failed).toBe(false)
+  expect(asked).toHaveLength(0)
+  expect(await viaPictures(call)).toEqual([['@poster', [12]], ['@two', [10]]])
+  expect(objects.size).toBe(3)
+  // A new address is fetched and joins the stated ones.
+  expect((await call('edit_sighting', { record: 1, sighting: read.id, rev: 2, vias: [{ ...post, pictures: [second.url, 'https://img.example/new.png'] }, { ...post, author: '@two' }] })).failed).toBe(false)
+  expect(asked).toEqual(['https://img.example/new.png'])
+  expect(await viaPictures(call)).toEqual([['@poster', [12, 10]], ['@two', [10]]])
+  // An empty list takes them all away. A picture named by another via moves to it.
+  expect((await call('edit_sighting', { record: 1, sighting: read.id, rev: 3, vias: [{ ...post, pictures: [] }, { ...post, author: '@two' }] })).failed).toBe(false)
+  expect(await viaPictures(call)).toEqual([['@poster', []], ['@two', [10]]])
+  expect((await call('edit_sighting', { record: 1, sighting: read.id, rev: 4, vias: [{ ...post, author: '@three', pictures: [moved.url] }] })).failed).toBe(false)
+  expect(await viaPictures(call)).toEqual([['@three', [10]]])
+})
+
+test('edit_sighting refuses too many pictures across the chain and pictures on a via with no source', async () => {
+  const { call } = fixture()
+  const asked = pictures(different)
+  await call('add_record', { ids: ['⿰舟覽'], sightings: [{ place: 'A page', vias: [{ ...post, pictures: ['https://img.example/shot.png'] }] }] })
+  const read = (await call('get_record', { record: 1 })).value.sightings[0]
+  const many = (n: number) => Array.from({ length: n }, (_, index) => `https://img.example/tall${index}.png`)
+  asked.length = 0
+  expect(await call('edit_sighting', { record: 1, sighting: read.id, rev: 1, vias: [{ ...post, pictures: many(MEDIA_MAX) }, { ...post, author: '@two', pictures: many(1) }] })).toMatchObject({ failed: true, value: expect.stringContaining(`${MEDIA_MAX}`) })
+  expect(await call('edit_sighting', { record: 1, sighting: read.id, rev: 1, vias: [{ pictures: many(1) }] })).toMatchObject({ failed: true, value: expect.stringContaining('Found via') })
+  expect(asked).toHaveLength(0)
+  expect(await viaPictures(call)).toEqual([['@poster', [10]]])
 })

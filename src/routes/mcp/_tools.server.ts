@@ -18,14 +18,14 @@ import { RELATION_KINDS } from '$lib/related'
 import { CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
 import { tagList } from '$lib/server/tags'
-import { addSighting, CITATION_FIELDS, citesEvidence, createEntry, editEntry, editSighting, getEntry, heldPictures, list, mediaVisible, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, type StoredImage, type ViaPicture } from '$lib/server/entries'
+import { addSighting, CITATION_FIELDS, citesEvidence, createEntry, editEntry, editSighting, getEntry, heldPictures, list, mediaVisible, namedVias, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, viaKey, viaRows, type StoredImage, type ViaPicture } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { MAX_WRITE_BODY } from '$lib/server/body-limit'
 import { MAX_IMAGE, prepareImage } from '$lib/server/image'
 import { agentWriter } from '$lib/server/people'
-import { storeImages, type ReadImage } from '../_submission.server'
+import { described, storeImages, type ReadImage } from '../_submission.server'
 
 type Json = Record<string, unknown>
 export type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean }
@@ -156,6 +156,49 @@ async function readPictures(event: RequestEvent, value: unknown, budget: Budget)
   const read: ReadImage[] = []
   for (const picture of pictures) read.push(await readPicture(event, picture, budget))
   return read
+}
+
+// The pictures each via sends, as addresses without marks; undefined for a via that sends none. The chain
+// shares one allowance, and a picture shows a source, so a via with pictures needs a citation. Nothing is
+// fetched here.
+function viaPictureItems(vias: readonly Json[], form: FormData) {
+  const named = namedVias(form)
+  const rows = vias.map((via, index) => {
+    if (via.pictures === undefined) return undefined
+    const own = pictureItems(via.pictures).map(({ address }) => ({ address, marks: undefined }))
+    if (own.length && !named[index]) throw new Refusal(said('viaSource'))
+    return own
+  })
+  if (rows.reduce((sum, row) => sum + (row?.length ?? 0), 0) > MEDIA_MAX) throw new Refusal(said('viaImage', { most: MEDIA_MAX }))
+  return rows
+}
+
+// The address of a picture this site holds, as its key.
+function ownKey(event: RequestEvent, address: string) {
+  let url: URL | null = null
+  try { url = new URL(address) } catch { /* refused when it is read */ }
+  return url?.origin === event.url.origin ? OWN_PICTURE.exec(url.pathname)?.[1] : undefined
+}
+
+// The pictures of each via, fetched and not yet stored. An address of a picture in `held` keeps it without a
+// fetch; the fetched ones are in `files`.
+async function readViaPictures(event: RequestEvent, rows: ReturnType<typeof viaPictureItems>, budget: Budget, held: ReadonlyMap<string, ViaPicture> = new Map()) {
+  const files: ReadImage[] = []
+  const pictures: (ViaPicture[] | undefined)[] = []
+  for (const row of rows) {
+    if (!row) { pictures.push(undefined); continue }
+    const own: ViaPicture[] = []
+    for (const picture of row) {
+      const key = ownKey(event, picture.address)
+      const kept = key ? held.get(key) : undefined
+      if (kept) { if (!own.includes(kept)) own.push(kept); continue }
+      const read = await readPicture(event, picture, budget)
+      files.push(read)
+      own.push(described(read))
+    }
+    pictures.push(own)
+  }
+  return { pictures, files }
 }
 
 function pictureItems(value: unknown) {
@@ -314,17 +357,25 @@ async function addRecord(event: RequestEvent, input: Json) {
   const { fields: entry, error } = readEntryFields(entryForm(input, tags.map(tag => tag.name), value => places(value, inputs.length, 'evidence')), tags)
   if (error) throw new Refusal(said(error))
   const stated = inputs.map((sighting, index) => {
-    const fields = readSightingFields(sightingForm(sighting))
-    if (!items(sighting.pictures).length && !citesEvidence(fields)) throw new Refusal(`Sighting ${index + 1}: ${said('evidence')}`)
-    return { fields, pictures: sighting.pictures }
+    const form = sightingForm(sighting)
+    const vias = viaPictureItems(items(sighting.vias).map(record), form)
+    if (!items(sighting.pictures).length && !vias.some(row => row?.length) && !citesEvidence(readSightingFields(form))) throw new Refusal(`Sighting ${index + 1}: ${said('evidence')}`)
+    return { form, vias, pictures: sighting.pictures }
   })
   if (!(await chargeWrites(event, 'ADDS', stated.length - 1))) throw new Refusal(said('slow'))
   const budget = { bytes: PICTURES_BODY_MAX, fetches: FETCHES_MAX }
   const read = []
-  for (const { fields, pictures } of stated) read.push({ fields, pictures: await readPictures(event, pictures, budget) })
+  for (const { form, vias, pictures } of stated) {
+    const own = await readPictures(event, pictures, budget)
+    const via = await readViaPictures(event, vias, budget)
+    read.push({ fields: readSightingFields(form, via.pictures.map(row => row ?? [])), pictures: own, files: via.files })
+  }
   const { DB, MEDIA } = env(event)
   const drafts = []
-  for (const { fields, pictures } of read) drafts.push({ fields, media: await storeImages(MEDIA, pictures) })
+  for (const { fields, pictures, files } of read) {
+    await storeImages(MEDIA, files)
+    drafts.push({ fields, media: await storeImages(MEDIA, pictures) })
+  }
   const person = await agentWriter(event, DB)
   const id = await createEntry(DB, entry, drafts[0].fields, drafts[0].media, { actor: person.id, ip: await ipHash(event) }, drafts.slice(1))
   notifyIndexNow(event, { entries: [id] })
@@ -337,10 +388,15 @@ async function addSightingTo(event: RequestEvent, input: Json) {
   const { id, found } = await openRecord(event, input.record)
   const { DB, MEDIA } = env(event)
   if (found.sightings.length >= SIGHTINGS_MAX) throw new Refusal(said('sightingLimit'))
-  const fields = readSightingFields(sightingForm(input))
-  if (!items(input.pictures).length && !citesEvidence(fields)) throw new Refusal(said('evidence'))
-  // One sighting takes what its form takes in one request.
-  const pictures = await readPictures(event, input.pictures, { bytes: MAX_WRITE_BODY, fetches: FETCHES_MAX })
+  const form = sightingForm(input)
+  const vias = viaPictureItems(items(input.vias).map(record), form)
+  if (!items(input.pictures).length && !vias.some(row => row?.length) && !citesEvidence(readSightingFields(form))) throw new Refusal(said('evidence'))
+  // One sighting takes what its form takes in one request, its pictures and those of its vias together.
+  const budget = { bytes: MAX_WRITE_BODY, fetches: FETCHES_MAX }
+  const pictures = await readPictures(event, input.pictures, budget)
+  const via = await readViaPictures(event, vias, budget)
+  const fields = readSightingFields(form, via.pictures.map(row => row ?? []))
+  await storeImages(MEDIA, via.files)
   const media = await storeImages(MEDIA, pictures)
   const person = await agentWriter(event, DB)
   let sighting: number | null
@@ -392,12 +448,23 @@ async function editSightingOf(event: RequestEvent, input: Json) {
     quotes: quotations(sighting.quotes), vias: sighting.vias.map(({ id: _, ...via }) => via),
   }
   const stated = Object.fromEntries(Object.keys(now).filter(name => input[name] !== undefined).map(name => [name, input[name]]))
-  // An agent sends no pictures of the chain, so each link keeps its own, as a restore does.
-  const read = readSightingFields(sightingForm({ ...now, ...stated }))
-  const fields = { ...read, vias: heldPictures(read.vias, sighting.vias) }
-  const pictures = input.pictures === undefined ? null : await editedPictures(event, sighting.media, input.pictures)
+  // A via that states pictures gets those; any other keeps its own, as a restore does.
+  const form = sightingForm({ ...now, ...stated })
+  const rows = viaPictureItems(stated.vias === undefined ? [] : items(stated.vias).map(record), form)
+  const budget = { bytes: MAX_WRITE_BODY, fetches: FETCHES_MAX }
+  const pictures = input.pictures === undefined ? null : await editedPictures(event, sighting.media, input.pictures, budget)
+  const via = await readViaPictures(event, rows, budget, new Map(sighting.vias.flatMap(via => via.pictures ?? []).map(picture => [picture.image_key, picture])))
+  const read = readSightingFields(form)
+  const stating = new Map<string, ViaPicture[]>()
+  for (const [index, row] of viaRows(form).entries()) {
+    const own = via.pictures[index]
+    if (own) stating.set(viaKey(row), [...stating.get(viaKey(row)) ?? [], ...own])
+  }
+  const fields = { ...read, vias: heldPictures(read.vias, sighting.vias, stating) }
+  if (fields.vias.reduce((sum, via) => sum + (via.pictures?.length ?? 0), 0) > MEDIA_MAX) throw new Refusal(said('viaImage', { most: MEDIA_MAX }))
   if (!(pictures ?? sighting.media).length && !citesEvidence(fields) && !fields.place) throw new Refusal(said('evidence'))
   const { DB, MEDIA } = env(event)
+  await storeImages(MEDIA, via.files)
   let media: StoredImage[] | null = null
   if (pictures) {
     media = []
@@ -411,16 +478,13 @@ async function editSightingOf(event: RequestEvent, input: Json) {
 }
 
 // The pictures an edit leaves a sighting with, none stored yet.
-async function editedPictures(event: RequestEvent, held: readonly StoredImage[], value: unknown) {
-  const budget = { bytes: MAX_WRITE_BODY, fetches: FETCHES_MAX }
+async function editedPictures(event: RequestEvent, held: readonly StoredImage[], value: unknown, budget: Budget) {
   const pictures: (StoredImage | ReadImage)[] = []
   // A sighting may hold one picture twice with different marks: each address keeps a held picture not yet
   // kept, the one with the same marks when there is one.
   const unkept = [...held]
   for (const picture of pictureItems(value)) {
-    let address: URL | null = null
-    try { address = new URL(picture.address) } catch { /* refused when it is read */ }
-    const key = address?.origin === event.url.origin ? OWN_PICTURE.exec(address.pathname)?.[1] : undefined
+    const key = ownKey(event, picture.address)
     const candidates = unkept.filter(stored => stored.image_key === key)
     const marked = picture.marks === undefined ? undefined : JSON.stringify(picture.marks)
     const kept = candidates.find(stored => marked !== undefined && JSON.stringify(stored.box ? JSON.parse(stored.box) : []) === marked) ?? candidates[0]
@@ -489,7 +553,7 @@ export const INSTRUCTIONS = `珍字集覽 (Rare Character Compendium) records ra
 To add a character:
 1. Read the form from the evidence picture and write it as an ideographic description sequence (IDS), such as ⿰山東. A code point or a description given by whoever reported the character is a claim to check against the picture.
 2. Call find_similar_records with the IDS and compare the pictures of what comes back. When a record shows the same form, call add_sighting on it. Otherwise call add_record.
-3. Cite the work the character appears in as the sighting's source, with author, title, publisher, date and page. Cite where you found it, such as a post or a chat message that shows the page, as a via, with its author, date, link and the words you quote.
+3. Cite the work the character appears in as the sighting's source, with author, title, publisher, date and page. Cite where you found it, such as a post or a chat message that shows the page, as a via, with its author, date, link and the words you quote, and its pictures when you have them.
 4. A chat message, a forum post or a personal communication is evidence and is cited as one: the author as they sign, the date of that message, the words quoted, the group or channel as container, the service as publisher, and no title. A private message, a letter or a conversation has no container and takes source_kind personal. Each message is its own citation; never reuse another message's author or date.
 
 To correct a record or a sighting, read it with get_record and call edit_record or edit_sighting with the rev it shows, giving only what changes. Say what changed and why in summary.
@@ -516,7 +580,7 @@ const SIGHTING = {
   types: { type: 'array', items: { type: 'string', enum: SIGHTING_TYPES }, description: 'What the source provides: mention (discusses the character), attestation (uses it in a text), description (says how it is written), definition (gives a meaning), reading (gives a pronunciation), relation (names a variant or the same character).' },
   quotes: { type: 'array', maxItems: QUOTATIONS_MAX, items: { type: 'object', required: ['text'], properties: { text: { type: 'string' }, locator: { type: 'string' } } }, description: 'Quoted passages, each with an optional attribution or location in the source.' },
   note: { type: 'string', description: 'A note on this source.' },
-  vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' } } } },
+  vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' }, pictures: { type: 'array', maxItems: MEDIA_MAX, description: `Pictures of this source, such as a screenshot of the post, from their addresses. They share the ${MEDIA_MAX} the chain may hold, and the source needs a citation.`, items: { type: 'string', description: 'Address of the image file itself.' } } } } },
   pictures: {
     type: 'array', maxItems: MEDIA_MAX, description: `Evidence pictures, fetched from their addresses and kept by the site. JPEG, PNG or WebP, up to ${FETCHES_MAX} from other sites in one call.`,
     items: {
@@ -623,7 +687,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'edit_sighting', title: 'Edit evidence on a record', annotations: EDITS, run: editSightingOf,
-    description: `Change one sighting of a record. A field left out stays as it is; quotes, vias and pictures given replace the whole list. Keep a picture by giving its address from get_record. The pictures of a via stay with it, and are kept even when a via is left out. ${SIGHTING_RULE} Answers the new rev.`,
+    description: `Change one sighting of a record. A field left out stays as it is; quotes, vias and pictures given replace the whole list. Keep a picture by giving its address from get_record. A via that gives pictures holds exactly those; a via that leaves them out keeps its own, even when it is left out of vias. ${SIGHTING_RULE} Answers the new rev.`,
     inputSchema: { type: 'object', required: ['record', 'sighting', 'rev'], properties: {
       record: RECORD, sighting: { type: 'integer', minimum: 1, description: 'The sighting\'s id in get_record.' }, rev: REV, summary: SUMMARY, ...SIGHTING,
     } },
