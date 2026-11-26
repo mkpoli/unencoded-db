@@ -1423,7 +1423,9 @@ type TotalRange = { tag: string; exact?: undefined; words?: undefined } | { tag?
 const rowsIn = (rows: number) => rows === 1 ? '= ?' : `IN (${Array(rows).fill('?')})`
 export const wordSize = (rows: number) => `SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags WHERE tag ${rowsIn(rows)} LIMIT ${TOTAL_READ + 1})`
 export const exactSize = (spellings: number) => `SELECT count(*) AS n FROM (SELECT entry_id FROM claims WHERE kind = 'ids' AND value IN (${Array(spellings).fill('?')}) LIMIT ${TOTAL_READ + 1})`
-// The records of a range that the search finds, as `d`: at most TOTAL_READ read, the newest first when `newest`.
+// The records of a range that the search finds, as `d`: at most TOTAL_READ read. When `newest`, each tag or
+// spelling of the range is read newest first on its own, an equal share of TOTAL_READ each, since the index
+// gives several of them in no one order and sorting them all would read every row.
 function rangeFound(plan: Plan, from: TotalRange, newest = false) {
   const tags = (plan.keys.length ? plan.keys : ['all']).filter(tag => tag !== from.tag)
   const exact = from.exact ? null : plan.exact
@@ -1436,12 +1438,13 @@ function rangeFound(plan: Plan, from: TotalRange, newest = false) {
     ...words.tests,
     ...tags.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = d.entry_id)'),
   ].join(' AND ') || '1'
-  // Several spellings or rows are read unordered, since none of them is one range of the index, unless the newest are wanted.
-  const order = newest ? ' ORDER BY entry_id DESC' : ''
-  const range = from.exact
-    ? `SELECT entry_id FROM claims WHERE kind = 'ids' AND value IN (${from.exact.map(() => '?')})${order} LIMIT ${TOTAL_READ}`
-    : read.length > 1 ? `SELECT entry_id FROM entry_tags WHERE tag ${rowsIn(read.length)}${order} LIMIT ${TOTAL_READ}`
-    : `SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id${newest ? ' DESC' : ''} LIMIT ${TOTAL_READ}`
+  // Several spellings or rows are read unordered, since none of them is one range of the index.
+  const each = Math.ceil(TOTAL_READ / read.length)
+  const one = from.exact ? `SELECT entry_id FROM claims WHERE kind = 'ids' AND value = ? ORDER BY entry_id DESC LIMIT ${each}` : `SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id DESC LIMIT ${each}`
+  const range = newest ? read.map(() => `SELECT entry_id FROM (${one})`).join(' UNION ALL ')
+    : from.exact ? `SELECT entry_id FROM claims WHERE kind = 'ids' AND value IN (${from.exact.map(() => '?')}) LIMIT ${TOTAL_READ}`
+    : read.length > 1 ? `SELECT entry_id FROM entry_tags WHERE tag ${rowsIn(read.length)} LIMIT ${TOTAL_READ}`
+    : `SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id LIMIT ${TOTAL_READ}`
   return { range, tests, values: [...read, ...(exact ?? []), ...words.values, ...tags] }
 }
 export function totalStatement(db: D1Database, listing: Listing, from: TotalRange) {
@@ -1489,13 +1492,18 @@ export async function searchTotal(db: D1Database, listing: Listing): Promise<{ n
 
 // The newest records a search finds, at most `limit`, read from its shortest range as it is counted, so
 // a record is found however far back it is when that range is short. Hidden and merged records are left out.
+export function foundStatement(db: D1Database, listing: Listing, from: TotalRange, limit: number) {
+  const plan = listPlan(listing)
+  if (!plan) return null
+  const { range, tests, values } = rangeFound(plan, from, true)
+  return db.prepare(`SELECT DISTINCT d.entry_id AS id FROM (${range}) d CROSS JOIN entries e ON e.id = d.entry_id WHERE e.hidden_at IS NULL AND e.merged_into IS NULL AND ${tests} ORDER BY d.entry_id DESC LIMIT ?`)
+    .bind(...values, limit)
+}
 export async function searchFound(db: D1Database, listing: Listing, limit: number): Promise<number[] | null> {
   const searched = await searchRange(db, listing)
   if (!searched) return null
   if (!searched.from.size) return []
-  const { range, tests, values } = rangeFound(searched.plan, searched.from, true)
-  const { results } = await db.prepare(`SELECT DISTINCT d.entry_id AS id FROM (${range}) d CROSS JOIN entries e ON e.id = d.entry_id WHERE e.hidden_at IS NULL AND e.merged_into IS NULL AND ${tests} ORDER BY d.entry_id DESC LIMIT ?`)
-    .bind(...values, limit).all<{ id: number }>()
+  const { results } = await foundStatement(db, listing, searched.from, limit)!.all<{ id: number }>()
   return results.map(row => row.id)
 }
 
