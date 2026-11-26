@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { newClaim } from '$lib/claims'
 import { addSighting, createEntry, editEntry, getEntry, globalHistory, personRevisionsStatement, setHidden, type EntryFields, type SightingFields } from '$lib/server/entries'
-import { agentPerson, agentsOf, contributors, createPerson, joinAtlas, joinPerson, startSession } from '$lib/server/people'
+import { agentsOf, agentsOfStatement, contributors, createPerson, joinAtlas, joinPerson, startSession } from '$lib/server/people'
 import { thank } from '$lib/server/notifications'
 import { openTestDb } from '$lib/server/testdb'
 import { actions, load } from './+page.server'
@@ -236,21 +236,9 @@ test('a moderator merges an agent into its commander, keeping the agent name whi
   expect(feed.rows[0]).toMatchObject({ by_id: commander.id, by_name: 'Commander', by_agent: null })
   expect(feed.rows[1]).toMatchObject({ by_id: commander.id, by_name: 'Commander', by_agent: 'Claude Code Opus 5.5' })
 
-  // Reading a commander's agents uses the covering partial index.
-  const plan = (raw.query('EXPLAIN QUERY PLAN SELECT DISTINCT name FROM people WHERE merged_into = ? AND agent = 1 ORDER BY name LIMIT 50').all(commander.id) as { detail: string }[]).map(row => row.detail).join('\n')
+  // Reading a commander's agents uses index seeks over the partial covering index, never scanning duplicate rows.
+  const stmt = agentsOfStatement(db, commander.id) as unknown as { sql: string; values: unknown[] }
+  const plan = (raw.query(`EXPLAIN QUERY PLAN ${stmt.sql}`).all(...(stmt.values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')
   expect(plan).toContain('USING COVERING INDEX people_agents_by_commander')
-})
-
-test('agentPerson reuses or creates an agent identity under a live commander', async () => {
-  const { db, raw } = openTestDb()
-  const commander = await createPerson(db, 'atlas-1', 'Commander')
-  const first = await agentPerson(db, commander.id, 'Antigravity  Gemini 4 Neon')
-  const second = await agentPerson(db, commander.id, 'Antigravity Gemini 4 Neon')
-  expect(first).not.toBeNull()
-  expect(second!.id).toBe(first!.id)
-  expect(first!.name).toBe('Commander')
-  expect(await agentPerson(db, commander.id, 'x'.repeat(81))).toBeNull()
-  expect(await agentPerson(db, '000000000000', 'Claude Code Opus 5.5')).toBeNull()
-  raw.run("UPDATE people SET banned_at = '2026' WHERE id = ?", [commander.id])
-  expect(await agentPerson(db, commander.id, 'Claude Code Opus 5.5')).toBeNull()
+  expect(plan).not.toContain('TEMP B-TREE')
 })

@@ -173,23 +173,19 @@ export async function joinPerson(db: D1Database, from: string, into: string, opt
   return null
 }
 
+export const AGENTS_MAX = 50
+// Each distinct agent name is one seek in `people_agents_by_commander` for the least name after the
+// previous one, so listing a commander's agents reads at most AGENTS_MAX index entries regardless of
+// how many merged rows share a name.
+export const agentsOfStatement = (db: D1Database, id: string) => db.prepare(`WITH RECURSIVE names(name, n) AS (
+  SELECT (SELECT MIN(name) FROM people WHERE merged_into = ?1 AND agent = 1), 1
+  UNION ALL
+  SELECT (SELECT MIN(name) FROM people WHERE merged_into = ?1 AND agent = 1 AND name > names.name), n + 1 FROM names WHERE name IS NOT NULL AND n < ?2
+) SELECT name FROM names WHERE name IS NOT NULL`).bind(id, AGENTS_MAX)
+
 /** The distinct agent names merged under this contributor, in name order. */
 export async function agentsOf(db: D1Database, id: string) {
-  const { results } = await db.prepare('SELECT DISTINCT name FROM people WHERE merged_into = ? AND agent = 1 ORDER BY name LIMIT 50').bind(id).all<{ name: string }>()
-  return results.map(row => row.name)
-}
-
-/** Finds or creates an agent identity acting under a commander. */
-export async function agentPerson(db: D1Database, commanderId: string, rawName: string): Promise<Person | null> {
-  const name = cleanAgentName(rawName)
-  if (!name) return null
-  const commander = await db.prepare('SELECT id, name, atlas_sub, role, banned_at FROM people WHERE id = ? AND merged_into IS NULL AND banned_at IS NULL').bind(commanderId).first<Row>()
-  if (!commander) return null
-  const existing = await db.prepare('SELECT id FROM people WHERE merged_into = ? AND agent = 1 AND name = ? LIMIT 1').bind(commanderId, name).first<{ id: string }>()
-  if (existing) return shape({ ...commander, id: existing.id })
-  const id = randomHex(6)
-  await db.prepare('INSERT INTO people(id, name, created_at, merged_into, agent) VALUES(?,?,?,?,1)').bind(id, name, new Date().toISOString(), commanderId).run()
-  return shape({ ...commander, id })
+  return (await agentsOfStatement(db, id).all<{ name: string }>()).results.map(row => row.name)
 }
 
 // A person signs in through Glyph Atlas: this browser's anonymous person, if any, joins the account's.
