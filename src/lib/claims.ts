@@ -180,6 +180,34 @@ export function joinClaims(kept: readonly Claim[], joining: readonly Claim[]): J
   return { claims: [...claims, ...added.map(item => item.claim)], added: added.map(item => item.claim.key), scoped }
 }
 
+/** Splits off the relations that name one of `records` by its code. Two records a merge makes one have no
+ * relation left between them. No claim holds under a relation, so the claims that stay keep their scopes. */
+export function relationsTo(claims: readonly Claim[], records: ReadonlySet<number>): { kept: Claim[]; dropped: Claim[] } {
+  const named = (claim: Claim) => claim.kind === 'relation' && records.has(codedRecord(claim.value) ?? 0)
+  return { kept: claims.filter(claim => !named(claim)), dropped: claims.filter(named) }
+}
+
+/** The claims a list stored apart from their record holds, each checked alone: their scopes are in the record. */
+export function storedClaims(text: string | null): Claim[] {
+  try { const value: unknown = JSON.parse(text ?? '[]'); return Array.isArray(value) ? value.filter(validClaim) : [] } catch { return [] }
+}
+
+/** Puts back the relations a merge dropped, after the claims the record holds now: each one it no longer states,
+ * under the scopes that are still there, while a record's limits allow. */
+export function restoreClaims(claims: readonly Claim[], dropped: readonly Claim[]): Claim[] {
+  const restored = [...claims]
+  const held = new Set(claims.map(stated)), keys = new Set(claims.map(claim => claim.key))
+  for (const claim of dropped) {
+    if (held.has(stated(claim)) || restored.length >= CLAIMS_MAX || restored.filter(item => item.kind === claim.kind).length >= CLAIM_LIMITS[claim.kind].max) continue
+    const copy = { ...claim, key: keys.has(claim.key) ? newClaimKey() : claim.key, under: claim.under.filter(scope => keys.has(scope)) }
+    if (JSON.stringify([...restored, copy]).length > CLAIMS_LENGTH_MAX) continue
+    restored.push(copy)
+    held.add(stated(copy))
+    keys.add(copy.key)
+  }
+  return restored
+}
+
 /** A record's claims once a duplicate has parted from it. No claim rests on a sighting of `gone`. What the
  * merges gave the record (`merged`) leaves too, unless it rests on a sighting that stays or a duplicate
  * that is still joined (`still`, the claims of each) states it. */

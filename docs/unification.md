@@ -24,6 +24,7 @@ The later record joins the earlier one:
 - a claim both records state is kept once and rests on the sightings of both;
 - its other claims are added after the record's own, as far as a record's limits allow;
 - its description, radical and stroke count fill the ones the record that stays leaves empty;
+- a relation either record states to the other is dropped, since it would name the record itself;
 - its address opens the record that stays, and both histories are kept.
 
 ## Separate records
@@ -57,6 +58,8 @@ its sightings and its own claims as they were. The record that stayed loses what
 - the claims and the scopes it added, unless one rests on a sighting that stays or another duplicate
   that is still merged states it;
 - the fields it filled, unless one has been rewritten since.
+
+The record that stayed gets back the relations it stated to the duplicate.
 
 Evidence that was moved to another record since stays there. The last piece a duplicate brought cannot be
 moved while it is merged.

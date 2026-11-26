@@ -12,7 +12,7 @@ import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
-import { encodingsOf, joinClaims, mapSightings, moveClaims, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, valuesOf, type Brought, type Claim, type ClaimError } from '$lib/claims'
+import { encodingsOf, joinClaims, mapSightings, moveClaims, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, relationsTo, restoreClaims, storedClaims, valuesOf, type Brought, type Claim, type ClaimError } from '$lib/claims'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { FILE_ROWS, ensureTags, filedUnder } from './tags'
@@ -709,7 +709,10 @@ export async function mergeEntry(db: D1Database, from: number, into: number, who
     if (source.merged_into) return { ok: false, code: 'merged' }
     const [moving, staying] = [await sightingRows(db, from), await sightingRows(db, into)]
     if (moving.length + staying.length > SIGHTINGS_MAX) return { ok: false, code: 'full' }
-    const joined = joinClaims(await claimRows(db, into), await claimRows(db, from))
+    // A relation between the two records would name the record itself once they are one.
+    const pair = new Set([from, into])
+    const between = relationsTo(await claimRows(db, into), pair)
+    const joined = joinClaims(between.kept, relationsTo(await claimRows(db, from), pair).kept)
     // What the record that stays leaves unsaid, the duplicate may say.
     const filled = FILLED_FIELDS.filter(field => target[field] === null && source[field] !== null)
     const fields = { ...snapshotOf(target, ENTRY_FIELDS), ...snapshotOf(source, filled), claims: joined.claims } as EntryFields
@@ -728,7 +731,7 @@ export async function mergeEntry(db: D1Database, from: number, into: number, who
         db.prepare('DELETE FROM claims WHERE entry_id = ?').bind(into),
         insertClaims(db, into, joined.claims),
         revision(db, who, { entry: from, kind: 'merge', rev: source.rev, snapshot: JSON.stringify({ into }), summary }),
-        revision(db, who, { entry: into, kind: 'merge', rev, snapshot: JSON.stringify({ ...JSON.parse(entrySnapshot(fields)), from, added: joined.added, scoped: joined.scoped, filled }), summary }),
+        revision(db, who, { entry: into, kind: 'merge', rev, snapshot: JSON.stringify({ ...JSON.parse(entrySnapshot(fields)), from, added: joined.added, scoped: joined.scoped, filled, dropped: between.dropped }), summary }),
       ])
     } catch (error) {
       if (attempt < 4 && ((await revisionMark(db, from)) !== marks[0] || (await revisionMark(db, into)) !== marks[1])) continue
@@ -762,11 +765,13 @@ export async function unmergeEntry(db: D1Database, id: number, who: Who) {
     if (!target || target.merged_into || target.hidden_at || entry.hidden_at) return false
     const { results: back } = await db.prepare(`${PARTS} SELECT id FROM sightings WHERE entry_id = ?2 AND first_entry IN (SELECT id FROM part)`).bind(id, into).all<{ id: number }>()
     // Every merge into the record says what it gave; a claim two duplicates gave leaves with the last of them.
-    const { results: merges } = await db.prepare(`SELECT json_extract(snapshot, '$.from') AS source, json_extract(snapshot, '$.added') AS added, json_extract(snapshot, '$.scoped') AS scoped, json_extract(snapshot, '$.filled') AS filled FROM revisions WHERE entry_id = ? AND kind = 'merge' ORDER BY id DESC LIMIT ${SIGHTINGS_MAX}`).bind(into).all<{ source: number | null; added: string | null; scoped: string | null; filled: string | null }>()
+    const { results: merges } = await db.prepare(`SELECT json_extract(snapshot, '$.from') AS source, json_extract(snapshot, '$.added') AS added, json_extract(snapshot, '$.scoped') AS scoped, json_extract(snapshot, '$.filled') AS filled, json_extract(snapshot, '$.dropped') AS dropped FROM revisions WHERE entry_id = ? AND kind = 'merge' ORDER BY id DESC LIMIT ${SIGHTINGS_MAX}`).bind(into).all<{ source: number | null; added: string | null; scoped: string | null; filled: string | null; dropped: string | null }>()
     const listed = (text: string | null): string[] => { try { const value: unknown = JSON.parse(text ?? '[]'); return Array.isArray(value) ? value.filter(item => typeof item === 'string') : [] } catch { return [] } }
     const { results: others } = await db.prepare(`SELECT k.entry_id, ${CLAIM_COLUMNS.map(column => `k.${column}`).join(', ')} FROM entries e JOIN claims k ON k.entry_id = e.id WHERE e.merged_into = ?1 AND e.id != ?2 ORDER BY k.entry_id, k.position LIMIT 5000`).bind(into, id).all<ClaimRow & { entry_id: number }>()
     const still = Object.values(Object.groupBy(others, row => row.entry_id)).map(rows => rows!.map(toClaim))
-    const claims = partClaims(await claimRows(db, into), new Set(back.map(row => row.id)), { added: merges.flatMap(row => listed(row.added)), scoped: merges.flatMap(row => listed(row.scoped)) }, still)
+    const parted = partClaims(await claimRows(db, into), new Set(back.map(row => row.id)), { added: merges.flatMap(row => listed(row.added)), scoped: merges.flatMap(row => listed(row.scoped)) }, still)
+    // The relations the record held to the duplicate come back with it.
+    const claims = restoreClaims(parted, storedClaims(merges.find(row => row.source === id)?.dropped ?? null))
     // A field the duplicate filled is emptied again unless it has been rewritten since.
     const filled = listed(merges.find(row => row.source === id)?.filled ?? null)
     const emptied = Object.fromEntries(FILLED_FIELDS.flatMap(field => filled.includes(field) && entry[field] === target[field] ? [[field, null]] : []))

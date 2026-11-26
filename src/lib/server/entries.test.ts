@@ -13,6 +13,7 @@ import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
 import { decadeOf } from '$lib/dates'
+import { recordCode } from '$lib/code'
 import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { PAGE, PAGE_SIZES, pageSizeOf } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
@@ -515,6 +516,21 @@ describe('the wiki', () => {
     expect(parted.entry).toMatchObject({ radical: null, strokes: 9 })
     expect(parted.claims.map(item => [item.kind, item.value])).toEqual([['ids', '⿰木木'], ['reading', 'rin'], ['meaning', 'grove']])
     expect((await getEntry(db, b))!.entry).toMatchObject({ radical: '木', strokes: 8, merged_into: null })
+  })
+
+  test('a merge drops the relations between the two records, and undoing it gives them back', async () => {
+    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰氵秀')] }), seen({ place: 'one' }), [], who)
+    const b = await createEntry(db, fields({ claims: [claim('ids', '⿰氵秀'), relation('衛', 'variant'), relation(recordCode(a), 'unifiable')] }), seen({ place: 'two' }), [], who)
+    const meaning = claim('meaning', '= 衛')
+    await editEntry(db, a, 1, fields({ claims: [claim('ids', '⿰氵秀'), meaning, relation('衛', 'variant'), { ...relation(recordCode(b), 'variant'), under: [meaning.key] }] }), who, null)
+    expect(await mergeEntry(db, b, a, who, null)).toEqual({ ok: true })
+    const merged = (await getEntry(db, a))!
+    expect(merged.claims.map(item => [item.kind, item.value])).toEqual([['ids', '⿰氵秀'], ['meaning', '= 衛'], ['relation', '衛']])
+    expect(merged.entry.status).toBe('variant')
+    expect(await unmergeEntry(db, b, who)).toBe(true)
+    const parted = (await getEntry(db, a))!
+    expect(parted.claims.map(item => [item.kind, item.value, item.under])).toEqual([['ids', '⿰氵秀', []], ['meaning', '= 衛', []], ['relation', '衛', []], ['relation', recordCode(b), [meaning.key]]])
+    expect((await getEntry(db, b))!.claims.map(item => item.value)).toEqual(['⿰氵秀', '衛', recordCode(a)])
   })
 
   test('a hidden record keeps its duplicates, and a redacted merge can still be undone', async () => {
