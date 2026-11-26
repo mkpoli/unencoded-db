@@ -89,6 +89,7 @@
     ids: ['.descriptions input:not([type="hidden"])'],
     readings: ['input[name="reading_doculect"]', 'input[name="reading"]', 'textarea[name="meaning"]'],
     encodings: ['input[name="encoding_charset"]', 'input[name="encoding_code"]', 'select[name="encoding_charset"]'],
+    documents: ['input[name="document_number"]', 'input[name="document_page"]', 'input[name="document_url"]'],
     relatedCharacters: ['input[name="related_character"][required]'],
     ivd: ['input[name="ivd_sequence"]', 'select[name="ivd_status"]'],
     tags: ['input[name="tags"]'],
@@ -167,6 +168,7 @@
     // The choice and its sequence are one answer, and so are a code and its set.
     if (control.matches('[name="ivd_status"], [name="ivd_sequence"]')) formEl?.querySelectorAll('[name="ivd_status"], [name="ivd_sequence"]').forEach(item => item.removeAttribute('aria-invalid'))
     if (control.matches('[name="encoding_charset"], [name="encoding_code"]')) formEl?.querySelectorAll('[name="encoding_charset"], [name="encoding_code"]').forEach(item => item.removeAttribute('aria-invalid'))
+    if (control.matches('[name="document_number"], [name="document_page"], [name="document_url"]')) formEl?.querySelectorAll('[name="document_number"], [name="document_page"], [name="document_url"]').forEach(item => item.removeAttribute('aria-invalid'))
     // A link or a picture answers the evidence rule for the whole sighting.
     const section = control.closest('[data-sighting]')
     if (section) {

@@ -12,14 +12,15 @@ import { carryLayout, cleanLayout, validLayout, type Layout } from './layout'
 import { ivdSequence } from './ivd'
 import { cleanDoculect } from './doculects'
 import { isRelationKind } from './related'
+import { DOCUMENT_NUMBER_MAX, DOCUMENT_PAGE_MAX, normalizeDocumentNumber, validDocumentNumber, validDocumentUrl, type UnicodeDocument } from './unicode-docs'
 
-export const CLAIM_KINDS = ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'collection', 'tag'] as const
+export const CLAIM_KINDS = ['ids', 'composition', 'reading', 'meaning', 'encoding', 'document', 'relation', 'ivd', 'collection', 'tag'] as const
 export type ClaimKind = (typeof CLAIM_KINDS)[number]
 export type Claim = { key: string; kind: ClaimKind; value: string; data: Record<string, unknown> | null; sightings: number[]; under: string[] }
 
 /** The kinds of claim under which a claim of each kind may hold. A reading goes with a meaning; a related
  * character is related under a meaning, a reading or both. Every other kind states a fact of the whole record. */
-export const SCOPES: Record<ClaimKind, readonly ClaimKind[]> = { ids: [], composition: [], reading: ['meaning'], meaning: [], encoding: [], relation: ['meaning', 'reading'], ivd: [], collection: [], tag: [] }
+export const SCOPES: Record<ClaimKind, readonly ClaimKind[]> = { ids: [], composition: [], reading: ['meaning'], meaning: [], encoding: [], document: [], relation: ['meaning', 'reading'], ivd: [], collection: [], tag: [] }
 /** How many sightings one claim names, and how many claims it holds under. */
 export const CLAIM_SIGHTINGS_MAX = 20
 export const CLAIM_SCOPES_MAX = 20
@@ -36,6 +37,7 @@ export const CLAIM_LIMITS: Record<ClaimKind, { max: number; length: number }> = 
   reading: { max: 20, length: 200 },
   meaning: { max: 20, length: 500 },
   encoding: { max: 20, length: 80 },
+  document: { max: 20, length: DOCUMENT_NUMBER_MAX },
   relation: { max: 50, length: 80 },
   ivd: { max: 1, length: 80 },
   collection: { max: 10, length: 40 },
@@ -84,6 +86,15 @@ export function validClaim(claim: unknown): claim is Claim {
     case 'ids': return splitIds(value).length === 1 && splitIds(value)[0] === value && (data === null || (Object.keys(data).length === 1 && validLayout(data.layout, value)))
     case 'composition': return Boolean(data && parseComposition(JSON.stringify({ ...data, ids: value })))
     case 'encoding': return Boolean(data && typeof data.charset === 'string' && data.charset.length > 0 && data.charset.length <= 40)
+    case 'document': {
+      if (!validDocumentNumber(value)) return false
+      if (data === null) return true
+      const keys = Object.keys(data)
+      if (!keys.length || keys.some(key => key !== 'page' && key !== 'url')) return false
+      if ('page' in data && !(typeof data.page === 'string' && data.page.length > 0 && data.page.length <= DOCUMENT_PAGE_MAX && data.page === data.page.normalize('NFC').trim())) return false
+      if ('url' in data && !validDocumentUrl(data.url)) return false
+      return true
+    }
     case 'relation': return Boolean(data && isRelationKind(data.relationship) && short(data.difference ?? '', 5000) && short(data.evidence ?? '', 5000))
     case 'ivd': return value === 'none' || ivdSequence(value) === value
     case 'collection': return isCollection(value)
@@ -272,8 +283,13 @@ export function compositionOf(claims: readonly Claim[]): Composition | null {
   return claim ? parseComposition(JSON.stringify({ ...claim.data, ids: claim.value })) : null
 }
 
-export type { Encoding }
+export type { Encoding, UnicodeDocument }
 export const encodingsOf = (claims: readonly Claim[]): Encoding[] => claimsOf(claims, 'encoding').map(claim => ({ charset: String(claim.data?.charset), code: claim.value }))
+export const documentsOf = (claims: readonly Claim[]): UnicodeDocument[] => claimsOf(claims, 'document').map(claim => ({
+  doc: claim.value,
+  page: typeof claim.data?.page === 'string' ? claim.data.page : null,
+  url: typeof claim.data?.url === 'string' ? claim.data.url : null,
+}))
 
 // The links of a record read from either side.
 /** The claims that hold under the claim with this key. */
@@ -289,7 +305,7 @@ export const mapSightings = (claims: readonly Claim[], to: (sighting: number) =>
   return { ...claim, sightings: [...new Set(claim.sightings.map(to).filter(id => id !== null))].sort((a, b) => a - b) }
 })
 
-export type ClaimError = 'ids' | 'encodings' | 'relatedCharacters' | 'ivd' | 'readings' | 'tags' | 'links'
+export type ClaimError = 'ids' | 'encodings' | 'documents' | 'relatedCharacters' | 'ivd' | 'readings' | 'tags' | 'links'
 
 // The form fields of each kind. A group is replaced when the form carries it, by its own field or by
 // the `<group>_present` marker a list of rows sends even when it is empty; otherwise the record keeps
@@ -314,7 +330,7 @@ function typed(form: FormData, names: readonly string[]): string[][] {
 
 const KEY_FIELDS = ['reading_key', 'meaning_key', 'related_key']
 // What tells one claim of a kind from another when no key does: a kind a record holds once is one claim.
-const identity = (kind: ClaimKind, value: string, data: Claim['data']) => CLAIM_LIMITS[kind].max === 1 ? '' : `${value}\n${kind === 'reading' ? data?.doculect ?? '' : kind === 'encoding' ? data?.charset ?? '' : ''}`
+const identity = (kind: ClaimKind, value: string, data: Claim['data']) => CLAIM_LIMITS[kind].max === 1 ? '' : `${value}\n${kind === 'reading' ? data?.doculect ?? '' : kind === 'encoding' ? data?.charset ?? '' : kind === 'document' ? `${data?.page ?? ''}\n${data?.url ?? ''}` : ''}`
 
 /**
  * The claims a form submits, over the ones the record holds for the groups the form leaves out. With
@@ -414,6 +430,37 @@ export function readClaims(form: FormData, tags: readonly Pick<Tag, 'name' | 'la
     }
     if (bad || out.length > CLAIM_LIMITS.encoding.max) { fail('encodings'); next.set('encoding', typed(form, ['encoding_charset', 'encoding_code']).map(([charset, code]) => one('encoding', code, { charset }))) }
     else next.set('encoding', out)
+  }
+
+  if (form.has('documents_present') || form.has('document_number')) {
+    const names = ['document_number', ...(form.has('document_page') ? ['document_page'] : []), ...(form.has('document_url') ? ['document_url'] : [])]
+    const column = (row: string[], name: string) => names.includes(name) ? row[names.indexOf(name)] : ''
+    const found = rows(form, names, CLAIM_LIMITS.document.max * 2)
+    const seen = new Set<string>()
+    const out: Claim[] = []
+    let bad = !found
+    for (const row of found ?? []) {
+      const rawDoc = row[0], page = column(row, 'document_page'), url = column(row, 'document_url')
+      if (!rawDoc && !page && !url) continue
+      const doc = normalizeDocumentNumber(rawDoc)
+      if (!validDocumentNumber(doc) || page.length > DOCUMENT_PAGE_MAX || (url && !validDocumentUrl(url))) { bad = true; continue }
+      const dedupKey = `${doc}\n${page}\n${url}`
+      if (seen.has(dedupKey)) continue
+      seen.add(dedupKey)
+      const data: Record<string, string> = {}
+      if (page) data.page = page
+      if (url) data.url = url
+      out.push(made('document', doc, Object.keys(data).length ? data : null))
+    }
+    if (bad || out.length > CLAIM_LIMITS.document.max) {
+      fail('documents')
+      next.set('document', typed(form, ['document_number', 'document_page', 'document_url']).filter(([doc, page, url]) => doc.trim() || page.trim() || url.trim()).map(([doc, page, url]) => {
+        const data: Record<string, string> = {}
+        if (page.trim()) data.page = page
+        if (url.trim()) data.url = url
+        return one('document', doc, Object.keys(data).length ? data : null)
+      }))
+    } else next.set('document', out)
   }
 
   if (form.has('related_characters_present')) {

@@ -3,9 +3,10 @@
   // count it is indexed by, and where it stands among encoded characters (its codes, the character it is
   // equivalent to, IVD membership). A line opens by itself when the record states something on it.
   import { untrack } from 'svelte'
-  import { CLAIM_LIMITS, encodingsOf, valuesOf, type Claim } from '$lib/claims'
+  import { CLAIM_LIMITS, documentsOf, encodingsOf, valuesOf, type Claim } from '$lib/claims'
   import { descriptionStrokes, type Fill } from '$lib/encoded'
   import { t } from '$lib/t'
+  import DocumentFields from './DocumentFields.svelte'
   import EncodingFields from './EncodingFields.svelte'
   import FactLine from './FactLine.svelte'
 
@@ -21,6 +22,7 @@
   let radicalValue = $state(untrack(() => radical ?? ''))
   let strokesValue = $state<number | string>(untrack(() => strokes ?? ''))
   let codes = $state<string[]>([])
+  let docs = $state<string[]>([])
 
   const counted = $derived(strokesValue !== '' && strokesValue != null)
   const indexed = $derived(Boolean(radicalValue.trim()) || counted)
@@ -30,6 +32,7 @@
   ])
   let indexOpen = $state(untrack(() => indexed))
   let encodedOpen = $state(untrack(() => claims.some(claim => claim.kind === 'encoding' || claim.kind === 'ivd')))
+  let docsOpen = $state(untrack(() => claims.some(claim => claim.kind === 'document')))
 
   // An estimate only: a part can take fewer strokes inside a character than alone. It is offered in the
   // empty field and never sent.
@@ -77,6 +80,10 @@
       {#if ivdStatus === 'registered'}<input class="input mono" name="ivd_sequence" maxlength="80" bind:value={ivdSequence} placeholder="U+4E00 U+E0100" aria-label={t('field.ivdSequence')} autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" required />{/if}
     </div>
   </div>
+</FactLine>
+<FactLine label={t('field.documents')} stated={docs.length > 0} bind:open={docsOpen}>
+  {#snippet value()}{#each docs as item}<span class="tag">{item}</span>{/each}{/snippet}
+  <DocumentFields values={documentsOf(claims)} bind:stated={docs} />
 </FactLine>
 
 <style>

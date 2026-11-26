@@ -232,6 +232,9 @@ function entryForm(input: Json, sightings: number, tags: readonly string[]) {
   const encodings = items(input.encodings).map(record)
   if (encodings.length) form.set('encodings_present', '1')
   for (const encoding of encodings) { form.append('encoding_charset', text(encoding.charset)); form.append('encoding_code', text(encoding.code)) }
+  const documents = items(input.documents).map(row => typeof row === 'string' ? { doc: row } : record(row))
+  if (documents.length) form.set('documents_present', '1')
+  for (const doc of documents) { form.append('document_number', text(doc.doc)); form.append('document_page', text(doc.page)); form.append('document_url', text(doc.url)) }
   const ivd = text(input.ivd).trim()
   if (ivd) { form.set('ivd_status', ivd === 'none' ? 'none' : 'registered'); if (ivd !== 'none') form.set('ivd_sequence', ivd) }
   if (items(input.categories).length) form.set('tags_present', '1')
@@ -435,6 +438,11 @@ const TOOLS: Tool[] = [
       encodings: { type: 'array', description: 'The character sets, dictionaries and glyph registries that hold the character.', items: { type: 'object', required: ['charset', 'code'], properties: {
         charset: { type: 'string', description: `One of ${REGISTRIES.map(registry => registry.id).join(', ')}, or another work's name.` },
         code: { type: 'string', description: 'The code as the work writes it, such as U+2D6DD for unicode.' },
+      } } },
+      documents: { type: 'array', description: 'Unicode (L2), IRG or WG2 documents that discuss the character.', items: { type: 'object', required: ['doc'], properties: {
+        doc: { type: 'string', description: 'Document number, such as L2/25-056, IRG N2850 or WG2 N5234.' },
+        page: { type: 'string', description: 'Page or section within the document.' },
+        url: { type: 'string', description: 'Direct http or https link to the document, when not using the default L2 link.' },
       } } },
       related: { type: 'array', items: { type: 'object', required: ['character', 'relationship'], properties: {
         character: { type: 'string', description: 'The other character, or its description sequence.' },

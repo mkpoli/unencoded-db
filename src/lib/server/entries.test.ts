@@ -9,7 +9,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TAG_IMPLY_DEPTH_MAX, TAG_TYPES, arrangeTags, canImply, cleanTag, implicationClosure, localized, tagLabels } from '$lib/tags'
 import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement, mergeTag, aliasTag, unaliasTag, aliasesStatement, nameTier } from './tags'
-import { newClaim, readClaims, type Claim } from '$lib/claims'
+import { documentsOf, newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
 import { decadeOf } from '$lib/dates'
@@ -81,6 +81,55 @@ test('omitted comparison controls preserve existing data; explicit empty control
   expect(readEntryFields(form, [], original).fields.claims).toEqual(original.claims)
   form.set('related_characters_present', '1')
   expect(readEntryFields(form, [], original).fields.claims).toEqual([])
+})
+
+test('Unicode and IRG documents persist across create, edit, revert and search', async () => {
+  const pdf = 'https://www.unicode.org/L2/L2025/25056-uax45-3-abbreviated%20ideographs.pdf'
+  const form = new FormData()
+  form.set('ids', '⿰木木')
+  form.set('documents_present', '1')
+  form.append('document_number', 'l2/25-056')
+  form.append('document_page', '12')
+  form.append('document_url', pdf)
+  form.append('document_number', 'irg n2850')
+  form.append('document_page', '')
+  form.append('document_url', '')
+  const { fields: values, error } = readEntryFields(form, [])
+  expect(error).toBeNull()
+  expect(documentsOf(values.claims)).toEqual([
+    { doc: 'L2/25-056', page: '12', url: pdf },
+    { doc: 'IRG N2850', page: null, url: null },
+  ])
+
+  const id = await createEntry(db, values, seen(), [], who)
+  const stored = (await getEntry(db, id))!
+  expect(documentsOf(stored.claims)).toEqual([
+    { doc: 'L2/25-056', page: '12', url: pdf },
+    { doc: 'IRG N2850', page: null, url: null },
+  ])
+  for (const query of ['L2/25-056', '25-056', 'IRG N2850', 'IRGN2850', 'irgn2850', 'N2850']) {
+    expect((await list(db, { query }))!.tiles.map(tile => tile.id)).toEqual([id])
+  }
+
+  const original = (await history(db, id)).find(row => row.kind === 'create')!
+  const editForm = new FormData()
+  editForm.set('documents_present', '1')
+  editForm.append('document_number', 'wg2 n5234')
+  editForm.append('document_page', '4')
+  editForm.append('document_url', '')
+  const edited = readEntryFields(editForm, [], { ...stored.entry, claims: stored.claims })
+  expect(edited.error).toBeNull()
+  await editEntry(db, id, stored.entry.rev, edited.fields, who, null)
+  expect(documentsOf((await getEntry(db, id))!.claims)).toEqual([{ doc: 'WG2 N5234', page: '4', url: null }])
+  expect((await list(db, { query: 'N5234' }))!.tiles.map(tile => tile.id)).toEqual([id])
+  expect((await list(db, { query: 'L2/25-056' }))!.tiles).toEqual([])
+
+  await revertEntry(db, id, original.id, who)
+  expect(documentsOf((await getEntry(db, id))!.claims)).toEqual([
+    { doc: 'L2/25-056', page: '12', url: pdf },
+    { doc: 'IRG N2850', page: null, url: null },
+  ])
+  expect((await list(db, { query: 'L2/25-056' }))!.tiles.map(tile => tile.id)).toEqual([id])
 })
 
 describe('marked works', () => {
