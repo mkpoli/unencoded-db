@@ -33,6 +33,12 @@ export const handle: Handle = async ({ event, resolve }) => {
         headers: { 'content-type': 'application/json', upgrade: 'TLS/1.2' },
       })
     }
+    if ((event.route.id === '/api/sync/atlas' || pathname === '/api/sync/atlas') && event.request.headers.has('authorization')) {
+      return new Response(JSON.stringify({ error: 'HTTPS is required' }), {
+        status: 426,
+        headers: { 'content-type': 'application/json', upgrade: 'TLS/1.2' },
+      })
+    }
     const secure = new URL(event.url)
     secure.protocol = 'https:'
     redirect(308, secure.href)
@@ -51,17 +57,18 @@ export const handle: Handle = async ({ event, resolve }) => {
   // A browser names itself by its cookie. An agent names itself by the token it signed in for, or else by
   // its connection's own.
   const agent = event.route.id === '/mcp'
+  const syncApi = event.route.id === '/api/sync/atlas'
   // A request that claims a token is that token's person or no one, never its connection's.
   const claims = agent && event.request.headers.has('authorization')
-  event.locals.person = !db || pathname.startsWith('/media/') ? null : claims ? await tokenPerson(db, bearerOf(event.request)) : await personOf(db, agent ? agentToken(event.request) : event.cookies.get(sessionName(event)))
+  event.locals.person = !db || pathname.startsWith('/media/') || syncApi ? null : claims ? await tokenPerson(db, bearerOf(event.request)) : await personOf(db, agent ? agentToken(event.request) : event.cookies.get(sessionName(event)))
   if (!['GET', 'HEAD', 'OPTIONS'].includes(event.request.method) && !(event.route.id === '/auth/sign-out' && event.request.method === 'POST')) {
-    // An agent's request says in its body whether it writes, so the endpoint guards each writing tool itself.
-    if (!agent) {
+    // An agent's request says in its body whether it writes, and the sync endpoint authenticates itself.
+    if (!agent && !syncApi) {
       const limit = writeLimitFor(event)
       if (!limit) return new Response('Not Found', { status: 404 })
       await guardWrite(event, limit, moderationAction(event))
     }
-    const request = await limitWriteBody(event.request, agent || event.route.id?.startsWith('/oauth/') ? MAX_AGENT_BODY : event.route.id === '/[locale]/batch' || event.route.id === '/[locale]/new' ? MAX_PICTURES_BODY : undefined)
+    const request = await limitWriteBody(event.request, agent || syncApi || event.route.id?.startsWith('/oauth/') ? MAX_AGENT_BODY : event.route.id === '/[locale]/batch' || event.route.id === '/[locale]/new' ? MAX_PICTURES_BODY : undefined)
     if (!request) return new Response('Payload Too Large', { status: 413 })
     event.request = request
   }

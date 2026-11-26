@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit'
 import { BATCH_ROWS_MAX } from '$lib/limits'
 import { createEntry, hasLink, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
+import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
 import { uploadedImages } from '../../_submission.server'
@@ -68,6 +69,7 @@ export const actions: Actions = {
       created.push(id)
     }
     notifyIndexNow(event, { entries: created })
+    scheduleAtlasSync(event, created)
     redirect(303, `/${event.params.locale}/entry/${first}`)
   },
 }
