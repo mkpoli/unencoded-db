@@ -380,3 +380,21 @@ test('a sighting is edited field by field, keeping or replacing its pictures', a
   expect(await call('edit_sighting', { record: 1, sighting: read.id, rev: 1, note: 'Stale.' })).toMatchObject({ failed: true, value: expect.stringContaining('rev 4') })
   expect(await call('edit_sighting', { record: 1, sighting: 999, rev: 1 })).toMatchObject({ failed: true, value: expect.stringContaining(`Its sightings: ${read.id}`) })
 })
+
+test('an edit matches rows as the claims store them, and keeps the one of two equal pictures its marks name', async () => {
+  const { call } = fixture()
+  pictures()
+  await call('add_record', {
+    ids: ['⿰山東'], meanings: [{ text: 'café', evidence: [1] }], readings: [{ text: 'x', meanings: [1] }],
+    sightings: [{ place: 'A page', pictures: [{ url: 'https://img.example/a.png', marks: [[1, 1, 4, 4]] }, { url: 'https://img.example/a.png', marks: [[2, 2, 5, 5]] }] }],
+  })
+  const read = (await call('get_record', { record: 1 })).value
+  const meaning = read.claims.find((claim: { kind: string }) => claim.kind === 'meaning')
+  expect((await call('edit_record', { record: 1, rev: 1, meanings: [{ text: 'café' }] })).failed).toBe(false)
+  const claims = (await call('get_record', { record: 1 })).value.claims
+  expect(claims.find((claim: { kind: string }) => claim.kind === 'meaning')).toMatchObject({ key: meaning.key, evidence: meaning.evidence })
+  expect(claims.find((claim: { kind: string }) => claim.kind === 'reading').under).toEqual([meaning.key])
+  const [, second] = read.sightings[0].pictures
+  expect((await call('edit_sighting', { record: 1, sighting: read.sightings[0].id, rev: 1, pictures: [{ url: second.url, marks: second.marks }] })).failed).toBe(false)
+  expect((await call('get_record', { record: 1 })).value.sightings[0].pictures.map((picture: { marks: number[][] }) => picture.marks)).toEqual([[[2, 2, 5, 5]]])
+})

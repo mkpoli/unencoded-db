@@ -228,10 +228,11 @@ function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) 
 
   const held = new Map(current.map(claim => [claim.key, claim]))
   const taken = new Set<string>()
-  // A row without a key continues the claim it repeats word for word.
+  // A row without a key continues the claim it repeats word for word, compared as the claims store text.
+  const same = (value: unknown) => text(value).normalize('NFC').trim()
   const repeats = (kind: ClaimKind, row: Json) => (claim: Claim) => claim.kind === kind && !taken.has(claim.key) && (
-    kind === 'relation' ? claim.value === text(row.character).trim() && claim.data?.relationship === text(row.relationship).trim()
-    : claim.value === text(row.text).trim() && (kind !== 'reading' || (claim.data?.doculect ?? '') === text(row.doculect).trim()))
+    kind === 'relation' ? claim.value === same(row.character) && claim.data?.relationship === same(row.relationship)
+    : claim.value === same(row.text) && (kind !== 'reading' || (claim.data?.doculect ?? '') === same(row.doculect)))
   const rows = (value: unknown, field: string, kind: ClaimKind) => items(value).map(row => typeof row === 'string' ? { [field]: row } : record(row)).map(row => {
     const named = held.get(text(row.key))
     const kept = named?.kind === kind && !taken.has(named.key) ? named : row.key === undefined ? current.find(repeats(kind, row)) : undefined
@@ -407,12 +408,18 @@ async function editSightingOf(event: RequestEvent, input: Json) {
 async function editedPictures(event: RequestEvent, held: readonly StoredImage[], value: unknown) {
   const budget = { bytes: MAX_WRITE_BODY, fetches: FETCHES_MAX }
   const pictures: (StoredImage | ReadImage)[] = []
+  // A sighting may hold one picture twice with different marks: each address keeps a held picture not yet
+  // kept, the one with the same marks when there is one.
+  const unkept = [...held]
   for (const picture of pictureItems(value)) {
     let address: URL | null = null
     try { address = new URL(picture.address) } catch { /* refused when it is read */ }
     const key = address?.origin === event.url.origin ? OWN_PICTURE.exec(address.pathname)?.[1] : undefined
-    const kept = held.find(stored => stored.image_key === key)
+    const candidates = unkept.filter(stored => stored.image_key === key)
+    const marked = picture.marks === undefined ? undefined : JSON.stringify(picture.marks)
+    const kept = candidates.find(stored => marked !== undefined && JSON.stringify(stored.box ? JSON.parse(stored.box) : []) === marked) ?? candidates[0]
     if (!kept) { pictures.push(await readPicture(event, picture, budget)); continue }
+    unkept.splice(unkept.indexOf(kept), 1)
     // A picture marked anew stands as its own cover, as a fetched one does.
     const box = picture.marks === undefined ? kept.box : marksOn(picture.marks, kept.image_w, kept.image_h)
     pictures.push(box === kept.box ? kept : { ...kept, box, thumb_key: kept.image_key })
