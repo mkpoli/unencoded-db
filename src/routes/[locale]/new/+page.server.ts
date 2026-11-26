@@ -3,25 +3,19 @@ import { fail, redirect } from '@sveltejs/kit'
 import { mapSightings, newClaim } from '$lib/claims'
 import { readNewTag } from '$lib/tags'
 import { ADD_SIGHTINGS_MAX } from '$lib/limits'
-import { CITATION_FIELDS, hasLink, type SightingFields, createEntry, getEntryRow, getSighting, readEntryFields, readSightingFields } from '$lib/server/entries'
+import { hasLink, type SightingFields, createEntry, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
-import { positiveId, readImages, sightingForms, storeImages, type ReadImage } from '../../_submission.server'
+import { loadSightingSeed, readImages, sightingForms, storeImages, type ReadImage } from '../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
 // `?sighting=` starts the form from a visible sighting: its citation, where it was found and its pictures,
 // for another character seen in the same place.
 export const load: PageServerLoad = async (event) => {
-  const id = positiveId(event.url.searchParams.get('sighting'))
   const { DB } = env(event)
-  const { tags, groups } = await taxonomy(DB)
-  if (!id) return { seed: null, tags, groups }
-  const sighting = await getSighting(DB, id)
-  const entry = sighting && !sighting.hidden_at ? await getEntryRow(DB, sighting.entry_id) : null
-  if (!sighting || !entry || entry.hidden_at || entry.merged_into) return { seed: null, tags, groups }
-  const values: Partial<SightingFields> = { ...Object.fromEntries((['place', 'original_date', 'page', ...CITATION_FIELDS] as const).map(field => [field, sighting[field]])), vias: sighting.vias.map(({ id: _, ...via }) => via) }
-  return { seed: { values, pictures: sighting.media.map(picture => picture.image_key) }, tags, groups }
+  const [{ tags, groups }, seed] = await Promise.all([taxonomy(DB), loadSightingSeed(DB, event.url.searchParams.get('sighting'))])
+  return { seed, tags, groups }
 }
 
 const filled = (form: FormData, fields: SightingFields) => Object.values({ ...fields, vias: fields.vias.length }).some(Boolean) || form.getAll('image').some(file => file instanceof File && file.size > 0)
