@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte'
+  import { untrack } from 'svelte'
   import EvidenceDate from './EvidenceDate.svelte'
   import { westernDate } from '$lib/dates'
   import Combobox, { type ComboOption } from './Combobox.svelte'
@@ -39,9 +39,9 @@
       || (reading && source.lookup === reading)
       || sourceNameKey(sourceHeading(source, t)) === typed
     )
-    if (!exact.length) return null
-    exact.sort((a, b) => b.records - a.records || a.id - b.id)
-    return exact[0].id
+    // A title several citations share names none of them until one is picked.
+    const ids = new Set(exact.map(source => source.id))
+    return ids.size === 1 ? exact[0].id : null
   }
 
   const resolvedSourceId = $derived(pickedId ?? matchedSourceId(value, matches.length ? matches : quietMatches))
@@ -53,15 +53,18 @@
     onsource?.(nextId)
   })
 
-  onMount(() => {
-    const initial = untrack(() => value.trim())
-    if (!initial || !onsource) return
+  // A title filled in without the list open, by a saved draft or a pasted link, is looked up quietly.
+  $effect(() => {
+    const text = value.trim()
+    if (!onsource || !text || pickedId !== null || untrack(() => query) === value) return
     const controller = new AbortController()
-    fetch('/api/sources?' + new URLSearchParams({ q: initial }), { signal: controller.signal })
-      .then(response => response.ok ? response.json() as Promise<{ rows: SourceMatch[] }> : null)
-      .then(data => { if (!controller.signal.aborted && data?.rows && pickedId === null && !query) quietMatches = data.rows })
-      .catch(() => {})
-    return () => controller.abort()
+    const timer = setTimeout(() => {
+      fetch('/api/sources?' + new URLSearchParams({ q: text }), { signal: controller.signal })
+        .then(response => response.ok ? response.json() as Promise<{ rows: SourceMatch[] }> : null)
+        .then(data => { if (!controller.signal.aborted) quietMatches = data?.rows ?? [] })
+        .catch(() => {})
+    }, 300)
+    return () => { clearTimeout(timer); controller.abort() }
   })
 
   function search(text: string) {
