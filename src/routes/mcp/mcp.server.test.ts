@@ -131,6 +131,16 @@ test('a record is added with its claims, sightings and fetched pictures', async 
   expect(read.value.claims.find((claim: { kind: string }) => claim.kind === 'reading')).toMatchObject({ value: 'tōge', data: { doculect: 'ja' }, evidence: [1, 2] })
 })
 
+test('a form that cannot be described is added without ids', async () => {
+  const { call, raw } = fixture()
+  const added = await call('add_record', { script: 'sawndip', sightings: [sighting] })
+  expect(added.failed).toBe(false)
+  expect(raw.query('SELECT ids, script FROM entries').all()).toEqual([{ ids: null, script: 'sawndip' }])
+  expect(raw.query("SELECT count(*) AS n FROM claims WHERE kind = 'ids'").get()).toEqual({ n: 0 })
+  expect((await call('get_record', { record: 1 })).value.claims).toEqual([])
+  expect(await call('add_record', { ids: [], sightings: [sighting] })).toMatchObject({ failed: true })
+})
+
 test('a connection writes under one anonymous name', async () => {
   const { call, raw, count, connect } = fixture()
   const one = await connect(), other = await connect()
