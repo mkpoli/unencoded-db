@@ -11,6 +11,7 @@
   import { recordCode } from '$lib/code'
   import { pictureAlt } from '$lib/picture'
   import { sourceData } from '$lib/structured-data'
+  import { ARCHIVES_MAX, ARCHIVE_URL_MAX } from '$lib/source-archives'
   let { data, form } = $props()
   const source = $derived(data.source)
   const heading = $derived(sourceHeading(source, t))
@@ -30,6 +31,9 @@
   // The card draws the thumbnail of the first picture of the first sighting that cites the work itself.
   const artwork = $derived(data.sightings.find(sighting => !sighting.via && sighting.media.length)?.media[0]?.thumb_key ?? '')
   const records = $derived(new Set(data.sightings.map(sighting => sighting.entry_id)).size)
+  // A copy is named by its archive's host, with its path when the source has another copy there.
+  const copies = $derived(data.archives.map(archive => new URL(archive)).map((url, _, all) =>
+    ({ href: url.href, label: all.filter(other => other.host === url.host).length > 1 ? `${url.host}${url.pathname}` : url.host })))
 </script>
 
 <Seo data={structured} title={heading} description={[t('source.title'), heading, source.author, source.publisher, source.report_date].filter(Boolean).join(' · ')}
@@ -40,9 +44,10 @@
     <span class="badge">{t('source.title')}</span>
     <h1>{heading}</h1>
     {#if source.url && /^https?:\/\//i.test(source.url)}<a class="text-link url" href={source.url} target="_blank" rel="noopener noreferrer">{source.url} ↗</a>{/if}
+    {#if data.archives.length}<p class="archived"><span class="muted">{t('source.archives')}</span>{#each copies as archive}<a class="text-link" href={archive.href} title={archive.href} target="_blank" rel="noopener noreferrer">{archive.label} ↗</a>{/each}</p>{/if}
     <dl class="facts">{#each facts as fact}{#if source[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{#if fact.key === 'report_date'}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} />{:else if fact.key === 'source_kind'}{kindName(source.source_kind)}{:else}{source[fact.key]}{/if}</dd></div>{/if}{/each}</dl>
     {#if data.copy}<a class="text-link" href={href(`/sources/copy/${data.copy.slug}`)}>{t('sources.digitizedCopy')} · {data.copy.title} · {data.copy.collection}</a>{/if}
-    <details class="aliases" open={form != null || data.aliases.length > 0 || data.before !== null}>
+    <details class="edits" open={form?.aliasError !== undefined || data.aliases.length > 0 || data.before !== null}>
       <summary>{t('source.aliases')}{#if data.aliases.length} ({data.aliases.length}){/if}</summary>
       {#each data.aliases as alias}
         <form class="row" method="POST" action="?/removeAlias">
@@ -50,7 +55,7 @@
           <button class="text-button" aria-label={t('source.removeAlias', { alias })}>{t('source.remove')}</button>
         </form>
       {/each}
-      <form method="POST" action="?/addAlias" class="row add-alias">
+      <form method="POST" action="?/addAlias" class="row add">
         <label for="alias">{t('source.alias')}</label>
         <input id="alias" class="input" name="alias" maxlength="300" required value={form?.value ?? ''} />
         <button class="button">{t('source.addAlias')}</button>
@@ -64,6 +69,31 @@
         </details>
       {/if}
       {#if form?.aliasError}<p role="alert">{t('source.aliasError')}</p>{/if}
+    </details>
+    <details class="edits" open={form?.archiveError !== undefined || data.archivesBefore !== null}>
+      <summary>{t('source.archives')}{#if data.archives.length}{` (${data.archives.length})`}{/if}</summary>
+      {#each data.archives as archive}
+        <form class="row" method="POST" action="?/removeArchive">
+          <span>{archive}</span><input type="hidden" name="archive" value={archive} />
+          <button class="text-button" aria-label={t('source.removeArchive', { url: archive })}>{t('source.remove')}</button>
+        </form>
+      {/each}
+      {#if data.archives.length < ARCHIVES_MAX}
+        <form method="POST" action="?/addArchive" class="row add">
+          <label for="archive">{t('source.archive')}</label>
+          <input id="archive" class="input" type="url" name="archive" maxlength={ARCHIVE_URL_MAX} required value={form?.archive ?? ''} />
+          <button class="button">{t('source.addArchive')}</button>
+        </form>
+      {/if}
+      {#if data.archiveChanges.length}
+        <details id="archive-history" open={data.archivesBefore !== null}><summary>{t('nav.history')}</summary>
+          <ul>{#each data.archiveChanges as change (change.id)}
+            <li>{t(change.removed ? 'source.archiveRemoved' : 'source.archiveAdded', { url: change.url })} · <a class="text-link" href={href(`/u/${change.actor}`)}>{change.name}</a> · <time datetime={change.at}>{when(change.at)}</time></li>
+          {/each}</ul>
+          {#if data.olderArchives}<a class="text-link" href={`?archivesBefore=${data.olderArchives}#archive-history`}>{t('browse.more')}</a>{/if}
+        </details>
+      {/if}
+      {#if form?.archiveError}<p role="alert">{t(`source.archiveError.${form.archiveError}`, { n: ARCHIVES_MAX })}</p>{/if}
     </details>
   </section>
   <section class="stack">
@@ -103,10 +133,11 @@
   .back { align-self:start; color:var(--muted) }
   .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
   .intro { gap:8px } .intro .badge { align-self:start }
-  .aliases summary { cursor:pointer; width:fit-content }
-  .aliases form { margin-top:8px; overflow-wrap:anywhere }
-  .add-alias .input { width:min(100%, 18rem) }
+  .edits summary { cursor:pointer; width:fit-content }
+  .edits form { margin-top:8px; overflow-wrap:anywhere } .edits li { overflow-wrap:anywhere }
+  .add .input { width:min(100%, 18rem) } .add [type=url] { flex:1 1 16rem; min-width:0; max-width:32rem }
   .url { overflow-wrap:anywhere }
+  .archived { display:flex; flex-wrap:wrap; gap:4px 12px; margin:0; overflow-wrap:anywhere }
   .facts { display:flex; flex-wrap:wrap; gap:12px 28px; margin:0 } .facts:empty { display:none } dt { color:var(--muted); font-size:12px } dd { margin:2px 0 0; overflow-wrap:anywhere }
   .seen { display:grid; grid-template-columns:110px minmax(0,1fr); gap:20px; align-items:start }
   .record { display:flex; flex-direction:column; align-items:center; gap:4px; color:inherit; text-decoration:none; min-width:0 }
