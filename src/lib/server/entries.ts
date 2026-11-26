@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit'
 import { quotations, QUOTATIONS_MAX } from '../quotations'
 import { sampledSightings } from './source-sightings'
 import { sourceMatches, sourceMatchParams } from './source-aliases'
-import { nameKey, nameLabel, sourceNameKey } from '../name-key'
+import { nameKey, nameLabel, sourceKeys, sourceNameKey } from '../name-key'
 // The store of records: an entry is a character, a claim is one thing the record states about it, a
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
@@ -12,7 +12,7 @@ import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
-import { encodingsOf, joinClaims, mapSightings, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, valuesOf, type Claim, type ClaimError } from '$lib/claims'
+import { encodingsOf, joinClaims, mapSightings, moveClaims, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, valuesOf, type Brought, type Claim, type ClaimError } from '$lib/claims'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { FILE_ROWS, ensureTags, filedUnder } from './tags'
@@ -421,6 +421,8 @@ async function citationOf(db: D1Database, citation: Citation, dates: DateBook) {
   const [url, title, author, imprint, date, container] = values
   const sourceName = sourceNameKey(title || url || author || imprint || date || container || '')
   statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup, container_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName, container && nameKey(container) || null))
+  const keys = sourceKeys(citation)
+  if (keys.length) statements.push(db.prepare('INSERT OR IGNORE INTO source_keys(lookup, source_id) SELECT k.value, s.id FROM sources s CROSS JOIN json_each(?2) k WHERE s.hash = ?1').bind(hash, JSON.stringify(keys)))
   return { hash, statements }
 }
 // The hash of the cited work, and the links of the chain with the words each quotes.
@@ -716,8 +718,9 @@ export async function redactRevision(db: D1Database, entry: number, revisionId: 
   const row = await db.prepare(`SELECT r.rev, r.sighting_id, CASE WHEN r.sighting_id IS NULL THEN e.rev ELSE s.rev END AS current FROM revisions r JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id WHERE r.id = ? AND r.entry_id = ? AND r.redacted_at IS NULL AND (r.kind IN ('create','edit','revert','merge','unmerge','sighting','sighting_edit') OR (r.kind = 'hide' AND r.summary IS NOT NULL))`).bind(revisionId, entry).first<{ rev: number; sighting_id: number | null; current: number | null }>()
   if (!row || row.current === row.rev) return false
   await db.batch([
-    // A redacted merge still says which record it joined and what it gave, by key, so it can be undone.
-    db.prepare(`UPDATE revisions SET snapshot = CASE WHEN kind = 'hide' THEN snapshot WHEN kind IN ('merge','unmerge') THEN json_object('from', json_extract(snapshot, '$.from'), 'into', json_extract(snapshot, '$.into'), 'added', json(json_extract(snapshot, '$.added')), 'scoped', json(json_extract(snapshot, '$.scoped')), 'filled', json(json_extract(snapshot, '$.filled'))) ELSE '{}' END, summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
+    // A redacted merge still says which record it joined and what it gave, by key, so it can be undone, and a
+    // redacted move which evidence went where.
+    db.prepare(`UPDATE revisions SET snapshot = CASE WHEN kind = 'hide' THEN snapshot WHEN kind = 'edit' AND json_extract(snapshot, '$.moved') IS NOT NULL THEN json_object('moved', json_extract(snapshot, '$.moved')) WHEN kind IN ('merge','unmerge') THEN json_object('from', json_extract(snapshot, '$.from'), 'into', json_extract(snapshot, '$.into'), 'added', json(json_extract(snapshot, '$.added')), 'scoped', json(json_extract(snapshot, '$.scoped')), 'filled', json(json_extract(snapshot, '$.filled'))) ELSE '{}' END, summary = NULL, redacted_at = ?, redacted_by = ? WHERE id = ?`).bind(now(), who.actor, revisionId),
     db.prepare('DELETE FROM date_readings WHERE transcription NOT IN (SELECT value FROM evidence_dates WHERE value IS NOT NULL)'),
     revision(db, who, { entry, sighting: row.sighting_id, kind: 'redact', rev: row.rev, snapshot: JSON.stringify({ revision: revisionId }), summary }),
   ])
@@ -829,6 +832,73 @@ export async function unmergeEntry(db: D1Database, id: number, who: Who) {
   }
 }
 
+/** Whether a sighting is the last its record shows, or the last a record merged into it brought: that record
+ * would have none when the merge is undone. */
+export function standsAlone(sightings: readonly Pick<Sighting, 'id' | 'first_entry' | 'hidden_at'>[], id: number) {
+  const sighting = sightings.find(item => item.id === id)
+  return !sightings.some(other => other.id !== id && !other.hidden_at && other.first_entry === sighting?.first_entry)
+}
+
+export type MoveResult = 'done' | 'missing' | 'merged' | 'conflict' | 'only' | 'same' | 'crowded'
+
+// Moves a sighting to another record, with its history, its comments, its reports and the claims that rest
+// on it alone. Both records say so in their journal. It is the other record's own from then on, so undoing
+// a merge of the first does not bring it back, unless it has been moved back meanwhile. What the journal of
+// a record merged into the first says of it stays there.
+export async function moveSighting(db: D1Database, from: number, id: number, baseRev: number, into: number, who: Who, summary: string | null): Promise<MoveResult> {
+  if (from === into) return 'same'
+  for (let attempt = 0; ; attempt++) {
+    const marks = [await revisionMark(db, from), await revisionMark(db, into)]
+    const source = await getEntryRow(db, from), target = await getEntryRow(db, into)
+    if (!source || source.hidden_at || !target || target.hidden_at) return 'missing'
+    if (source.merged_into || target.merged_into) return 'merged'
+    const [leaving, staying] = [await sightingRows(db, from), await sightingRows(db, into)]
+    const sighting = leaving.find(item => item.id === id)
+    if (!sighting || sighting.hidden_at) return 'missing'
+    if (sighting.rev !== baseRev) return 'conflict'
+    if (standsAlone(leaving, id)) return 'only'
+    if (staying.length >= SIGHTINGS_MAX) return 'crowded'
+    const past = (entry: number, way: 'from' | 'to') => db.prepare(`SELECT json_extract(snapshot, '$.moved') AS moved FROM revisions WHERE entry_id = ? AND kind = 'edit' AND json_extract(snapshot, '$.moved.sighting') = ? AND json_extract(snapshot, '$.moved.${way}') IS NOT NULL ORDER BY id DESC LIMIT 1`).bind(entry, id)
+    const [came, went] = (await db.batch<{ moved: string }>([past(from, 'from'), past(into, 'to')])).map(({ results }) => results[0] ? JSON.parse(results[0].moved) as Partial<Brought> & { first?: number } : null)
+    // Moved back, it is again the part of the record it was.
+    const { results: parts } = await db.prepare(`${PARTS} SELECT id FROM part`).bind(into).all<{ id: number }>()
+    const first = parts.some(part => part.id === went?.first) ? went!.first! : into
+    const claims = moveClaims(await claimRows(db, from), await claimRows(db, into), id, into, { added: came?.added ?? [], joined: came?.joined ?? [] })
+    const left = leaving.filter(item => item.id !== id), held = [...staying, { ...sighting, entry_id: into, first_entry: first }].sort((a, b) => a.id - b.id)
+    const at = now()
+    const indexes = [...await reindex(db, from, source, claims.from, left), ...await reindex(db, into, target, claims.into, held)]
+    const write = (entry: Entry, said: Claim[], moved: { sighting: number; to?: number; from?: number; first?: number } & Partial<Brought>) => [
+      db.prepare('UPDATE entries SET rev = rev + 1, updated_at = ? WHERE id = ? AND rev = ? AND merged_into IS NULL AND hidden_at IS NULL').bind(at, entry.id, entry.rev),
+      checkChanged(db, entry.id, who),
+      db.prepare('DELETE FROM claims WHERE entry_id = ?').bind(entry.id),
+      insertClaims(db, entry.id, said),
+      revision(db, who, { entry: entry.id, kind: 'edit', rev: entry.rev + 1, snapshot: JSON.stringify({ ...JSON.parse(entrySnapshot({ ...snapshotOf(entry, ENTRY_FIELDS), claims: said } as EntryFields)), moved }), summary }),
+    ]
+    try {
+      await db.batch([
+        checkMark(db, from, marks[0], who),
+        checkMark(db, into, marks[1], who),
+        db.prepare('UPDATE sightings SET entry_id = ?, first_entry = ?, updated_at = ? WHERE id = ? AND entry_id = ? AND rev = ? AND hidden_at IS NULL').bind(into, first, at, id, from, baseRev),
+        checkChanged(db, from, who),
+        db.prepare('UPDATE revisions SET entry_id = ? WHERE entry_id = ? AND sighting_id = ?').bind(into, from, id),
+        db.prepare('UPDATE comments SET entry_id = ?, first_entry = ? WHERE entry_id = ? AND sighting_id = ?').bind(into, first, from, id),
+        db.prepare('UPDATE reports SET entry_id = ? WHERE sighting_id = ?').bind(into, id),
+        // A record merged into the first keeps its own claims for an undo; they cannot rest on it either.
+        db.prepare(`${PARTS} UPDATE claims SET sightings = (SELECT json_group_array(value) FROM json_each(claims.sightings) WHERE value != ?2) WHERE entry_id IN (SELECT id FROM part WHERE id != ?1) AND EXISTS (SELECT 1 FROM json_each(claims.sightings) WHERE value = ?2)`).bind(from, id),
+        ...write(source, claims.from, { sighting: id, to: into, first: sighting.first_entry }),
+        ...write(target, claims.into, { sighting: id, from, ...claims.brought }),
+        ...indexes,
+        recount(db, from, [sighting.source_id, ...sighting.vias.map(via => via.id)]),
+        recount(db, into),
+      ])
+      return 'done'
+    } catch (error) {
+      if (attempt < 4 && ((await revisionMark(db, from)) !== marks[0] || (await revisionMark(db, into)) !== marks[1])) continue
+      throw error
+    }
+  }
+}
+
 type Visibility = { hidden: boolean; removed?: boolean }
 export type RemoveResult = 'done' | 'missing' | 'merged' | 'conflict' | 'only'
 
@@ -901,8 +971,9 @@ export async function refresh(db: D1Database, id: number) {
   })
 }
 
+// Evidence that moved while its form was open is reported where it is now.
 export async function report(db: D1Database, target: { entry: number; sighting?: number | null }, reason: string, reporter: string) {
-  await db.prepare('INSERT INTO reports(entry_id, sighting_id, reason, reporter, at) VALUES(?,?,?,?,?)').bind(target.entry, target.sighting ?? null, reason, reporter, now()).run()
+  await db.prepare('INSERT INTO reports(entry_id, sighting_id, reason, reporter, at) VALUES(COALESCE((SELECT entry_id FROM sightings WHERE id = ?2), ?1), ?2, ?3, ?4, ?5)').bind(target.entry, target.sighting ?? null, reason, reporter, now()).run()
 }
 
 export async function resolveReport(db: D1Database, id: number, by: string) {
@@ -1499,7 +1570,13 @@ function sourceRun(db: D1Database, order: SourceRead, cursor: SourceCursor | nul
   const after = order.key ? `(c.${order.key}, c.id) ${past} (?, ?)` : `c.id ${past} ?`
   const bound = order.key ? [cursor?.key ?? start, cursor?.id ?? start] : [cursor?.id ?? start]
   type Row = Source & { year: number | null; records: number; direct: string; via: string }
-  return db.prepare(`SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(false)} AS direct, ${seen(true)} AS via FROM ${query ? `(SELECT DISTINCT source_id FROM (${sourceMatches})) m CROSS JOIN sources c ON c.id = m.source_id` : `sources c INDEXED BY ${order.index}${publisher !== null ? '_publisher' : ''}`} WHERE ${order.where} ${publisher !== null ? 'AND c.publisher_id = ?' : ''} AND ${after} ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction} LIMIT ?`)
+  const sorted = `ORDER BY ${order.key ? `c.${order.key} ${direction}, ` : ''}c.id ${direction}`
+  const within = `WHERE ${order.where} ${publisher !== null ? 'AND c.publisher_id = ?' : ''} AND ${after} ${sorted} LIMIT ?`
+  const cards = `SELECT c.id, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')}, c.year, c.records, ${seen(false)} AS direct, ${seen(true)} AS via`
+  // What a search finds is sorted as a whole, so its page is chosen before any source reads its sightings.
+  return db.prepare(query
+    ? `WITH page AS MATERIALIZED (SELECT c.id FROM (SELECT DISTINCT source_id FROM (${sourceMatches})) m CROSS JOIN sources c ON c.id = m.source_id ${within}) ${cards} FROM page CROSS JOIN sources c ON c.id = page.id ${sorted}`
+    : `${cards} FROM sources c INDEXED BY ${order.index}${publisher !== null ? '_publisher' : ''} ${within}`)
     .bind(...(query ? sourceMatchParams(query) : []), ...(publisher !== null ? [publisher] : []), ...bound, limit).all<Row>().then(({ results }) => results)
 }
 

@@ -22,6 +22,7 @@ export const SOCIAL_PAGES = {
   duplicate: { path: '/entry/[id]/duplicate', title: 'duplicate.title' },
   report: { path: '/entry/[id]/report', title: 'report.title' },
   'edit-evidence': { path: '/entry/[id]/sighting/[sighting]/edit', title: 'sighting.edit' },
+  'move-evidence': { path: '/entry/[id]/sighting/[sighting]/move', title: 'sighting.moveLink' },
   'remove-evidence': { path: '/entry/[id]/sighting/[sighting]/remove', title: 'sighting.removeLink' },
   'add-evidence': { path: '/entry/[id]/sighting/new', title: 'social.addEvidence' },
   favourites: { path: '/favourites', title: 'favourites.title' },
