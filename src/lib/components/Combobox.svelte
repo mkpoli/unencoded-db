@@ -10,8 +10,10 @@
   // when nothing in it fits. It is a plain input until scripts run. The pattern is the ARIA editable combobox
   // with list autocomplete: arrow keys move through the list, Enter takes an option, Escape folds the list.
   // `onchange` hears the value once it is settled: an option taken, or the field left.
-  let { id, name, value = $bindable(''), options, labelledby, maxlength, placeholder, filter = true, onopen, onquery, onchange, onselect, onmore, optionContent }: {
-    optionContent?: Snippet<[ComboOption]>; id: string; name: string; value?: string; options: readonly ComboOption[]; labelledby?: string; maxlength?: number; placeholder?: string; filter?: boolean; onopen?: () => void; onquery?: (text: string) => void; onchange?: (value: string) => void; onselect?: (option: ComboOption) => void; onmore?: () => void
+  // `takeFirst` lets Enter take the first option when the list is open and none is chosen, for a list that
+  // answers a search rather than offering values to type.
+  let { id, name, value = $bindable(''), options, labelledby, maxlength, placeholder, required = false, takeFirst = false, filter = true, onopen, onquery, onchange, onselect, onmore, optionContent }: {
+    optionContent?: Snippet<[ComboOption]>; id: string; name: string; value?: string; options: readonly ComboOption[]; labelledby?: string; maxlength?: number; placeholder?: string; required?: boolean; takeFirst?: boolean; filter?: boolean; onopen?: () => void; onquery?: (text: string) => void; onchange?: (value: string) => void; onselect?: (option: ComboOption) => void; onmore?: () => void
   } = $props()
 
   let open = $state(false)
@@ -57,14 +59,14 @@
     if (event.isComposing) return
     if (event.key === 'ArrowDown') { event.preventDefault(); if (event.altKey) show(); else move(1) }
     else if (event.key === 'ArrowUp') { event.preventDefault(); if (event.altKey) { open = false; activeKey = null } else move(-1) }
-    else if (event.key === 'Enter' && expanded && active >= 0 && shown[active]) { event.preventDefault(); take(shown[active]) }
+    else if (event.key === 'Enter' && expanded && (active >= 0 || takeFirst)) { const option = shown[Math.max(active, 0)]; if (option) { event.preventDefault(); take(option) } }
     else if (event.key === 'Escape' && open) { event.preventDefault(); open = false; activeKey = null }
   }
 </script>
 
 <div class="combo">
   <input
-    {id} {name} {maxlength} {placeholder} class="input" type="text" role="combobox" autocomplete="off" spellcheck="false"
+    {id} {name} {maxlength} {placeholder} {required} class="input" type="text" role="combobox" autocomplete="off" spellcheck="false"
     aria-autocomplete="list" aria-expanded={expanded} aria-controls="{id}-list" aria-labelledby={labelledby}
     aria-activedescendant={expanded && shown[active] ? optionId(active) : undefined}
     bind:value onclick={show} onkeydown={keydown} oninput={event => { show(); activeKey = null; onquery?.(event.currentTarget.value) }} onblur={() => { open = false; activeKey = null; onchange?.(value) }}

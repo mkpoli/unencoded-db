@@ -1,5 +1,6 @@
 <script lang="ts">
   import Seo from '$lib/components/Seo.svelte'
+  import RecordPicker from '$lib/components/RecordPicker.svelte'
   import Tile from '$lib/components/Tile.svelte'
   import { recordCode } from '$lib/code'
   import { RELATION_KINDS } from '$lib/related'
@@ -52,8 +53,7 @@
   {:else}
     {#if data.unknown}<p class="notice bad" role="alert">{t('error.missing')}</p>{/if}
     <form method="GET" class="row find">
-      <label class="sr-only" for="of">{t('duplicate.of')}</label>
-      <input class="input" id="of" name="of" value={data.typed} placeholder={t('duplicate.of')} required />
+      <RecordPicker id="of" name="of" value={data.typed} exclude={data.id} label={t('duplicate.of')} placeholder={t('duplicate.of')} />
       <button class="button primary" type="submit">{t('duplicate.compare')}</button>
     </form>
     {#if data.alike.length}
@@ -68,7 +68,6 @@
 <style>
   .back { align-self: start; color: var(--muted) }
   .decision { padding-top: 16px; border-top: 1px solid var(--line) }
-  .find .input { flex: 1 1 0; width: auto; min-width: 0 }
   .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 280px)); gap: 24px }
   .pair figure { margin: 0; min-width: 0 }
   .pair figcaption { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px }
