@@ -60,9 +60,9 @@ const removal = ({ kind, snapshot }: SnapshotRow) => (kind === 'hide' || kind ==
 
 // The old version a revision holds, or null for a change that changed no readable text.
 export function revisionFields(row: SnapshotRow) {
-  const moved = row.kind === 'edit' ? moveSnapshot(row.snapshot) : null
+  const moved = row.kind === 'edit' || row.kind === 'create' ? moveSnapshot(row.snapshot) : null
   return {
-    kind: removal(row) ? row.kind === 'hide' ? 'remove' : 'put_back' : moved ? 'move' : row.kind,
+    kind: removal(row) ? row.kind === 'hide' ? 'remove' : 'put_back' : moved && row.kind === 'edit' ? 'move' : row.kind,
     moved,
     fields: !row.redacted_at && !row.sighting_id && ENTRY_KINDS.includes(row.kind) ? entrySnapshot(row.snapshot) : null,
     sightingFields: !row.redacted_at && row.sighting_id && SIGHTING_KINDS.includes(row.kind) ? sightingSnapshot(row.snapshot) : null,
@@ -70,7 +70,7 @@ export function revisionFields(row: SnapshotRow) {
   }
 }
 
-// Which evidence an edit moved, and the record it went to or came from.
+// Which evidence an edit moved, or a record was made for, and the record it went to or came from.
 function moveSnapshot(raw: string): { sighting: number; to?: number; from?: number } | null {
   try {
     const { sighting, to, from } = JSON.parse(raw)?.moved ?? {}

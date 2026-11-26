@@ -29,7 +29,8 @@ The later record joins the earlier one:
 
 ## Separate records
 
-Keep two records apart, and link them with a relation claim, when:
+Keep two records apart, and link them with a relation claim, when one of these holds. Keep apart, on the
+page that compares the pair, puts the relation on the later record:
 
 - the forms differ in a part, or in how the parts are placed, even if they share a reading or a
   meaning (relation: Variant, Erroneous variant, Similar);
@@ -40,6 +41,16 @@ Keep two records apart, and link them with a relation claim, when:
   added or left out. Write that difference in the relation claim (relation: Glyph);
 - the form is that of an encoded character. Such a record stays, with an encoding claim; it is merged
   only with another record of the same form.
+
+## Finding candidates
+
+The page of possible duplicates (/duplicates) lists the records whose descriptions name one form: the same
+text, or the same structure with radical code points read as their ideographs and each part as its IWDS
+group. A part written out and the same part encoded (⿱⿰女子看 and ⿱好看) are two forms there. A description
+with an unknown part is left out.
+
+A pair leaves the list when the records are merged, or when a relation claim of one names the other by
+its code (R+0900), whatever the relation.
 
 ## Before merging
 

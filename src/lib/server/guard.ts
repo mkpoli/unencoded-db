@@ -24,6 +24,7 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
     case '/[locale]/new':
     case '/[locale]/batch': return action === 'default' ? 'ADDS' : null
     case '/[locale]/entry/[id]': return ['edit', 'comment', 'hideComment', 'unhideComment'].includes(action) ? 'EDITS' : null
+    case '/[locale]/entry/[id]/sighting/[sighting]/split':
     case '/[locale]/entry/[id]/sighting/new': return action === 'default' ? 'ADDS' : null
     case '/[locale]/source/[id]': return action === 'addAlias' || action === 'removeAlias' ? 'EDITS' : null
     case '/api/tags': return action === 'default' ? 'EDITS' : null
@@ -36,10 +37,10 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
     case '/api/favourites':
     case '/api/report':
     case '/[locale]/entry/[id]/report':
-    case '/[locale]/entry/[id]/duplicate':
     case '/[locale]/entry/[id]/sighting/[sighting]/remove':
     case '/[locale]/entry/[id]/sighting/[sighting]/move':
     case '/[locale]/entry/[id]/sighting/[sighting]/edit': return action === 'default' ? 'EDITS' : null
+    case '/[locale]/entry/[id]/duplicate': return action === 'merge' || action === 'apart' ? 'EDITS' : null
     case '/[locale]/entry/[id]/history': return ['restore', 'redact', 'thank', 'putBack', 'unmerge'].includes(action) ? 'EDITS' : null
     case '/[locale]/moderate': return ['restoreEntry', 'restoreSighting', 'hide', 'unhide', 'resolve'].includes(action) ? 'EDITS' : null
     default: return null
