@@ -731,5 +731,14 @@
   "mcp.tool.add_sighting": "为已有记录补充一条证据。",
   "mcp.authTitle": "登录与写入",
   "mcp.authBody": "无需登录即可使用，每次连接会获得一个新的匿名名称。支持OAuth 2.1的客户端可通过Glyph Atlas授权，将写入记在你的账号名下。",
-  "mcp.writesBody": "写入遵循与网页表单相同的校验规则；证据图片从公开网址抓取。"
+  "mcp.writesBody": "写入遵循与网页表单相同的校验规则；证据图片从公开网址抓取。",
+  "homographs.title": "同形异字",
+  "homographs.empty": "暂无同形异字记录。",
+  "homographs.column.form": "字形",
+  "homographs.column.record": "记录与语言",
+  "homographs.column.reading": "读音",
+  "homographs.column.meaning": "释义",
+  "homographs.column.evidence": "证据",
+  "homographs.encodedCounterpart": "Unicode已编码字",
+  "homographs.more": "另有{n}条"
 }

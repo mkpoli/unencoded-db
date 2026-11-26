@@ -731,5 +731,14 @@
   "mcp.tool.add_sighting": "既存の記録に証拠を1件追加します。",
   "mcp.authTitle": "ログインと書き込み",
   "mcp.authBody": "ログインしなくても利用でき、接続ごとに新しい匿名の名前が付きます。OAuth 2.1対応のクライアントからGlyph Atlasで認証すると、ご自身のアカウント名義で記録されます。",
-  "mcp.writesBody": "書き込みにはWebフォームと同じ検証が適用されます。証拠画像は公開URLから取得されます。"
+  "mcp.writesBody": "書き込みにはWebフォームと同じ検証が適用されます。証拠画像は公開URLから取得されます。",
+  "homographs.title": "同形異字",
+  "homographs.empty": "同形異字の記録はまだありません。",
+  "homographs.column.form": "字形",
+  "homographs.column.record": "記録と言語",
+  "homographs.column.reading": "読み",
+  "homographs.column.meaning": "意味",
+  "homographs.column.evidence": "証拠",
+  "homographs.encodedCounterpart": "Unicode収録字",
+  "homographs.more": "ほか{n}件"
 }
