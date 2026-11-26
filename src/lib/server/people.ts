@@ -203,9 +203,9 @@ export const PEOPLE_PAGES = 50
 export type Contributor = { id: string; name: string; changes: number; atlas: number }
 
 export function contributorsStatement(db: D1Database, page: number) {
-  // The catalogue's own maintenance is nobody.
+  // The catalogue's own maintenance and automated Glyph Atlas sync are not human contributors.
   return db.prepare(`SELECT p.id, p.name, p.changes, p.atlas_sub IS NOT NULL AS atlas FROM people p
-    WHERE p.merged_into IS NULL AND p.changes > 0 AND p.banned_at IS NULL AND p.name <> 'Catalogue maintenance'
+    WHERE p.merged_into IS NULL AND p.changes > 0 AND p.banned_at IS NULL AND p.name NOT IN ('Catalogue maintenance', 'Glyph Atlas')
     ORDER BY p.changes DESC, p.id LIMIT ? OFFSET ?`).bind(PEOPLE_PAGE + 1, (page - 1) * PEOPLE_PAGE)
 }
 

@@ -20,6 +20,7 @@ import { candidates } from '$lib/server/candidates'
 import { tagList } from '$lib/server/tags'
 import { addSighting, CITATION_FIELDS, citesEvidence, createEntry, editEntry, editSighting, getEntry, heldPictures, list, mediaVisible, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, type StoredImage, type ViaPicture } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
+import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { MAX_WRITE_BODY } from '$lib/server/body-limit'
 import { MAX_IMAGE, prepareImage } from '$lib/server/image'
@@ -327,6 +328,7 @@ async function addRecord(event: RequestEvent, input: Json) {
   const person = await agentWriter(event, DB)
   const id = await createEntry(DB, entry, drafts[0].fields, drafts[0].media, { actor: person.id, ip: await ipHash(event) }, drafts.slice(1))
   notifyIndexNow(event, { entries: [id] })
+  scheduleAtlasSync(event, [id])
   return shown(event, id)
 }
 
@@ -371,6 +373,7 @@ async function editRecordOf(event: RequestEvent, input: Json) {
   const result = await editEntry(DB, id, rev, fields, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
   if (!result.ok) throw result.code === 'conflict' ? changed((await getEntry(DB, id))?.entry.rev ?? rev) : new Refusal(said(result.code))
   notifyIndexNow(event, { entries: [id] })
+  scheduleAtlasSync(event, [id], { onlyIfChanged: true })
   return { record: shown(event, id), rev: result.rev }
 }
 
