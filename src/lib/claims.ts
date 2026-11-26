@@ -187,19 +187,14 @@ export function relationsTo(claims: readonly Claim[], records: ReadonlySet<numbe
   return { kept: claims.filter(claim => !named(claim)), dropped: claims.filter(named) }
 }
 
-/** The claims a list stored apart from their record holds, each checked alone: their scopes are in the record. */
-export function storedClaims(text: string | null): Claim[] {
-  try { const value: unknown = JSON.parse(text ?? '[]'); return Array.isArray(value) ? value.filter(validClaim) : [] } catch { return [] }
-}
-
 /** Puts back the relations a merge dropped, after the claims the record holds now: each one it no longer states,
- * under the scopes that are still there, while a record's limits allow. */
-export function restoreClaims(claims: readonly Claim[], dropped: readonly Claim[]): Claim[] {
+ * resting on the sightings it still holds and under the scopes that are still there, while a record's limits allow. */
+export function restoreClaims(claims: readonly Claim[], dropped: readonly Claim[], sightings: ReadonlySet<number>): Claim[] {
   const restored = [...claims]
   const held = new Set(claims.map(stated)), keys = new Set(claims.map(claim => claim.key))
   for (const claim of dropped) {
     if (held.has(stated(claim)) || restored.length >= CLAIMS_MAX || restored.filter(item => item.kind === claim.kind).length >= CLAIM_LIMITS[claim.kind].max) continue
-    const copy = { ...claim, key: keys.has(claim.key) ? newClaimKey() : claim.key, under: claim.under.filter(scope => keys.has(scope)) }
+    const copy = { ...claim, key: keys.has(claim.key) ? newClaimKey() : claim.key, sightings: claim.sightings.filter(id => sightings.has(id)), under: claim.under.filter(scope => keys.has(scope)) }
     if (JSON.stringify([...restored, copy]).length > CLAIMS_LENGTH_MAX) continue
     restored.push(copy)
     held.add(stated(copy))

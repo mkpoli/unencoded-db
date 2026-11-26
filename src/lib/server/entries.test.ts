@@ -14,7 +14,7 @@ import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
 import { decadeOf } from '$lib/dates'
 import { recordCode } from '$lib/code'
-import { type Via, addSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { type Via, addSighting, moveSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { PAGE, PAGE_SIZES, pageSizeOf } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
@@ -531,6 +531,36 @@ describe('the wiki', () => {
     const parted = (await getEntry(db, a))!
     expect(parted.claims.map(item => [item.kind, item.value, item.under])).toEqual([['ids', '⿰氵秀', []], ['meaning', '= 衛', []], ['relation', '衛', []], ['relation', recordCode(b), [meaning.key]]])
     expect((await getEntry(db, b))!.claims.map(item => item.value)).toEqual(['⿰氵秀', '衛', recordCode(a)])
+  })
+
+  test('a relation a merge dropped comes back after the merge is redacted, on the evidence the record still holds', async () => {
+    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰氵秀')] }), seen({ place: 'one' }), [], who)
+    const b = await createEntry(db, fields({ claims: [claim('ids', '⿰氵秀')] }), seen({ place: 'two' }), [], who)
+    const d = await createEntry(db, fields({ claims: [claim('ids', '⿱木木')] }), seen({ place: 'three' }), [], who)
+    const kept = (await addSighting(db, a, seen({ place: 'four' }), [], who))!
+    const first = (await getEntry(db, a))!
+    const moving = first.sightings.find(sighting => sighting.place === 'one')!.id
+    await editEntry(db, a, first.entry.rev, fields({ claims: [claim('ids', '⿰氵秀'), { ...relation(recordCode(b), 'variant', 'one stroke more'), sightings: [moving, kept] }] }), who, null)
+    expect(await mergeEntry(db, b, a, who, null)).toEqual({ ok: true })
+    const merged = (await getEntry(db, a))!
+    expect(merged.claims.map(item => item.kind)).toEqual(['ids'])
+    const sighting = merged.sightings.find(item => item.id === moving)!
+    expect(await moveSighting(db, a, moving, sighting.rev, d, who, null)).toBe('done')
+    const merge = (await history(db, a)).find(row => row.kind === 'merge')!
+    expect(await redactRevision(db, a, merge.id, who, null)).toBe(true)
+    expect(await unmergeEntry(db, b, who)).toBe(true)
+    expect((await getEntry(db, a))!.claims.filter(item => item.kind === 'relation').map(item => [item.value, item.data?.difference, item.sightings])).toEqual([[recordCode(b), 'one stroke more', [kept]]])
+  })
+
+  test('a merge drops the relations to records merged into either of the two before', async () => {
+    const a = await createEntry(db, fields({ claims: [claim('ids', '⿰氵秀')] }), seen({ place: 'one' }), [], who)
+    const b = await createEntry(db, fields({ claims: [claim('ids', '⿰氵秀')] }), seen({ place: 'two' }), [], who)
+    const c = await createEntry(db, fields({ claims: [claim('ids', '⿰氵秀')] }), seen({ place: 'three' }), [], who)
+    const first = (await getEntry(db, a))!
+    await editEntry(db, a, first.entry.rev, fields({ claims: [claim('ids', '⿰氵秀'), relation(recordCode(c), 'unifiable'), relation('衛', 'variant')] }), who, null)
+    expect(await mergeEntry(db, c, b, who, null)).toEqual({ ok: true })
+    expect(await mergeEntry(db, b, a, who, null)).toEqual({ ok: true })
+    expect((await getEntry(db, a))!.claims.map(item => item.value)).toEqual(['⿰氵秀', '衛'])
   })
 
   test('a hidden record keeps its duplicates, and a redacted merge can still be undone', async () => {
