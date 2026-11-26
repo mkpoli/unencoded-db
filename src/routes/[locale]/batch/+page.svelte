@@ -5,17 +5,17 @@
   import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import SightingFields from '$lib/components/SightingFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
-  import { BATCH_ROWS_MAX } from '$lib/limits'
+  import { BATCH_ROWS_MAX, MEDIA_MAX } from '$lib/limits'
   import { href, t } from '$lib/t'
   let { form } = $props()
   const values = $derived(form?.values)
-  let busy = $state(0)
+  let busy = $state(0), found = $state(false)
   let next = 0
   // Typed rows come back with a rejected batch; pictures are chosen again.
   const row = (ids = '', note = '') => ({ key: next++, ids, note })
   const typed = untrack(() => form?.values?.rows ?? [])
   let rows = $state(typed.length ? typed.map(item => row(item.ids, item.note)) : [row(), row(), row()])
-  const message = $derived(form?.error ? `${form.row ? `${t('batch.row', { n: form.row })} · ` : ''}${t(`error.${form.error}`, { max: BATCH_ROWS_MAX, n: form.row ?? 0 })}` : null)
+  const message = $derived(form?.error ? `${form.row ? `${t('batch.row', { n: form.row })} · ` : ''}${t(`error.${form.error}`, { most: MEDIA_MAX, max: BATCH_ROWS_MAX, n: form.row ?? 0 })}` : null)
 </script>
 
 <Seo title={t('batch.title')} />
@@ -25,7 +25,7 @@
   <form class="stack" method="POST" enctype="multipart/form-data">
     <section class="panel stack">
       <ScriptPicker value={values?.script} other={values?.script_other} />
-      <SightingFields {values} />
+      <SightingFields {values} onready={working => found = working} />
     </section>
     <section class="stack"><h2>{t('batch.rows')}</h2>
       {#each rows as item, index (item.key)}
@@ -39,7 +39,7 @@
       {/each}
       {#if rows.length < BATCH_ROWS_MAX}<div><button type="button" class="button" onclick={() => rows.push(row())}>{t('batch.add')}</button></div>{/if}
     </section>
-    <SubmitBar busy={busy > 0} label={t('batch.save')} cancel={href()} />
+    <SubmitBar busy={busy > 0 || found} label={t('batch.save')} cancel={href()} />
   </form>
 </div>
 <style>

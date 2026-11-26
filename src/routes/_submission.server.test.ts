@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { MEDIA_MAX } from '$lib/limits'
 import { SIGHTING_START } from '$lib/scripts'
-import { sightingForms, uploadedImages } from './_submission.server'
+import { readSightingFields, type ViaPicture } from '$lib/server/entries'
+import { readViaPictures, sightingForms, uploadedImages } from './_submission.server'
 
 const png = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10,
@@ -121,5 +122,66 @@ describe('the sightings of a form', () => {
     const form = new FormData()
     form.append('place', 'only'); form.append('url', 'https://example.test/only')
     expect(sightingForms(form)).toEqual([form])
+  })
+})
+
+describe('the pictures of the go-betweens of a form', () => {
+  const stored = (key: string): ViaPicture => ({ image_key: key, image_type: 'image/png', image_w: 20, image_h: 20, thumb_key: key })
+  const via = (author: string, pictures: ViaPicture[]) => ({ url: null, title: null, author, publisher: null, report_date: null, container: null, source_kind: null, quote: null, pictures })
+  const row = (form: FormData, author: string, keep: string[] = [], files: File[] = []) => {
+    for (const [name, value] of [['via_url', ''], ['via_title', ''], ['via_author', author], ['via_container', ''], ['via_publisher', ''], ['via_source_kind', ''], ['via_report_date', ''], ['via_quote', '']]) form.append(name, value)
+    for (const key of keep) form.append('via_keep', key)
+    form.append('via_thumb', new File([], ''))
+    for (const file of files.length ? files : [new File([], '')]) form.append('via_image', file)
+  }
+  const keys = (rows: ViaPicture[][]) => rows.map(pictures => pictures.map(picture => picture.image_key))
+
+  test('belong to the row they stand in, wherever it was dragged, and only stored ones are kept', async () => {
+    const form = new FormData()
+    row(form, '乙', ['b', 'elsewhere'], [sized(30)]); row(form, '丙'); row(form, '甲', ['a'])
+    const read = await readViaPictures(form, [via('甲', [stored('a')]), via('乙', [stored('b')])])
+    expect(read.error).toBeNull()
+    const [file] = read.files
+    expect(keys(read.kept)).toEqual([['b'], [], ['a']])
+    expect(keys(read.all)).toEqual([['b', file.image.key], [], ['a']])
+    expect(read.all[0][1]).toEqual({ image_key: file.image.key, image_type: 'image/png', image_w: 30, image_h: 20, thumb_key: file.image.key })
+    expect(readSightingFields(form, read.all).vias.map(item => [item.author, item.pictures?.length ?? 0])).toEqual([['乙', 2], ['丙', 0], ['甲', 1]])
+  })
+
+  test('need a source, a readable file and room, and a refused form keeps the stored ones', async () => {
+    const held = [via('甲', [stored('a')]), via('乙', [stored('b')])]
+    const refused = async (author: string, files: File[], keep: string[] = ['b']) => {
+      const form = new FormData(); row(form, '甲', ['a']); row(form, author, keep, files)
+      const { error, kept, all, files: read } = await readViaPictures(form, held)
+      expect(read).toEqual([])
+      expect(all).toEqual(kept)
+      // Both rows are shown again as they were, whatever is wrong with the second.
+      expect(readSightingFields(form, kept).vias.map(item => item.pictures)).toEqual([[stored('a')], [stored('b')]])
+      return error
+    }
+    expect(await refused('', [imageFile()])).toBe('viaSource')
+    expect(await refused('', [])).toBe('viaSource')
+    expect(await refused('乙', [new File(['no'], 'a.png')])).toBe('viaImage')
+    // The chain shares one allowance: the stored ones of both rows count.
+    expect(await refused('乙', Array.from({ length: MEDIA_MAX - 1 }, (_, index) => sized(21 + index)))).toBe('viaImage')
+    const room = new FormData(); row(room, '甲', ['a']); row(room, '乙', ['b'], Array.from({ length: MEDIA_MAX - 2 }, (_, index) => sized(21 + index)))
+    expect((await readViaPictures(room, held)).all.map(pictures => pictures.length)).toEqual([1, MEDIA_MAX - 1])
+    const twice = new FormData(); row(twice, '甲', ['a', 'a'])
+    expect((await readViaPictures(twice, held)).all).toEqual([[stored('a')]])
+    // A link that is no web address names nothing once it is cleaned.
+    const scheme = new FormData(); row(scheme, '', [], [imageFile()]); scheme.set('via_url', 'discord://channel/1')
+    expect((await readViaPictures(scheme)).error).toBe('viaSource')
+    const blank = new FormData(); row(blank, '')
+    expect(await readViaPictures(blank)).toEqual({ kept: [[]], all: [[]], files: [], error: null })
+    const dropped = new FormData(); row(dropped, '甲', ['a']); dropped.append('via_drop', 'a')
+    expect((await readViaPictures(dropped, held)).all).toEqual([[]])
+  })
+
+  test('stay with their sighting in a form of several', async () => {
+    const form = new FormData()
+    form.append(SIGHTING_START, ''); row(form, '甲', [], [sized(31)])
+    form.append(SIGHTING_START, ''); row(form, '乙'); row(form, '丙', [], [sized(32)])
+    const read = await Promise.all(sightingForms(form).map(section => readViaPictures(section)))
+    expect(read.map(result => result.all.map(pictures => pictures.map(picture => picture.image_w)))).toEqual([[[31]], [[], [32]]])
   })
 })

@@ -45,6 +45,8 @@
   }
 
   const pasted = (event: ClipboardEvent) => {
+    // A go-between took it.
+    if (event.defaultPrevented) return
     const file = [...(event.clipboardData?.files ?? [])].find(item => item.type.startsWith('image/'))
     if (!file) return
     const lists = [...document.querySelectorAll('[data-pictures]')]

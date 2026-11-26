@@ -21,6 +21,9 @@ function foreignForm(event: Pick<RequestEvent, 'request' | 'url' | 'route'>) {
   return FORM_TYPES.includes(type) && request.headers.get('origin') !== event.url.origin
 }
 
+// The forms that send pictures: a sighting's own and those of its chain.
+const PICTURE_FORMS = new Set(['/[locale]/batch', '/[locale]/new', '/[locale]/entry/[id]/sighting/new', '/[locale]/entry/[id]/sighting/[sighting]/edit'])
+
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname, search } = event.url
   // A session cookie is only set over HTTPS, and every other origin than loopback is refused by `secureOrigin`,
@@ -68,7 +71,7 @@ export const handle: Handle = async ({ event, resolve }) => {
       if (!limit) return new Response('Not Found', { status: 404 })
       await guardWrite(event, limit, moderationAction(event))
     }
-    const request = await limitWriteBody(event.request, agent || syncApi || event.route.id?.startsWith('/oauth/') ? MAX_AGENT_BODY : event.route.id === '/[locale]/batch' || event.route.id === '/[locale]/new' ? MAX_PICTURES_BODY : undefined)
+    const request = await limitWriteBody(event.request, agent || syncApi || event.route.id?.startsWith('/oauth/') ? MAX_AGENT_BODY : PICTURE_FORMS.has(event.route.id ?? '') ? MAX_PICTURES_BODY : undefined)
     if (!request) return new Response('Payload Too Large', { status: 413 })
     event.request = request
   }
