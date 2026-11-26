@@ -9,7 +9,7 @@
     "preview": "bun run build && wrangler dev --local --infer-origin-from-routes=false",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "svelte-kit sync && bun test ./src",
-    "db:local": "wrangler d1 migrations apply DB --local && bun scripts/sweep-source-names.ts --local && bun scripts/sweep-publishers.ts --local && bun scripts/sweep-dates.ts --local && bun scripts/sweep-title-readings.ts --local",
+    "db:local": "wrangler d1 migrations apply DB --local && bun scripts/sweep-source-names.ts --local && bun scripts/sweep-publishers.ts --local && bun scripts/sweep-dates.ts --local && bun scripts/sweep-title-readings.ts --local && bun scripts/sweep-forms.ts --local",
     "postinstall": "node scripts/prepare-composer.mjs"
   },
   "devDependencies": {

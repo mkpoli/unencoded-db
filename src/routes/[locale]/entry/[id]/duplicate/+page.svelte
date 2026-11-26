@@ -2,6 +2,7 @@
   import Seo from '$lib/components/Seo.svelte'
   import Tile from '$lib/components/Tile.svelte'
   import { recordCode } from '$lib/code'
+  import { RELATION_KINDS } from '$lib/related'
   import { href, media, t } from '$lib/t'
   let { data, form } = $props()
   const other = $derived(data.pair?.find(tile => tile.id !== data.id))
@@ -22,14 +23,32 @@
         </figure>
       {/each}
     </div>
-    <form method="POST" class="stack">
+    <form method="POST" action="?/merge&of={other.id}" class="stack decision">
       <input type="hidden" name="of" value={other.id} />
       <div class="field">
         <label for="summary">{t('form.summary')}</label>
         <input class="input" id="summary" name="summary" maxlength="500" />
       </div>
-      <div class="row"><button class="button primary" type="submit">{t('duplicate.merge')}</button><a class="button" href={href(`/entry/${data.id}/duplicate`)}>{t('duplicate.other')}</a></div>
+      <div><button class="button primary" type="submit">{t('duplicate.merge')}</button></div>
     </form>
+    <form method="POST" action="?/apart&of={other.id}" class="stack decision">
+      <input type="hidden" name="of" value={other.id} />
+      <div class="grid-2">
+        <div class="field">
+          <label for="relationship">{t('field.relatedRelationship')}</label>
+          <select class="input" id="relationship" name="relationship" required>
+            <option value="" hidden></option>
+            {#each RELATION_KINDS as kind}<option value={kind}>{t(`relationship.${kind}`)}</option>{/each}
+          </select>
+        </div>
+        <div class="field">
+          <label for="difference">{t('field.relatedDifference')}</label>
+          <input class="input" id="difference" name="difference" maxlength="5000" />
+        </div>
+      </div>
+      <div><button class="button" type="submit">{t('duplicate.apart')}</button></div>
+    </form>
+    <a class="text-link back" href={href(`/entry/${data.id}/duplicate`)}>{t('duplicate.other')}</a>
   {:else}
     {#if data.unknown}<p class="notice bad" role="alert">{t('error.missing')}</p>{/if}
     <form method="GET" class="row find">
@@ -48,6 +67,7 @@
 
 <style>
   .back { align-self: start; color: var(--muted) }
+  .decision { padding-top: 16px; border-top: 1px solid var(--line) }
   .find .input { flex: 1 1 0; width: auto; min-width: 0 }
   .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 280px)); gap: 24px }
   .pair figure { margin: 0; min-width: 0 }

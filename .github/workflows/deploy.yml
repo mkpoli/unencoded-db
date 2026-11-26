@@ -42,3 +42,4 @@ jobs:
       - run: bun scripts/sweep-publishers.ts --remote
       - run: bun scripts/sweep-title-readings.ts --remote
       - run: bun scripts/sweep-dates.ts --remote
+      - run: bun scripts/sweep-forms.ts --remote

@@ -155,7 +155,7 @@ describe('write body limit', () => {
 
   test('maps each existing guarded action to its limiter', () => {
     const routes: [string, string, 'ADDS' | 'EDITS'][] = [
-      ['/[locale]/new', '', 'ADDS'], ['/[locale]/batch', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/new', '', 'ADDS'],
+      ['/[locale]/new', '', 'ADDS'], ['/[locale]/batch', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/new', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/[sighting]/split', '', 'ADDS'],
       ['/[locale]/entry/[id]', '?/edit', 'EDITS'], ['/[locale]/entry/[id]', '?/comment', 'EDITS'], ['/[locale]/entry/[id]', '?/hideComment', 'EDITS'], ['/[locale]/entry/[id]', '?/unhideComment', 'EDITS'], ['/[locale]/me', '', 'EDITS'], ['/[locale]/notifications', '', 'EDITS'], ['/api/tags', '', 'EDITS'],
       ['/[locale]/entry/[id]/report', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/edit', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/remove', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/move', '', 'EDITS'],
       ['/[locale]/entry/[id]/history', '?/restore', 'EDITS'],
