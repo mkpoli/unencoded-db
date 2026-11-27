@@ -5,6 +5,7 @@ import { readNewTag } from '$lib/tags'
 import { ADD_SIGHTINGS_MAX } from '$lib/limits'
 import { citesEvidence, type SightingFields, createEntry, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
+import { archiveCited } from '$lib/server/archive'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
@@ -82,6 +83,7 @@ export const actions: Actions = {
     const id = await createEntry(DB, entry, drafts[0].fields, drafts[0].media, who, drafts.slice(1))
     notifyIndexNow(event, { entries: [id] })
     scheduleAtlasSync(event, [id])
+    archiveCited(event, drafts.map(draft => draft.fields))
     redirect(303, `/${event.params.locale}/entry/${id}`)
   },
 }

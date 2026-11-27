@@ -159,7 +159,7 @@ describe('write body limit', () => {
       ['/[locale]/entry/[id]', '?/edit', 'EDITS'], ['/[locale]/entry/[id]', '?/comment', 'EDITS'], ['/[locale]/entry/[id]', '?/hideComment', 'EDITS'], ['/[locale]/entry/[id]', '?/unhideComment', 'EDITS'], ['/[locale]/me', '', 'EDITS'], ['/[locale]/notifications', '', 'EDITS'], ['/api/tags', '', 'EDITS'],
       ['/[locale]/entry/[id]/report', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/edit', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/remove', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/move', '', 'EDITS'],
       ['/[locale]/entry/[id]/history', '?/restore', 'EDITS'],
-      ...['addAlias', 'removeAlias', 'addArchive', 'removeArchive'].map(action => ['/[locale]/source/[id]', `?/${action}`, 'EDITS'] as [string, string, 'ADDS' | 'EDITS']),
+      ...['addAlias', 'removeAlias', 'addArchive', 'removeArchive', 'archiveNow'].map(action => ['/[locale]/source/[id]', `?/${action}`, 'EDITS'] as [string, string, 'ADDS' | 'EDITS']),
       ['/[locale]/entry/[id]/history', '?/thank', 'EDITS'], ['/[locale]/u/[id]', '?/merge', 'EDITS'], ['/[locale]/entry/[id]/history', '?/putBack', 'EDITS'],
       ...['restoreEntry', 'restoreSighting', 'hide', 'unhide', 'resolve'].map(action => ['/[locale]/moderate', `?/${action}`, 'EDITS'] as [string, string, 'ADDS' | 'EDITS']),
     ]

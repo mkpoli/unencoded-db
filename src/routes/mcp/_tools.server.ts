@@ -20,6 +20,7 @@ import { candidates } from '$lib/server/candidates'
 import { tagList } from '$lib/server/tags'
 import { addSighting, CITATION_FIELDS, citesEvidence, createEntry, editEntry, editSighting, getEntry, heldPictures, list, mediaVisible, namedVias, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, viaKey, viaRows, type StoredImage, type ViaPicture } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
+import { archiveCited } from '$lib/server/archive'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { MAX_WRITE_BODY } from '$lib/server/body-limit'
@@ -464,6 +465,7 @@ async function addRecord(event: RequestEvent, input: Json) {
   const id = await createEntry(DB, entry, drafts[0].fields, drafts[0].media, { actor: person.id, ip: await ipHash(event) }, drafts.slice(1))
   notifyIndexNow(event, { entries: [id] })
   scheduleAtlasSync(event, [id])
+  archiveCited(event, drafts.map(draft => draft.fields))
   return shown(event, id)
 }
 
@@ -490,6 +492,7 @@ async function addSightingTo(event: RequestEvent, input: Json) {
   }
   if (!sighting) throw new Refusal(said('missing'))
   notifyIndexNow(event, { entries: [id] })
+  archiveCited(event, [fields])
   return { record: shown(event, id), sighting }
 }
 
@@ -565,6 +568,7 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   const result = await editSighting(DB, sighting.id, rev, fields, media, { actor: person.id, ip: await ipHash(event) }, summaryOf(input), id)
   if (!result.ok) throw result.code === 'conflict' ? changed((await getEntry(DB, id))?.sightings.find(row => row.id === sighting.id)?.rev ?? rev) : new Refusal(said(result.code))
   notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
+  archiveCited(event, [fields])
   return { record: shown(event, id), sighting: sighting.id, rev: result.rev }
 }
 
