@@ -106,7 +106,7 @@
   const siblingById = $derived(new Map(siblings.map(item => [String(item.id), item])))
   const dateWarnings = $derived.by(() => {
     const list = dateOrderWarnings(
-      { report_date: reportDate, original_date: originalDate },
+      { report_date: reportDate, original_date: originalDate, closeness },
       vias.map(row => ({ report_date: row.date })),
       cites.map(row => {
         const sibling = siblingById.get(row.sighting.trim().replace(/^#/, ''))

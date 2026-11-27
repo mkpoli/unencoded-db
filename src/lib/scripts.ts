@@ -83,6 +83,8 @@ const CLOSENESS_RANK: Record<Closeness, number> = { primary: 0, secondary_cited:
 export const closenessRank = (raw: string | null | undefined) => { const kind = closenessOf(raw); return kind ? CLOSENESS_RANK[kind] : 1 }
 // Only a primary sighting, or one nobody has judged, dates the work it reproduces; any other is dated by its report.
 export const datesOriginal = (raw: string | null | undefined) => closenessRank(raw) <= 1
+// The same rule in SQL: a sighting's original date where it dates the sighting, else null.
+export const datingOriginal = (alias: string) => `CASE WHEN ${alias}.closeness IS NULL OR ${alias}.closeness = 'primary' THEN ${alias}.original_date END`
 
 // A sighting stores the options chosen from a list as a JSON array in the order of the list, or null for none.
 function parseChosen<T extends string>(options: readonly T[], raw: string | null | undefined): T[] {

@@ -7,7 +7,7 @@ import { authorKeys, nameKey, nameLabel, sourceKeys, sourceNameKey } from '../na
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
-import { CITES_MAX, closenessOf, closenessRank, CONTEXTS, datesOriginal, isCiteKind, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
+import { CITES_MAX, closenessOf, closenessRank, CONTEXTS, datesOriginal, datingOriginal, isCiteKind, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
 import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
@@ -1382,7 +1382,7 @@ const MEDIA_OF_ENTRY = `SELECT x.sighting_id, ${IMAGE_FIELDS.map(field => `x.${f
 
 const CITE_ROW_COLUMNS = `sc.sighting_id, sc.position, sc.kind, sc.source_id, sc.cited_id, sc.quote, sc.note,
   ${CITATION_FIELDS.map(field => `ns.${field}`).join(', ')},
-  cs.entry_id AS t_entry_id, cs.place AS t_place, cs.original_date AS t_original_date,
+  cs.entry_id AS t_entry_id, cs.place AS t_place, ${datingOriginal('cs')} AS t_original_date,
   cs.hidden_at AS t_hidden_at, cs.source_id AS t_source_id,
   ce.hidden_at AS te_hidden_at, ce.merged_into AS te_merged_into,
   ${CITATION_FIELDS.map(field => `csrc.${field} AS t_${field}`).join(', ')},
@@ -1390,7 +1390,7 @@ const CITE_ROW_COLUMNS = `sc.sighting_id, sc.position, sc.kind, sc.source_id, sc
 const CITE_JOINS = `LEFT JOIN sources ns ON ns.id = sc.source_id LEFT JOIN sightings cs ON cs.id = sc.cited_id LEFT JOIN entries ce ON ce.id = cs.entry_id LEFT JOIN sources csrc ON csrc.id = cs.source_id`
 const CITES_OF_ENTRY = `SELECT ${CITE_ROW_COLUMNS} FROM sightings s JOIN sighting_cites sc ON sc.sighting_id = s.id ${CITE_JOINS} WHERE s.entry_id = ?1 AND s.id <= COALESCE((SELECT id FROM sightings WHERE entry_id = ?1 ORDER BY id LIMIT 1 OFFSET ${SIGHTINGS_MAX - 1}), ${Number.MAX_SAFE_INTEGER}) ORDER BY s.id`
 const CITED_BY_MAX = 60
-const CITED_BY_COLUMNS = `sc.cited_id AS target_id, sc.sighting_id, sc.position, sc.kind, sc.quote, sc.note, s.entry_id, s.place, s.original_date, c.title, c.author, c.report_date, (SELECT x.thumb_key FROM sighting_media x WHERE x.sighting_id = s.id ORDER BY x.position LIMIT 1) AS thumb_key`
+const CITED_BY_COLUMNS = `sc.cited_id AS target_id, sc.sighting_id, sc.position, sc.kind, sc.quote, sc.note, s.entry_id, s.place, ${datingOriginal('s')} AS original_date, c.title, c.author, c.report_date, (SELECT x.thumb_key FROM sighting_media x WHERE x.sighting_id = s.id ORDER BY x.position LIMIT 1) AS thumb_key`
 const CITED_BY_OF_ENTRY = `SELECT ${CITED_BY_COLUMNS} FROM sightings t JOIN sighting_cites sc INDEXED BY sighting_cites_by_cited ON sc.cited_id = t.id JOIN sightings s ON s.id = sc.sighting_id JOIN entries e ON e.id = s.entry_id LEFT JOIN sources c ON c.id = s.source_id WHERE t.entry_id = ?1 AND t.hidden_at IS NULL AND s.hidden_at IS NULL AND ${LIVE} AND t.id <= COALESCE((SELECT id FROM sightings WHERE entry_id = ?1 ORDER BY id LIMIT 1 OFFSET ${SIGHTINGS_MAX - 1}), ${Number.MAX_SAFE_INTEGER}) ORDER BY t.id LIMIT ${CITED_BY_MAX}`
 
 type CiteQueryRow = Citation & {
@@ -1486,7 +1486,7 @@ export function preserveHiddenCites(submitted: readonly Cite[], raw: readonly Ci
 }
 
 export async function sightingSiblings(db: D1Database, entryId: number, excludeId: number) {
-  const { results } = await db.prepare(`SELECT s.id, c.title, s.place, c.report_date, s.original_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.entry_id = ? AND s.hidden_at IS NULL AND s.id != ? ORDER BY s.id LIMIT ${SIGHTINGS_MAX}`)
+  const { results } = await db.prepare(`SELECT s.id, c.title, s.place, c.report_date, ${datingOriginal('s')} AS original_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.entry_id = ? AND s.hidden_at IS NULL AND s.id != ? ORDER BY s.id LIMIT ${SIGHTINGS_MAX}`)
     .bind(entryId, excludeId).all<{ id: number; title: string | null; place: string; report_date: string | null; original_date: string | null }>()
   return results
 }
@@ -1896,7 +1896,7 @@ export async function searchFound(db: D1Database, listing: Listing, limit: numbe
 // page starts at its own first row. The decades and their counts come from the counts kept with each write.
 export const CHRONICLE_PAGE = 100
 export const decadeCountsStatement = (db: D1Database) => db.prepare("SELECT tag, n FROM tag_counts WHERE tag >= 'y:' AND tag < 'y;' AND n > 0")
-const CHRONICLE_COLUMNS = `${TILE_COLUMNS}, t.year AS year, s.id AS s_id, s.place AS s_place, s.original_date AS s_original, c.title AS c_title, c.author AS c_author, c.report_date AS c_report`
+const CHRONICLE_COLUMNS = `${TILE_COLUMNS}, t.year AS year, s.id AS s_id, s.place AS s_place, ${datingOriginal('s')} AS s_original, c.title AS c_title, c.author AS c_author, c.report_date AS c_report`
 const CHRONICLE_FROM = `entry_tags t CROSS JOIN entries e ON e.id = t.entry_id LEFT JOIN sightings s ON s.id = e.first_sighting LEFT JOIN sources c ON c.id = s.source_id`
 const CHRONICLE_DATED = `t.tag = 'all' AND t.year IS NOT NULL AND ${LISTED}`
 // A page is read forwards from a place, inclusive, or backwards from just before one; both read one row
@@ -2044,7 +2044,7 @@ export async function sourcePage(db: D1Database, id: number) {
   const direct = { from: 'sightings s INDEXED BY sightings_by_source CROSS JOIN entries e ON e.id = s.entry_id', live: 's.source_id = ?', order: 's.id' }
   const via = { from: 'sighting_vias v INDEXED BY sighting_vias_by_source CROSS JOIN sightings s ON s.id = v.sighting_id CROSS JOIN entries e ON e.id = s.entry_id', live: 'v.source_id = ? AND s.source_id IS NOT v.source_id', order: 'v.sighting_id' }
   const live = (way: typeof direct) => `${way.live} AND s.hidden_at IS NULL AND ${LIVE}`
-  const namedQuery = `SELECT ${TILE_COLUMNS}, s.id AS s_id, sc.position AS sc_position, s.place AS s_place, s.original_date AS s_original_date, cs_src.title AS s_title, cs_src.author AS s_author, cs_src.report_date AS s_report_date, sc.kind AS sc_kind, sc.quote AS sc_quote, sc.note AS sc_note
+  const namedQuery = `SELECT ${TILE_COLUMNS}, s.id AS s_id, sc.position AS sc_position, s.place AS s_place, ${datingOriginal('s')} AS s_original_date, cs_src.title AS s_title, cs_src.author AS s_author, cs_src.report_date AS s_report_date, sc.kind AS sc_kind, sc.quote AS sc_quote, sc.note AS sc_note
     FROM sighting_cites sc INDEXED BY sighting_cites_by_source
     CROSS JOIN sightings s ON s.id = sc.sighting_id
     CROSS JOIN entries e ON e.id = s.entry_id

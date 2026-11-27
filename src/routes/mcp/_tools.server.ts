@@ -16,7 +16,7 @@ import { ADD_SIGHTINGS_MAX, BOXES_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib
 import { REGISTRIES } from '$lib/registries'
 import { RELATION_KINDS } from '$lib/related'
 import { dateOrderWarnings } from '$lib/cites'
-import { CITE_KINDS, CITES_MAX, CLOSENESS, CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX, type CiteKind } from '$lib/scripts'
+import { CITE_KINDS, CITES_MAX, CLOSENESS, CONTEXTS, datingOriginal, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX, type CiteKind } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
 import { addComment, cleanComment, commentsOf, setCommentHidden } from '$lib/server/comments'
 import { tagList, taxonomy } from '$lib/server/tags'
@@ -374,7 +374,7 @@ async function citeDateWarnings(db: D1Database, list: readonly SightingFields[])
     const targetIds = [...new Set(list.flatMap(fields => (fields.cites ?? []).map(cite => cite.sighting)).filter((id): id is number => id !== null))]
     const targets = new Map<number, { report_date: string | null; original_date: string | null }>()
     if (targetIds.length) {
-      const { results } = await db.prepare(`SELECT s.id, s.original_date, c.report_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.id IN (${targetIds.map(() => '?').join(', ')})`).bind(...targetIds).all<{ id: number; original_date: string | null; report_date: string | null }>()
+      const { results } = await db.prepare(`SELECT s.id, ${datingOriginal('s')} AS original_date, c.report_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.id IN (${targetIds.map(() => '?').join(', ')})`).bind(...targetIds).all<{ id: number; original_date: string | null; report_date: string | null }>()
       for (const row of results) targets.set(row.id, row)
     }
     const allDates = [...sightingDates(list), ...[...targets.values()].flatMap(target => [target.report_date, target.original_date])]
