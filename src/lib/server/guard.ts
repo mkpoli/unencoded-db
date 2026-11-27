@@ -36,6 +36,7 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
     case '/[locale]/notifications':
     case '/api/favourites':
     case '/api/report':
+    case '/api/pdf-page':
     case '/[locale]/entry/[id]/report':
     case '/[locale]/entry/[id]/sighting/[sighting]/remove':
     case '/[locale]/entry/[id]/sighting/[sighting]/move':
