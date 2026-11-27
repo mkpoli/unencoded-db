@@ -203,18 +203,25 @@ export async function joinPerson(db: D1Database, from: string, into: string, opt
 
 export type AgentIdentity = { name: string; model: string | null }
 export const AGENTS_MAX = 50
-// Each distinct (agent, model) pair is sought in `people_agents_by_commander` as the least pair
-// after the previous one, so listing a commander's agents reads at most AGENTS_MAX index entries
-// regardless of how many merged rows share a pair.
+// Each distinct (agent, model) pair is sought in `people_agents_by_commander` with separate B-tree
+// seeks for the next model within the current agent and the next agent name, so listing a
+// commander's agents reads at most O(AGENTS_MAX) index entries regardless of duplicate rows.
 export const agentsOfStatement = (db: D1Database, id: string) => db.prepare(`WITH RECURSIVE pairs(name, model, n) AS (
   SELECT
-    (SELECT name FROM people WHERE merged_into = ?1 AND agent = 1 ORDER BY name, agent_model LIMIT 1),
-    (SELECT agent_model FROM people WHERE merged_into = ?1 AND agent = 1 ORDER BY name, agent_model LIMIT 1),
+    (SELECT MIN(name) FROM people WHERE merged_into = ?1 AND agent = 1),
+    (SELECT MIN(agent_model) FROM people WHERE merged_into = ?1 AND agent = 1 AND name = (SELECT MIN(name) FROM people WHERE merged_into = ?1 AND agent = 1)),
     1
   UNION ALL
   SELECT
-    (SELECT name FROM people WHERE merged_into = ?1 AND agent = 1 AND (name, agent_model) > (pairs.name, pairs.model) ORDER BY name, agent_model LIMIT 1),
-    (SELECT agent_model FROM people WHERE merged_into = ?1 AND agent = 1 AND (name, agent_model) > (pairs.name, pairs.model) ORDER BY name, agent_model LIMIT 1),
+    CASE
+      WHEN (SELECT MIN(agent_model) FROM people WHERE merged_into = ?1 AND agent = 1 AND name = pairs.name AND agent_model > pairs.model) IS NOT NULL
+        THEN pairs.name
+      ELSE (SELECT MIN(name) FROM people WHERE merged_into = ?1 AND agent = 1 AND name > pairs.name)
+    END,
+    COALESCE(
+      (SELECT MIN(agent_model) FROM people WHERE merged_into = ?1 AND agent = 1 AND name = pairs.name AND agent_model > pairs.model),
+      (SELECT MIN(agent_model) FROM people WHERE merged_into = ?1 AND agent = 1 AND name = (SELECT MIN(name) FROM people WHERE merged_into = ?1 AND agent = 1 AND name > pairs.name))
+    ),
     pairs.n + 1
   FROM pairs WHERE pairs.name IS NOT NULL AND pairs.n < ?2
 ) SELECT name, NULLIF(model, '') AS model FROM pairs WHERE name IS NOT NULL`).bind(id, AGENTS_MAX)

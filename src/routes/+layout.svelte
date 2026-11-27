@@ -72,6 +72,8 @@
   })
 
   onMount(() => {
+    // Read by the stale-build reload in `app.html`, which acts only while the page starts up.
+    document.documentElement.dataset.started = ''
     hydrateBrowseReturn()
   })
 

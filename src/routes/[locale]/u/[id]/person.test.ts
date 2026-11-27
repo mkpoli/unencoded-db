@@ -10,7 +10,7 @@ const fields: EntryFields = { script: 'han', script_other: null, description: nu
 const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
 const event = (db: D1Database, person: string, before?: string) => ({
   params: { locale: 'en', id: person },
-  url: new URL(`http://localhost/en/u/${person}${before === undefined ? '' : `?before=${before}`}`),
+  url: new URL(`http://localhost/en/u/${person}?flat=1${before === undefined ? '' : `&before=${before}`}`),
   platform: { env: { DB: db } },
   locals: { person: null },
 }) as any
@@ -24,15 +24,15 @@ test('personal contributions list visible revisions with their old versions', as
 
   const result = await load(event(db, first.id)) as any
   expect(result.person).toMatchObject({ id: first.id, name: first.name })
-  expect(result.rows.map((row: any) => row.kind)).toEqual(['sighting', 'sighting', 'create'])
-  expect(result.rows[0]).toMatchObject({ by_id: first.id, by_name: first.name, sightingFields: { ...sighting, place: 'Second source' } })
-  expect(result.rows[0]).not.toHaveProperty('snapshot')
-  expect(result.rows[2].fields).toEqual(fields)
-  expect(result.next).toBeNull()
+  expect(result.items.map((row: any) => row.kind)).toEqual(['sighting', 'sighting', 'create'])
+  expect(result.items[0]).toMatchObject({ by_id: first.id, by_name: first.name, sightingFields: { ...sighting, place: 'Second source' } })
+  expect(result.items[0]).not.toHaveProperty('snapshot')
+  expect(result.items[2].fields).toEqual(fields)
+  expect(result.older).toBeNull()
 
   const edits = await load(event(db, second.id)) as any
-  expect(edits.rows).toHaveLength(1)
-  expect(edits.rows[0]).toMatchObject({ kind: 'edit', fields: { ...fields, description: 'Later' }, summary: 'Corrected' })
+  expect(edits.items).toHaveLength(1)
+  expect(edits.items[0]).toMatchObject({ kind: 'edit', fields: { ...fields, description: 'Later' }, summary: 'Corrected' })
 })
 
 test('personal contributions hide records and sightings a moderator hid', async () => {
@@ -42,12 +42,12 @@ test('personal contributions hide records and sightings a moderator hid', async 
   const seen = (await db.prepare('SELECT id FROM sightings WHERE entry_id = ?').bind(id).first<{ id: number }>())!.id
   await setHidden(db, { entry: id, sighting: seen }, true, { actor: person.id, ip: null }, null)
   const withoutSighting = await load(event(db, person.id)) as any
-  expect(withoutSighting.rows.map((row: any) => row.kind)).toEqual(['create'])
-  expect(withoutSighting.rows.some((row: any) => row.sighting_id === seen)).toBe(false)
+  expect(withoutSighting.items.map((row: any) => row.kind)).toEqual(['create'])
+  expect(withoutSighting.items.some((row: any) => row.sighting_id === seen)).toBe(false)
   await setHidden(db, { entry: id, sighting: seen }, false, { actor: person.id, ip: null }, null)
-  expect((await load(event(db, person.id)) as any).rows.map((row: any) => row.kind)).toEqual(['unhide', 'hide', 'sighting', 'create'])
+  expect((await load(event(db, person.id)) as any).items.map((row: any) => row.kind)).toEqual(['unhide', 'hide', 'sighting', 'create'])
   await setHidden(db, { entry: id }, true, { actor: person.id, ip: null }, null)
-  expect((await load(event(db, person.id)) as any).rows).toHaveLength(0)
+  expect((await load(event(db, person.id)) as any).items).toHaveLength(0)
 })
 
 test('personal contributions reject missing people and follow a merged person', async () => {
@@ -67,11 +67,11 @@ test('personal contributions page through a bounded revision range', async () =>
   const insert = raw.prepare("INSERT INTO revisions(entry_id,kind,rev,snapshot,actor,at) VALUES (?, 'edit', 1, ?, ?, '2026')")
   for (let i = 0; i < 65; i++) insert.run(id, JSON.stringify(fields), person.id)
   const first = await load(event(db, person.id)) as any
-  expect(first.rows).toHaveLength(60)
-  expect(first.next).toBeNumber()
-  const second = await load(event(db, person.id, String(first.next))) as any
-  expect(second.rows).toHaveLength(7)
-  expect(second.next).toBeNull()
+  expect(first.items).toHaveLength(60)
+  expect(first.older).toBeNumber()
+  const second = await load(event(db, person.id, String(first.older))) as any
+  expect(second.items).toHaveLength(7)
+  expect(second.older).toBeNull()
 })
 
 test('personal contributions keep the revision range on the actor index', () => {
@@ -91,8 +91,8 @@ test('a merged person\'s contributions join the account they signed in to', asyn
   const id = await createEntry(db, fields, sighting, [], { actor: anonymous.id, ip: null })
   await db.prepare('UPDATE people SET merged_into = ? WHERE id = ?').bind(account.id, anonymous.id).run()
   const result = await load(event(db, account.id)) as any
-  expect(result.rows).toHaveLength(2)
-  expect(result.rows.every((row: any) => row.entry_id === id && row.by_id === account.id && row.by_name === account.name)).toBe(true)
+  expect(result.items).toHaveLength(2)
+  expect(result.items.every((row: any) => row.entry_id === id && row.by_id === account.id && row.by_name === account.name)).toBe(true)
 })
 
 test('a person recorded under a UUID has a page', async () => {
@@ -133,7 +133,7 @@ test('a moderator merges a person into the one they are, after seeing who that i
     [{ id: account.id, merged_into: null, changes: 4 }, ...[anonymous.id, other.id].sort().map(id => ({ id, merged_into: account.id, changes: 0 }))])
   expect(raw.query('SELECT person FROM favourites').all()).toEqual([{ person: account.id }])
   expect(raw.query('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 0 })
-  expect((await load(event(db, account.id)) as any).rows).toHaveLength(4)
+  expect((await load(event(db, account.id)) as any).items).toHaveLength(4)
 })
 
 test('merging refuses what signing in could not do, and anyone but a moderator', async () => {
@@ -167,7 +167,7 @@ test('a merged person who later signs in brings along whoever was merged into th
   expect(await joinAtlas(db, second, 'atlas-1', 'Account', await startSession(db, second.id))).toBe(account.id)
   expect(raw.query('SELECT id, merged_into, changes FROM people ORDER BY id').all()).toEqual(
     [{ id: account.id, merged_into: null, changes: 3 }, { id: first.id, merged_into: account.id, changes: 0 }, { id: second.id, merged_into: account.id, changes: 0 }].sort((a, b) => a.id.localeCompare(b.id)))
-  expect((await load(event(db, account.id)) as any).rows).toHaveLength(3)
+  expect((await load(event(db, account.id)) as any).items).toHaveLength(3)
 })
 
 test('a merged person is signed out everywhere, and their thanks neither repeat nor thank themselves', async () => {
@@ -237,7 +237,7 @@ test('a moderator merges an agent into its commander, keeping agent and model se
     { name: 'Claude Code', model: 'Opus 5.5' },
     { name: 'DSH', model: 'DeepSeek Flash' },
   ])
-  expect(page.rows.map((row: any) => ({ by_name: row.by_name, by_agent: row.by_agent, by_model: row.by_model }))).toEqual([
+  expect(page.items.map((row: any) => ({ by_name: row.by_name, by_agent: row.by_agent, by_model: row.by_model }))).toEqual([
     { by_name: 'Commander', by_agent: null, by_model: null },
     { by_name: 'Commander', by_agent: 'Claude Code', by_model: null },
     { by_name: 'Commander', by_agent: 'Claude Code', by_model: 'Opus 5.5' },
@@ -250,9 +250,21 @@ test('a moderator merges an agent into its commander, keeping agent and model se
   expect(feed.rows[1]).toMatchObject({ by_id: commander.id, by_name: 'Commander', by_agent: 'Claude Code', by_model: null })
   expect(feed.rows[2]).toMatchObject({ by_id: commander.id, by_name: 'Commander', by_agent: 'Claude Code', by_model: 'Opus 5.5' })
 
-  // Reading a commander's agents uses index seeks over the partial covering index, never scanning duplicate rows.
+  // Reading a commander's agents seeks both name and model in the partial covering index, never scanning duplicate rows.
   const stmt = agentsOfStatement(db, commander.id) as unknown as { sql: string; values: unknown[] }
   const plan = (raw.query(`EXPLAIN QUERY PLAN ${stmt.sql}`).all(...(stmt.values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')
-  expect(plan).toContain('USING COVERING INDEX people_agents_by_commander')
+  expect(plan).toContain('USING COVERING INDEX people_agents_by_commander (merged_into=? AND name=? AND agent_model>?)')
+  expect(plan).toContain('USING COVERING INDEX people_agents_by_commander (merged_into=? AND name>?)')
   expect(plan).not.toContain('TEMP B-TREE')
+
+  // Duplicate rows under the same agent/model pair do not multiply rows read or alter results.
+  const insertDup = raw.prepare("INSERT INTO people(id, name, agent_model, created_at, merged_into, agent) VALUES (?, 'Claude Code', '', '2026', ?, 1)")
+  raw.transaction(() => {
+    for (let i = 0; i < 2000; i++) insertDup.run(`dup${String(i).padStart(9, '0')}`, commander.id)
+  })()
+  expect(await agentsOf(db, commander.id)).toEqual([
+    { name: 'Claude Code', model: null },
+    { name: 'Claude Code', model: 'Opus 5.5' },
+    { name: 'DSH', model: 'DeepSeek Flash' },
+  ])
 })
