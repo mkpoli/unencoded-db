@@ -1,8 +1,9 @@
 // Worker entrypoint wrapping the SvelteKit build to expose the periodic Glyph Atlas evidence sync cron.
 import site from './.svelte-kit/cloudflare/_worker.js'
+import { uncachedWhenMissing } from './src/lib/server/build-files.ts'
 
 export default {
-  fetch: (request, env, ctx) => site.fetch(request, env, ctx),
+  fetch: async (request, env, ctx) => uncachedWhenMissing(request, await site.fetch(request, env, ctx)),
   async scheduled(_controller, env, ctx) {
     if (env.WRITES_PAUSED === '1') return
     const token = crypto.randomUUID()
