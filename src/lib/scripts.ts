@@ -51,6 +51,11 @@ export type Status = (typeof STATUSES)[number]
 
 // The most vias a sighting's chain holds.
 export const VIAS_MAX = 4
+// The most older works a sighting cites, re-sets, or derives from.
+export const CITES_MAX = 8
+export const CITE_KINDS = ['quotes', 'edition', 'derived'] as const
+export type CiteKind = (typeof CITE_KINDS)[number]
+export const isCiteKind = (value: unknown): value is CiteKind => typeof value === 'string' && (CITE_KINDS as readonly string[]).includes(value)
 // How a character appears in a source. One page can show it several ways, as in both the title and the text.
 export const CONTEXTS = ['running_text', 'heading', 'logo', 'handwriting', 'other'] as const
 export type Context = (typeof CONTEXTS)[number]

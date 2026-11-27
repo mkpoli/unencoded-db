@@ -22,8 +22,9 @@ async function citedSources(db: D1Database, entries: readonly number[]): Promise
     const marks = batch.map(() => '?').join(', ')
     const { results } = await db.prepare(
       `SELECT source_id AS id FROM sightings WHERE entry_id IN (${marks}) AND source_id IS NOT NULL
-       UNION SELECT v.source_id FROM sighting_vias v JOIN sightings s ON s.id = v.sighting_id WHERE s.entry_id IN (${marks}) AND v.source_id IS NOT NULL`,
-    ).bind(...batch, ...batch).all<{ id: number }>()
+       UNION SELECT v.source_id FROM sighting_vias v JOIN sightings s ON s.id = v.sighting_id WHERE s.entry_id IN (${marks}) AND v.source_id IS NOT NULL
+       UNION SELECT sc.source_id FROM sighting_cites sc JOIN sightings s ON s.id = sc.sighting_id WHERE s.entry_id IN (${marks}) AND sc.source_id IS NOT NULL`,
+    ).bind(...batch, ...batch, ...batch).all<{ id: number }>()
     for (const row of results) sources.add(row.id)
   }
   return [...sources]
@@ -46,8 +47,8 @@ async function send(db: D1Database, key: string, changed: Changed) {
 }
 
 // The sources a sighting cited before a write, so the pages it leaves are recrawled too.
-export const citedBy = (sighting: { source_id: number | null; vias: readonly { id: number }[] }) =>
-  [sighting.source_id, ...sighting.vias.map(via => via.id)].filter((id): id is number => id !== null)
+export const citedBy = (sighting: { source_id: number | null; vias: readonly { id: number }[]; cites?: readonly { source_id: number | null }[] }) =>
+  [sighting.source_id, ...sighting.vias.map(via => via.id), ...(sighting.cites ?? []).map(cite => cite.source_id)].filter((id): id is number => id !== null)
 
 // Tells IndexNow the pages of these records, and of the sources they cite, changed. It runs after the
 // response and does nothing without a configured key.

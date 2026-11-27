@@ -3,7 +3,7 @@ import { fail, redirect } from '@sveltejs/kit'
 import { mapSightings, newClaim } from '$lib/claims'
 import { readNewTag } from '$lib/tags'
 import { ADD_SIGHTINGS_MAX } from '$lib/limits'
-import { citesEvidence, type SightingFields, createEntry, readEntryFields, readSightingFields } from '$lib/server/entries'
+import { citesEvidence, type SightingFields, createEntry, readEntryFields, readSightingFields, validateCiteTargets } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { archiveCited } from '$lib/server/archive'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
@@ -20,7 +20,7 @@ export const load: PageServerLoad = async (event) => {
   return { seed, tags, groups }
 }
 
-const filled = (form: FormData, fields: SightingFields) => Object.values({ ...fields, vias: fields.vias.length }).some(Boolean) || [...form.getAll('image'), ...form.getAll('via_image')].some(file => file instanceof File && file.size > 0)
+const filled = (form: FormData, fields: SightingFields) => Object.values({ ...fields, vias: fields.vias.length, cites: fields.cites?.length ?? 0 }).some(Boolean) || [...form.getAll('image'), ...form.getAll('via_image')].some(file => file instanceof File && file.size > 0)
 
 export const actions: Actions = {
   // A record and the sightings it starts with. Each sighting needs a picture or a link, and all of them are read and checked before a picture is stored or a row written; the record
@@ -64,6 +64,8 @@ export const actions: Actions = {
       const { shots } = section
       if (shots.error) return reject(400, shots.error, index + 1)
       const fields = readSightingFields(section.form, shots.all)
+      const badCite = await validateCiteTargets(DB, fields.cites)
+      if (badCite) return reject(400, badCite, index + 1)
       const images = await readImages(section.form)
       if (images === 'invalid') return reject(400, 'image', index + 1)
       if (!images.length && !citesEvidence(fields)) return reject(400, 'evidence', index + 1)

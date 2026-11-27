@@ -45,6 +45,7 @@
     <ArchiveLinks archives={data.archives} />
     <dl class="facts">{#each facts as fact}{#if source[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{#if fact.key === 'report_date'}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} />{:else if fact.key === 'source_kind'}{kindName(source.source_kind)}{:else}{source[fact.key]}{/if}</dd></div>{/if}{/each}</dl>
     {#if data.copy}<a class="text-link" href={href(`/sources/copy/${data.copy.slug}`)}>{t('sources.digitizedCopy')} · {data.copy.title} · {data.copy.collection}</a>{/if}
+    {#if data.sightings.length}
     <details class="edits" open={form?.aliasError !== undefined || data.aliases.length > 0 || data.before !== null}>
       <summary>{t('source.aliases')}{#if data.aliases.length}{` (${data.aliases.length})`}{/if}</summary>
       {#each data.aliases as alias}
@@ -96,7 +97,9 @@
       {/if}
       {#if form?.archiveError}<p role="alert">{t(`source.archiveError.${form.archiveError}`, { n: ARCHIVES_MAX })}</p>{/if}
     </details>
+    {/if}
   </section>
+  {#if data.sightings.length}
   <section class="stack">
     <div class="row"><h2>{t('entry.sightings')}</h2><span class="badge">{data.sightings.length}</span><span class="badge">{t(records === 1 ? 'source.record' : 'source.records', { n: records })}</span></div>
     {#each data.sightings as sighting (sighting.id)}
@@ -124,6 +127,33 @@
       </article>
     {/each}
   </section>
+  {/if}
+  {#if data.namedIn.length}
+  <section class="stack" id="named-unseen">
+    <div class="row"><h2>{t('source.namedUnseen')}</h2><span class="badge">{data.namedIn.length}</span></div>
+    {#each data.namedIn as item (`${item.sighting_id}:${item.position}`)}
+      {@const tile = item.tile}
+      {@const citedDate = item.original_date ?? item.report_date}
+      <article class="panel seen">
+        <a class="record" href={href(`/entry/${tile.id}#sighting-${item.sighting_id}`)}>
+          <span class="plate">{#if tile.ids}<IdsGlyph ids={tile.ids} layout={tile.layout} path={data.glyphs?.[tile.id]} />{:else}<span class="small muted">{t('browse.noImage')}</span>{/if}</span>
+          <span class="ids">{tile.ids ?? ''}</span>
+          <span class="small muted">{recordCode(tile.id)}</span>
+        </a>
+        <div class="stack body">
+          <div class="row badges">
+            <span class="badge">{t(`cite.kind.${item.kind}`)}</span>
+            <a class="text-link small" href={href(`/entry/${tile.id}#sighting-${item.sighting_id}`)}>{item.title || item.place || `#${item.sighting_id}`}</a>
+            {#if citedDate}<span class="small muted"><EvidenceDate text={citedDate} reading={data.dates.get(citedDate)} /></span>{/if}
+          </div>
+          {#if item.quote}<blockquote class="named-quote">{item.quote}</blockquote>{/if}
+          {#if item.note}<p class="note">{item.note}</p>{/if}
+          <div class="row"><a class="button small" href={href(`/entry/${item.entry_id}/sighting/new`)}>{t('entry.addSighting')}</a></div>
+        </div>
+      </article>
+    {/each}
+  </section>
+  {/if}
 </div>
 
 <style>
@@ -142,6 +172,7 @@
   .record:hover .ids { text-decoration:underline }
   .body { gap:10px; min-width:0 }
   .note { margin:0; white-space:pre-wrap; overflow-wrap:anywhere }
+  .named-quote { max-width:75ch; margin:0; padding:2px 0 2px 10px; border-left:2px solid var(--line-strong); white-space:pre-wrap; overflow-wrap:anywhere }
   h3 { margin:0 } .badge.via { align-self:start }
   @media(max-width:600px) { .panel { padding:16px } .seen { grid-template-columns:minmax(0,1fr) } .record { flex-direction:row; justify-content:flex-start; gap:10px } .plate { width:56px; height:56px } }
 </style>

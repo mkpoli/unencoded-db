@@ -1,4 +1,5 @@
 import { isLocale } from '$lib/i18n'
+import { WHO, WHO_COLUMNS } from './people'
 import { GROUPS_MAX, TAG_ALIASES_MAX, TAG_CLOSURE_MAX, TAG_IMPLIES_MAX, byGroupOrder, byTagOrder, canImply, cleanTag, isTagType, validGroupLabel, validTagName, type Names, type Tag, type TagGroup, type TagType } from '$lib/tags'
 
 type Who = { actor: string; ip: string | null }
@@ -62,9 +63,9 @@ export const CHANGES_SHOWN = 20
 // `retype` is the kind older type changes were logged as; a type change is now a `move`.
 export type TagChangeKind = 'create' | 'move' | 'rename' | 'name' | 'retype' | 'imply' | 'unimply' | 'merge' | 'split' | 'alias' | 'unalias' | 'delete'
 export type TagSubject = 'tag' | 'group'
-export type TagChange = { id: number; subject: TagSubject; name: string; kind: TagChangeKind; before: string | null; after: string | null; at: string; by_id: string | null; by_name: string | null }
+export type TagChange = { id: number; subject: TagSubject; name: string; kind: TagChangeKind; before: string | null; after: string | null; at: string; by_id: string | null; by_name: string | null; by_agent: string | null; by_model: string | null }
 export const changesStatement = (db: D1Database) =>
-  db.prepare(`SELECT c.id, c.subject, c.name, c.kind, c.before, c.after, c.at, p.id AS by_id, p.name AS by_name FROM tag_changes c LEFT JOIN people p ON p.id = c.actor ORDER BY c.id DESC LIMIT ${CHANGES_SHOWN}`)
+  db.prepare(`SELECT c.id, c.subject, c.name, c.kind, c.before, c.after, c.at, ${WHO_COLUMNS} FROM tag_changes c ${WHO('c.actor')} ORDER BY c.id DESC LIMIT ${CHANGES_SHOWN}`)
 export async function tagChanges(db: D1Database) {
   const { results } = await changesStatement(db).all<TagChange>()
   return results

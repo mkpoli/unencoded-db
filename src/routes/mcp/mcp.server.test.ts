@@ -62,7 +62,7 @@ test('a connection is opened with the revision asked for and a token of its own'
   const { send, count } = fixture()
   const open = (protocolVersion: string) => send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion, capabilities: {}, clientInfo: { name: 'test', version: '1' } } })
   const first = await open('2025-06-18'), second = await open('2099-01-01')
-  expect((await first.json() as any).result).toMatchObject({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'rare-character-compendium' } })
+  expect((await first.json() as any).result).toMatchObject({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'org.glyphatlas/rare-character-compendium' } })
   expect((await second.json() as any).result.protocolVersion).toBe('2025-11-25')
   expect(first.headers.get('mcp-session-id')).toMatch(/^[0-9a-f]{64}$/)
   expect(second.headers.get('mcp-session-id')).not.toBe(first.headers.get('mcp-session-id'))
@@ -76,7 +76,7 @@ test('the protocol answers its own methods and refuses the rest', async () => {
   expect((await send({ jsonrpc: '2.0', method: 'notifications/initialized' })).status).toBe(202)
   expect(await (await send({ jsonrpc: '2.0', id: 'a', method: 'ping' })).json()).toEqual({ jsonrpc: '2.0', id: 'a', result: {} })
   const { result } = await (await send({ jsonrpc: '2.0', id: 2, method: 'tools/list' })).json() as any
-  expect(result.tools.map((tool: { name: string }) => tool.name)).toEqual(['find_similar_records', 'search_records', 'get_record', 'add_record', 'add_sighting', 'edit_record', 'edit_sighting'])
+  expect(result.tools.map((tool: { name: string }) => tool.name)).toEqual(['find_similar_records', 'search_records', 'get_record', 'add_record', 'add_sighting', 'edit_record', 'edit_sighting', 'link_sightings'])
   expect(result.tools.every((tool: Record<string, unknown>) => !('run' in tool) && (tool.inputSchema as any).type === 'object')).toBe(true)
   expect((await (await send({ jsonrpc: '2.0', id: 3, method: 'resources/list' })).json() as any).error.code).toBe(-32601)
   expect((await (await send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'drop_everything' } })).json() as any).error.code).toBe(-32602)
@@ -631,6 +631,45 @@ test('every write is an agent\'s, named by the harness and model it says', async
   expect((await call('add_record', { ids: ['⿰山南'], sightings: [sighting], agent: { harness: 'Codex' } }, other)).failed).toBe(false)
   expect(actor(3)).toMatchObject({ name: 'Codex', agent: 1, agent_model: '' })
   expect((await call('add_sighting', { record: 1, ...sighting, place: 'Elsewhere', agent: { harness: 'x'.repeat(81) } }, other)).value).toContain('agent.harness')
+})
+
+test('cites, cited_by, link_sightings, and date-order warnings work across records', async () => {
+  const { call } = fixture()
+  const r1 = await call('add_record', {
+    ids: ['⿰山東'],
+    sightings: [{ place: 'Zihui Bu p. 5', title: '字彙補', report_date: '1666', url: 'https://example.test/zihui' }],
+  })
+  expect(r1.failed).toBe(false)
+  const s1 = (await call('get_record', { record: r1.value.id })).value.sightings[0].id
+
+  const r2 = await call('add_record', {
+    ids: ['⿰山柬'],
+    sightings: [{
+      place: 'Kangxi p. 12', title: '康熙字典', report_date: '1716', url: 'https://example.test/kx',
+      cites: [
+        { kind: 'quotes', sighting: s1, title: '字彙補', quote: '《字彙補》音東' },
+        { kind: 'quotes', title: '現代論文', report_date: '2024' },
+      ],
+      vias: [{ title: '古本', report_date: '1600' }],
+    }],
+  })
+  expect(r2.failed).toBe(false)
+  expect(r2.value.warnings).toHaveLength(2)
+
+  // Cross-record cited_by appears on record 1.
+  const got1 = (await call('get_record', { record: r1.value.id })).value
+  expect(got1.sightings[0].cited_by).toHaveLength(1)
+  expect(got1.sightings[0].cited_by[0]).toMatchObject({ kind: 'quotes', entry_id: r2.value.id, title: '康熙字典' })
+
+  // link_sightings adds a derived edge (requiring note) and refuses direct 2-cycles.
+  const s2 = (await call('get_record', { record: r2.value.id })).value.sightings[0].id
+  expect((await call('link_sightings', { sighting: s2, kind: 'derived', source: { title: '龍龕手鑑' } })).failed).toBe(true)
+  const linked = await call('link_sightings', { sighting: s2, kind: 'derived', source: { title: '龍龕手鑑', report_date: '997' }, note: 'same gloss', summary: 'link older gloss' })
+  expect(linked.failed).toBe(false)
+  expect(linked.value.rev).toBe(2)
+
+  const twoCycle = await call('link_sightings', { sighting: s1, kind: 'quotes', cited_sighting: s2 })
+  expect(twoCycle.failed).toBe(true)
 })
 
 test('GET /mcp redirects browsers to the localized setup page and answers 405 to MCP clients', async () => {
