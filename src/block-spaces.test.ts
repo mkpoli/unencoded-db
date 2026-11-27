@@ -7,6 +7,7 @@ import { parse } from 'svelte/compiler'
 // before it. A space that has to show sits in an expression: `{' · '}`.
 type Node = { type?: string, data?: string, start?: number, nodes?: Node[], elseif?: boolean, [key: string]: unknown }
 const BLOCKS = new Set(['IfBlock', 'EachBlock', 'KeyBlock', 'AwaitBlock', 'SnippetBlock'])
+const HIDDEN = new Set(['Comment', 'ConstTag', 'SnippetBlock'])
 const PARTS = ['consequent', 'alternate', 'body', 'fallback', 'pending', 'then', 'catch']
 
 function trimmed(file: string) {
@@ -14,11 +15,12 @@ function trimmed(file: string) {
   const found: string[] = []
   const at = (node: Node) => `${file}:${source.slice(0, node.start).split('\n').length}`
   const check = (fragment: Node | undefined) => {
-    const nodes = fragment?.nodes
+    const nodes = fragment?.nodes?.filter(node => !HIDDEN.has(node.type ?? ''))
     if (!nodes?.length) return
     const first = nodes[0], last = nodes[nodes.length - 1]
-    if (first.type === 'Text' && /^[ \t]+\S/.test(first.data ?? '')) found.push(at(first))
-    if (last.type === 'Text' && /\S[ \t]+$/.test(last.data ?? '')) found.push(at(last))
+    // Spaces only, with no line break: the author meant that space to show.
+    if (first.type === 'Text' && /^[ \t]+(\S|$)/.test(first.data ?? '')) found.push(at(first))
+    if (last.type === 'Text' && last !== first && /(^|\S)[ \t]+$/.test(last.data ?? '')) found.push(at(last))
   }
   const walk = (node: unknown): void => {
     if (!node || typeof node !== 'object') return

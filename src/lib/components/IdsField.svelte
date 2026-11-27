@@ -214,13 +214,13 @@
                     {:else if item.record.cover_key}<img src={media(item.record.cover_key)} alt="" loading="lazy" decoding="async" />{/if}
                   </span>
                   <span class="body">
-                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier !== 'similar' && (placed || !seed || seed.entry !== item.record.id)} <a class="text-link" href={evidenceHref(item.record.id)} target={evidenceTab}>{t(placed ? 'sighting.moveThere' : 'field.candidateAdd')}</a>{/if}{#if whole && group.tier !== 'same' && !placed} <a class="text-link" href={href(`/entry/${item.record.id}?ids_add=${encodeURIComponent(sequence)}#edit-ids`)} target="_blank">{t('field.candidateAddIds')}</a>{/if}</span>
+                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier !== 'similar' && (placed || !seed || seed.entry !== item.record.id)}{' '}<a class="text-link" href={evidenceHref(item.record.id)} target={evidenceTab}>{t(placed ? 'sighting.moveThere' : 'field.candidateAdd')}</a>{/if}{#if whole && group.tier !== 'same' && !placed}{' '}<a class="text-link" href={href(`/entry/${item.record.id}?ids_add=${encodeURIComponent(sequence)}#edit-ids`)} target="_blank">{t('field.candidateAddIds')}</a>{/if}</span>
                     <span class="ids">{item.record.ids ?? ''}</span>
                   </span>
                 {:else}
                   <span class="plate char" lang="zh">{item.char}</span>
                   <span class="body">
-                    <span class="line">{codePoints(item.char)}{#if onfill} <button type="button" class="text-button" onclick={() => fill(item.char, false, item.ids)}>{t('field.idsFill')}</button> <button type="button" class="text-button" onclick={() => fill(item.char, true, item.ids)}>{t('field.encodedHomograph')}</button>{/if}</span>
+                    <span class="line">{codePoints(item.char)}{#if onfill}{' '}<button type="button" class="text-button" onclick={() => fill(item.char, false, item.ids)}>{t('field.idsFill')}</button> <button type="button" class="text-button" onclick={() => fill(item.char, true, item.ids)}>{t('field.encodedHomograph')}</button>{/if}</span>
                     <span class="ids">{item.ids}</span>
                   </span>
                 {/if}
