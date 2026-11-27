@@ -34,6 +34,7 @@
     "@hyzyla/pdfium": "3.0.0",
     "@jsquash/webp": "1.5.0",
     "@resvg/resvg-wasm": "2.6.2",
+    "clipper-lib": "6.4.2",
     "d3-contour": "^4.0.3",
     "fast-png": "8.0.0",
     "fflate": "^0.8.3",
