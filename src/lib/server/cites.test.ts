@@ -33,7 +33,7 @@ import { newClaim } from '../claims'
 const who = { actor: 'u1', ip: null }
 
 function makeEntry(ids = '⿰山東'): EntryFields {
-  return { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', ids)] }
+  return { description: null, radical: null, strokes: null, claims: [newClaim('ids', ids)] }
 }
 
 function makeSighting(overrides: Partial<SightingFields> = {}): SightingFields {

@@ -9,8 +9,8 @@ import { GET as child } from './sitemap-[part].xml/+server'
 test('entry sitemaps list all locales for live records and skip shards with only hidden or merged records', async () => {
   const { db, raw } = openTestDb()
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
-  const insert = raw.prepare(`INSERT INTO entries(id, script, created_by, created_at, updated_at, hidden_at, merged_into)
-    VALUES (?, 'han', 'p', '2026', '2026', ?, ?)`)
+  const insert = raw.prepare(`INSERT INTO entries(id, created_by, created_at, updated_at, hidden_at, merged_into)
+    VALUES (?, 'p', '2026', '2026', ?, ?)`)
   const firstOfSecond = ENTRIES_PER_SITEMAP + 1
   insert.run(1, null, null)
   insert.run(2, 'hidden', null)
@@ -47,8 +47,8 @@ test('source sitemaps list sources that visible records cite', async () => {
 test('record sitemaps say when each record last changed', async () => {
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026');
-    INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES
-      (1, 'han', 'p', '2026', '2026-11-16T14:13:22.122Z'), (2, 'han', 'p', '2026', 'not a time')`)
+    INSERT INTO entries(id, created_by, created_at, updated_at) VALUES
+      (1, 'p', '2026', '2026-11-16T14:13:22.122Z'), (2, 'p', '2026', 'not a time')`)
   const xml = await (await child({ platform: { env: { DB: db } }, params: { part: '1' } } as Parameters<typeof child>[0])).text()
   expect(xml).toContain(`<url><loc>${SITE_ORIGIN}/en/entry/1</loc><lastmod>2026-11-16T14:13:22.122Z</lastmod><xhtml:link`)
   expect(xml).toContain(`<url><loc>${SITE_ORIGIN}/en/entry/2</loc><xhtml:link`)
@@ -57,7 +57,7 @@ test('record sitemaps say when each record last changed', async () => {
 test('record sitemaps list the pictures of visible sightings, through the export index', async () => {
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026');
-    INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES (1, 'han', 'p', '2026', '2026');
+    INSERT INTO entries(id, created_by, created_at, updated_at) VALUES (1, 'p', '2026', '2026');
     INSERT INTO sightings(id, entry_id, first_entry, place, created_by, created_at, updated_at, hidden_at) VALUES
       (1, 1, 1, 'Book', 'p', '2026', '2026', null), (2, 1, 1, 'Hidden', 'p', '2026', '2026', 'hidden');
     INSERT INTO sighting_media(sighting_id, position, image_key, image_type, image_w, image_h, thumb_key) VALUES
@@ -82,7 +82,7 @@ test('record sitemaps list the pictures of visible sightings, through the export
 
 test('page sitemaps name every language and the English default for each page', async () => {
   const { db, raw } = openTestDb()
-  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES (1, 'han', 'p', '2026', '2026')")
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, created_by, created_at, updated_at) VALUES (1, 'p', '2026', '2026')")
   const entry = await (await child({ platform: { env: { DB: db } }, params: { part: '1' } } as Parameters<typeof child>[0])).text()
   const ja = entry.split('<url>').find(block => block.includes(`<loc>${SITE_ORIGIN}/ja/entry/1</loc>`))!
   expect([...ja.matchAll(/<xhtml:link rel="alternate" hreflang="([^"]+)" href="([^"]+)"\/>/g)].map(match => [match[1], match[2]])).toEqual([

@@ -13,7 +13,7 @@ async function fixture() {
   const { db, raw } = openTestDb()
   const who = { actor: (await createPerson(db)).id, ip: null }
   const moderator = { actor: (await createPerson(db)).id, ip: null }
-  const id = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, seen('First', '1921'), [], who)
+  const id = await createEntry(db, { radical: null, strokes: null, claims: [], description: null }, seen('First', '1921'), [], who)
   const second = (await addSighting(db, id, seen('Second', '1500'), [], who))!
   const event = (form: Record<string, string> = {}, sighting: number | string = second, entry: number | string = id) => {
     const data = new FormData()
@@ -57,7 +57,7 @@ test('a record keeps its last evidence, and a removal of an edited or a missing 
   expect(await actions.default(event({ rev: '9' }))).toMatchObject({ status: 409, data: { error: 'conflict' } })
   expect(await actions.default(event())).toMatchObject({ status: 409, data: { error: 'conflict' } })
   for (const bad of [event({ rev: '1' }, 99), event({ rev: '1' }, 'x'), event({ rev: '1' }, second, 99)]) await expect(actions.default(bad)).rejects.toMatchObject({ status: 404 })
-  const other = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, seen('Other'), [], who)
+  const other = await createEntry(db, { radical: null, strokes: null, claims: [], description: null }, seen('Other'), [], who)
   await expect(actions.default(event({ rev: '1' }, second, other))).rejects.toMatchObject({ status: 404 })
   await expect(actions.default(event({ rev: '1' }))).rejects.toMatchObject({ status: 303 })
   // Gone already, and the one that is left stays.
@@ -67,7 +67,7 @@ test('a record keeps its last evidence, and a removal of an edited or a missing 
   expect(await actions.default(event({ rev: '1' }, left))).toMatchObject({ status: 409, data: { error: 'only' } })
   expect(await visible()).toEqual([left])
   // A merged record takes no removal.
-  const duplicate = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, seen('Dup 1'), [], who)
+  const duplicate = await createEntry(db, { radical: null, strokes: null, claims: [], description: null }, seen('Dup 1'), [], who)
   const dupFirst = (await getEntry(db, duplicate))!.sightings[0].id
   const dupSecond = (await addSighting(db, duplicate, seen('Dup 2'), [], who))!
   expect(await removeSighting(db, duplicate, dupSecond, 1, who, null)).toBe('done')
@@ -146,7 +146,7 @@ test('what people are counted for agrees with what the history shows through a r
 
 test('evidence removed before or after a merge can be put back from the record that holds it', async () => {
   const { db, id: kept, event, who } = await fixture()
-  const dup = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, seen('Dup 1'), [], who)
+  const dup = await createEntry(db, { radical: null, strokes: null, claims: [], description: null }, seen('Dup 1'), [], who)
   const second = (await addSighting(db, dup, seen('Dup 2'), [], who))!
   const lost = async (entry: number) => ((await loadHistory(event({}, second, entry))) as any).removed.map((s: { id: number }) => s.id)
   await removeSighting(db, dup, second, 1, who, null)
@@ -163,12 +163,12 @@ test('evidence removed before or after a merge can be put back from the record t
 
 test('a merge and its undoing carry removed evidence, with the counts, the claims that rest on it and its redaction', async () => {
   const { db, raw, id: other, who, moderator } = await fixture()
-  const id = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, seen('Dup 1'), [], who)
+  const id = await createEntry(db, { radical: null, strokes: null, claims: [], description: null }, seen('Dup 1'), [], who)
   const second = (await addSighting(db, id, seen('Dup 2'), [], who))!
   // The duplicate is the one whose evidence was removed, and a reading of it rests on that evidence.
   const claim = { key: 'read0001', kind: 'reading' as const, value: 'bak6', data: null, sightings: [second], under: [] }
   const entry = (await getEntry(db, id))!.entry
-  expect(await editEntry(db, id, entry.rev, { script: 'han', script_other: null, radical: null, strokes: null, claims: [claim], description: null }, who, null)).toMatchObject({ ok: true })
+  expect(await editEntry(db, id, entry.rev, { radical: null, strokes: null, claims: [claim], description: null }, who, null)).toMatchObject({ ok: true })
   expect(await removeSighting(db, id, second, 1, who, 'a private reason')).toBe('done')
   const counted = () => (raw.query('SELECT changes FROM people WHERE id = ?').get(who.actor) as { changes: number }).changes
   const shown = async () => (await globalHistory(db)).rows.filter(row => row.by_id === who.actor).length

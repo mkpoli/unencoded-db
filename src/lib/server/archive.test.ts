@@ -6,7 +6,7 @@ import { createPerson } from './people'
 import { editSourceArchive, sourceArchiveChanges, sourceArchives } from './source-archives'
 import { openTestDb } from './testdb'
 
-const entry: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] }
+const entry: EntryFields = { description: null, radical: null, strokes: null, claims: [] }
 const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: '甲', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
 const snapshot = (url: string) => `https://web.archive.org/web/20260501120000/${url}`
 // Answers the availability check with a snapshot of the asked address, and counts the calls.

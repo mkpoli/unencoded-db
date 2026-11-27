@@ -164,7 +164,7 @@ test('hidden lists are bounded and use partial indexes with keyset cursors', asy
   const { db, raw, event } = await fixture()
   raw.exec("UPDATE entries SET hidden_at = 'now'; UPDATE sightings SET hidden_at = 'now'")
   for (let i = 0; i < 105; i++) {
-    raw.exec("INSERT INTO entries(script, created_by, created_at, updated_at, hidden_at) VALUES('han', 'moderator', 'now', 'now', 'now'); INSERT INTO sightings(entry_id, first_entry, place, created_by, created_at, updated_at, hidden_at) VALUES(1, 1, 'place', 'moderator', 'now', 'now', 'now')")
+    raw.exec("INSERT INTO entries(created_by, created_at, updated_at, hidden_at) VALUES ('moderator', 'now', 'now', 'now'); INSERT INTO sightings(entry_id, first_entry, place, created_by, created_at, updated_at, hidden_at) VALUES(1, 1, 'place', 'moderator', 'now', 'now', 'now')")
   }
   const queries: string[] = []
   const prepare = db.prepare.bind(db)

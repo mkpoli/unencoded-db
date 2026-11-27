@@ -107,13 +107,13 @@ test('a record is added with its claims, sightings and fetched pictures', async 
   const { call, raw, objects, count } = fixture()
   const asked = pictures()
   const added = await call('add_record', {
-    script: 'han', ids: ['⿰山東', '⿰山⿻日木'], description: 'On a shop sign.',
+    ids: ['⿰山東', '⿰山⿻日木'], description: 'On a shop sign.',
     meanings: [{ text: 'mountain pass', evidence: [2] }],
     readings: [{ text: 'tōge', doculect: 'ja', meanings: [1], evidence: [1, 2] }],
     creators: [{ name: '陸貫一', evidence: [2] }],
     encodings: [{ charset: 'unicode', code: 'U+5D20' }],
     related: [{ character: '峠', relationship: 'variant', difference: 'right side', readings: [1] }],
-    categories: ['kokuji'], tags: ['signage'],
+    categories: ['kokuji'], tags: ['han', 'signage'],
     sightings: [
       { ...sighting, pictures: [{ url: 'https://img.example/sign.png', marks: [[1, 1, 6, 6]] }] },
       { place: 'A dictionary', title: 'Book', author: 'Someone', report_date: '1936', page: '12', types: ['definition', 'reading'], contexts: ['running_text', 'heading'], vias: [{ url: 'https://example.test/post/1', author: '@poster', publisher: 'X', report_date: '2026-11-14', container: null, source_kind: null, quote: '書影 p. 3' }] },
@@ -124,10 +124,10 @@ test('a record is added with its claims, sightings and fetched pictures', async 
   // Some image hosts refuse a request without one.
   expect(agents.at(-1)).toBe(`GlyphAtlasRare/1.0 (+${ORIGIN}/mcp)`)
   expect(objects.size).toBe(1)
-  expect(raw.query('SELECT ids, script, status, sightings, first_year FROM entries').get()).toEqual({ ids: '⿰山東', script: 'han', status: 'encoded', sightings: 2, first_year: '1936' })
+  expect(raw.query('SELECT ids, status, sightings, first_year FROM entries').get()).toEqual({ ids: '⿰山東', status: 'encoded', sightings: 2, first_year: '1936' })
   expect(raw.query('SELECT box, image_w FROM sighting_media').get()).toEqual({ box: '[[1,1,6,6]]', image_w: 10 })
   const claims = raw.query('SELECT key, kind, value, sightings, under FROM claims ORDER BY position').all() as { key: string; kind: string; value: string; sightings: string; under: string }[]
-  expect(claims.map(claim => [claim.kind, claim.value])).toEqual([['ids', '⿰山東'], ['ids', '⿰山⿻日木'], ['reading', 'tōge'], ['meaning', 'mountain pass'], ['encoding', 'U+5D20'], ['relation', '峠'], ['tag', 'kokuji'], ['tag', 'signage'], ['creator', '陸貫一']])
+  expect(claims.map(claim => [claim.kind, claim.value])).toEqual([['ids', '⿰山東'], ['ids', '⿰山⿻日木'], ['reading', 'tōge'], ['meaning', 'mountain pass'], ['encoding', 'U+5D20'], ['relation', '峠'], ['tag', 'kokuji'], ['tag', 'han'], ['tag', 'signage'], ['creator', '陸貫一']])
   const of = (kind: string) => claims.find(claim => claim.kind === kind)!
   expect(JSON.parse(of('meaning').sightings)).toEqual([2])
   expect(JSON.parse(of('reading').sightings)).toEqual([1, 2])
@@ -139,7 +139,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
 
   const read = await call('get_record', { record: 'R+0001' })
   expect(read.value).toMatchObject({
-    id: 1, script: 'han', status: 'encoded', description: 'On a shop sign.',
+    id: 1, status: 'encoded', description: 'On a shop sign.',
     sightings: [
       { id: 1, place: 'A shop sign', pictures: [{ url: expect.stringMatching(/^https:\/\/example\.test\/media\/v2\/[a-f0-9]{64}\.png$/), width: 10, height: 10, marks: [[1, 1, 6, 6]] }] },
       { id: 2, title: 'Book', contexts: ['running_text', 'heading'], types: ['definition', 'reading'], vias: [{ url: 'https://example.test/post/1', author: '@poster', quote: '書影 p. 3' }] },
@@ -150,12 +150,24 @@ test('a record is added with its claims, sightings and fetched pictures', async 
 
 test('a form that cannot be described is added without ids', async () => {
   const { call, raw } = fixture()
-  const added = await call('add_record', { script: 'sawndip', sightings: [sighting] })
+  const added = await call('add_record', { tags: ['sawndip'], sightings: [sighting] })
   expect(added.failed).toBe(false)
-  expect(raw.query('SELECT ids, script FROM entries').all()).toEqual([{ ids: null, script: 'sawndip' }])
+  expect(raw.query('SELECT ids FROM entries').all()).toEqual([{ ids: null }])
   expect(raw.query("SELECT count(*) AS n FROM claims WHERE kind = 'ids'").get()).toEqual({ n: 0 })
-  expect((await call('get_record', { record: 1 })).value.claims).toEqual([])
+  expect((await call('get_record', { record: 1 })).value.claims.map((c: { kind: string; value: string }) => [c.kind, c.value])).toEqual([['tag', 'sawndip']])
   expect(await call('add_record', { ids: [], sightings: [sighting] })).toMatchObject({ failed: true })
+})
+
+test('a new record is filed under its script tag, and under han when it names none', async () => {
+  const { call } = fixture()
+  const tagsOf = async (record: number) => (await call('get_record', { record })).value.claims.filter((c: { kind: string }) => c.kind === 'tag').map((c: { value: string }) => c.value)
+  await call('add_record', { ids: ['⿰山東'], sightings: [sighting] })
+  expect(await tagsOf(1)).toEqual(['han'])
+  await call('add_record', { ids: ['⿰山西'], tags: ['#nom'], sightings: [sighting] })
+  expect(await tagsOf(2)).toEqual(['nom'])
+  await call('add_record', { ids: ['⿰山南'], tags: ['大陸'], sightings: [sighting] })
+  expect(await tagsOf(3)).toEqual(['大陸', 'han'])
+  expect(await call('add_record', { ids: ['⿰山北'], script: 'nom', sightings: [sighting] })).toMatchObject({ failed: true, value: expect.stringContaining('script is a tag now') })
 })
 
 test('a connection writes under one anonymous name', async () => {
@@ -914,7 +926,7 @@ test('moderator MCP tools are advertised and callable only by unbanned moderator
   expect(await callMod('set_hidden', { record: 2, hidden: true, agent: { harness: 'Mod' } })).toMatchObject({ failed: true, value: expect.stringContaining('merged') })
 
   // Moderator tools still work under WRITES_PAUSED=1.
-  raw.run("INSERT INTO entries(id, script, rev, created_by, created_at, updated_at) VALUES(1, 'han', 1, 'mod1', ?, ?)", [at, at])
+  raw.run("INSERT INTO entries(id, rev, created_by, created_at, updated_at) VALUES(1, 1, 'mod1', ?, ?)", [at, at])
   await report(db, { entry: 1, sighting: null }, 'Paused test', 'mod1')
   expect((await callAs('resolve_report', { report: 1, agent: { harness: 'Mod' } }, modAuth)).failed).toBe(false)
 

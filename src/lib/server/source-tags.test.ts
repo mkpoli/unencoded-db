@@ -7,8 +7,6 @@ import { openTestDb } from './testdb'
 import { GET as sourceTagsEndpoint } from '../../routes/api/sources/tags/+server'
 
 const fields = (tags: string[] = []): EntryFields => ({
-  script: 'han',
-  script_other: null,
   description: null,
   radical: null,
   strokes: null,
@@ -123,7 +121,7 @@ describe('source tag hints', () => {
   test('reads at most SOURCE_TAG_READ sightings and uses indexed lookups with no table scan or temp B-tree', async () => {
     const first = await createEntry(db, fields(['nom']), seen({ title: 'Huge Book' }), [], who)
     const sourceId = sourceIdOf(first)
-    const insertEntry = raw.prepare("INSERT INTO entries(script, created_by, created_at, updated_at) VALUES ('han', ?, '2026', '2026')")
+    const insertEntry = raw.prepare("INSERT INTO entries(created_by, created_at, updated_at) VALUES (?, '2026', '2026')")
     const insertSighting = raw.prepare("INSERT INTO sightings(entry_id, first_entry, source_id, place, created_by, created_at, updated_at) VALUES (?, ?, ?, 'p', ?, '2026', '2026')")
     const insertClaim = raw.prepare("INSERT INTO claims(entry_id, position, key, kind, value) VALUES (?, 0, 'tag00001', 'tag', 'hakka')")
     raw.transaction(() => {

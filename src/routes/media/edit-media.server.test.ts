@@ -9,7 +9,7 @@ const image: StoredImage = { image_key: replacement, thumb_key: replacement, ima
 
 test('sighting edits atomically replace or remove served pictures', async () => {
   const { db, raw } = openTestDb()
-  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES (1, 'han', 'p', '2026', '2026')")
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, created_by, created_at, updated_at) VALUES (1, 'p', '2026', '2026')")
   raw.exec("INSERT INTO sightings(id, entry_id, first_entry, place, created_by, created_at, updated_at) VALUES (1, 1, 1, 'book', 'p', '2026', '2026')")
   raw.prepare("INSERT INTO sighting_media(sighting_id, position, image_key, image_type, image_w, image_h, thumb_key) VALUES (1, 0, ?, 'image/png', 20, 20, ?)").run(original, thumb)
   const status = async (key: string) => (await GET({ params: { key: `v2/${key}` }, platform: { env: { DB: db, MEDIA: { get: async () => ({ body: 'image', httpEtag: '"etag"' }) } } } } as any)).status

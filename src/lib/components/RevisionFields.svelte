@@ -92,10 +92,11 @@
   {@const entry = fields as EntryFields}
   {@const status = statusOf(entry.claims)}
   <div class="snapshot">
-    <div class="row">
-      <span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>
-      {#if status}<span class="badge {status}">{t(`status.${status}`)}</span>{/if}
-    </div>
+    {#if status}
+      <div class="row">
+        <span class="badge {status}">{t(`status.${status}`)}</span>
+      </div>
+    {/if}
     <p class:muted={!entry.description} class="description">{entry.description || t('entry.noDescription')}</p>
     <dl class="facts">
       {#if entry.radical}<div><dt>{t('field.radical')}</dt><dd>{entry.radical}</dd></div>{/if}

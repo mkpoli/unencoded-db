@@ -8,7 +8,7 @@
   import { COLLECTIONS, arrangeTags, localized } from '$lib/tags'
   import { MARKED } from '$lib/registries'
   import { ORDER, PAGE, PAGE_SIZES, SORTS, pageSteps } from '$lib/order'
-  import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
+  import { STATUSES, NEEDS } from '$lib/scripts'
   import { describedTable } from '$lib/encoded'
   import { cleanIds } from '$lib/ids'
   import { equivalentSpellings, isParts, partSpellings } from '$lib/ids-variants'
@@ -28,7 +28,6 @@
   const currentState = $derived<BrowseState>({
     query: data.query,
     also: data.also,
-    script: data.script,
     filter: data.filter,
     collection: data.collection,
     tag: data.tag,
@@ -107,17 +106,15 @@
   // Form controls stay synced with the URL parameters across navigations and back/forward steps.
   let queryInput = $state<HTMLInputElement>()
   let query = $state(untrack(() => data.query ?? ''))
-  let script = $state(untrack(() => data.script ?? ''))
   let need = $state(untrack(() => NEEDS.includes(data.filter as never) ? (data.filter ?? '') : ''))
   let tag = $state(untrack(() => data.tag ?? ''))
   let creator = $state(untrack(() => data.creator ?? ''))
   let decade = $state(untrack(() => data.decade ?? ''))
   const searchInvalid = $derived(Boolean(data.searchError && query.trim() === data.query))
-  const hasFilters = $derived(Boolean(data.query || data.script || data.filter || data.collection || data.tag || data.creator || data.radical || data.decade || data.within.length || data.without.length))
+  const hasFilters = $derived(Boolean(data.query || data.filter || data.collection || data.tag || data.creator || data.radical || data.decade || data.within.length || data.without.length))
   const clearedFilters = $derived(browseHref(href(), { order: data.order, seed: data.seed, per: data.per }))
   function syncControls() {
     query = data.query ?? ''
-    script = data.script ?? ''
     need = NEEDS.includes(data.filter as never) ? (data.filter ?? '') : ''
     tag = data.tag ?? ''
     creator = data.creator ?? ''
@@ -261,7 +258,6 @@
     const target = browseHref(href(), {
       query: trimmed,
       also: spellings,
-      script,
       filter: mergeFilter(need, data.filter),
       collection: pinned?.name === 'collection' ? pinned.value : null,
       tag: pinned?.name === 'tag' ? pinned.value : pinned ? null : tag,
@@ -290,7 +286,6 @@
     }
   }
   const controlsDirty = () =>
-    script !== (data.script ?? '') ||
     need !== (NEEDS.includes(data.filter as never) ? (data.filter ?? '') : '') ||
     (!pinned && tag !== (data.tag ?? '')) ||
     creator !== (data.creator ?? '') ||
@@ -413,7 +408,6 @@
         {#if query}<button class="clear-input" type="button" aria-label={t('sources.clear')} onclick={clearQuery}><span aria-hidden="true">×</span></button>{/if}
       </div>
     </div>
-    <div class="field"><label for="script">{t('field.script')}</label><select class="input" class:active={Boolean(script)} id="script" name="script" bind:value={script} onchange={() => applyFilters({ noScroll: true, keepFocus: true })}><option value="">{t('browse.all')}</option>{#each SCRIPTS as item (item.id)}{#if count(`s:${item.id}`) || data.script === item.id}<option value={item.id}>{t(`script.${item.id}`)} ({count(`s:${item.id}`)})</option>{/if}{/each}</select></div>
     <div class="field"><label for="filter">{t('browse.needs')}</label><select class="input" class:active={Boolean(need)} id="filter" name="filter" bind:value={need} onchange={() => applyFilters({ noScroll: true, keepFocus: true })}><option value="">{t('browse.all')}</option>{#each NEEDS as item}<option value={item}>{t(`needs.${item}`)} ({count(`n:${item}`)})</option>{/each}</select></div>
     {#if pinned}
       <div class="field"><span class="label">{t(pinned.name === 'tag' ? 'field.tags' : 'field.collection')}</span><input type="hidden" name={pinned.name} value={pinned.value} /><a class="pinned" href={unpinned} aria-label="{pinned.label} ×">{pinned.label} <span aria-hidden="true">×</span></a></div>

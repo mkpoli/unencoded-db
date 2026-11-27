@@ -32,15 +32,16 @@ function form(rows: { ids?: string; note?: string; picture?: boolean }[], shared
   return data
 }
 
-test('saves each row as its own record under one source', async () => {
+test('saves each row as its own record under one source and attaches shared tags', async () => {
   const { event, count, raw } = fixture()
-  await expect(actions.default(event(form([{ ids: '⿰山東', picture: true }, { ids: '⿱木木', note: 'second', picture: true }, {}], { place: 'A book', title: 'Zidian' })))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+  await expect(actions.default(event(form([{ ids: '⿰山東', picture: true }, { ids: '⿱木木', note: 'second', picture: true }, {}], { place: 'A book', title: 'Zidian', tag: 'sawndip' })))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
   expect(count('entries')).toBe(2)
   expect(count('sightings')).toBe(2)
   expect(count('sources')).toBe(1)
   expect(count('sighting_media')).toBe(2)
   expect(raw.query('SELECT count(*) AS n FROM revisions WHERE kind = ?').get('create')).toEqual({ n: 2 })
   expect(raw.query("SELECT ids FROM entries ORDER BY id").all()).toEqual([{ ids: '⿰山東' }, { ids: '⿱木木' }])
+  expect(raw.query("SELECT entry_id, value FROM claims WHERE kind = 'tag' ORDER BY entry_id").all()).toEqual([{ entry_id: 1, value: 'sawndip' }, { entry_id: 2, value: 'sawndip' }])
   expect(raw.query('SELECT note FROM sightings ORDER BY id').all()).toEqual([{ note: null }, { note: 'second' }])
 })
 

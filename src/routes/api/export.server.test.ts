@@ -8,7 +8,7 @@ import { composerDrawing, GLYPH_STYLES } from '$lib/composer'
 function fixture() {
   const { db, raw } = openTestDb()
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
-  const entry = raw.prepare("INSERT INTO entries(script, ids, created_by, created_at, updated_at, hidden_at) VALUES ('han', ?, 'p', '2026', '2026', ?)")
+  const entry = raw.prepare("INSERT INTO entries(ids, created_by, created_at, updated_at, hidden_at) VALUES (?, 'p', '2026', '2026', ?)")
   entry.run('⿰亻木', null)
   entry.run('⿰亻木', 'hidden')
   entry.run('⿰亻木', null)

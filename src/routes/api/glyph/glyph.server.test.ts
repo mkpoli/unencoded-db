@@ -11,7 +11,7 @@ const layout = '{"0":[1,0,0,1,40,0]}'
 
 function fixture() {
   const { db, raw } = openTestDb()
-  raw.exec(`INSERT INTO entries(id,script,ids,created_by,created_at,updated_at) VALUES(2,'han','${first}','a','2026','2026');
+  raw.exec(`INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES(2,'${first}','a','2026','2026');
     INSERT INTO claims(entry_id,position,key,kind,value,data) VALUES
       (2,0,'ids00001','ids','${first}',NULL),
       (2,1,'ids00002','ids','${second}','{"layout":${layout}}');`)
@@ -57,7 +57,7 @@ test('a description no visible record states does not draw', async () => {
   expect((await glyph(event(ask('⿰木木')))).status).toBe(404)
   raw.exec("UPDATE entries SET hidden_at = '2026'")
   expect((await glyph(event(ask(first)))).status).toBe(404)
-  raw.exec("INSERT INTO entries(id,script,created_by,created_at,updated_at) VALUES(1,'han','a','2026','2026'); UPDATE entries SET hidden_at = NULL, merged_into = 1 WHERE id = 2")
+  raw.exec("INSERT INTO entries(id, created_by, created_at, updated_at) VALUES(1,'a','2026','2026'); UPDATE entries SET hidden_at = NULL, merged_into = 1 WHERE id = 2")
   expect((await glyph(event(ask(first)))).status).toBe(404)
 })
 
@@ -90,7 +90,7 @@ test('a temporarily unavailable object store returns a retryable status', async 
 // file holds no outlines unless a test says otherwise.
 function bundledFixture(assets: () => Promise<Response> = async () => new Response(gzipSync('{}'))) {
   const { raw, event } = fixture()
-  raw.exec(`INSERT INTO entries(id,script,ids,created_by,created_at,updated_at) VALUES(3,'bopomofo','ㄍ','a','2026','2026');
+  raw.exec(`INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES(3,'ㄍ','a','2026','2026');
     INSERT INTO claims(entry_id,position,key,kind,value,data) VALUES(3,0,'ids00003','ids','ㄍ',NULL);`)
   const request = event(ask('ㄍ'))
   const stored: string[] = []

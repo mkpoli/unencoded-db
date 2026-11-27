@@ -42,6 +42,9 @@
   --tag-general-ink: var(--muted);
   --tag-general-bg: var(--surface-sunken);
   --tag-general-line: var(--line);
+  --tag-script-ink: light-dark(#0f5c63, #66d2db);
+  --tag-script-bg: light-dark(#e6f6f7, #112d31);
+  --tag-script-line: light-dark(#9ad3d8, #245b62);
   --tag-region-ink: light-dark(#8b4300, #ffb067);
   --tag-region-bg: light-dark(#fff2e2, #382411);
   --tag-region-line: light-dark(#edc594, #6c4723);
@@ -145,6 +148,7 @@ textarea.input { min-height: 96px; resize: vertical; line-height: 1.55 }
 }
 .tag-chip.implied { border-style: dashed }
 .tag-chip[data-tag-type=general] { --tag-ink: var(--tag-general-ink); --tag-bg: var(--tag-general-bg); --tag-line: var(--tag-general-line) }
+.tag-chip[data-tag-type=script] { --tag-ink: var(--tag-script-ink); --tag-bg: var(--tag-script-bg); --tag-line: var(--tag-script-line) }
 .tag-chip[data-tag-type=region] { --tag-ink: var(--tag-region-ink); --tag-bg: var(--tag-region-bg); --tag-line: var(--tag-region-line) }
 .tag-chip[data-tag-type=language] { --tag-ink: var(--tag-language-ink); --tag-bg: var(--tag-language-bg); --tag-line: var(--tag-language-line) }
 .tag-chip[data-tag-type=form] { --tag-ink: var(--tag-form-ink); --tag-bg: var(--tag-form-bg); --tag-line: var(--tag-form-line) }

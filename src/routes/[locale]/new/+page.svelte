@@ -1,7 +1,6 @@
 <script lang="ts">
   import Seo from '$lib/components/Seo.svelte'
   import PictureList from '$lib/components/PictureList.svelte'
-  import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import SightingFields from '$lib/components/SightingFields.svelte'
   import CharacterFields from '$lib/components/CharacterFields.svelte'
   import CompositionField from '$lib/components/CompositionField.svelte'
@@ -10,6 +9,7 @@
   import RelationFields from '$lib/components/RelationFields.svelte'
   import { createSenseDraft } from '$lib/sense-draft.svelte'
   import TagFields from '$lib/components/TagFields.svelte'
+  import { DEFAULT_SCRIPT_TAG } from '$lib/tags'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { compositionOf, primaryLayoutOf, valuesOf } from '$lib/claims'
   import { ADD_SIGHTINGS_MAX, MEDIA_MAX } from '$lib/limits'
@@ -232,7 +232,6 @@
       <CharacterFields values={descriptions} {layout} bind:primary seed={data.seed ? { id: data.seed.id, entry: data.seed.entry } : null} onfill={facts => filled = facts}>
         <div class="sheet">
           <CompositionField ids={primary} value={composition} />
-          <ScriptPicker value={values?.script} other={values?.script_other} />
           <IdentityFields {claims} radical={values?.radical} strokes={values?.strokes} fill={filled} ids={primary} />
         </div>
       </CharacterFields>
@@ -253,7 +252,7 @@
     </section>
     <details class="panel filing" open>
       <summary class="section-title">{t('field.filing')}</summary>
-      <div class="group filed"><TagFields tags={data.tags} groups={data.groups} selected={valuesOf(claims, 'tag')} collections={valuesOf(claims, 'collection')} suggested={sourceTags} /></div>
+      <div class="group filed"><TagFields tags={data.tags} groups={data.groups} selected={values ? valuesOf(claims, 'tag') : [DEFAULT_SCRIPT_TAG]} collections={valuesOf(claims, 'collection')} suggested={sourceTags} /></div>
     </details>
     <section class="panel noted">
       <div class="titled"><label class="section-title" for="description">{t('field.notes')}</label><span class="subtitle" id="description-note">{t('field.description')}</span></div>

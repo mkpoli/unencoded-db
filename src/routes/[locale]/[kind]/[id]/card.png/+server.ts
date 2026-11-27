@@ -1,9 +1,9 @@
 import { error } from '@sveltejs/kit'
 import { recordCode, recordName } from '$lib/code'
 import { translate } from '$lib/i18n'
-import { scriptName } from '$lib/scripts'
+import { shownLabel } from '$lib/tags'
 import { sourceByline, sourceName } from '$lib/source-name'
-import { getCoverPicture, getEntryRow, getSourceArtwork, getVisibleSource } from '$lib/server/entries'
+import { entryScriptTags, getCoverPicture, getEntryRow, getSourceArtwork, getVisibleSource } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
 import { evidenceArtwork, recordArtwork, renderCard } from '$lib/server/social-card'
 import { positiveId } from '../../../../_submission.server'
@@ -19,10 +19,13 @@ export const GET: RequestHandler = async event => {
   if (!(source || entry && !entry.hidden_at && !entry.merged_into)) error(404)
   try {
     if (entry) {
-      const cover = entry.cover_key ? await getCoverPicture(bindings.DB, entry.cover_key) : null
+      const [cover, scripts] = await Promise.all([
+        entry.cover_key ? getCoverPicture(bindings.DB, entry.cover_key) : null,
+        event.url.searchParams.get('view') === 'history' ? [] : entryScriptTags(bindings.DB, id),
+      ])
       const label = event.url.searchParams.get('view') === 'history'
         ? translate(locale, 'history.globalTitle')
-        : scriptName(locale, entry.script, entry.script_other)
+        : scripts.map(tag => shownLabel(tag, locale)).join(' · ') || translate(locale, 'app.name')
       return await renderCard(event, bindings.ASSETS, {
         key: JSON.stringify([kind, locale, id, label, entry.ids, entry.layout, cover]),
         label, title: recordCode(entry.id), detail: recordName(entry.id),

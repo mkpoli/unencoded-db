@@ -212,7 +212,7 @@ test('0006 counts every listed record in or out of each marked work, as the app 
     [['zitools', '⿰魚它'], ['mj', 'MJ059588']], [['glyphwiki', 'irg2021-03300'], ['big5', 'A140']], [['unicode', 'U+3042'], ['unicode', 'U+4E00'], ['yedict', 'U04E00']], [],
   ]
   let last = 0
-  for (const rows of codes) last = await createEntry(db, { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: rows.map(([charset, code]) => newClaim('encoding', code, { charset })) }, seen, [], who)
+  for (const rows of codes) last = await createEntry(db, { description: null, radical: null, strokes: null, claims: rows.map(([charset, code]) => newClaim('encoding', code, { charset })) }, seen, [], who)
   await setHidden(db, { entry: last }, true, who, null)
   const marks = () => ({
     tags: raw.query("SELECT tag, entry_id FROM entry_tags WHERE tag GLOB 'r:*' OR tag GLOB 'x:*' ORDER BY tag, entry_id").all(),
@@ -230,7 +230,7 @@ test('0007 gives each record the marked works it is in, as the app writes them',
   const who = { actor: (await createPerson(db)).id, ip: null }
   const seen = { place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
   const codes = [[['unicode', 'U+2D6DD'], ['mj', 'MJ059588']], [['mj', 'MJ059588'], ['glyphwiki', 'irg2021-03300'], ['zitools', '⿰魚它']], [['unicode', 'U+3042']], [['big5', 'A140']], []]
-  for (const rows of codes) await createEntry(db, { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: rows.map(([charset, code]) => newClaim('encoding', code, { charset })) }, seen, [], who)
+  for (const rows of codes) await createEntry(db, { description: null, radical: null, strokes: null, claims: rows.map(([charset, code]) => newClaim('encoding', code, { charset })) }, seen, [], who)
   const marks = () => (raw.query('SELECT marks FROM entries ORDER BY id').all() as { marks: string | null }[]).map(row => row.marks)
   const written = marks()
   expect(written).toEqual(['["unicode","zitools","yedict","glyphwiki","mj"]', '["zitools","glyphwiki","mj"]', '["unicode"]', null, null])
@@ -639,5 +639,83 @@ test('0062 aborts when a legacy upward merge or non-positive id exists and other
   expect(() => raw.exec('UPDATE entries SET rowid = 9 WHERE id = 2')).toThrow('entry id cannot change')
   expect(() => raw.exec("INSERT OR REPLACE INTO entries(id, script, created_by, created_at, updated_at) VALUES (2, 'han', 'p', '2026', '2026')")).toThrow('entries cannot be replaced')
   expect(() => raw.exec("INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES (-1, 'han', 'p', '2026', '2026')")).toThrow('entry id must be positive')
+  raw.close()
+})
+
+test('0067 migrates record scripts, custom scripts and revision snapshots into script tags', async () => {
+  const raw = new Database(':memory:')
+  raw.exec('PRAGMA foreign_keys = ON')
+  const all = readdirSync(join(import.meta.dir, '../../../migrations')).sort()
+  for (const name of all.filter(name => name < '0067')) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  // Existing custom tag colliding by label (`古壯字`) and existing localized name on `nom`.
+  raw.exec("INSERT INTO tags(name, label, type, position) VALUES ('古壯字', '古壯字', 'general', 99)")
+  raw.exec(`UPDATE tags SET names = '{"en":"Custom Nôm"}' WHERE name = 'nom'`)
+  const insEntry = raw.prepare("INSERT INTO entries(id, script, script_other, hidden_at, merged_into, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'p', ?, ?)")
+  insEntry.run(1, 'han', null, null, null, '2026-01-01', '2026-01-01')
+  insEntry.run(2, 'nom', null, null, null, '2026-01-02', '2026-01-02')
+  insEntry.run(3, 'bai', null, null, null, '2026-01-03', '2026-01-03')
+  insEntry.run(4, 'sawndip', null, null, null, '2026-01-04', '2026-01-04')
+  insEntry.run(5, 'other', '臺灣 方音符號', null, null, '2026-01-05', '2026-01-05')
+  insEntry.run(6, 'other', null, null, null, '2026-01-06', '2026-01-06')
+  insEntry.run(7, 'han', null, '2026-01-07', null, '2026-01-07', '2026-01-07')
+  insEntry.run(8, 'miao', null, null, 1, '2026-01-08', '2026-01-08')
+  raw.exec(`INSERT INTO claims(entry_id, position, key, kind, value) VALUES (2, 0, 'aaaaaaaa', 'tag', 'nom'), (3, 0, 'bbbbbbbb', 'tag', 'baiwen')`)
+  const insRev = raw.prepare("INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) VALUES (?, 'create', 1, ?, 'p', '2026')")
+  insRev.run(1, JSON.stringify({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] }))
+  insRev.run(2, JSON.stringify({ script: 'nom', script_other: null, description: null, radical: null, strokes: null, claims: [{ key: 'aaaaaaaa', kind: 'tag', value: 'nom', data: null, sightings: [], under: [] }] }))
+  insRev.run(5, JSON.stringify({ script: 'other', script_other: '臺灣 方音符號', description: null, radical: null, strokes: null, claims: [] }))
+  insRev.run(6, JSON.stringify({ script: 'other', script_other: null, description: null, radical: null, strokes: null, claims: [] }))
+  raw.exec("INSERT INTO entry_tags(tag, entry_id) VALUES ('s:han', 1), ('s:han|f:encoded', 1); INSERT INTO tag_counts(tag, n) VALUES ('s:han', 1), ('s:han|f:encoded', 1)")
+
+  for (const name of all.filter(name => name >= '0067')) raw.exec(migration(name))
+
+  expect(raw.query('PRAGMA foreign_key_check').all()).toEqual([])
+  const cols = (raw.query("SELECT name FROM pragma_table_info('entries')").all() as { name: string }[]).map(c => c.name)
+  expect(cols).not.toContain('script')
+  expect(cols).not.toContain('script_other')
+  // Pre-existing localized name on `nom` is preserved while missing locales are filled.
+  const nom = raw.query("SELECT type, names FROM tags WHERE name = 'nom'").get() as { type: string; names: string }
+  expect(nom.type).toBe('script')
+  expect(JSON.parse(nom.names)).toMatchObject({ en: 'Custom Nôm', ja: 'チュノム', 'zh-Hant': '喃字' })
+  // `bai` aliases `baiwen`, `bouyei` aliases `布依方塊字`, and `sawndip` aliases the pre-existing `古壯字` tag.
+  expect(raw.query('SELECT alias, tag FROM tag_aliases ORDER BY alias').all()).toEqual([
+    { alias: 'bai', tag: 'baiwen' },
+    { alias: 'bouyei', tag: '布依方塊字' },
+    { alias: 'sawndip', tag: '古壯字' },
+  ])
+  // Live, hidden, and merged records get their script tag without duplicating existing tags; `other` with null gets none.
+  expect(raw.query("SELECT entry_id, value FROM claims WHERE kind = 'tag' ORDER BY entry_id, position").all()).toEqual([
+    { entry_id: 1, value: 'han' },
+    { entry_id: 2, value: 'nom' },
+    { entry_id: 3, value: 'baiwen' },
+    { entry_id: 4, value: '古壯字' },
+    { entry_id: 5, value: '臺灣方音符號' },
+    { entry_id: 7, value: 'han' },
+    { entry_id: 8, value: 'miao' },
+  ])
+  // Obsolete `s:` rows are gone; hidden (7) and merged (8) entries are excluded from `t:` counts; `nom` implies `越南` and `dialect`.
+  expect(raw.query("SELECT tag FROM entry_tags WHERE tag LIKE 's:%'").all()).toEqual([])
+  expect(raw.query("SELECT tag, n FROM tag_counts WHERE tag LIKE 't:%' ORDER BY tag").all()).toEqual([
+    { tag: 't:baiwen', n: 1 },
+    { tag: 't:dialect', n: 2 },
+    { tag: 't:han', n: 1 },
+    { tag: 't:nom', n: 1 },
+    { tag: 't:古壯字', n: 1 },
+    { tag: 't:臺灣方音符號', n: 1 },
+    { tag: 't:越南', n: 1 },
+  ])
+  // Historical snapshots lose `script` / `script_other` and carry the migrated script tag claim, ready to revert.
+  const snaps = (raw.query('SELECT entry_id, snapshot FROM revisions ORDER BY id').all() as { entry_id: number; snapshot: string }[])
+  for (const row of snaps) {
+    const parsed = JSON.parse(row.snapshot)
+    expect(parsed).not.toHaveProperty('script')
+    expect(parsed).not.toHaveProperty('script_other')
+    expect(entrySnapshot(row.snapshot)).not.toBeNull()
+  }
+  expect(entrySnapshot(snaps[0].snapshot)!.claims.map(c => c.value)).toEqual(['han'])
+  expect(entrySnapshot(snaps[1].snapshot)!.claims.map(c => c.value)).toEqual(['nom'])
+  expect(entrySnapshot(snaps[2].snapshot)!.claims.map(c => c.value)).toEqual(['臺灣方音符號'])
+  expect(entrySnapshot(snaps[3].snapshot)!.claims).toEqual([])
   raw.close()
 })

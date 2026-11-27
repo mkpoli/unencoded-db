@@ -37,7 +37,7 @@ function call(body: string, options: { token?: string; configured?: string; paus
 test('POST /api/sync/atlas hides behind 404 without token, rejects bad auth and paused writes, and syncs on valid auth', async () => {
   const { db } = openTestDb()
   const person = await createPerson(db, null, 'Recorder')
-  const entryId = await createEntry(db, { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', '⿰山東')] }, baseSighting, [], { actor: person.id, ip: null })
+  const entryId = await createEntry(db, { description: null, radical: null, strokes: null, claims: [newClaim('ids', '⿰山東')] }, baseSighting, [], { actor: person.id, ip: null })
 
   await expect(call('{}', { db })).rejects.toMatchObject({ status: 404 })
 

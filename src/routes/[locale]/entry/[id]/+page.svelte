@@ -7,7 +7,6 @@
   import { claimLabel } from '$lib/claim-label'
   import { onMount, tick, untrack } from 'svelte'
   import Seo from '$lib/components/Seo.svelte'
-  import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import CharacterFields from '$lib/components/CharacterFields.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import GlyphFace from '$lib/components/GlyphFace.svelte'
@@ -39,10 +38,10 @@
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { codePage, marksOf, registryLabel } from '$lib/registries'
-  import { COLLECTIONS, implicationClosure, localized, tagLabels, tagLookup } from '$lib/tags'
+  import { COLLECTIONS, TAG_TYPES, implicationClosure, localized, tagLabels, tagLookup } from '$lib/tags'
   import { boxesOf, evidenceFile, pictureAlt } from '$lib/picture'
   import { CHECKS, readiness } from '$lib/readiness'
-  import { parseContexts, parseSightingTypes, scriptName } from '$lib/scripts'
+  import { parseContexts, parseSightingTypes } from '$lib/scripts'
   import { snippet } from '$lib/seo'
   import { recordData } from '$lib/structured-data'
   import type { Sighting, StoredImage } from '$lib/server/entries'
@@ -59,7 +58,7 @@
   const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
   const commenting = $derived(Boolean(form?.error && page.url.searchParams.has('/comment')))
   const shownComments = $derived.by(() => { const shown = data.comments.filter(comment => !comment.hidden_at).length; return shown && (data.comments.length >= COMMENTS_SHOWN ? `${shown}+` : String(shown)) })
-  const editValues = $derived(editing && form?.values && 'script' in form.values ? form.values : { ...entry, claims })
+  const editValues = $derived(editing && form?.values && 'claims' in form.values ? form.values : { ...entry, claims })
   let filled = $state<Fill | null>(null)
   let editOpen = $state(untrack(() => editing || data.idsAdd !== null))
   $effect(() => { if (editing) editOpen = true })
@@ -157,10 +156,15 @@
   const recordLabel = $derived(`${recordCode(entry.id)} ${recordName(entry.id)}`)
   const unicode = $derived(encodings.find(encoding => encoding.charset === 'unicode'))
   const subject = $derived(entry.ids || (unicode && encodedCharacter(unicode.code)))
+  const tagsByName = $derived(tagLookup(data.tags))
+  const labels = $derived(tagLabels(localized(data.tags, locale())))
+  const closure = $derived(implicationClosure(valuesOf(claims, 'tag'), data.tags))
+  const directTags = $derived([...closure.direct].sort((a, b) => TAG_TYPES.indexOf(tagsByName.get(a)?.type ?? 'general') - TAG_TYPES.indexOf(tagsByName.get(b)?.type ?? 'general')))
+  const scriptLabels = $derived(directTags.filter(value => tagsByName.get(value)?.type === 'script').map(value => labels.get(value) ?? value))
   const seoTitle = $derived(subject ? `${snippet(subject, 36)} · ${recordLabel}` : recordLabel)
   const seoDescription = $derived([
     t('entry.record', { id: recordLabel }),
-    scriptName(locale(), entry.script, entry.script_other),
+    scriptLabels.join(' / '),
     entry.status && t(`status.${entry.status}`),
     entry.description || entry.cover_place,
   ].filter(Boolean).join(' · '))
@@ -169,9 +173,6 @@
   const vias = $derived(data.sightings.flatMap(sighting => sighting.vias))
   const structured = $derived(recordData({ locale: locale(), id: entry.id, name: seoTitle, description: seoDescription, siteName: t('app.name'), image: cover && media(cover.image_key), sources, vias, archives: data.archives }))
   const marks = $derived(marksOf(encodings))
-  const tagsByName = $derived(tagLookup(data.tags))
-  const labels = $derived(tagLabels(localized(data.tags, locale())))
-  const closure = $derived(implicationClosure(valuesOf(claims, 'tag'), data.tags))
   const collections = $derived(COLLECTIONS.filter(collection => valuesOf(claims, 'collection').includes(collection.slug)))
   const brief = (text: string) => [...text].length > 40 ? [...text].slice(0, 39).join('') + '…' : text
   const options = $derived(data.sightings.map(sighting => ({ token: String(sighting.id), value: String(sighting.id), label: `#${sighting.id} ${brief(sighting.place || sighting.title || sighting.url || '')}` })))
@@ -220,7 +221,7 @@
 <Seo data={structured} title={seoTitle} description={seoDescription} image={href(`/entry/${entry.id}/card.png?v=${encodeURIComponent(entry.updated_at)}`)} imageAlt={seoTitle} />
 <div class="page narrow stack">
   <div class="row"><a class="text-link back" href={backHref} onclick={returnToBrowse}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href="#discussion">{t('discussion.title')}{#if shownComments}{' '}<span class="count">{shownComments}</span>{/if}</a><a class="text-link" href={href(`/entry/${entry.id}/duplicate`)}>{t('entry.duplicate')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
-  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: yearName(Number(data.earliest.year), true) })}</a>{/if}</div></div><div class="row"><ShareRecord id={entry.id} /><FavouriteButton id={entry.id} initial={data.favourites.includes(entry.id)} onerror={message => favError = message} /></div></div>
+  <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1>{#if entry.status || data.earliest}<div class="row">{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: yearName(Number(data.earliest.year), true) })}</a>{/if}</div>{/if}</div><div class="row"><ShareRecord id={entry.id} /><FavouriteButton id={entry.id} initial={data.favourites.includes(entry.id)} onerror={message => favError = message} /></div></div>
   {#if favError}<p class="notice bad" role="alert">{favError}</p>{/if}
   {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
   {#if entry.merged_into}<p class="notice quiet"><a class="text-link" href={href(`/entry/${entry.merged_into}`)}>{t('entry.mergedInto', { id: recordCode(entry.merged_into) })}</a></p>{/if}
@@ -251,10 +252,10 @@
     </div>
     {#if closure.all.length || collections.length}
       <p class="chips">
-        {#each closure.direct as value (value)}
+        {#each directTags as value (value)}
           {@const info = tagsByName.get(value)}
           <a class="tag-chip" data-tag-type={info?.type ?? 'general'} href={browseHref(href(), { tag: value })}>
-            {info?.label ?? value}
+            {labels.get(value) ?? info?.label ?? value}
           </a>
         {/each}
         {#each closure.implied as implied (implied.name)}
@@ -266,7 +267,7 @@
             title={t('tags.carriedBy', { via: viaNames })}
             href={browseHref(href(), { tag: implied.name })}
           >
-            {info?.label ?? implied.name}
+            {labels.get(implied.name) ?? info?.label ?? implied.name}
           </a>
         {/each}
         {#each collections as collection (collection.slug)}<a class="chip-link" href={browseHref(href(), { collection: collection.slug })}>{collection.label}</a>{/each}
@@ -314,7 +315,6 @@
         <CharacterFields bind:this={fields} anchor="edit-ids" exclude={entry.id} values={editIds} layout={primaryLayoutOf(editValues.claims)} bind:primary onfill={facts => filled = facts}>
           <div class="sheet">
             <CompositionField ids={primary} value={editComposition} />
-            <ScriptPicker value={editValues.script} other={editValues.script_other} />
             <IdentityFields anchor="edit-identity" claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} fill={filled} ids={primary} />
           </div>
         </CharacterFields>

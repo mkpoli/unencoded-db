@@ -5,7 +5,7 @@ import { createEntry, mergeEntry, unmergeEntry, type EntryFields, type SightingF
 import { createPerson } from './people'
 import { openTestDb } from './testdb'
 
-const fields = (ids: string): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', ids)] })
+const fields = (ids: string): EntryFields => ({ description: null, radical: null, strokes: null, claims: [newClaim('ids', ids)] })
 const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
 
 test('a comment is trimmed and bounded', () => {

@@ -288,6 +288,7 @@
   .stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px }
   .type-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px }
   .type-heading { font-size: 12px; font-weight: 600; color: var(--muted) }
+  .type-heading[data-tag-type=script] { color: var(--tag-script-ink) }
   .type-heading[data-tag-type=region] { color: var(--tag-region-ink) }
   .type-heading[data-tag-type=language] { color: var(--tag-language-ink) }
   .type-heading[data-tag-type=form] { color: var(--tag-form-ink) }
