@@ -14,7 +14,7 @@ function streamed(chunks: Uint8Array[], length?: string) {
     },
     cancel() { cancelled = true },
   })
-  const request = new Request('https://example.test/en/entry/1/sighting/new', {
+  const request = new Request('https://example.test/en/R+0001/sighting/new', {
     method: 'POST', body, headers: length === undefined ? {} : { 'content-length': length },
     duplex: 'half',
   } as RequestInit)
@@ -175,9 +175,9 @@ describe('write body limit', () => {
     const db = (role: string) => ({ prepare: () => ({ bind: () => ({ first: async () => ({ id: '1', name: 'x', atlas_sub: null, role, banned_at: null, created_at: new Date().toISOString() }) }) }) })
     const options = (role: string) => ({ route: { id: '/[locale]/[code=recordCode]' }, cookies: { get: () => 'token' }, platform: { env: { DB: db(role), WRITES_PAUSED: '1' } } })
     const request = (path: string) => new Request(`https://example.test/en/${path}`, { method: 'POST', body: 'x' })
-    expect((await runHook(request('entry/1?/hideComment'), async () => new Response('ok'), options('moderator'))).status).toBe(200)
-    await expect(runHook(request('entry/1?/hideComment'), async () => new Response('ok'), options('member'))).rejects.toMatchObject({ status: 403 })
-    await expect(runHook(request('entry/1?/comment'), async () => new Response('ok'), options('moderator'))).rejects.toMatchObject({ status: 503 })
+    expect((await runHook(request('R+0001?/hideComment'), async () => new Response('ok'), options('moderator'))).status).toBe(200)
+    await expect(runHook(request('R+0001?/hideComment'), async () => new Response('ok'), options('member'))).rejects.toMatchObject({ status: 403 })
+    await expect(runHook(request('R+0001?/comment'), async () => new Response('ok'), options('moderator'))).rejects.toMatchObject({ status: 503 })
     const person = (role: string) => ({ ...options(role), route: { id: '/[locale]/u/[id]' } })
     expect((await runHook(request('u/abcdefabcdef?/merge'), async () => new Response('ok'), person('moderator'))).status).toBe(200)
     await expect(runHook(request('u/abcdefabcdef?/merge'), async () => new Response('ok'), person('member'))).rejects.toMatchObject({ status: 403 })
@@ -202,7 +202,7 @@ describe('write body limit', () => {
     await expect(runHook(request('moderate?/hide'), async () => new Response(), options('moderator', false))).rejects.toMatchObject({ status: 429 })
     expect((await runHook(request('moderate?/unknown'), async () => new Response(), options('moderator'))).status).toBe(404)
     await expect(runHook(request('new'), async () => new Response(), { platform: { env: { WRITES_PAUSED: '1' } } })).rejects.toMatchObject({ status: 503 })
-    await expect(runHook(request('entry/1?/edit'), async () => new Response(), { route: { id: '/[locale]/[code=recordCode]' }, platform: { env: { WRITES_PAUSED: '1' } } })).rejects.toMatchObject({ status: 503 })
+    await expect(runHook(request('R+0001?/edit'), async () => new Response(), { route: { id: '/[locale]/[code=recordCode]' }, platform: { env: { WRITES_PAUSED: '1' } } })).rejects.toMatchObject({ status: 503 })
   })
 
   test('leaves GET requests untouched', async () => {

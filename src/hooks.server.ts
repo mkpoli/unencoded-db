@@ -54,7 +54,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     const rewritten = canonicalRecordSubpath(pathname)
     redirect(302, `/${locale}${rewritten ?? (pathname === '/' ? '' : pathname)}${search}`)
   }
-  if (isLocale(first) && ['GET', 'HEAD'].includes(event.request.method)) {
+  if (isLocale(first) && ['GET', 'HEAD', 'POST'].includes(event.request.method)) {
     const rewritten = canonicalRecordSubpath(pathname.slice(first.length + 1))
     if (rewritten) redirect(308, `/${first}${rewritten}${search}`)
   }

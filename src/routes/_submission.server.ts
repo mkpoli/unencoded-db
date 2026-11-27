@@ -1,4 +1,6 @@
 import { parseRecordCode, parseRecordUrlCode } from '$lib/code'
+import { isLocale } from '$lib/i18n'
+import { readShortRecordCode } from '$lib/short-record'
 import { CITATION_FIELDS, CITE_INPUTS, getEntryRow, getSighting, namedVias, readBoxes, SIGHTING_FIELDS, VIA_INPUTS, type SightingFields, type StoredImage, type Via, type ViaPicture } from '$lib/server/entries'
 import { MAX_IMAGE, MAX_THUMB, prepareImage, storeImage } from '$lib/server/image'
 import { MEDIA_MAX } from '$lib/limits'
@@ -154,17 +156,24 @@ export function positiveId(value: string | null | undefined): number | null {
 export const recordIdParam = (value: string | null | undefined) => value ? parseRecordUrlCode(value) : null
 
 function recordFromUrl(text: string): number | null {
-  const legacy = positiveId(/\/entry\/(\d+)/.exec(text)?.[1])
-  if (legacy) return legacy
-  const coded = /\/(r(?:%2b|[+ ])[0-9a-f]{1,8})(?:\/|[?#]|$)/i.exec(text)?.[1]
-  if (coded) {
-    try { return parseRecordUrlCode(decodeURIComponent(coded)) } catch { return null }
-  }
-  const shortHex = /^https?:\/\/mkpo\.li\/r\/([0-9a-f]{1,8})(?:[?#]|$)/i.exec(text.trim())?.[1]
-  if (shortHex) {
-    const id = parseInt(shortHex, 16)
+  let url: URL
+  try { url = new URL(text.trim()) } catch { return null }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+  const parts = url.pathname.split('/').filter(Boolean)
+  if (!parts.length) return null
+  if (url.hostname === 'mkpo.li' && parts[0] === 'r' && parts.length === 2 && /^[0-9a-f]{1,8}$/i.test(parts[1])) {
+    const id = parseInt(parts[1], 16)
     return id > 0 && Number.isSafeInteger(id) ? id : null
   }
+  const rest = isLocale(parts[0]) ? parts.slice(1) : parts
+  if (rest[0] === 'entry') return positiveId(rest[1])
+  if (rest[0]) {
+    try {
+      const coded = parseRecordUrlCode(decodeURIComponent(rest[0]))
+      if (coded) return coded
+    } catch { /* ignore malformed percent-encoding */ }
+  }
+  if (url.hostname === 'rare.glyphatlas.org' && parts.length === 1) return readShortRecordCode(parts[0])
   return null
 }
 

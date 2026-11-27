@@ -45,6 +45,10 @@ test('record URL redirects canonicalize legacy /entry/ and non-canonical codes i
   ]) {
     expect((await run(canonical)).status).toBe(200)
   }
+
+  // Legacy POST forms opened before deploy keep method and body via 308.
+  await expect(run('https://rare.glyphatlas.org/en/entry/9?/edit', { method: 'POST' }))
+    .rejects.toMatchObject({ status: 308, location: '/en/R+0009?/edit' })
 })
 
 test('recordCode param matcher and SEO indexability align with canonical R+XXXX paths', () => {
