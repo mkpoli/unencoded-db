@@ -11,7 +11,7 @@ import { resourceMetadata } from '$lib/server/agents'
 import { tagList } from '$lib/server/tags'
 import { env } from '$lib/server/guard'
 import { AGENT_SESSION, newSessionToken } from '$lib/server/people'
-import { callTool, INSTRUCTIONS, toolList } from './_tools.server'
+import { callTool, INSTRUCTIONS, isModerator, toolList } from './_tools.server'
 import type { RequestHandler } from './$types'
 
 // Newest first. A client that asks for another revision is answered with the newest.
@@ -59,7 +59,7 @@ export const POST: RequestHandler = async (event) => {
       }, { [AGENT_SESSION]: newSessionToken() })
     }
     case 'ping': return reply(id, {})
-    case 'tools/list': return reply(id, { tools: toolList((await tagList(env(event).DB)).map(tag => tag.name)) })
+    case 'tools/list': return reply(id, { tools: toolList((await tagList(env(event).DB)).map(tag => tag.name), isModerator(event)) })
     case 'tools/call': {
       try {
         const result = await callTool(event, params.name, params.arguments)

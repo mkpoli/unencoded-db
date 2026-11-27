@@ -17,9 +17,9 @@ import { REGISTRIES } from '$lib/registries'
 import { RELATION_KINDS } from '$lib/related'
 import { CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
-import { addComment, cleanComment, commentsOf } from '$lib/server/comments'
+import { addComment, cleanComment, commentsOf, setCommentHidden } from '$lib/server/comments'
 import { tagList, taxonomy } from '$lib/server/tags'
-import { addSighting, CITATION_FIELDS, citesEvidence, createEntry, editEntry, editSighting, ENTRY_HISTORY_PAGE, getEntry, getEntryRow, getSighting, heldPictures, history, list, mediaVisible, mergeEntry, mergedInto, namedVias, putBackSighting, readBoxes, readEntryFields, readSightingFields, removeSighting, restoreSighting, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, unmergeEntry, viaKey, viaRows, type StoredImage, type ViaPicture } from '$lib/server/entries'
+import { addSighting, CITATION_FIELDS, citesEvidence, createEntry, editEntry, editSighting, ENTRY_HISTORY_PAGE, getEntry, getEntryRow, getSighting, heldPictures, history, list, mediaVisible, mergeEntry, mergedInto, namedVias, openReports, putBackSighting, readBoxes, readEntryFields, readSightingFields, redactRevision, removeSighting, resolveReport, restoreSighting, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, setHidden, SightingLimitError, SIGHTINGS_MAX, unmergeEntry, viaKey, viaRows, type StoredImage, type ViaPicture } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { archiveCited } from '$lib/server/archive'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
@@ -89,9 +89,17 @@ const shown = (event: RequestEvent, id: number) => ({ id, code: recordCode(id), 
 
 // ---------- Writes ----------
 
-async function guard(event: RequestEvent, limit: 'ADDS' | 'EDITS') {
-  try { await guardWrite(event, limit) } catch (cause) {
+export const isModerator = (event: RequestEvent) => Boolean(event.locals.person?.moderator && !event.locals.person.banned)
+
+async function guard(event: RequestEvent, limit: 'ADDS' | 'EDITS', moderation = false) {
+  if (moderation && !isModerator(event)) {
+    throw new Refusal(event.locals.person?.banned ? said('banned') : 'This action requires moderator permission.')
+  }
+  try { await guardWrite(event, limit, moderation) } catch (cause) {
     if (!isHttpError(cause)) throw cause
+    if (cause.status === 403 && moderation && !event.locals.person?.banned) {
+      throw new Refusal('This action requires moderator permission.')
+    }
     throw new Refusal(cause.status === 403 ? said('banned') : cause.status === 503 ? said('paused') : cause.status === 429 ? said('slow') : cause.body.message)
   }
 }
@@ -744,6 +752,80 @@ async function restoreRevisionTo(event: RequestEvent, input: Json) {
   return { record: shown(event, id), rev: result.rev }
 }
 
+// ---------- Moderation ----------
+
+async function setHiddenTo(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS', true)
+  const id = recordId(input.record)
+  if (!id) throw new Refusal(said('missing'))
+  if (typeof input.hidden !== 'boolean') throw new Refusal('hidden must be true or false.')
+  const sighting = input.sighting === undefined || input.sighting === null ? null : positiveInt(input.sighting, 'sighting')
+  const { DB } = env(event)
+  const entry = await getEntryRow(DB, id)
+  if (!entry) throw new Refusal(said('missing'))
+  if (entry.merged_into) throw new Refusal(`${said('merged')} Moderate ${recordCode(entry.merged_into)} (${entry.merged_into}).`)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const ok = await setHidden(DB, { entry: id, sighting }, input.hidden, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
+  if (!ok) throw new Refusal(said('missing'))
+  notifyIndexNow(event, { entries: [id] })
+  return { record: shown(event, id), ...(sighting !== null ? { sighting } : {}), hidden: input.hidden }
+}
+
+async function listReportsMod(event: RequestEvent, input: Json) {
+  if (!isModerator(event)) {
+    throw new Refusal(event.locals.person?.banned ? said('banned') : 'This action requires moderator permission.')
+  }
+  const after = input.after === undefined || input.after === null ? 0 : positiveInt(input.after, 'after')
+  const { reports, next } = await openReports(env(event).DB, after)
+  return {
+    reports: reports.map(report => ({
+      id: report.id,
+      record: shown(event, report.entry_id),
+      sighting: report.sighting_id,
+      reason: report.reason,
+      at: report.at,
+      by: report.by_name,
+      ids: report.ids,
+      record_hidden: Boolean(report.hidden_at),
+      target_hidden: Boolean(report.target_hidden_at),
+    })),
+    next,
+  }
+}
+
+async function resolveReportMod(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS', true)
+  const report = positiveInt(input.report, 'report')
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  if (!await resolveReport(DB, report, person.id)) throw new Refusal('No open report with that id exists.')
+  return { report, resolved: true }
+}
+
+async function setCommentHiddenMod(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS', true)
+  const id = recordId(input.record)
+  if (!id) throw new Refusal(said('missing'))
+  const comment = positiveInt(input.comment, 'comment')
+  if (typeof input.hidden !== 'boolean') throw new Refusal('hidden must be true or false.')
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  if (!await setCommentHidden(DB, id, comment, input.hidden, person.id)) throw new Refusal('That comment does not exist on this record.')
+  return { record: shown(event, id), comment, hidden: input.hidden }
+}
+
+async function redactRevisionMod(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS', true)
+  const id = recordId(input.record)
+  if (!id) throw new Refusal(said('missing'))
+  const revisionId = positiveInt(input.revision, 'revision')
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const ok = await redactRevision(DB, id, revisionId, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
+  if (!ok) throw new Refusal('That revision cannot be redacted (it may be missing, already redacted, or the current revision).')
+  return { record: shown(event, id), revision: revisionId, redacted: true }
+}
+
 // ---------- Reads ----------
 
 const SEARCH_PAGE = 20
@@ -772,30 +854,34 @@ async function findSimilar(event: RequestEvent, input: Json) {
 async function getRecord(event: RequestEvent, input: Json) {
   const id = recordId(input.record)
   const { DB } = env(event)
+  const showHidden = isModerator(event) && input.include_hidden === true
   const found = id ? await getEntry(DB, id) : null
-  if (!id || !found || found.entry.hidden_at) throw new Refusal(said('missing'))
+  if (!id || !found || (found.entry.hidden_at && !showHidden)) throw new Refusal(said('missing'))
   const { entry } = found
-  if (entry.merged_into) return { ...shown(event, id), merged_into: shown(event, entry.merged_into) }
-  const sightings = found.sightings.filter(sighting => !sighting.hidden_at)
-  const visible = new Set(sightings.map(sighting => sighting.id))
+  if (entry.merged_into) return { ...shown(event, id), ...(entry.hidden_at ? { hidden: true } : {}), merged_into: shown(event, entry.merged_into) }
+  const sightings = showHidden ? found.sightings : found.sightings.filter(sighting => !sighting.hidden_at)
+  const visible = new Set(found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => sighting.id))
   const [dates, comments] = await Promise.all([
     readDates(DB, sightingDates(sightings)),
-    commentsOf(DB, id, false),
+    commentsOf(DB, id, showHidden),
   ])
   return {
     ...shown(event, id), rev: entry.rev,
+    ...(entry.hidden_at ? { hidden: true } : {}),
     script: entry.script === 'other' ? entry.script_other ?? 'other' : entry.script,
     status: entry.status, description: entry.description, radical: entry.radical, strokes: entry.strokes,
-    claims: found.claims.map(claim => ({ key: claim.key, kind: claim.kind, value: claim.value, ...(claim.data ? { data: claim.data } : {}), ...(claim.under.length ? { under: claim.under } : {}), evidence: claim.sightings.filter(sighting => visible.has(sighting)) })),
+    claims: found.claims.map(claim => ({ key: claim.key, kind: claim.kind, value: claim.value, ...(claim.data ? { data: claim.data } : {}), ...(claim.under.length ? { under: claim.under } : {}), evidence: claim.sightings.filter(sighting => showHidden || visible.has(sighting)) })),
     date_readings: Object.fromEntries(dates),
     sightings: sightings.map(sighting => ({
-      id: sighting.id, rev: sighting.rev, source_id: sighting.source_id, place: sighting.place,
+      id: sighting.id, rev: sighting.rev, source_id: sighting.source_id,
+      ...(sighting.hidden_at ? { hidden: true, removed: Boolean(sighting.removed_by) } : {}),
+      place: sighting.place,
       ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
       original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note,
       vias: sighting.vias.map(({ id: source_id, pictures, ...via }) => ({ source_id, ...via, pictures: (pictures ?? []).map(picture => shownPicture(event, picture)) })),
       pictures: sighting.media.map(picture => ({ ...shownPicture(event, picture), marks: picture.box ? JSON.parse(picture.box) as number[][] : [] })),
     })),
-    comments: comments.map(comment => ({ id: comment.id, sighting: comment.sighting_id, body: comment.body, at: comment.at, by: comment.by_name })),
+    comments: comments.map(comment => ({ id: comment.id, sighting: comment.sighting_id, body: comment.body, at: comment.at, by: comment.by_name, ...(comment.hidden_at ? { hidden: true } : {}) })),
   }
 }
 
@@ -810,9 +896,10 @@ async function listTags(event: RequestEvent) {
 async function getHistory(event: RequestEvent, input: Json) {
   const id = recordId(input.record)
   const { DB } = env(event)
+  const showHidden = isModerator(event) && input.include_hidden === true
   const found = id ? await getEntry(DB, id) : null
-  if (!id || !found || found.entry.hidden_at) throw new Refusal(said('missing'))
-  if (found.entry.merged_into) return { ...shown(event, id), merged_into: shown(event, found.entry.merged_into) }
+  if (!id || !found || (found.entry.hidden_at && !showHidden)) throw new Refusal(said('missing'))
+  if (found.entry.merged_into) return { ...shown(event, id), ...(found.entry.hidden_at ? { hidden: true } : {}), merged_into: shown(event, found.entry.merged_into) }
   const before = input.before === undefined || input.before === null ? null : positiveInt(input.before, 'before')
   const visibleSightings = new Map(found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => [sighting.id, sighting.rev]))
   const removed = found.sightings.filter(sighting => sighting.hidden_at && sighting.removed_by)
@@ -820,7 +907,7 @@ async function getHistory(event: RequestEvent, input: Json) {
   const [page, duplicates] = await Promise.all([history(DB, id, before), mergedInto(DB, id)])
   const next = page.length > ENTRY_HISTORY_PAGE ? page[ENTRY_HISTORY_PAGE - 1].id : null
   const rows = page.slice(0, ENTRY_HISTORY_PAGE)
-    .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id) || removedRevs.has(row.sighting_id))
+    .filter(row => showHidden || !row.sighting_id || visibleSightings.has(row.sighting_id) || removedRevs.has(row.sighting_id))
     .map(({ id: revId, sighting_id, kind, rev, summary, at, by_name, by_agent, by_model, snapshot, redacted_at }) => ({
       id: revId,
       sighting: sighting_id,
@@ -832,6 +919,7 @@ async function getHistory(event: RequestEvent, input: Json) {
       redacted: Boolean(redacted_at),
       ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
       removed: sighting_id !== null && removedRevs.has(sighting_id),
+      ...(sighting_id !== null && !visibleSightings.has(sighting_id) && !removedRevs.has(sighting_id) ? { hidden: true } : {}),
     }))
   const dates = await revisionDates(DB, rows)
   return {
@@ -1084,17 +1172,71 @@ const TOOLS: Tool[] = [
   },
 ]
 
+const MOD_TOOLS: Tool[] = [
+  {
+    name: 'set_hidden', title: 'Hide or unhide a record or sighting', annotations: EDITS, run: setHiddenTo,
+    description: 'Moderator only. Hide or restore visibility of a record or one of its sightings.',
+    inputSchema: { type: 'object', required: ['record', 'hidden', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      sighting: { type: 'integer', minimum: 1, description: 'Optional sighting id; omit to hide or unhide the whole record.' },
+      hidden: { type: 'boolean', description: 'true to hide, false to unhide.' },
+      summary: SUMMARY,
+    } },
+  },
+  {
+    name: 'list_reports', title: 'List open moderation reports', annotations: READS, run: listReportsMod,
+    description: 'Moderator only. List unresolved moderation reports with their targets and reasons.',
+    inputSchema: { type: 'object', properties: {
+      after: { type: 'integer', minimum: 1, description: 'The `next` cursor from an earlier call, for later reports.' },
+    } },
+  },
+  {
+    name: 'resolve_report', title: 'Resolve a moderation report', annotations: EDITS, run: resolveReportMod,
+    description: 'Moderator only. Mark an open moderation report as resolved.',
+    inputSchema: { type: 'object', required: ['report', 'agent'], properties: {
+      agent: AGENT,
+      report: { type: 'integer', minimum: 1, description: 'Report id from list_reports.' },
+    } },
+  },
+  {
+    name: 'set_comment_hidden', title: 'Hide or unhide a comment', annotations: EDITS, run: setCommentHiddenMod,
+    description: 'Moderator only. Hide or restore visibility of a comment on a record.',
+    inputSchema: { type: 'object', required: ['record', 'comment', 'hidden', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      comment: { type: 'integer', minimum: 1, description: 'Comment id from get_record.' },
+      hidden: { type: 'boolean', description: 'true to hide, false to unhide.' },
+    } },
+  },
+  {
+    name: 'redact_revision', title: 'Redact a past revision', annotations: EDITS, run: redactRevisionMod,
+    description: 'Moderator only. Irreversibly clear the stored snapshot and summary of a past revision (cannot redact the current revision).',
+    inputSchema: { type: 'object', required: ['record', 'revision', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      revision: { type: 'integer', minimum: 1, description: 'Revision id from get_history.' },
+      summary: SUMMARY,
+    } },
+  },
+]
+
 /** Public tool names and whether each writes, in server order. */
 export const MCP_TOOLS = TOOLS.map(({ name, annotations }) => ({ name, write: annotations.readOnlyHint !== true }))
 
 /** The tools, known tag names listed on the `categories` schema of the tools that take one. */
-export const toolList = (tags: readonly string[]) => TOOLS.map(({ run: _, ...tool }) => !('categories' in record(tool.inputSchema.properties)) ? tool : {
-  ...tool, inputSchema: { ...tool.inputSchema, properties: { ...record(tool.inputSchema.properties), categories: { type: 'array', items: { type: 'string', enum: tags } } } },
+const INCLUDE_HIDDEN = { type: 'boolean', description: 'Moderator only. Set true to include hidden records, sightings or comments (default false).' }
+
+export const toolList = (tags: readonly string[], moderator = false) => (moderator ? [...TOOLS, ...MOD_TOOLS] : TOOLS).map(({ run: _, ...tool }) => {
+  const properties = { ...record(tool.inputSchema.properties) }
+  if ('categories' in properties) properties.categories = { type: 'array', items: { type: 'string', enum: tags } }
+  if (moderator && (tool.name === 'get_record' || tool.name === 'get_history')) properties.include_hidden = INCLUDE_HIDDEN
+  return { ...tool, inputSchema: { ...tool.inputSchema, properties } }
 })
 
 /** What a tool answers, or null for a name that is no tool. */
 export async function callTool(event: RequestEvent, name: unknown, input: unknown): Promise<ToolResult | null> {
-  const tool = TOOLS.find(tool => tool.name === name)
+  const tool = TOOLS.find(tool => tool.name === name) ?? MOD_TOOLS.find(tool => tool.name === name)
   if (!tool) return null
   try {
     return { content: [{ type: 'text', text: JSON.stringify(await tool.run(event, record(input))) }] }

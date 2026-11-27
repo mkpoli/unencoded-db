@@ -94,6 +94,8 @@ An agent can sign in, and then writes under a person's name. The site is the OAu
 
 An agent with no browser, such as a chat bot, gets its token from the maintainer: `bun scripts/issue-agent-token.ts --remote --name <name> --out <file>` makes a person of that name and writes a year's token to the file, readable only by its owner. The token is never printed, and its client cannot sign in through a browser.
 
+When an agent presents a bearer token belonging to an unbanned moderator, `tools/list` additionally exposes five moderator-only tools (`set_hidden`, `list_reports`, `resolve_report`, `set_comment_hidden`, `redact_revision`), and `get_record` and `get_history` accept `include_hidden: true` to inspect hidden records, sightings and comments. Non-moderators do not see those tools in `tools/list` and receive a permission refusal if they call them.
+
 ## Data model
 
 | Table | Holds |

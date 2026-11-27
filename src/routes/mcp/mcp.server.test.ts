@@ -1,7 +1,8 @@
+import { createHash } from 'node:crypto'
 import { afterEach, expect, test } from 'bun:test'
 import { handle } from '../../hooks.server'
 import { openTestDb } from '$lib/server/testdb'
-import { mergeEntry } from '$lib/server/entries'
+import { mergeEntry, report } from '$lib/server/entries'
 import { personOf } from '$lib/server/people'
 import { MEDIA_MAX } from '$lib/limits'
 import { PDF_SIDE } from '$lib/server/pdf'
@@ -721,4 +722,108 @@ test('remove_sighting, merge_records, unmerge_record, get_history, and restore_r
   })
   expect((await call('get_record', { record: 2 })).value.merged_into).toBeUndefined()
   expect(await call('unmerge_record', { record: 2, agent: { harness: 'Test' } })).toMatchObject({ failed: true })
+})
+
+test('moderator MCP tools are advertised and callable only by unbanned moderators, even when writes are paused', async () => {
+  const { db, raw, send, call } = fixture({ WRITES_PAUSED: '1' })
+  const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex')
+  const at = new Date().toISOString()
+  raw.run("INSERT INTO people(id, name, role, created_at) VALUES('mod1', 'ModBot', 'moderator', ?)", [at])
+  raw.run("INSERT INTO people(id, name, role, created_at) VALUES('mem1', 'MemberBot', 'member', ?)", [at])
+  raw.run("INSERT INTO agent_clients(id, name, redirect_uris, created_at, used_at) VALUES('c1', 'Bot', '[]', ?, ?)", [at, at])
+  const modToken = 'a'.repeat(64)
+  const memToken = 'b'.repeat(64)
+  raw.run('INSERT INTO agent_tokens(token_hash, client, person, created_at) VALUES(?, ?, ?, ?)', [tokenHash(modToken), 'c1', 'mod1', at])
+  raw.run('INSERT INTO agent_tokens(token_hash, client, person, created_at) VALUES(?, ?, ?, ?)', [tokenHash(memToken), 'c1', 'mem1', at])
+
+  const modAuth = { authorization: `Bearer ${modToken}` }
+  const memAuth = { authorization: `Bearer ${memToken}` }
+
+  // Anonymous and regular members do not see moderator tools and are refused when calling them.
+  const anonTools = (await (await send({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).json() as any).result.tools.map((t: { name: string }) => t.name)
+  const memTools = (await (await send({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, memAuth)).json() as any).result.tools.map((t: { name: string }) => t.name)
+  const modTools = (await (await send({ jsonrpc: '2.0', id: 3, method: 'tools/list' }, modAuth)).json() as any).result.tools.map((t: { name: string }) => t.name)
+  for (const name of ['set_hidden', 'list_reports', 'resolve_report', 'set_comment_hidden', 'redact_revision']) {
+    expect(anonTools).not.toContain(name)
+    expect(memTools).not.toContain(name)
+    expect(modTools).toContain(name)
+  }
+
+  const callAs = async (name: string, args: Record<string, unknown>, headers: Record<string, string>) => {
+    const body = await (await send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }, headers)).json() as any
+    const text = body.result.content[0].text
+    return { failed: Boolean(body.result.isError), value: body.result.isError ? text : JSON.parse(text) }
+  }
+
+  expect(await callAs('list_reports', {}, memAuth)).toMatchObject({ failed: true, value: expect.stringContaining('moderator') })
+  expect(await callAs('set_hidden', { record: 1, hidden: true, agent: { harness: 'Test' } }, memAuth)).toMatchObject({ failed: true, value: expect.stringContaining('moderator') })
+
+  // Full end-to-end moderation lifecycle on an unpaused database.
+  const unpaused = fixture()
+  unpaused.raw.run("INSERT INTO people(id, name, role, created_at) VALUES('mod1', 'ModBot', 'moderator', ?)", [at])
+  unpaused.raw.run("INSERT INTO agent_clients(id, name, redirect_uris, created_at, used_at) VALUES('c1', 'Bot', '[]', ?, ?)", [at, at])
+  unpaused.raw.run('INSERT INTO agent_tokens(token_hash, client, person, created_at) VALUES(?, ?, ?, ?)', [tokenHash(modToken), 'c1', 'mod1', at])
+  const callMod = async (name: string, args: Record<string, unknown>) => {
+    const body = await (await unpaused.send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }, modAuth)).json() as any
+    const text = body.result.content[0].text
+    return { failed: Boolean(body.result.isError), value: body.result.isError ? text : JSON.parse(text) }
+  }
+
+  await unpaused.call('add_record', { ids: ['⿰山東'], description: 'Secret PII', sightings: [{ place: 'p. 1', url: 'https://example.test/1' }] })
+  await unpaused.call('edit_record', { record: 1, rev: 1, description: 'Clean', agent: { harness: 'Test' } })
+  const sightingId = (await unpaused.call('get_record', { record: 1 })).value.sightings[0].id as number
+  const commentId = (await unpaused.call('add_comment', { record: 1, body: 'Spam link', agent: { harness: 'Test' } })).value.comment as number
+  await report(unpaused.db, { entry: 1, sighting: sightingId }, 'Spam sighting', 'mod1')
+
+  // List & resolve reports.
+  const listed = await callMod('list_reports', {})
+  expect(listed.failed).toBe(false)
+  expect(listed.value.reports).toHaveLength(1)
+  const reportId = listed.value.reports[0].id as number
+  expect(await callMod('resolve_report', { report: reportId, agent: { harness: 'Mod' } })).toEqual({ failed: false, value: { report: reportId, resolved: true } })
+  expect((await callMod('list_reports', {})).value.reports).toEqual([])
+
+  // Hide comment: hidden from public and default moderator get_record; visible only with include_hidden: true.
+  expect(await callMod('set_comment_hidden', { record: 1, comment: commentId, hidden: true, agent: { harness: 'Mod' } })).toMatchObject({ failed: false, value: { comment: commentId, hidden: true } })
+  expect((await unpaused.call('get_record', { record: 1, include_hidden: true })).value.comments).toEqual([])
+  expect((await callMod('get_record', { record: 1 })).value.comments).toEqual([])
+  expect((await callMod('get_record', { record: 1, include_hidden: true })).value.comments).toMatchObject([{ id: commentId, hidden: true }])
+
+  // Hide sighting & record: hidden by default even for moderators; visible when include_hidden: true.
+  expect(await callMod('set_hidden', { record: 1, sighting: sightingId, hidden: true, summary: 'Bad scan', agent: { harness: 'Mod' } })).toMatchObject({ failed: false, value: { sighting: sightingId, hidden: true } })
+  expect((await unpaused.call('get_record', { record: 1, include_hidden: true })).value.sightings).toEqual([])
+  expect((await callMod('get_record', { record: 1 })).value.sightings).toEqual([])
+  expect((await callMod('get_record', { record: 1, include_hidden: true })).value.sightings).toMatchObject([{ id: sightingId, hidden: true }])
+  const hiddenHist = (await callMod('get_history', { record: 1, include_hidden: true })).value.rows as { sighting: number | null; hidden?: boolean }[]
+  expect(hiddenHist.some(row => row.sighting === sightingId && row.hidden === true)).toBe(true)
+
+  expect(await callMod('set_hidden', { record: 1, hidden: true, summary: 'Spam', agent: { harness: 'Mod' } })).toMatchObject({ failed: false, value: { hidden: true } })
+  expect((await unpaused.call('get_record', { record: 1, include_hidden: true })).failed).toBe(true)
+  expect((await callMod('get_record', { record: 1 })).failed).toBe(true)
+  expect((await callMod('get_record', { record: 1, include_hidden: true })).value.hidden).toBe(true)
+  expect(await callMod('set_hidden', { record: 1, hidden: false, agent: { harness: 'Mod' } })).toMatchObject({ failed: false, value: { hidden: false } })
+
+  // Redact past revision (rev 1) succeeds; redacting current revision (rev 2) is refused.
+  const hist = (await callMod('get_history', { record: 1 })).value.rows as { id: number; sighting: number | null; rev: number }[]
+  const rev1 = hist.find(r => r.sighting === null && r.rev === 1)!
+  const rev2 = hist.find(r => r.sighting === null && r.rev === 2)!
+  expect(await callMod('redact_revision', { record: 1, revision: rev1.id, summary: 'Remove PII', agent: { harness: 'Mod' } })).toMatchObject({ failed: false, value: { revision: rev1.id, redacted: true } })
+  expect(await callMod('redact_revision', { record: 1, revision: rev2.id, agent: { harness: 'Mod' } })).toMatchObject({ failed: true })
+
+  // Merged records are refused by set_hidden so duplicates stay reachable for unmerge.
+  await unpaused.call('add_record', { ids: ['⿰山東'], sightings: [{ place: 'p. 2', url: 'https://example.test/2' }] })
+  await unpaused.call('merge_records', { record: 1, duplicate_of: 2, agent: { harness: 'Test' } })
+  expect(await callMod('set_hidden', { record: 2, hidden: true, agent: { harness: 'Mod' } })).toMatchObject({ failed: true, value: expect.stringContaining('merged') })
+
+  // Moderator tools still work under WRITES_PAUSED=1.
+  raw.run("INSERT INTO entries(id, script, rev, created_by, created_at, updated_at) VALUES(1, 'han', 1, 'mod1', ?, ?)", [at, at])
+  await report(db, { entry: 1, sighting: null }, 'Paused test', 'mod1')
+  expect((await callAs('resolve_report', { report: 1, agent: { harness: 'Mod' } }, modAuth)).failed).toBe(false)
+
+  // A banned moderator loses moderator tool visibility and access.
+  raw.run("UPDATE people SET banned_at = ? WHERE id = 'mod1'", [at])
+  const bannedTools = (await (await send({ jsonrpc: '2.0', id: 4, method: 'tools/list' }, modAuth)).json() as any).result.tools.map((t: { name: string }) => t.name)
+  expect(bannedTools).not.toContain('set_hidden')
+  expect(await callAs('list_reports', {}, modAuth)).toMatchObject({ failed: true })
+  expect(await callAs('set_hidden', { record: 1, hidden: true, agent: { harness: 'Mod' } }, modAuth)).toMatchObject({ failed: true })
 })
