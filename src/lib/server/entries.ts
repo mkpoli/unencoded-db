@@ -7,7 +7,7 @@ import { authorKeys, nameKey, nameLabel, sourceKeys, sourceNameKey } from '../na
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
-import { CITES_MAX, closenessOf, CONTEXTS, isCiteKind, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
+import { CITES_MAX, closenessOf, closenessRank, CONTEXTS, datesOriginal, isCiteKind, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
 import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
@@ -390,24 +390,33 @@ type Year = NonNullable<ReturnType<typeof datedYear>>
 // scripts/reindex-dates.sql ranks by the same order.
 const before = (a: Year, b: Year) => a.n < b.n || (a.n === b.n && compareDays(a.end, b.end) < 0)
 
+type Dated = Pick<SightingFields, 'report_date' | 'original_date'> & { closeness?: string | null }
 // A sighting's year: the work's own date unless the report's year is the earlier. A work is no later
-// than its report, so the nearer last day of the two bounds it.
-function sightingYear(sighting: Pick<SightingFields, 'report_date' | 'original_date'>, dates: DateBook) {
-  const report = datedYear(sighting.report_date, dates), original = datedYear(sighting.original_date, dates)
+// than its report, so the nearer last day of the two bounds it. A compilation or a memory is dated by
+// its report alone, whatever older work it names.
+function sightingYear(sighting: Dated, dates: DateBook) {
+  const report = datedYear(sighting.report_date, dates), original = datesOriginal(sighting.closeness) ? datedYear(sighting.original_date, dates) : null
   const year = original && (!report || original.n <= report.n) ? { ...original, kind: 'original' as const } : report && { ...report, kind: 'report' as const }
   return year && original && report ? { ...year, end: compareDays(original.end, report.end) < 0 ? original.end : report.end } : year
 }
 
-// The earliest attestation among visible sightings, and the sighting that holds it: the first added
-// of those that share its date.
-export function earliestSighting<T extends Pick<SightingFields, 'report_date' | 'original_date'> & { id?: number; hidden_at?: string | null }>(sightings: T[], dates: DateBook = new Map()) {
+// The earliest attestation among visible sightings, and the sighting that holds it: of those that share
+// its date, the closest to the original, then the first added.
+export function earliestSighting<T extends Dated & { id?: number; hidden_at?: string | null }>(sightings: T[], dates: DateBook = new Map()) {
   let found: (Year & { kind: YearKind; sighting: T }) | null = null
   for (const sighting of sightings) {
     if (sighting.hidden_at) continue
     const year = sightingYear(sighting, dates)
-    if (year && (!found || before(year, found))) found = { ...year, sighting }
+    if (year && (!found || before(year, found) || (!before(found, year) && closenessRank(sighting.closeness) < closenessRank(found.sighting.closeness)))) found = { ...year, sighting }
   }
   return found
+}
+
+/** A record's evidence in the order its page reads: closest to the original first, then by date with the
+ * undated last, then as added. Rows keep their ids, so claims and exports that name them by id are unchanged. */
+export function evidenceOrder<T extends Dated & { id: number }>(sightings: readonly T[], dates: DateBook) {
+  const dated = sightings.map(sighting => ({ sighting, rank: closenessRank(sighting.closeness), year: sightingYear(sighting, dates) }))
+  return dated.sort((a, b) => a.rank - b.rank || (a.year && b.year ? (before(a.year, b.year) ? -1 : before(b.year, a.year) ? 1 : 0) : a.year ? -1 : b.year ? 1 : 0) || a.sighting.id - b.sighting.id).map(item => item.sighting)
 }
 
 type SightingState = SightingFields & { media?: StoredImage[]; hidden_at?: string | null }
@@ -417,7 +426,9 @@ type SightingState = SightingFields & { media?: StoredImage[]; hidden_at?: strin
 // sighting, not the post.
 function summarize(sightings: SightingState[], dates: DateBook) {
   const visible = sightings.filter(sighting => !sighting.hidden_at)
-  const cover = visible.find(sighting => sighting.media?.length)
+  // The cover is from the closest sighting with a picture, the first added of equals.
+  const closest = [...visible].sort((a, b) => closenessRank(a.closeness) - closenessRank(b.closeness))
+  const cover = closest.find(sighting => sighting.media?.length)
   const types = new Set<SightingType>()
   for (const sighting of visible) for (const type of parseSightingTypes(sighting.types)) types.add(type)
   const year = earliestSighting(visible, dates)
@@ -430,7 +441,7 @@ function summarize(sightings: SightingState[], dates: DateBook) {
   return {
     visible,
     cover_key: cover?.media?.[0].thumb_key ?? null,
-    cover_place: (cover ?? visible[0])?.place ?? null,
+    cover_place: (cover ?? closest[0])?.place ?? null,
     types: chosen.length ? JSON.stringify(chosen) : null,
     first_year: year?.text ?? null,
     first_year_kind: year?.kind ?? null,
