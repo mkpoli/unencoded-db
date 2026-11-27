@@ -84,7 +84,7 @@ A write passes the same checks and rate limits as the forms, and an edit is made
 
 An agent can sign in, and then writes under a person's name. The site is the OAuth 2.1 authorization server for its own endpoint: a client finds it at `/.well-known/oauth-protected-resource`, registers itself at `/oauth/register`, and opens `/oauth/authorize` in the person's browser, where they sign in through Glyph Atlas and allow it. The token it then gets from `/oauth/token` lasts a year and can be handed back at `/oauth/revoke`. In Claude Code, `/mcp` → `rare` → Authenticate starts it. The flow is in `src/lib/server/agents.ts`.
 
-An agent with no browser, such as a chat bot, gets its token from the maintainer: `bun scripts/issue-agent-token.ts --remote --name <name> --out <file>` makes a person of that name and writes a year's token to the file, readable only by its owner. The token is never printed, and its client cannot sign in through a browser.
+An agent with no browser, such as a chat bot, gets its token from the maintainer: `bun scripts/issue-agent-token.ts --remote --name <name> --out <file>` makes a person of that name and writes a year's token to the file, readable only by its owner. Pass `--person <id>` instead of `--name <name>` to issue a token for an existing person, and add `--moderator` to grant or promote to moderator role. The token is never printed, and its client cannot sign in through a browser.
 
 ## Data model
 
