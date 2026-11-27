@@ -45,6 +45,7 @@
     <ArchiveLinks archives={data.archives} />
     <dl class="facts">{#each facts as fact}{#if source[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{#if fact.key === 'report_date'}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} />{:else if fact.key === 'source_kind'}{kindName(source.source_kind)}{:else}{source[fact.key]}{/if}</dd></div>{/if}{/each}</dl>
     {#if data.copy}<a class="text-link" href={href(`/sources/copy/${data.copy.slug}`)}>{t('sources.digitizedCopy')} · {data.copy.title} · {data.copy.collection}</a>{/if}
+    {#if data.sightings.length}
     <details class="edits" open={form?.aliasError !== undefined || data.aliases.length > 0 || data.before !== null}>
       <summary>{t('source.aliases')}{#if data.aliases.length}{` (${data.aliases.length})`}{/if}</summary>
       {#each data.aliases as alias}
@@ -96,6 +97,7 @@
       {/if}
       {#if form?.archiveError}<p role="alert">{t(`source.archiveError.${form.archiveError}`, { n: ARCHIVES_MAX })}</p>{/if}
     </details>
+    {/if}
   </section>
   {#if data.sightings.length}
   <section class="stack">
@@ -129,7 +131,7 @@
   {#if data.namedIn.length}
   <section class="stack" id="named-unseen">
     <div class="row"><h2>{t('source.namedUnseen')}</h2><span class="badge">{data.namedIn.length}</span></div>
-    {#each data.namedIn as item (`${item.sighting_id}:${item.kind}`)}
+    {#each data.namedIn as item (`${item.sighting_id}:${item.position}`)}
       {@const tile = item.tile}
       {@const citedDate = item.original_date ?? item.report_date}
       <article class="panel seen">

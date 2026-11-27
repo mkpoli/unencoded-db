@@ -35,26 +35,23 @@
         <li class="item">
           {#if position}<span class="arrow" aria-hidden="true">←</span>{/if}
           <div class="node">
-            {#if witnessId}
-              <a class="witness-pill" href="#sighting-{witnessId}">{t('cite.foundThroughSighting', { id: witnessId })}</a>
-            {:else}
-              <span class="title">
-                {#if via.id}
-                  <a class="text-link" href={href(`/source/${via.id}`)}>{name.text}</a>
-                  {#if web(via.url)}{' '}<a class="text-link url" href={via.url} target="_blank" rel="noopener noreferrer" aria-label={t('field.url')}>↗</a>{/if}
-                {:else if web(via.url)}
-                  <a class="text-link" href={via.url} target="_blank" rel="noopener noreferrer">{name.text}</a>
-                {:else}
-                  <span>{name.text}</span>
-                {/if}
-              </span>
-              {#if byline || via.report_date}
-                <span class="meta">
-                  {byline}{#if via.report_date}{#if byline}{' · '}{/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}
-                </span>
+            <span class="title">
+              {#if via.id}
+                <a class="text-link" href={href(`/source/${via.id}`)}>{name.text}</a>
+                {#if web(via.url)}{' '}<a class="text-link url" href={via.url} target="_blank" rel="noopener noreferrer" aria-label={t('field.url')}>↗</a>{/if}
+              {:else if web(via.url)}
+                <a class="text-link" href={via.url} target="_blank" rel="noopener noreferrer">{name.text}</a>
+              {:else}
+                <span>{name.text}</span>
               {/if}
-              {#if via.id && archives?.get(via.id)}<ArchiveLinks archives={archives.get(via.id)!} compact />{/if}
+              {#if witnessId}{' '}<a class="witness-pill" href="#sighting-{witnessId}">{t('cite.foundThroughSighting', { id: witnessId })}</a>{/if}
+            </span>
+            {#if byline || via.report_date}
+              <span class="meta">
+                {byline}{#if via.report_date}{#if byline}{' · '}{/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}
+              </span>
             {/if}
+            {#if via.id && archives?.get(via.id)}<ArchiveLinks archives={archives.get(via.id)!} compact />{/if}
             {#if via.quote}<blockquote class="quote">{via.quote}</blockquote>{/if}
             {#if pictures && via.pictures?.length}
               <div class="pictures">

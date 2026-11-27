@@ -192,7 +192,7 @@ const csvCell = (value: unknown) => {
 // `東 (usage) [under: east | cmn:dōng] [evidence: #3 #7]`. The JSON form carries what else a claim holds.
 const ENTRY_COLUMNS = ['script', 'script_other', 'description', 'status', 'radical', 'strokes'] as const
 const BULK_ENTRY_COLUMNS = [...ENTRY_COLUMNS, 'created_by_name', 'created_by_agent', 'created_by_model'] as const
-const csvColumns = (bulk: boolean) => ['entry_id', ...(bulk ? ['record_code'] as const : []), ...(bulk ? BULK_ENTRY_COLUMNS : ENTRY_COLUMNS), ...CLAIM_KINDS, 'sighting_id', ...SIGHTING_FIELDS, 'vias', 'cites', 'images']
+const csvColumns = (bulk: boolean) => ['entry_id', ...(bulk ? ['record_code'] as const : []), ...(bulk ? BULK_ENTRY_COLUMNS : ENTRY_COLUMNS), ...CLAIM_KINDS, 'sighting_id', ...SIGHTING_FIELDS, 'vias', 'images', 'cites']
 
 const said = (claim: Claim) => claim.kind === 'encoding'
   ? `${claim.data?.charset}:${claim.value}`
@@ -223,8 +223,8 @@ export function csvRows(entries: readonly ExportEntry[], bulk = true) {
       sighting?.id,
       ...SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : field === 'contexts' ? parseContexts(sighting?.contexts).join(', ') : sighting?.[field]),
       sighting ? JSON.stringify(sighting.vias) : '',
-      sighting ? JSON.stringify(sighting.cites ?? []) : '',
       sighting?.media.map(image => image.image_key).join('; '),
+      sighting ? JSON.stringify(sighting.cites ?? []) : '',
     ]).map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n'
   }).join('')
 }

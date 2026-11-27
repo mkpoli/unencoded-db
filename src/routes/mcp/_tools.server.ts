@@ -19,7 +19,7 @@ import { dateOrderWarnings } from '$lib/cites'
 import { CITE_KINDS, CITES_MAX, CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX, type CiteKind } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
 import { tagList } from '$lib/server/tags'
-import { addSighting, CITATION_FIELDS, citesEvidence, CiteValidationError, createEntry, editEntry, editSighting, getEntry, getSighting, heldPictures, linkSightings, list, mediaVisible, namedVias, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, validateCiteTargets, viaKey, viaRows, type Cite, type SightingFields, type StoredImage, type ViaPicture } from '$lib/server/entries'
+import { addSighting, CITATION_FIELDS, citesEvidence, CiteValidationError, createEntry, editEntry, editSighting, getEntry, getSighting, heldPictures, linkSightings, list, mediaVisible, namedVias, preserveHiddenCites, rawCitesOfSighting, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, validateCiteTargets, viaKey, viaRows, type Cite, type SightingFields, type StoredImage, type ViaPicture } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { archiveCited } from '$lib/server/archive'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
@@ -343,26 +343,30 @@ function sightingForm(input: Json) {
 }
 
 async function citeDateWarnings(db: D1Database, list: readonly SightingFields[]): Promise<string[]> {
-  const targetIds = [...new Set(list.flatMap(fields => (fields.cites ?? []).map(cite => cite.sighting)).filter((id): id is number => id !== null))]
-  const targets = new Map<number, { report_date: string | null; original_date: string | null }>()
-  if (targetIds.length) {
-    const { results } = await db.prepare(`SELECT s.id, s.original_date, c.report_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.id IN (${targetIds.map(() => '?').join(', ')})`).bind(...targetIds).all<{ id: number; original_date: string | null; report_date: string | null }>()
-    for (const row of results) targets.set(row.id, row)
-  }
-  const allDates = [...sightingDates(list), ...[...targets.values()].flatMap(target => [target.report_date, target.original_date])]
-  const book = await readDates(db, allDates)
-  const messages: string[] = []
-  for (const fields of list) {
-    const citesWithTargets = (fields.cites ?? []).map(cite => {
-      const target = cite.sighting ? targets.get(cite.sighting) : undefined
-      return { report_date: cite.report_date, target_report_date: target?.report_date ?? null, target_original_date: target?.original_date ?? null }
-    })
-    for (const warning of dateOrderWarnings(fields, fields.vias, citesWithTargets, book)) {
-      if (warning.side === 'via') messages.push(`Via #${warning.index + 1} (${warning.viaYear}) predates the work (${warning.workYear}); if it is an older work this source quotes, record it under cites instead.`)
-      else messages.push(`Cite #${warning.index + 1} (${warning.citeYear}) postdates the work (${warning.workYear}); if it is where you found this source, record it under vias instead.`)
+  try {
+    const targetIds = [...new Set(list.flatMap(fields => (fields.cites ?? []).map(cite => cite.sighting)).filter((id): id is number => id !== null))]
+    const targets = new Map<number, { report_date: string | null; original_date: string | null }>()
+    if (targetIds.length) {
+      const { results } = await db.prepare(`SELECT s.id, s.original_date, c.report_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.id IN (${targetIds.map(() => '?').join(', ')})`).bind(...targetIds).all<{ id: number; original_date: string | null; report_date: string | null }>()
+      for (const row of results) targets.set(row.id, row)
     }
+    const allDates = [...sightingDates(list), ...[...targets.values()].flatMap(target => [target.report_date, target.original_date])]
+    const book = await readDates(db, allDates)
+    const messages: string[] = []
+    for (const fields of list) {
+      const citesWithTargets = (fields.cites ?? []).map(cite => {
+        const target = cite.sighting ? targets.get(cite.sighting) : undefined
+        return { report_date: cite.report_date, target_report_date: target?.report_date ?? null, target_original_date: target?.original_date ?? null }
+      })
+      for (const warning of dateOrderWarnings(fields, fields.vias, citesWithTargets, book)) {
+        if (warning.side === 'via') messages.push(`Via #${warning.index + 1} (${warning.viaYear}) predates the work (${warning.workYear}); if it is an older work this source quotes, record it under cites instead.`)
+        else messages.push(`Cite #${warning.index + 1} (${warning.citeYear}) postdates the work (${warning.workYear}); if it is where you found this source, record it under vias instead.`)
+      }
+    }
+    return messages
+  } catch {
+    return []
   }
-  return messages
 }
 
 // The record's own fields as its form sends them. A field the input leaves out is left out of the form, so
@@ -575,11 +579,13 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   if (!sighting) throw new Refusal(`${recordCode(id)} has no sighting ${text(input.sighting)}. Its sightings: ${found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => sighting.id).join(', ')}.`)
   const rev = revisionOf(input.rev)
   if (rev !== sighting.rev) throw changed(sighting.rev)
+  const { DB, MEDIA } = env(event)
+  const rawCites = await rawCitesOfSighting(DB, sighting.id)
   const now: Json = {
     place: sighting.place, ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
     original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, types: parseSightingTypes(sighting.types), note: sighting.note,
     quotes: quotations(sighting.quotes), vias: sighting.vias.map(({ id: _, ...via }) => via),
-    cites: sighting.cites.map(({ source_id: _, target: _target, status: _status, ...cite }) => cite),
+    cites: rawCites,
   }
   const stated = Object.fromEntries(Object.keys(now).filter(name => input[name] !== undefined).map(name => [name, input[name]]))
   // A via that states pictures gets those; any other keeps its own, as a restore does.
@@ -587,9 +593,9 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   const rows = viaPictureItems(stated.vias === undefined ? [] : items(stated.vias).map(record), form)
   const planned = planViaPictures(event, rows, new Map(sighting.vias.flatMap(via => via.pictures ?? []).map(picture => [picture.image_key, picture])))
   const read = readSightingFields(form)
-  const { DB, MEDIA } = env(event)
-  const heldTargets = new Set(sighting.cites.map(cite => cite.sighting).filter((target): target is number => target !== null))
-  const badCite = await validateCiteTargets(DB, read.cites, sighting.id, heldTargets)
+  const citesToSave = input.cites === undefined ? rawCites : preserveHiddenCites(read.cites ?? [], rawCites, sighting.cites)
+  const heldTargets = new Set(rawCites.map(cite => cite.sighting).filter((target): target is number => target !== null))
+  const badCite = await validateCiteTargets(DB, citesToSave, sighting.id, heldTargets)
   if (badCite) throw new Refusal(said(badCite))
   const chain = (pictures: readonly (ViaPicture[] | undefined)[]) => {
     const stating = new Map<string, ViaPicture[]>()
@@ -606,7 +612,7 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   const budget = { bytes: MAX_WRITE_BODY, fetches: FETCHES_MAX }
   const pictures = input.pictures === undefined ? null : await editedPictures(event, sighting.media, input.pictures, budget)
   const via = await readViaPictures(event, planned, budget)
-  const fields = { ...read, vias: chain(via.pictures) }
+  const fields = { ...read, cites: citesToSave, vias: chain(via.pictures) }
   if (!(pictures ?? sighting.media).length && !citesEvidence(fields) && !fields.place) throw new Refusal(said('evidence'))
   await storeImages(MEDIA, via.files)
   let media: StoredImage[] | null = null
@@ -646,8 +652,10 @@ async function linkSightingsOf(event: RequestEvent, input: Json) {
   const person = await agentWriter(event, DB, agentSaid(input))
   const result = await linkSightings(DB, sightingId, cite, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
   if (!result.ok) throw new Refusal(result.code === 'full' ? `A sighting names up to ${CITES_MAX} cited older works.` : said(result.code))
-  notifyIndexNow(event, { entries: [result.entry_id] })
+  const updatedEntries = result.cited_entry_id && result.cited_entry_id !== result.entry_id ? [result.entry_id, result.cited_entry_id] : [result.entry_id]
   const updated = await getSighting(DB, sightingId)
+  notifyIndexNow(event, { entries: updatedEntries, sources: updated ? citedBy(updated) : [] })
+  if (updated) archiveCited(event, [updated])
   const warnings = updated ? await citeDateWarnings(DB, [updated]) : []
   return { record: shown(event, result.entry_id), sighting: sightingId, rev: result.rev, ...(warnings.length ? { warnings } : {}) }
 }

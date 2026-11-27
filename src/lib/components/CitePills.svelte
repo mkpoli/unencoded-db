@@ -67,7 +67,7 @@
               <a class="text-link small add-link" href={href(`/entry/${entryId}/sighting/new`)}>{t('cite.addWitness')}</a>
             {:else if cite.status === 'removed' && cite.target}
               <a class="pill removed" href={href(`/entry/${cite.target.entry_id}/history`)}>
-                <span class="name">{named || cite.target.place || `#${cite.target.id}`}</span>
+                <span class="name">{named || cite.target.title || cite.target.place || `#${cite.target.id}`}</span>
                 <span class="tag">{t('cite.removed')}</span>
               </a>
             {/if}
@@ -84,7 +84,7 @@
   <div class="provenance inbound">
     <span class="heading"><span aria-hidden="true">→</span><span>{t('cite.citedBy')}</span></span>
     <div class="pills">
-      {#each shownInbound as item (`${item.sighting_id}:${item.kind}`)}
+      {#each shownInbound as item (`${item.sighting_id}:${item.position}`)}
         <span class="inbound-item">
           {@render witnessPill({ id: item.sighting_id, entry_id: item.entry_id, title: item.title, place: item.place, original_date: item.original_date, report_date: item.report_date, thumb_key: item.thumb_key })}
           {#if item.kind !== 'quotes'}<span class="subkind">{t(`cite.kind.${item.kind}`)}</span>{/if}
@@ -94,7 +94,7 @@
         <details class="more-inbound">
           <summary class="pill more-pill">{t('cite.moreInbound', { count: extraInbound.length })}</summary>
           <div class="pills extra">
-            {#each extraInbound as item (`${item.sighting_id}:${item.kind}`)}
+            {#each extraInbound as item (`${item.sighting_id}:${item.position}`)}
               <span class="inbound-item">
                 {@render witnessPill({ id: item.sighting_id, entry_id: item.entry_id, title: item.title, place: item.place, original_date: item.original_date, report_date: item.report_date, thumb_key: item.thumb_key })}
                 {#if item.kind !== 'quotes'}<span class="subkind">{t(`cite.kind.${item.kind}`)}</span>{/if}

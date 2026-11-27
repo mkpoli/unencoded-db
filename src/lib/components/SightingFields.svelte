@@ -68,7 +68,7 @@
   })
   let cites = $state<CiteRow[]>(untrack(() => values.cites?.length ? values.cites.map(makeCite) : [makeCite()]))
   let citesOpen = $state(untrack(() => Boolean(values.cites?.length)))
-  const blankCite = (row: CiteRow) => !(row.sighting.trim() || row.url || row.title || row.author || row.publisher || row.date || row.container)
+  const blankCite = (row: CiteRow) => !(row.sighting.trim() || row.url || row.title || row.author || row.publisher || row.date || row.container || row.sourceKind || row.quote.trim() || row.note.trim())
   function removeCite(key: number) {
     cites = cites.filter(row => row.key !== key)
     if (!cites.length) cites = [makeCite()]
@@ -385,7 +385,6 @@
 </details>
 <details class="more" bind:open={citesOpen}>
   <summary>{t('field.cites')}</summary>
-  <p class="hint">{t('field.citesHint')}</p>
   <input type="hidden" name="cites_present" value="1" />
   <div class="via-list">
     {#each cites as row, index (row.key)}
@@ -396,7 +395,7 @@
         <div class="cite-kinds" role="radiogroup" aria-label={t('field.citeKind')}>
           {#each CITE_KINDS as option}
             <label class="kind-pill">
-              <input type="radio" name="{uid}-cite-kind-ui-{row.key}" value={option} checked={row.kind === option} onchange={() => row.kind = option} />
+              <input type="radio" name="cite_kind_{index}" value={option} checked={row.kind === option} onchange={() => row.kind = option} />
               <span>{t(`cite.kind.${option}`)}</span>
             </label>
           {/each}
@@ -406,7 +405,7 @@
           <input id="{uid}-cite_sighting-{row.key}" class="input" name="cite_sighting" bind:value={row.sighting} inputmode="numeric" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder={t('field.citeSightingPlaceholder')} />
           {#if siblings.length}
             <div class="sibling-picks">
-              {#each siblings as sibling (sibling.id)}
+              {#each siblings.slice(0, 16) as sibling (sibling.id)}
                 {@const picked = row.sighting.trim().replace(/^#/, '') === String(sibling.id)}
                 {@const year = sibling.original_date ?? sibling.report_date}
                 <button type="button" class="sibling-chip" class:picked aria-pressed={picked} onclick={() => row.sighting = picked ? '' : String(sibling.id)}>
@@ -494,7 +493,7 @@
         {@const warn = dateWarnings.via.get(row.key)!}
         <div class="date-guard" role="status">
           <span>{t('field.viaDateEarlier', { viaYear: warn.viaYear, workYear: warn.workYear })}</span>
-          {#if cites.length < CITES_MAX}<button type="button" class="text-button" onclick={() => moveViaToCites(row.key)}>{t('field.moveToCite')}</button>{/if}
+          {#if cites.length < CITES_MAX && !row.pictures.length && !(held[row.key] > 0)}<button type="button" class="text-button" onclick={() => moveViaToCites(row.key)}>{t('field.moveToCite')}</button>{/if}
         </div>
       {/if}
       <div class="via-actions">

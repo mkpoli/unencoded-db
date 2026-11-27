@@ -1,6 +1,6 @@
 import { quotations } from '../quotations'
 import { readDates, sightingDates } from './date-readings'
-import { CITE_KINDS, CITES_MAX, isCiteKind, STYLES, VIAS_MAX, isStoredContexts, isStoredSightingTypes, sourceKind } from '$lib/scripts'
+import { CITES_MAX, isCiteKind, STYLES, VIAS_MAX, isStoredContexts, isStoredSightingTypes, sourceKind } from '$lib/scripts'
 import { historyFeed, type FeedCursor, type FeedScope } from './entries'
 import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, VIA_IMAGE_FIELDS, tidyCites, tidyVias, type Cite, type EntryFields, type SightingFields, type Via, type ViaPicture } from './entries'
 

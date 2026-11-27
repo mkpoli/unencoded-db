@@ -7,7 +7,7 @@ import { authorKeys, nameKey, nameLabel, sourceKeys, sourceNameKey } from '../na
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
-import { CITE_KINDS, CITES_MAX, CONTEXTS, isCiteKind, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
+import { CITES_MAX, CONTEXTS, isCiteKind, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
 import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
@@ -41,7 +41,7 @@ export type Via = Citation & { quote: string | null; pictures?: ViaPicture[] }
 export type Cite = Citation & { kind: CiteKind; sighting: number | null; quote: string | null; note: string | null }
 export type CiteTarget = { id: number; entry_id: number; title: string | null; place: string; author: string | null; report_date: string | null; original_date: string | null; thumb_key: string | null; removed?: boolean }
 export type ResolvedCite = Cite & { source_id: number | null; target: CiteTarget | null; status: 'witness' | 'unseen' | 'removed' }
-export type InboundCite = { kind: CiteKind; sighting_id: number; entry_id: number; title: string | null; place: string; author: string | null; report_date: string | null; original_date: string | null; thumb_key: string | null; quote: string | null; note: string | null }
+export type InboundCite = { position: number; kind: CiteKind; sighting_id: number; entry_id: number; title: string | null; place: string; author: string | null; report_date: string | null; original_date: string | null; thumb_key: string | null; quote: string | null; note: string | null }
 export type CiteError = 'citeNote' | 'citeSelf' | 'citeMissing' | 'citeCycle'
 export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; source_kind: string | null; vias: Via[]; cites?: Cite[]; original_date: string | null; page: string | null; contexts: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
@@ -153,7 +153,9 @@ export function viaRows(form: FormData): Via[] {
 /** Whether each row of vias a form sends names a source. */
 export const namedVias = (form: FormData) => viaRows(form).map(via => !blankCitation(via))
 const parseSightingRef = (raw: unknown): number | null => {
-  const value = String(raw ?? '').trim().replace(/^#/, '')
+  const trimmed = String(raw ?? '').trim()
+  const hashMatch = /#sighting-([1-9]\d{0,15})$/.exec(trimmed)
+  const value = hashMatch ? hashMatch[1] : trimmed.replace(/^#/, '')
   if (!/^[1-9]\d{0,15}$/.test(value)) return null
   const id = Number(value)
   return Number.isSafeInteger(id) ? id : null
@@ -189,7 +191,7 @@ export function citeRows(form: FormData): Cite[] {
   const columns = CITE_INPUTS.map(name => form.getAll(name))
   const rows = Math.max(...columns.map(column => column.length))
   return Array.from({ length: rows }, (_, index) => {
-    const rawKind = clean(columns[0][index], 20)
+    const rawKind = clean(form.get(`cite_kind_${index}`) ?? columns[0][index], 20)
     const kind: CiteKind = isCiteKind(rawKind) ? rawKind : 'quotes'
     const row: Cite = {
       kind,
@@ -216,7 +218,7 @@ export function citeInputError(cites: readonly Cite[] = [], selfId?: number | nu
   }
   return null
 }
-/** Checks target visibility and direct 2-cycles for new `cited_id` links. `kept` are ids already held on this sighting. */
+/** Checks target visibility and cycles (up to 16 hops) for new `cited_id` links. `kept` are ids already held on this sighting. */
 export async function validateCiteTargets(db: D1Database, cites: readonly Cite[] = [], selfId?: number | null, kept: ReadonlySet<number> = new Set()): Promise<CiteError | null> {
   const cleanList = tidyCites(cites)
   const syncError = citeInputError(cleanList, selfId)
@@ -227,7 +229,11 @@ export async function validateCiteTargets(db: D1Database, cites: readonly Cite[]
   const { results: visible } = await db.prepare(`SELECT s.id FROM sightings s JOIN entries e ON e.id = s.entry_id WHERE s.id IN (${placeholders}) AND s.hidden_at IS NULL AND e.hidden_at IS NULL AND e.merged_into IS NULL`).bind(...targetIds).all<{ id: number }>()
   if (visible.length !== targetIds.length) return 'citeMissing'
   if (selfId != null) {
-    const cycle = await db.prepare(`SELECT 1 FROM sighting_cites WHERE sighting_id IN (${placeholders}) AND cited_id = ? LIMIT 1`).bind(...targetIds, selfId).first()
+    const cycle = await db.prepare(`WITH RECURSIVE reach(id, depth) AS (
+      SELECT cited_id, 1 FROM sighting_cites WHERE sighting_id IN (${placeholders}) AND cited_id IS NOT NULL
+      UNION
+      SELECT sc.cited_id, r.depth + 1 FROM reach r JOIN sighting_cites sc ON sc.sighting_id = r.id WHERE sc.cited_id IS NOT NULL AND r.depth < 16
+    ) SELECT 1 FROM reach WHERE id = ? LIMIT 1`).bind(...targetIds, selfId).first()
     if (cycle) return 'citeCycle'
   }
   return null
@@ -616,22 +622,19 @@ const OCCURRENCE_MARKS = OCCURRENCE_FIELDS.map(() => '?').join(', ')
 export type SightingDraft = { fields: SightingFields; media: StoredImage[] }
 
 // Counts again the visible records that cite each source a record's sightings cite, and the sources in
-// `also`, which a sighting cited before this write. Also recounts `named` (records naming a source with
-// no visible witness identified). Runs after the write in the same batch.
+// `also`, which a sighting cited before this write. Runs after the write in the same batch.
 const LIVE = 'e.hidden_at IS NULL AND e.merged_into IS NULL'
 const CITING = `SELECT s.entry_id FROM sightings s INDEXED BY sightings_by_source CROSS JOIN entries e ON e.id = s.entry_id WHERE s.source_id = sources.id AND s.hidden_at IS NULL AND ${LIVE}`
 const CITING_AS_VIA = `SELECT s.entry_id FROM sighting_vias v INDEXED BY sighting_vias_by_source CROSS JOIN sightings s ON s.id = v.sighting_id CROSS JOIN entries e ON e.id = s.entry_id WHERE v.source_id = sources.id AND s.hidden_at IS NULL AND ${LIVE}`
 const NAMED_UNSEEN = `SELECT s.entry_id FROM sighting_cites sc INDEXED BY sighting_cites_by_source CROSS JOIN sightings s ON s.id = sc.sighting_id CROSS JOIN entries e ON e.id = s.entry_id LEFT JOIN sightings cs ON cs.id = sc.cited_id LEFT JOIN entries ce ON ce.id = cs.entry_id WHERE sc.source_id = sources.id AND s.hidden_at IS NULL AND ${LIVE} AND (sc.cited_id IS NULL OR cs.id IS NULL OR cs.hidden_at IS NOT NULL OR ce.hidden_at IS NOT NULL OR ce.merged_into IS NOT NULL)`
 export function recountStatement(db: D1Database, entry: number | string, also: (number | null)[] = []) {
   const { sql, values } = owned(entry)
-  return db.prepare(`UPDATE sources SET records = (SELECT count(*) FROM (${CITING} UNION ${CITING_AS_VIA})), named = (SELECT count(DISTINCT entry_id) FROM (${NAMED_UNSEEN})) WHERE id IN (
+  return db.prepare(`UPDATE sources SET records = (SELECT count(*) FROM (${CITING} UNION ${CITING_AS_VIA})) WHERE id IN (
       SELECT source_id FROM sightings WHERE entry_id = ${sql}
       UNION SELECT v.source_id FROM sightings s CROSS JOIN sighting_vias v ON v.sighting_id = s.id WHERE s.entry_id = ${sql}
-      UNION SELECT sc.source_id FROM sightings s CROSS JOIN sighting_cites sc ON sc.sighting_id = s.id WHERE s.entry_id = ${sql} AND sc.source_id IS NOT NULL
-      UNION SELECT sc.source_id FROM sightings t CROSS JOIN sighting_cites sc INDEXED BY sighting_cites_by_cited ON sc.cited_id = t.id WHERE t.entry_id = ${sql} AND sc.source_id IS NOT NULL
       UNION SELECT value FROM json_each(?)
     )`)
-    .bind(...values, ...values, ...values, ...values, JSON.stringify(also.filter(id => id !== null)))
+    .bind(...values, ...values, JSON.stringify(also.filter(id => id !== null)))
 }
 const recount = recountStatement
 
@@ -643,6 +646,10 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
   return withDateIndex(db, async guard => {
     const at = now()
     const drafts = [{ fields: sighting, media }, ...more]
+    for (const draft of drafts) {
+      const badCite = await validateCiteTargets(db, draft.fields.cites ?? [])
+      if (badCite) throw new CiteValidationError(badCite)
+    }
     const claims = mapSightings(fields.claims, place => Number.isInteger(place) && place >= 1 && place <= drafts.length ? place : null)
     const dates = await prepareDates(db, sightingDates(drafts.map(draft => draft.fields)))
     const sources = await Promise.all(drafts.map(draft => sourceOf(db, draft.fields, dates.book)))
@@ -833,7 +840,7 @@ export async function restoreSighting(db: D1Database, entryId: number, sightingI
   return writeSighting(db, sightingId, baseRev, fields, null, who, `r${sourceRev}`, entryId, true, from)
 }
 
-export type LinkResult = { ok: true; rev: number; entry_id: number } | { ok: false; code: 'missing' | 'conflict' | 'merged' | 'full' | CiteError }
+export type LinkResult = { ok: true; rev: number; entry_id: number; cited_entry_id: number | null } | { ok: false; code: 'missing' | 'conflict' | 'merged' | 'full' | CiteError }
 
 // Patches one cite edge on a sighting against its live state, matching by target sighting or named source
 // hash so concurrent edits on other fields never cause stale-rev conflicts.
@@ -851,27 +858,25 @@ export async function linkSightings(db: D1Database, sightingId: number, cite: Ci
     if (!entry || entry.hidden_at) return { ok: false, code: 'missing' }
     if (entry.merged_into) return { ok: false, code: 'merged' }
     const rawCites = await rawCitesOfSighting(db, sightingId)
+    const rawHashes = await Promise.all(rawCites.map(row => citationHash(row)))
     let matched = -1
+    let citedEntryId: number | null = null
     if (next.sighting !== null) {
+      const target = await getSighting(db, next.sighting)
+      citedEntryId = target?.entry_id ?? null
       matched = rawCites.findIndex(row => row.sighting === next.sighting)
       // Upgrading an unseen stub that names the same source preserves its attested source fields.
       if (matched < 0 && targetHash !== null) {
-        const hashes = await Promise.all(rawCites.map(row => citationHash(row)))
-        matched = rawCites.findIndex((row, index) => row.sighting === null && hashes[index] === targetHash)
+        matched = rawCites.findIndex((row, index) => row.sighting === null && rawHashes[index] === targetHash)
       }
-      if (matched < 0) {
-        const target = await getSighting(db, next.sighting)
-        if (target?.source_id != null) {
-          const targetSourceHash = await citationHash(target)
-          if (targetSourceHash !== null) {
-            const hashes = await Promise.all(rawCites.map(row => citationHash(row)))
-            matched = rawCites.findIndex((row, index) => row.sighting === null && hashes[index] === targetSourceHash)
-          }
+      if (matched < 0 && target?.source_id != null) {
+        const targetSourceHash = await citationHash(target)
+        if (targetSourceHash !== null) {
+          matched = rawCites.findIndex((row, index) => row.sighting === null && rawHashes[index] === targetSourceHash)
         }
       }
     } else if (targetHash !== null) {
-      const hashes = await Promise.all(rawCites.map(row => citationHash(row)))
-      matched = rawCites.findIndex((row, index) => row.sighting === null && hashes[index] === targetHash)
+      matched = rawCites.findIndex((row, index) => row.sighting === null && rawHashes[index] === targetHash)
     }
     const updated = [...rawCites]
     if (matched >= 0) {
@@ -893,7 +898,7 @@ export async function linkSightings(db: D1Database, sightingId: number, cite: Ci
       cites: updated,
     } as SightingFields
     const result = await writeSighting(db, sightingId, current.rev, fields, null, who, summary, current.entry_id)
-    if (result.ok) return { ok: true, rev: result.rev, entry_id: current.entry_id }
+    if (result.ok) return { ok: true, rev: result.rev, entry_id: current.entry_id, cited_entry_id: citedEntryId }
     if (result.code !== 'conflict' || attempt >= 4) return result
   }
 }
@@ -917,8 +922,9 @@ async function writeSighting(db: D1Database, id: number, baseRev: number, sent: 
     const rev = current.rev + 1
     const kept = media ?? current.media
     const fields = restore ? { ...sent, vias: heldPictures(sent.vias, current.vias) } : sent
+    const rawCites = await rawCitesOfSighting(db, id)
     if (!restore) {
-      const heldTargets = new Set(current.cites.map(cite => cite.sighting).filter((target): target is number => target !== null))
+      const heldTargets = new Set(rawCites.map(cite => cite.sighting).filter((target): target is number => target !== null))
       const badCite = await validateCiteTargets(db, fields.cites ?? [], id, heldTargets)
       if (badCite) return { ok: false, code: badCite }
     } else if ((fields.cites ?? []).some(cite => cite.sighting === id)) {
@@ -927,7 +933,8 @@ async function writeSighting(db: D1Database, id: number, baseRev: number, sent: 
     const dates = await prepareDates(db, sightingDates([fields]))
     const source = await sourceOf(db, fields, dates.book)
     const index = await reindex(db, current.entry_id, entry, await claimRows(db, current.entry_id), sightings.map(s => s.id === id ? { ...s, ...fields, media: kept } : s), dates.book)
-    const oldSources = [current.source_id, ...current.vias.map(via => via.id), ...current.cites.map(cite => cite.source_id)]
+    const rawCiteSources = await db.prepare('SELECT DISTINCT source_id FROM sighting_cites WHERE sighting_id = ? AND source_id IS NOT NULL').bind(id).all<{ source_id: number }>()
+    const oldSources = [current.source_id, ...current.vias.map(via => via.id), ...rawCiteSources.results.map(row => row.source_id)]
     try {
       await db.batch([
         checkMark(db, current.entry_id, mark, who),
@@ -1371,8 +1378,9 @@ const CITE_ROW_COLUMNS = `sc.sighting_id, sc.position, sc.kind, sc.source_id, sc
   (SELECT x.thumb_key FROM sighting_media x WHERE x.sighting_id = cs.id ORDER BY x.position LIMIT 1) AS t_thumb_key`
 const CITE_JOINS = `LEFT JOIN sources ns ON ns.id = sc.source_id LEFT JOIN sightings cs ON cs.id = sc.cited_id LEFT JOIN entries ce ON ce.id = cs.entry_id LEFT JOIN sources csrc ON csrc.id = cs.source_id`
 const CITES_OF_ENTRY = `SELECT ${CITE_ROW_COLUMNS} FROM sightings s JOIN sighting_cites sc ON sc.sighting_id = s.id ${CITE_JOINS} WHERE s.entry_id = ?1 AND s.id <= COALESCE((SELECT id FROM sightings WHERE entry_id = ?1 ORDER BY id LIMIT 1 OFFSET ${SIGHTINGS_MAX - 1}), ${Number.MAX_SAFE_INTEGER}) ORDER BY s.id`
+const CITED_BY_MAX = 60
 const CITED_BY_COLUMNS = `sc.cited_id AS target_id, sc.sighting_id, sc.position, sc.kind, sc.quote, sc.note, s.entry_id, s.place, s.original_date, c.title, c.author, c.report_date, (SELECT x.thumb_key FROM sighting_media x WHERE x.sighting_id = s.id ORDER BY x.position LIMIT 1) AS thumb_key`
-const CITED_BY_OF_ENTRY = `SELECT ${CITED_BY_COLUMNS} FROM sightings t JOIN sighting_cites sc INDEXED BY sighting_cites_by_cited ON sc.cited_id = t.id JOIN sightings s ON s.id = sc.sighting_id JOIN entries e ON e.id = s.entry_id LEFT JOIN sources c ON c.id = s.source_id WHERE t.entry_id = ?1 AND t.hidden_at IS NULL AND s.hidden_at IS NULL AND ${LIVE} AND t.id <= COALESCE((SELECT id FROM sightings WHERE entry_id = ?1 ORDER BY id LIMIT 1 OFFSET ${SIGHTINGS_MAX - 1}), ${Number.MAX_SAFE_INTEGER}) ORDER BY t.id`
+const CITED_BY_OF_ENTRY = `SELECT ${CITED_BY_COLUMNS} FROM sightings t JOIN sighting_cites sc INDEXED BY sighting_cites_by_cited ON sc.cited_id = t.id JOIN sightings s ON s.id = sc.sighting_id JOIN entries e ON e.id = s.entry_id LEFT JOIN sources c ON c.id = s.source_id WHERE t.entry_id = ?1 AND t.hidden_at IS NULL AND s.hidden_at IS NULL AND ${LIVE} AND t.id <= COALESCE((SELECT id FROM sightings WHERE entry_id = ?1 ORDER BY id LIMIT 1 OFFSET ${SIGHTINGS_MAX - 1}), ${Number.MAX_SAFE_INTEGER}) ORDER BY t.id LIMIT ${CITED_BY_MAX}`
 
 type CiteQueryRow = Citation & {
   sighting_id: number; position: number; kind: CiteKind; source_id: number | null; cited_id: number | null; quote: string | null; note: string | null
@@ -1381,8 +1389,9 @@ type CiteQueryRow = Citation & {
   t_url: string | null; t_title: string | null; t_author: string | null; t_publisher: string | null; t_report_date: string | null; t_container: string | null; t_source_kind: string | null
   t_thumb_key: string | null
 }
-type CitedByRow = InboundCite & { target_id: number; position: number }
+type CitedByRow = InboundCite & { target_id: number }
 
+// Lazy lookup of `removed_by` only when a hidden target without own `source_id` exists, keeping pre-0051 test schemas working.
 async function fillRemovedBy(db: D1Database, rows: CiteQueryRow[]): Promise<CiteQueryRow[]> {
   const hiddenIds = [...new Set(rows.filter(row => row.cited_id !== null && row.source_id === null && row.t_hidden_at !== null && row.te_hidden_at === null && row.te_merged_into === null).map(row => row.cited_id!))]
   if (!hiddenIds.length) return rows
@@ -1409,11 +1418,11 @@ function resolveCiteRow(row: CiteQueryRow): ResolvedCite | null {
       source_id: row.source_id, status: 'unseen', target: null,
     }
   }
-  if (targetLive && row.t_hidden_at !== null && row.t_removed_by !== null) {
+  if (targetLive && row.t_hidden_at !== null && Boolean(row.t_removed_by)) {
     return {
       kind: row.kind, sighting: row.cited_id,
-      url: row.t_url, title: row.t_title, author: row.t_author, publisher: row.t_publisher, report_date: row.t_report_date, container: row.t_container, source_kind: row.t_source_kind,
-      quote: row.quote, note: row.note, source_id: row.t_source_id, status: 'removed',
+      ...ownCitation,
+      quote: row.quote, note: row.note, source_id: row.source_id, status: 'removed',
       target: { id: row.cited_id!, entry_id: row.t_entry_id!, title: row.t_title, place: row.t_place ?? '', author: row.t_author, report_date: row.t_report_date, original_date: row.t_original_date, thumb_key: null, removed: true },
     }
   }
@@ -1431,14 +1440,43 @@ function withCites<T extends { id: number }>(sightings: T[], rows: CiteQueryRow[
 
 function withCitedBy<T extends { id: number }>(sightings: T[], rows: CitedByRow[]) {
   const found = new Map<number, InboundCite[]>()
-  for (const { target_id, position: _, ...inbound } of [...rows].sort((a, b) => a.target_id - b.target_id || a.sighting_id - b.sighting_id || a.position - b.position)) {
+  for (const { target_id, ...inbound } of [...rows].sort((a, b) => a.target_id - b.target_id || a.sighting_id - b.sighting_id || a.position - b.position)) {
     found.set(target_id, [...(found.get(target_id) ?? []), inbound])
   }
   return sightings.map(sighting => ({ ...sighting, cited_by: found.get(sighting.id) ?? [] }))
 }
 
-async function rawCitesOfSighting(db: D1Database, sightingId: number): Promise<Cite[]> {
+export async function rawCitesOfSighting(db: D1Database, sightingId: number): Promise<Cite[]> {
   const { results } = await db.prepare(`SELECT sc.kind, sc.cited_id AS sighting, sc.quote, sc.note, ${CITATION_FIELDS.map(field => `c.${field}`).join(', ')} FROM sighting_cites sc LEFT JOIN sources c ON c.id = sc.source_id WHERE sc.sighting_id = ? ORDER BY sc.position`).bind(sightingId).all<Cite>()
+  return results
+}
+
+/**
+ * Merges submitted edits with hidden raw provenance rows the editor could not see:
+ * - Restores hidden `cited_id` on an `unseen`-degraded stub if the editor kept that row's kind + citation.
+ * - Re-attaches moderator-suppressed rows (not visible in `resolved`) so unrelated edits never delete them.
+ */
+export function preserveHiddenCites(submitted: readonly Cite[], raw: readonly Cite[], resolved: readonly ResolvedCite[]): Cite[] {
+  const hiddenStubs = raw.filter(row => row.sighting !== null && !blankCitation(row) && !resolved.some(r => r.sighting === row.sighting))
+  const suppressed = raw.filter(row => row.sighting !== null && blankCitation(row) && !resolved.some(r => r.sighting === row.sighting))
+  const usedStubs = new Set<number>()
+  const merged = tidyCites(submitted).map(row => {
+    if (row.sighting !== null || blankCitation(row)) return row
+    const matchIndex = hiddenStubs.findIndex((rawRow, idx) => !usedStubs.has(idx) && rawRow.kind === row.kind && citationKey(rawRow) === citationKey(row))
+    if (matchIndex < 0) return row
+    usedStubs.add(matchIndex)
+    return { ...row, sighting: hiddenStubs[matchIndex].sighting }
+  })
+  for (const row of suppressed) {
+    if (merged.length >= CITES_MAX) break
+    if (!merged.some(item => item.sighting === row.sighting && item.kind === row.kind)) merged.push(row)
+  }
+  return merged
+}
+
+export async function sightingSiblings(db: D1Database, entryId: number, excludeId: number) {
+  const { results } = await db.prepare(`SELECT s.id, c.title, s.place, c.report_date, s.original_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.entry_id = ? AND s.hidden_at IS NULL AND s.id != ? ORDER BY s.id LIMIT ${SIGHTINGS_MAX}`)
+    .bind(entryId, excludeId).all<{ id: number; title: string | null; place: string; report_date: string | null; original_date: string | null }>()
   return results
 }
 
@@ -1475,7 +1513,7 @@ export async function getSighting(db: D1Database, id: number) {
     db.prepare(`SELECT sighting_id, ${IMAGE_FIELDS.join(', ')} FROM sighting_media WHERE sighting_id = ? ORDER BY position`).bind(id),
     db.prepare(`SELECT ${VIA_COLUMNS} FROM sighting_vias v JOIN sources c ON c.id = v.source_id WHERE v.sighting_id = ? ORDER BY v.position`).bind(id),
     db.prepare(`SELECT ${CITE_ROW_COLUMNS} FROM sighting_cites sc ${CITE_JOINS} WHERE sc.sighting_id = ? ORDER BY sc.position`).bind(id),
-    db.prepare(`SELECT ${CITED_BY_COLUMNS} FROM sighting_cites sc INDEXED BY sighting_cites_by_cited JOIN sightings s ON s.id = sc.sighting_id JOIN entries e ON e.id = s.entry_id LEFT JOIN sources c ON c.id = s.source_id WHERE sc.cited_id = ? AND s.hidden_at IS NULL AND ${LIVE}`).bind(id),
+    db.prepare(`SELECT ${CITED_BY_COLUMNS} FROM sighting_cites sc INDEXED BY sighting_cites_by_cited JOIN sightings s ON s.id = sc.sighting_id JOIN entries e ON e.id = s.entry_id LEFT JOIN sources c ON c.id = s.source_id WHERE sc.cited_id = ? AND s.hidden_at IS NULL AND ${LIVE} LIMIT ${CITED_BY_MAX}`).bind(id),
   ])
   const citeRowsResolved = await fillRemovedBy(db, cites.results as CiteQueryRow[])
   return (withCitedBy(
@@ -1983,7 +2021,7 @@ export const SOURCE_PAGE = 200
 
 // A source and the records seen in it, each once, with the pages it was seen on.
 export type SourceSighting = Pick<Sighting, 'id' | 'entry_id' | 'place' | 'original_date' | 'page' | 'style' | 'note' | 'quotes' | 'media'> & { contexts: Context[]; types: SightingType[]; tile: Tile; via: boolean; vias: (Via & { id: number })[] }
-export type SourceNamed = { sighting_id: number; entry_id: number; place: string; title: string | null; author: string | null; report_date: string | null; original_date: string | null; kind: CiteKind; quote: string | null; note: string | null; tile: Tile }
+export type SourceNamed = { sighting_id: number; position: number; entry_id: number; place: string; title: string | null; author: string | null; report_date: string | null; original_date: string | null; kind: CiteKind; quote: string | null; note: string | null; tile: Tile }
 const SOURCE_SIGHTING = ['place', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'].map(field => `s.${field} AS s_${field}`).join(', ')
 
 // A source with the visible sightings that cite it, each with its pictures and the record it belongs to:
@@ -1995,7 +2033,7 @@ export async function sourcePage(db: D1Database, id: number) {
   const direct = { from: 'sightings s INDEXED BY sightings_by_source CROSS JOIN entries e ON e.id = s.entry_id', live: 's.source_id = ?', order: 's.id' }
   const via = { from: 'sighting_vias v INDEXED BY sighting_vias_by_source CROSS JOIN sightings s ON s.id = v.sighting_id CROSS JOIN entries e ON e.id = s.entry_id', live: 'v.source_id = ? AND s.source_id IS NOT v.source_id', order: 'v.sighting_id' }
   const live = (way: typeof direct) => `${way.live} AND s.hidden_at IS NULL AND ${LIVE}`
-  const namedQuery = `SELECT ${TILE_COLUMNS}, s.id AS s_id, s.place AS s_place, s.original_date AS s_original_date, cs_src.title AS s_title, cs_src.author AS s_author, cs_src.report_date AS s_report_date, sc.kind AS sc_kind, sc.quote AS sc_quote, sc.note AS sc_note
+  const namedQuery = `SELECT ${TILE_COLUMNS}, s.id AS s_id, sc.position AS sc_position, s.place AS s_place, s.original_date AS s_original_date, cs_src.title AS s_title, cs_src.author AS s_author, cs_src.report_date AS s_report_date, sc.kind AS sc_kind, sc.quote AS sc_quote, sc.note AS sc_note
     FROM sighting_cites sc INDEXED BY sighting_cites_by_source
     CROSS JOIN sightings s ON s.id = sc.sighting_id
     CROSS JOIN entries e ON e.id = s.entry_id
@@ -2016,12 +2054,12 @@ export async function sourcePage(db: D1Database, id: number) {
   ])
   const source = found.results[0] as Source | undefined
   type Row = TileRow & { s_id: number; s_place: string; s_original_date: string | null; s_page: string | null; s_contexts: string | null; s_style: string | null; s_types: string | null; s_note: string | null; s_quotes: string | null }
-  type NamedRow = TileRow & { s_id: number; s_place: string; s_original_date: string | null; s_title: string | null; s_author: string | null; s_report_date: string | null; sc_kind: CiteKind; sc_quote: string | null; sc_note: string | null }
+  type NamedRow = TileRow & { s_id: number; sc_position: number; s_place: string; s_original_date: string | null; s_title: string | null; s_author: string | null; s_report_date: string | null; sc_kind: CiteKind; sc_quote: string | null; sc_note: string | null }
   const listed = [false, true].flatMap((isVia, way) => withMedia((queries[way * 2].results as Row[]).map(({ s_id, s_place, s_original_date, s_page, s_contexts, s_style, s_types, s_note, s_quotes, ...tile }) => ({
     id: s_id, entry_id: tile.id, place: s_place, original_date: s_original_date, page: s_page, contexts: parseContexts(s_contexts), style: s_style, note: s_note, quotes: s_quotes, types: parseSightingTypes(s_types), tile: toTile(tile), via: isVia,
   })), (queries[way * 2 + 1].results as (MediaRow & { position: number })[]).sort((a, b) => a.sighting_id - b.sighting_id || a.position - b.position).map(({ position: _, ...image }) => image)) as Omit<SourceSighting, 'vias'>[]).slice(0, SOURCE_PAGE)
-  const namedIn: SourceNamed[] = (queries[4].results as NamedRow[]).map(({ s_id, s_place, s_original_date, s_title, s_author, s_report_date, sc_kind, sc_quote, sc_note, ...tile }) => ({
-    sighting_id: s_id, entry_id: tile.id, place: s_place, title: s_title, author: s_author, report_date: s_report_date, original_date: s_original_date, kind: sc_kind, quote: sc_quote, note: sc_note, tile: toTile(tile),
+  const namedIn: SourceNamed[] = (queries[4].results as NamedRow[]).map(({ s_id, sc_position, s_place, s_original_date, s_title, s_author, s_report_date, sc_kind, sc_quote, sc_note, ...tile }) => ({
+    sighting_id: s_id, position: sc_position, entry_id: tile.id, place: s_place, title: s_title, author: s_author, report_date: s_report_date, original_date: s_original_date, kind: sc_kind, quote: sc_quote, note: sc_note, tile: toTile(tile),
   }))
   // A citation is shown while a visible sighting gives it directly, as a via, or as an unseen named older work.
   if (!source || (!listed.length && !namedIn.length)) return null
@@ -2299,11 +2337,11 @@ const EXPORT_CITES = `(SELECT json_group_array(json_object(
       ELSE NULL
     END AS target_entry_id,
     CASE
-      WHEN cs.id IS NOT NULL AND cs.hidden_at IS NULL AND ce.hidden_at IS NULL AND ce.merged_into IS NULL THEN sc.source_id
+      WHEN cs.id IS NOT NULL AND cs.hidden_at IS NULL AND ce.hidden_at IS NULL AND ce.merged_into IS NULL THEN COALESCE(sc.source_id, cs.source_id)
       WHEN sc.source_id IS NOT NULL THEN sc.source_id
       ELSE cs.source_id
     END AS resolved_source_id,
-    ${CITATION_FIELDS.map(field => `CASE WHEN (cs.id IS NOT NULL AND cs.hidden_at IS NULL AND ce.hidden_at IS NULL AND ce.merged_into IS NULL) OR sc.source_id IS NOT NULL THEN ns.${field} ELSE csrc.${field} END AS ${field}`).join(', ')}
+    ${CITATION_FIELDS.map(field => `CASE WHEN (cs.id IS NOT NULL AND cs.hidden_at IS NULL AND ce.hidden_at IS NULL AND ce.merged_into IS NULL) THEN COALESCE(ns.${field}, csrc.${field}) WHEN sc.source_id IS NOT NULL THEN ns.${field} ELSE csrc.${field} END AS ${field}`).join(', ')}
   FROM sighting_cites sc
   LEFT JOIN sources ns ON ns.id = sc.source_id
   LEFT JOIN sightings cs ON cs.id = sc.cited_id

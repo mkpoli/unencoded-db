@@ -76,8 +76,8 @@
               {@const named = cite.title || cite.url || cite.author || cite.publisher || cite.report_date || cite.container ? sourceName(cite, t).text : null}
               <li>
                 <span class="scope"><span class="kind">{t(`cite.kind.${cite.kind}`)}</span><span class="text">{cite.sighting ? `#${cite.sighting}` : ''}{#if cite.sighting && named}{' · '}{/if}{named ?? ''}</span></span>
-                {#if cite.quote}<span class="basis">{cite.quote}</span>{/if}
-                {#if cite.note}<span class="basis">{cite.note}</span>{/if}
+                {#if cite.quote}<span class="cite-detail">{cite.quote}</span>{/if}
+                {#if cite.note}<span class="cite-detail">{cite.note}</span>{/if}
               </li>
             {/each}
           </ul>
@@ -145,5 +145,6 @@
   .scope .kind { flex: none; color: var(--muted); font-size: 11.5px }
   .scope .text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .basis { color: var(--muted); font-size: 11.5px; white-space: nowrap }
+  .cite-detail { color: var(--muted); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere }
   .url { font-size: 12.5px; overflow-wrap: anywhere }
 </style>
