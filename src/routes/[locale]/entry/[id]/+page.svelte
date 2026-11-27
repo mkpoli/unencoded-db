@@ -55,7 +55,8 @@
   const entry = $derived(data.entry)
   const claims = $derived(data.claims)
   const derivedCount = $derived(data.sightings.filter(s => s.cites.some(c => c.status === 'witness')).length)
-  const witnessBySource = $derived(new Map(data.sightings.filter(s => s.source_id !== null).map(s => [s.source_id!, s.id])))
+  // A source cited on several sightings points at the first in page order, the closest to the original.
+  const witnessBySource = $derived(new Map(data.sightings.filter(s => s.source_id !== null).map(s => [s.source_id!, s.id] as const).reverse()))
   const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
   const commenting = $derived(Boolean(form?.error && page.url.searchParams.has('/comment')))
   const shownComments = $derived.by(() => { const shown = data.comments.filter(comment => !comment.hidden_at).length; return shown && (data.comments.length >= COMMENTS_SHOWN ? `${shown}+` : String(shown)) })
