@@ -74,11 +74,19 @@ claude mcp add --scope user --transport http rare https://rare.glyphatlas.org/mc
 |---|---|
 | `find_similar_records` | Lists the records that may show the same form as a description sequence |
 | `search_records` | Searches the records by description, character or word |
-| `get_record` | Reads a record with its claims, sightings and picture addresses |
+| `get_record` | Reads a record with its claims, sightings, comments and picture addresses |
+| `list_tags` | Lists the typed tag taxonomy, groups, aliases and implications |
+| `get_history` | Reads a record's revision history, merged duplicates and removed evidence |
 | `add_record` | Adds a character with up to five sightings |
 | `add_sighting` | Adds evidence to a record |
 | `edit_record` | Changes a record's fields |
 | `edit_sighting` | Changes one piece of evidence on a record |
+| `remove_sighting` | Removes an erroneous sighting from a record (reversible) |
+| `merge_records` | Merges two duplicate records of the same form |
+| `unmerge_record` | Undoes a record merge |
+| `add_comment` | Posts a comment on a record or sighting |
+| `edit_source_alias` | Adds or removes an alternate name on a cited source |
+| `restore_revision` | Restores an earlier revision or puts back removed evidence |
 
 A write passes the same checks and rate limits as the forms, and an edit is made against the revision `get_record` answered. A picture is given by its address and fetched by the site, up to ten from other sites in one call, and stands as its own thumbnail. The writes of one connection carry one anonymous name, kept by the `Mcp-Session-Id` the endpoint hands out; that id is no browser session and cannot be signed in. The tools are defined in `src/routes/mcp/_tools.server.ts`.
 

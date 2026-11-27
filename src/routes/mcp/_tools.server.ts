@@ -17,8 +17,9 @@ import { REGISTRIES } from '$lib/registries'
 import { RELATION_KINDS } from '$lib/related'
 import { CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
-import { tagList } from '$lib/server/tags'
-import { addSighting, CITATION_FIELDS, citesEvidence, createEntry, editEntry, editSighting, getEntry, heldPictures, list, mediaVisible, namedVias, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, viaKey, viaRows, type StoredImage, type ViaPicture } from '$lib/server/entries'
+import { addComment, cleanComment, commentsOf } from '$lib/server/comments'
+import { tagList, taxonomy } from '$lib/server/tags'
+import { addSighting, CITATION_FIELDS, citesEvidence, createEntry, editEntry, editSighting, ENTRY_HISTORY_PAGE, getEntry, getEntryRow, getSighting, heldPictures, history, list, mediaVisible, mergeEntry, mergedInto, namedVias, putBackSighting, readBoxes, readEntryFields, readSightingFields, removeSighting, restoreSighting, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, unmergeEntry, viaKey, viaRows, type StoredImage, type ViaPicture } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { archiveCited } from '$lib/server/archive'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
@@ -28,6 +29,8 @@ import { MAX_IMAGE, prepareImage, sniff } from '$lib/server/image'
 import { pagesOf } from '$lib/pdf-pages'
 import { heavyJpx, isPdf, JPX_PIXELS, PDF_SIDE, renderPdfPage } from '$lib/server/pdf'
 import { AGENT_NAME_MAX, agentWriter, cleanAgentName, type AgentSaid } from '$lib/server/people'
+import { entrySnapshot, revisionDates, revisionFields, sightingSnapshot } from '$lib/server/revisions'
+import { editSourceAlias } from '$lib/server/source-aliases'
 import { described, storeImages, type ReadImage } from '../_submission.server'
 
 type Json = Record<string, unknown>
@@ -40,6 +43,21 @@ const said = (code: string, values?: Record<string, string | number>) => transla
 const record = (value: unknown): Json => value && typeof value === 'object' && !Array.isArray(value) ? value as Json : {}
 const items = (value: unknown): unknown[] => Array.isArray(value) ? value : value == null ? [] : [value]
 const text = (value: unknown) => typeof value === 'string' ? value : typeof value === 'number' ? String(value) : ''
+
+function positiveInt(value: unknown, name: string) {
+  if (typeof value === 'number') {
+    if (Number.isSafeInteger(value) && value >= 1) return value
+    throw new Refusal(`${name} must be a positive integer.`)
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (/^[1-9]\d{0,15}$/.test(trimmed)) {
+      const parsed = Number(trimmed)
+      if (Number.isSafeInteger(parsed)) return parsed
+    }
+  }
+  throw new Refusal(`${name} must be a positive integer.`)
+}
 
 function choice(value: unknown, allowed: readonly string[], name: string) {
   const chosen = text(value).trim()
@@ -593,6 +611,139 @@ async function editedPictures(event: RequestEvent, held: readonly StoredImage[],
   return pictures
 }
 
+async function removeSightingFrom(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const { id } = await openRecord(event, input.record)
+  const sightingId = positiveInt(input.sighting, 'sighting')
+  const rev = revisionOf(input.rev)
+  const { DB } = env(event)
+  const sighting = await getSighting(DB, sightingId)
+  if (!sighting || sighting.entry_id !== id || sighting.hidden_at) throw new Refusal(`${recordCode(id)} has no sighting ${sightingId}.`)
+  if (sighting.rev !== rev) throw changed(sighting.rev)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const result = await removeSighting(DB, id, sighting.id, rev, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
+  if (result === 'only') throw new Refusal('Cannot remove the only remaining sighting of a record.')
+  if (result === 'conflict') throw changed((await getSighting(DB, sighting.id))?.rev ?? rev)
+  if (result === 'merged') throw new Refusal(said('merged'))
+  if (result !== 'done') throw new Refusal(said('missing'))
+  notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
+  return { record: shown(event, id), sighting: sighting.id, removed: true }
+}
+
+async function mergeRecords(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const first = recordId(input.record)
+  const second = recordId(input.duplicate_of)
+  if (!first || !second) throw new Refusal(said('missing'))
+  if (first === second) throw new Refusal(said('self'))
+  const from = Math.max(first, second), into = Math.min(first, second)
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const result = await mergeEntry(DB, from, into, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
+  if (!result.ok) {
+    throw new Refusal(result.code === 'self' ? said('self') : result.code === 'merged' ? said('merged') : result.code === 'full' ? said('sightingLimit') : said('missing'))
+  }
+  notifyIndexNow(event, { entries: [from, into] })
+  return { merged: shown(event, from), into: shown(event, into) }
+}
+
+async function unmergeRecord(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const id = recordId(input.record)
+  const { DB } = env(event)
+  const entry = id ? await getEntryRow(DB, id) : null
+  if (!id || !entry || entry.hidden_at) throw new Refusal(said('missing'))
+  if (!entry.merged_into) throw new Refusal('That record is not merged into another record.')
+  const into = entry.merged_into
+  const person = await agentWriter(event, DB, agentSaid(input))
+  if (!await unmergeEntry(DB, id, { actor: person.id, ip: await ipHash(event) })) {
+    throw new Refusal(said('conflict'))
+  }
+  notifyIndexNow(event, { entries: [id, into] })
+  return { record: shown(event, id), from: shown(event, into), unmerged: true }
+}
+
+async function addCommentTo(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const { id, found } = await openRecord(event, input.record)
+  let about: number | null = null
+  if (input.sighting !== undefined && input.sighting !== null) {
+    about = positiveInt(input.sighting, 'sighting')
+    if (!found.sightings.some(sighting => sighting.id === about && !sighting.hidden_at)) {
+      throw new Refusal(`${recordCode(id)} has no sighting ${about}.`)
+    }
+  }
+  const body = cleanComment(input.body)
+  if (!body) throw new Refusal(said('comment'))
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const comment = await addComment(DB, { entry: id, sighting: about }, body, { actor: person.id, ip: await ipHash(event) })
+  return { record: shown(event, id), comment }
+}
+
+async function editSourceAliasTo(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const source = positiveInt(input.source, 'source')
+  const alias = text(input.alias).trim()
+  const action = choice(input.action, ['add', 'remove'], 'action')
+  if (!action) throw new Refusal('action is one of: add, remove.')
+  if (!alias || alias.length > 300) throw new Refusal('alias must be 1 to 300 characters.')
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  if (!await editSourceAlias(DB, source, alias, action === 'remove', person.id)) {
+    throw new Refusal(translate('en', 'source.aliasError'))
+  }
+  notifyIndexNow(event, { sources: [source] })
+  return { source, alias, action }
+}
+
+async function restoreRevisionTo(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const { id, found } = await openRecord(event, input.record)
+  const { DB } = env(event)
+
+  if (input.put_back === true) {
+    const sightingId = positiveInt(input.sighting, 'sighting')
+    const sighting = found.sightings.find(s => s.id === sightingId && s.hidden_at && s.removed_by)
+    if (!sighting) throw new Refusal('No contributor-removed sighting with that id exists on this record.')
+    const person = await agentWriter(event, DB, agentSaid(input))
+    if (await putBackSighting(DB, id, sightingId, { actor: person.id, ip: await ipHash(event) }) !== 'done') throw new Refusal(said('missing'))
+    notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
+    return { record: shown(event, id), sighting: sightingId, restored: true }
+  }
+
+  const revisionId = positiveInt(input.revision, 'revision')
+  const baseRev = revisionOf(input.rev)
+  if (input.sighting !== undefined && input.sighting !== null) {
+    const sightingId = positiveInt(input.sighting, 'sighting')
+    const sighting = found.sightings.find(s => s.id === sightingId && !s.hidden_at)
+    if (!sighting) throw new Refusal(`${recordCode(id)} has no sighting ${sightingId}.`)
+    if (baseRev !== sighting.rev) throw changed(sighting.rev)
+    const old = await DB.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id = ? AND redacted_at IS NULL AND kind IN ('sighting','sighting_edit')")
+      .bind(revisionId, id, sighting.id).first<{ snapshot: string; rev: number }>()
+    const fields = old && sightingSnapshot(old.snapshot)
+    if (!old || !fields) throw new Refusal('That sighting revision cannot be restored.')
+    if (!sighting.media.length && !sighting.vias.some(via => via.pictures?.length) && !citesEvidence(fields) && !fields.place) throw new Refusal(said('evidence'))
+    const person = await agentWriter(event, DB, agentSaid(input))
+    const result = await restoreSighting(DB, id, sighting.id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, old.rev, revisionId)
+    if (!result.ok) throw result.code === 'conflict' ? changed((await getSighting(DB, sighting.id))?.rev ?? baseRev) : new Refusal(said('missing'))
+    notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
+    return { record: shown(event, id), sighting: sighting.id, rev: result.rev }
+  }
+
+  if (baseRev !== found.entry.rev) throw changed(found.entry.rev)
+  const old = await DB.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id IS NULL AND redacted_at IS NULL AND kind IN ('create','edit','revert','merge','unmerge')")
+    .bind(revisionId, id).first<{ snapshot: string; rev: number }>()
+  const fields = old && entrySnapshot(old.snapshot)
+  if (!old || !fields) throw new Refusal('That record revision cannot be restored.')
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const result = await editEntry(DB, id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, `r${old.rev}`, 'revert', revisionId)
+  if (!result.ok) throw result.code === 'conflict' ? changed((await getEntry(DB, id))?.entry.rev ?? baseRev) : new Refusal(said('missing'))
+  notifyIndexNow(event, { entries: [id] })
+  scheduleAtlasSync(event, [id], { onlyIfChanged: true })
+  return { record: shown(event, id), rev: result.rev }
+}
+
 // ---------- Reads ----------
 
 const SEARCH_PAGE = 20
@@ -620,25 +771,81 @@ async function findSimilar(event: RequestEvent, input: Json) {
 
 async function getRecord(event: RequestEvent, input: Json) {
   const id = recordId(input.record)
-  const found = id ? await getEntry(env(event).DB, id) : null
+  const { DB } = env(event)
+  const found = id ? await getEntry(DB, id) : null
   if (!id || !found || found.entry.hidden_at) throw new Refusal(said('missing'))
   const { entry } = found
   if (entry.merged_into) return { ...shown(event, id), merged_into: shown(event, entry.merged_into) }
   const sightings = found.sightings.filter(sighting => !sighting.hidden_at)
   const visible = new Set(sightings.map(sighting => sighting.id))
+  const [dates, comments] = await Promise.all([
+    readDates(DB, sightingDates(sightings)),
+    commentsOf(DB, id, false),
+  ])
   return {
     ...shown(event, id), rev: entry.rev,
     script: entry.script === 'other' ? entry.script_other ?? 'other' : entry.script,
     status: entry.status, description: entry.description, radical: entry.radical, strokes: entry.strokes,
     claims: found.claims.map(claim => ({ key: claim.key, kind: claim.kind, value: claim.value, ...(claim.data ? { data: claim.data } : {}), ...(claim.under.length ? { under: claim.under } : {}), evidence: claim.sightings.filter(sighting => visible.has(sighting)) })),
-    date_readings: Object.fromEntries(await readDates(env(event).DB, sightingDates(sightings))),
+    date_readings: Object.fromEntries(dates),
     sightings: sightings.map(sighting => ({
-      id: sighting.id, rev: sighting.rev, place: sighting.place,
+      id: sighting.id, rev: sighting.rev, source_id: sighting.source_id, place: sighting.place,
       ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
       original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note,
-      vias: sighting.vias.map(({ id: _, pictures, ...via }) => ({ ...via, pictures: (pictures ?? []).map(picture => shownPicture(event, picture)) })),
+      vias: sighting.vias.map(({ id: source_id, pictures, ...via }) => ({ source_id, ...via, pictures: (pictures ?? []).map(picture => shownPicture(event, picture)) })),
       pictures: sighting.media.map(picture => ({ ...shownPicture(event, picture), marks: picture.box ? JSON.parse(picture.box) as number[][] : [] })),
     })),
+    comments: comments.map(comment => ({ id: comment.id, sighting: comment.sighting_id, body: comment.body, at: comment.at, by: comment.by_name })),
+  }
+}
+
+async function listTags(event: RequestEvent) {
+  const { tags, groups } = await taxonomy(env(event).DB)
+  return {
+    groups: groups.map(group => ({ id: group.id, type: group.type, label: group.label })),
+    tags: tags.map(tag => ({ name: tag.name, label: tag.label, type: tag.type, group: tag.group, aliases: tag.aliases, implies: tag.implies })),
+  }
+}
+
+async function getHistory(event: RequestEvent, input: Json) {
+  const id = recordId(input.record)
+  const { DB } = env(event)
+  const found = id ? await getEntry(DB, id) : null
+  if (!id || !found || found.entry.hidden_at) throw new Refusal(said('missing'))
+  if (found.entry.merged_into) return { ...shown(event, id), merged_into: shown(event, found.entry.merged_into) }
+  const before = input.before === undefined || input.before === null ? null : positiveInt(input.before, 'before')
+  const visibleSightings = new Map(found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => [sighting.id, sighting.rev]))
+  const removed = found.sightings.filter(sighting => sighting.hidden_at && sighting.removed_by)
+  const removedRevs = new Map(removed.map(sighting => [sighting.id, sighting.rev]))
+  const [page, duplicates] = await Promise.all([history(DB, id, before), mergedInto(DB, id)])
+  const next = page.length > ENTRY_HISTORY_PAGE ? page[ENTRY_HISTORY_PAGE - 1].id : null
+  const rows = page.slice(0, ENTRY_HISTORY_PAGE)
+    .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id) || removedRevs.has(row.sighting_id))
+    .map(({ id: revId, sighting_id, kind, rev, summary, at, by_name, by_agent, by_model, snapshot, redacted_at }) => ({
+      id: revId,
+      sighting: sighting_id,
+      rev,
+      summary,
+      at,
+      by: by_name,
+      ...(by_agent ? { by_agent: true, ...(by_model ? { by_model } : {}) } : {}),
+      redacted: Boolean(redacted_at),
+      ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
+      removed: sighting_id !== null && removedRevs.has(sighting_id),
+    }))
+  const dates = await revisionDates(DB, rows)
+  return {
+    record: shown(event, id),
+    rev: found.entry.rev,
+    duplicates: duplicates.map(dup => shown(event, dup)),
+    removed: removed.map(sighting => ({ id: sighting.id, rev: sighting.rev, title: sighting.title, place: sighting.place })),
+    date_readings: Object.fromEntries(dates),
+    rows: rows.map(({ fields, sightingFields, ...row }) => ({
+      ...row,
+      ...(fields ? { fields } : {}),
+      ...(sightingFields ? { sighting_fields: sightingFields } : {}),
+    })),
+    next,
   }
 }
 
@@ -652,7 +859,7 @@ To add a character:
 3. Cite the work the character appears in as the sighting's source, with author, title, publisher, date and page. Cite where you found it, such as a post or a chat message that shows the page, as a via, with its author, date, link and the words you quote, and its pictures when you have them.
 4. A chat message, a forum post or a personal communication is evidence and is cited as one: the author as they sign, the date of that message, the words quoted, the group or channel as container, the service as publisher, and no title. A private message, a letter or a conversation has no container and takes source_kind personal. Each message is its own citation; never reuse another message's author or date.
 
-To correct a record or a sighting, read it with get_record and call edit_record or edit_sighting with the rev it shows, giving only what changes. Say what changed and why in summary.
+To correct a record or a sighting, read it with get_record and call edit_record or edit_sighting with the rev it shows, giving only what changes. Say what changed and why in summary. Merge two records with merge_records only when their evidence pictures clearly show the exact same written form; when unsure, leave them separate and add a related claim with relationship "uncertain". Use get_history and restore_revision to inspect or revert earlier changes.
 
 Every change you make is shown as an agent's. Say what you are in agent on each add and edit: the harness you run in and the model you run on.
 
@@ -766,8 +973,21 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'get_record', title: 'Read a record', annotations: READS, run: getRecord,
-    description: 'A record with its claims (descriptions, readings, meanings, creators, codes, relations) and its sightings, each with its citation and picture addresses.',
+    description: 'A record with its revision number (rev), claims (descriptions, readings, meanings, creators, codes, relations), latest comments, and sightings (each with its id, rev, source_id, citation, vias, and picture addresses).',
     inputSchema: { type: 'object', required: ['record'], properties: { record: RECORD } },
+  },
+  {
+    name: 'list_tags', title: 'List tags', annotations: READS, run: listTags,
+    description: 'List the typed tag taxonomy: groups, canonical tag names, labels, aliases, and automatic tag implications.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_history', title: 'Read record history', annotations: READS, run: getHistory,
+    description: 'Read a record\'s revision history, merged duplicates, and contributor-removed sightings.',
+    inputSchema: { type: 'object', required: ['record'], properties: {
+      record: RECORD,
+      before: { type: 'integer', minimum: 1, description: 'The `next` cursor from an earlier call, for older revisions.' },
+    } },
   },
   {
     name: 'add_record', title: 'Add a character', annotations: ADDS, run: addRecord,
@@ -799,6 +1019,67 @@ const TOOLS: Tool[] = [
     description: `Change one sighting of a record. A field left out stays as it is; quotes, vias and pictures given replace the whole list. Keep a picture by giving its address from get_record. When a via gives pictures, the chain's pictures are those given: a via holds exactly its own list, and a via that leaves them out keeps the ones it has. When no via gives pictures, each via keeps its own, even one left out of vias. ${SIGHTING_RULE} Answers the new rev.`,
     inputSchema: { type: 'object', required: ['record', 'sighting', 'rev', 'agent'], properties: {
       agent: AGENT, record: RECORD, sighting: { type: 'integer', minimum: 1, description: 'The sighting\'s id in get_record.' }, rev: REV, summary: SUMMARY, ...SIGHTING,
+    } },
+  },
+  {
+    name: 'remove_sighting', title: 'Remove evidence from a record', annotations: EDITS, run: removeSightingFrom,
+    description: 'Remove an erroneous or misplaced sighting from a record (reversible via restore_revision). Cannot remove a record\'s last remaining sighting.',
+    inputSchema: { type: 'object', required: ['record', 'sighting', 'rev', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      sighting: { type: 'integer', minimum: 1, description: 'The sighting\'s id in get_record.' },
+      rev: REV,
+      summary: SUMMARY,
+    } },
+  },
+  {
+    name: 'merge_records', title: 'Merge duplicate records', annotations: EDITS, run: mergeRecords,
+    description: 'Merge two duplicate records of the exact same written form. The higher-numbered record always merges into the lower-numbered one, moving its evidence and keeping both histories.',
+    inputSchema: { type: 'object', required: ['record', 'duplicate_of', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      duplicate_of: { type: 'string', description: 'The other record id or code representing the same written form.' },
+      summary: SUMMARY,
+    } },
+  },
+  {
+    name: 'unmerge_record', title: 'Undo a record merge', annotations: EDITS, run: unmergeRecord,
+    description: 'Undo a merge, separating a merged duplicate record back out with its sightings and claims.',
+    inputSchema: { type: 'object', required: ['record', 'agent'], properties: {
+      agent: AGENT,
+      record: { type: 'string', description: 'The merged duplicate record id or code to unmerge.' },
+    } },
+  },
+  {
+    name: 'add_comment', title: 'Comment on a record', annotations: ADDS, run: addCommentTo,
+    description: 'Post a discussion comment on a record or on a specific sighting.',
+    inputSchema: { type: 'object', required: ['record', 'body', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      sighting: { type: 'integer', minimum: 1, description: 'Optional sighting id this comment discusses.' },
+      body: { type: 'string', description: 'Comment text, up to 4,000 characters.' },
+    } },
+  },
+  {
+    name: 'edit_source_alias', title: 'Edit source alternate name', annotations: EDITS, run: editSourceAliasTo,
+    description: 'Add or remove an alternate name or abbreviation on a cited source (by source_id from get_record).',
+    inputSchema: { type: 'object', required: ['source', 'alias', 'action', 'agent'], properties: {
+      agent: AGENT,
+      source: { type: 'integer', minimum: 1, description: 'Source id from get_record.' },
+      alias: { type: 'string', description: 'Alternate title or abbreviation, 1 to 300 characters.' },
+      action: { type: 'string', enum: ['add', 'remove'] },
+    } },
+  },
+  {
+    name: 'restore_revision', title: 'Restore a previous revision', annotations: EDITS, run: restoreRevisionTo,
+    description: 'Restore a previous record revision, restore a sighting\'s previous text (keeping its current pictures), or put back a contributor-removed sighting (with put_back: true).',
+    inputSchema: { type: 'object', required: ['record', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      sighting: { type: 'integer', minimum: 1, description: 'Sighting id when restoring a sighting revision or putting back removed evidence.' },
+      revision: { type: 'integer', minimum: 1, description: 'Revision id from get_history (omit when put_back is true).' },
+      rev: REV,
+      put_back: { type: 'boolean', description: 'Set true with sighting to put back contributor-removed evidence.' },
     } },
   },
 ]
