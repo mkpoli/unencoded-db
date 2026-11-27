@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { newClaim } from '$lib/claims'
 import { addComment, setCommentHidden } from './comments'
-import { addSighting, createEntry, editEntry, editSighting, getEntry, getSighting, mergeEntry, setHidden, type EntryFields, type SightingFields } from './entries'
+import { addSighting, createEntry, editEntry, editSighting, getEntry, putBackSighting, removeSighting, getSighting, mergeEntry, setHidden, type EntryFields, type SightingFields } from './entries'
 import { latestNotice, markRead, notificationsOf, thank, thankedOf, unreadCount } from './notifications'
 import { createPerson, joinAtlas, startSession } from './people'
 import { openTestDb } from './testdb'
@@ -85,8 +85,8 @@ test('changes made before notices existed are queued for the recorder', async ()
   const raw = new Database(':memory:')
   const migrations = join(import.meta.dir, '../../../migrations')
   const names = readdirSync(migrations).sort()
-  // The code under test writes the source and sighting columns and reads the tag aliases of today, so their migrations run first.
-  const early = (name: string) => name < '0035' || name === '0041_source_container.sql' || name === '0045_tag_aliases.sql' || name === '0047_sighting_contexts.sql' || name === '0048_source_kind.sql'
+  // The code under test writes the source and sighting columns, the forms and the pictures of a chain, and reads the tag aliases and source keys, of today, so their migrations run first.
+  const early = (name: string) => name < '0035' || name === '0041_source_container.sql' || name === '0045_tag_aliases.sql' || name === '0047_sighting_contexts.sql' || name === '0048_source_kind.sql' || name === '0054_source_keys.sql' || name === '0055_via_pictures.sql' || name === '0056_forms.sql' || name === '0058_agent_attribution.sql' || name === '0060_agent_model.sql'
   for (const name of names.filter(early)) raw.exec(readFileSync(join(migrations, name), 'utf8'))
   const db = d1Over(raw)
   const recorder = await createPerson(db), second = await createPerson(db), maintenance = await createPerson(db, null, 'Catalogue maintenance')
@@ -106,11 +106,11 @@ test('changes made before notices existed are queued for the recorder', async ()
 test('a merge tells each recorder once, and reading stops at what the page held', async () => {
   const { db, recorder, second, reader, who, entry } = await scene()
   const other = await createEntry(db, fields('⿰山西'), sighting, [], who(second))
-  expect((await mergeEntry(db, entry, other, who(reader), null)).ok).toBe(true)
+  expect((await mergeEntry(db, other, entry, who(reader), null)).ok).toBe(true)
   expect(await unreadCount(db, recorder.id)).toBe(1)
   expect(await unreadCount(db, second.id)).toBe(1)
   const held = await latestNotice(db, recorder.id)
-  await addComment(db, { entry: other }, 'after the page was shown', who(reader))
+  await addComment(db, { entry }, 'after the page was shown', who(reader))
   await markRead(db, recorder.id, held)
   expect(await unreadCount(db, recorder.id)).toBe(1)
 })
@@ -147,15 +147,17 @@ test('the rebuilt table keeps the notices it held', async () => {
   const { raw } = openTestDb()
   const migrations = join(import.meta.dir, '../../../migrations')
   const names = readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()
+  // The chain's pictures are read by the code under test, so their table comes first.
+  const early = (name: string) => name < '0049' || name === '0055_via_pictures.sql' || name === '0056_forms.sql'
   const old = new Database(':memory:')
-  for (const name of names.filter(name => name < '0049')) old.exec(readFileSync(join(migrations, name), 'utf8'))
+  for (const name of names.filter(early)) old.exec(readFileSync(join(migrations, name), 'utf8'))
   const db = d1Over(old)
   const recorder = await createPerson(db), second = await createPerson(db)
   const entry = await createEntry(db, fields('⿰山東'), sighting, [], { actor: recorder.id, ip: null })
   await addSighting(db, entry, { ...sighting, place: 'Another book' }, [], { actor: second.id, ip: null })
   await markRead(db, recorder.id, 1)
   const before = old.query('SELECT id, person, comment_id, revision_id, at, read_at FROM notifications').all()
-  for (const name of names.filter(name => name >= '0049')) old.exec(readFileSync(join(migrations, name), 'utf8'))
+  for (const name of names.filter(name => !early(name))) old.exec(readFileSync(join(migrations, name), 'utf8'))
   expect(before.length).toBe(1)
   expect(old.query('SELECT id, person, comment_id, revision_id, at, read_at FROM notifications').all()).toEqual(before)
   expect(old.query("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all()).toEqual(raw.query("SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name").all())
@@ -173,4 +175,22 @@ test('thanks said before signing in join the account, except those for its own c
   expect(await thankedOf(db, account.id, [1, edit])).toEqual([1])
   expect((await notificationsOf(db, account.id)).notifications.map(notice => notice.kind)).toEqual([])
   expect((await notificationsOf(db, recorder.id)).notifications.map(notice => [notice.kind, notice.by_id])).toEqual([['thank', account.id], ['edit', account.id]])
+})
+
+test('a notice of a change carries the version it left, and a comment carries none', async () => {
+  const { load } = await import('../../routes/[locale]/notifications/+page.server')
+  const { db, recorder, second, who, entry } = await scene()
+  const found = (await getEntry(db, entry))!
+  expect((await editEntry(db, entry, found.entry.rev, { ...fields('⿰山東'), description: 'checked' }, who(second), 'gloss corrected')).ok).toBe(true)
+  await addSighting(db, entry, { ...sighting, place: 'Another book' }, [], who(second))
+  await addComment(db, { entry }, 'Is this 觀?', who(second))
+  const seen = await load({ url: new URL('http://localhost/en/notifications'), params: { locale: 'en' }, platform: { env: { DB: db } }, locals: { person: recorder } } as any) as any
+  expect(seen.notifications.map((notice: any) => [notice.kind, notice.fields?.description ?? null, notice.sightingFields?.place ?? null])).toEqual([['comment', null, null], ['sighting', null, 'Another book'], ['edit', 'checked', null]])
+  expect(seen.notifications[2]).not.toHaveProperty('snapshot')
+  // Evidence taken off its record and put back is named as that, and holds no version.
+  const taken = (await getEntry(db, entry))!.sightings[0]
+  expect(await removeSighting(db, entry, taken.id, taken.rev, who(second), 'another form')).toBe('done')
+  expect(await putBackSighting(db, entry, taken.id, who(second))).toBe('done')
+  const after = await load({ url: new URL('http://localhost/en/notifications'), params: { locale: 'en' }, platform: { env: { DB: db } }, locals: { person: recorder } } as any) as any
+  expect(after.notifications.slice(0, 2).map((notice: any) => [notice.kind, notice.text, notice.fields, notice.sightingFields])).toEqual([['put_back', null, null, null], ['remove', 'another form', null, null]])
 })

@@ -1,8 +1,12 @@
 <script lang="ts">
+  import { SvelteSet } from 'svelte/reactivity'
   import Seo from '$lib/components/Seo.svelte'
   import { href, locale, t } from '$lib/t'
   let { data } = $props()
   const number = $derived(new Intl.NumberFormat(locale()))
+  const loaded = new SvelteSet<string>()
+  // A picture that arrived before the page came alive has already said so.
+  const arrived = (id: string) => (img: HTMLImageElement) => { if (img.complete && img.naturalWidth) loaded.add(id) }
   const initial = (name: string) => /^anon-[0-9a-f]{6}$/.test(name) ? null : [...name.replace(/^[^\p{L}\p{N}]+/u, '') || name][0].toUpperCase()
 </script>
 
@@ -15,7 +19,10 @@
         {@const letter = initial(person.name)}
         <li class:mine={person.id === data.person?.id} class:podium={data.first + i <= 3}>
           <span class="place">{number.format(data.first + i)}</span>
-          <span class="avatar" class:unnamed={!letter} aria-hidden="true">{letter ?? '?'}</span>
+          <span class="avatar" class:unnamed={!letter} aria-hidden="true">
+            {#if !loaded.has(person.id)}{letter ?? '?'}{/if}
+            {#if person.atlas}<img class:shown={loaded.has(person.id)} src="/api/people/{person.id}/picture" alt="" width="30" height="30" loading="lazy" decoding="async" onload={() => loaded.add(person.id)} {@attach arrived(person.id)} />{/if}
+          </span>
           <a class="name" aria-current={person.id === data.person?.id ? 'true' : undefined} href={href(`/u/${person.id}`)}>{person.name}</a>
           <span class="total">{t(person.changes === 1 ? 'people.change' : 'people.changes', { n: number.format(person.changes) })}</span>
         </li>
@@ -34,7 +41,9 @@
   .people li.mine { background: var(--accent-light); box-shadow: inset 3px 0 var(--accent) }
   .place { flex: 0 0 34px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right }
   .podium .place { color: var(--ink); font-size: 15px; font-weight: 600 }
-  .avatar { display: grid; flex: 0 0 30px; place-items: center; height: 30px; border-radius: 50%; background: var(--accent-light); color: var(--accent); font-size: 13px; font-weight: 600 }
+  .avatar { position: relative; overflow: hidden; display: grid; flex: 0 0 30px; place-items: center; height: 30px; border-radius: 50%; background: var(--accent-light); color: var(--accent); font-size: 13px; font-weight: 600 }
+  .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; visibility: hidden }
+  .avatar img.shown { visibility: visible }
   .mine .avatar { background: var(--surface) }
   .avatar.unnamed { background: var(--surface-sunken); color: var(--muted); font-weight: 400 }
   .name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }

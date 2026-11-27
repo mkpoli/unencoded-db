@@ -1,13 +1,14 @@
 <script lang="ts">
-  // What a record says its character means, how it is read and which characters it is related to, read
+  // What a record says its character means, how it is read, who made it and which characters it is related to, read
   // from either side: a meaning shows the readings and related characters that hold under it, and a
   // related character shows the meanings and readings it holds under. A reading under no meaning is
   // listed by itself. Each claim is the target of `#claim-<key>`, and names the sightings it rests on.
-  import { claimsOf, claimsUnder, scopesOf, type Claim } from '$lib/claims'
+  import { claimsOf, claimsUnder, creatorKey, scopesOf, type Claim } from '$lib/claims'
   import { claimLabel, doculectName } from '$lib/claim-label'
+  import { browseHref } from '$lib/browse-params'
   import { codedRecord } from '$lib/code'
   import type { RelatedRecord } from '$lib/server/related-records'
-  import { t } from '$lib/t'
+  import { href, t } from '$lib/t'
   import CopyButton from './CopyButton.svelte'
   import RelationCharacter from './RelationCharacter.svelte'
 
@@ -19,6 +20,7 @@
   const meanings = $derived(claimsOf(claims, 'meaning'))
   const readings = $derived(claimsOf(claims, 'reading'))
   const relations = $derived(claimsOf(claims, 'relation'))
+  const creators = $derived(claimsOf(claims, 'creator'))
   const general = $derived(readings.filter(reading => !meanings.some(meaning => reading.under.includes(meaning.key))))
   // A reading under several meanings is shown with each, and is the link's target where it is shown first.
   // A related character under a reading stands beside it, unless the meaning it is shown with lists it.
@@ -60,6 +62,12 @@
   <section class="block">
     <h3>{t('field.reading')}</h3>
     <ul class="readings">{#each general as reading (reading.key)}{@render read(reading, true)}{/each}</ul>
+  </section>
+{/if}
+{#if creators.length}
+  <section class="block">
+    <h3>{t('field.creator')}</h3>
+    <ul class="readings">{#each creators as creator (creator.key)}<li class="claim" id="claim-{creator.key}"><a class="text-link" href={browseHref(href(), { creator: creatorKey(creator.value) })}>{creator.value}</a>{@render basis(creator)}</li>{/each}</ul>
   </section>
 {/if}
 {#if relations.length}

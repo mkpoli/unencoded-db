@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit'
-import { editEntry, hasLink, ENTRY_HISTORY_PAGE, getEntry, history, putBackSighting, redactRevision, restoreSighting } from '$lib/server/entries'
+import { editEntry, citesEvidence, ENTRY_HISTORY_PAGE, getEntry, getEntryRow, history, mergedInto, putBackSighting, redactRevision, restoreSighting, unmergeEntry } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { thank, thankable, thankedOf } from '$lib/server/notifications'
@@ -23,18 +23,18 @@ export const load: PageServerLoad = async (event) => {
   const before = event.url?.searchParams.get('before')
   if (before !== null && before !== undefined && !positiveId(before)) error(404)
   const viewer = event.locals?.person
-  const [page, tags] = await Promise.all([history(db, id, before ? positiveId(before) : null), tagList(db)])
+  const [page, tags, duplicates] = await Promise.all([history(db, id, before ? positiveId(before) : null), tagList(db), mergedInto(db, id)])
   const next = page.length > ENTRY_HISTORY_PAGE ? page[ENTRY_HISTORY_PAGE - 1].id : null
   const rows = page.slice(0, ENTRY_HISTORY_PAGE)
     .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id) || removedRevs.has(row.sighting_id))
-    .map(({ id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, snapshot, redacted_at }) => ({
-      id, entry_id, sighting_id, rev, summary, at, by_id, by_name, redacted: Boolean(redacted_at),
+    .map(({ id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, by_agent, by_model, snapshot, redacted_at }) => ({
+      id, entry_id, sighting_id, rev, summary, at, by_id, by_name, by_agent, by_model, redacted: Boolean(redacted_at),
       ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
       sightingRev: sighting_id ? visibleSightings.get(sighting_id) ?? removedRevs.get(sighting_id) : null,
       removed: sighting_id !== null && removedRevs.has(sighting_id),
     }))
   const thanked = viewer ? await thankedOf(db, viewer.id, rows.map(row => row.id)) : []
-  return { id, rev: found.entry.rev, updated_at: found.entry.updated_at, rows, removed: removed.map(({ id, title, place }) => ({ id, name: title || place })), thanked, dates: await revisionDates(db, rows), next, tags: tags.map(({ name, label, type }) => ({ name, label, type })) }
+  return { id, rev: found.entry.rev, updated_at: found.entry.updated_at, rows, duplicates, removed: removed.map(({ id, title, place }) => ({ id, name: title || place })), thanked, dates: await revisionDates(db, rows), next, tags: tags.map(({ name, label, type }) => ({ name, label, type })) }
 }
 
 export const actions: Actions = {
@@ -59,7 +59,7 @@ export const actions: Actions = {
       const fields = old && sightingSnapshot(old.snapshot)
       if (!old || !fields) error(404)
       // A restore keeps the pictures, so a version without a place or a link needs one to stay.
-      if (!sighting.media.length && !hasLink(fields) && !fields.place) return fail(400, { error: 'evidence' })
+      if (!sighting.media.length && !sighting.vias.some(via => via.pictures?.length) && !citesEvidence(fields) && !fields.place) return fail(400, { error: 'evidence' })
       const person = await writer(event, db)
       const result = await restoreSighting(db, id, sighting.id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, old.rev, revisionId)
       if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })
@@ -67,7 +67,7 @@ export const actions: Actions = {
       redirect(303, `/${event.params.locale}/entry/${id}/history`)
     }
     if (!baseRev || baseRev !== found.entry.rev) return fail(409, { error: 'conflict' })
-    const old = await db.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id IS NULL AND redacted_at IS NULL AND kind IN ('create','edit','revert')")
+    const old = await db.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id IS NULL AND redacted_at IS NULL AND kind IN ('create','edit','revert','merge','unmerge')")
       .bind(revisionId, id).first<{ snapshot: string; rev: number }>()
     const fields = old && entrySnapshot(old.snapshot)
     if (!old || !fields) error(404)
@@ -75,6 +75,20 @@ export const actions: Actions = {
     const result = await editEntry(db, id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, `r${old.rev}`, 'revert', revisionId)
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })
     notifyIndexNow(event, { entries: [id] })
+    redirect(303, `/${event.params.locale}/entry/${id}/history`)
+  },
+  // A duplicate that joined this record parts from it again.
+  unmerge: async event => {
+    await guardWrite(event, 'EDITS')
+    const id = positiveId(event.params.id)
+    const form = await event.request.formData()
+    const from = positiveId(String(form.get('from') ?? ''))
+    if (!id || !from) error(404)
+    const db = env(event).DB
+    if ((await getEntryRow(db, from))?.merged_into !== id) return fail(409, { error: 'conflict' })
+    const person = await writer(event, db)
+    if (!await unmergeEntry(db, from, { actor: person.id, ip: await ipHash(event) })) return fail(409, { error: 'conflict' })
+    notifyIndexNow(event, { entries: [id, from] })
     redirect(303, `/${event.params.locale}/entry/${id}/history`)
   },
   // Anyone puts removed evidence back.

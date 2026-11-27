@@ -1,26 +1,71 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import EvidenceDate from './EvidenceDate.svelte'
   import { westernDate } from '$lib/dates'
   import Combobox, { type ComboOption } from './Combobox.svelte'
   import { media, t } from '$lib/t'
   import { kindName } from '$lib/source-kind'
+  import { sourceHeading } from '$lib/source-name'
+  import { sourceNameKey, titleReadingKey } from '$lib/name-key'
   import { recordCode } from '$lib/code'
   import type { SourceMatch } from '$lib/server/source-aliases'
   import type { Source } from '$lib/server/entries'
 
-  let { id, name, value = $bindable(''), onselect }: {
-    id: string; name: string; value?: string; onselect: (source: Source) => void
+  let { id, name, value = $bindable(''), onselect, onsource }: {
+    id: string; name: string; value?: string; onselect: (source: Source) => void; onsource?: (sourceId: number | null) => void
   } = $props()
   let query = $state('')
   let chosenLabel = $state('')
   let matches = $state<SourceMatch[]>([])
+  let quietMatches = $state<SourceMatch[]>([])
+  let pickedId = $state<number | null>(null)
   const byKey = $derived(new Map(matches.map(source => [String(source.id), source])))
   type Cursor = [string, number]
   let page = $state<{ cursor: Cursor | null }>({ cursor: null }), next = $state<Cursor | null>(null)
   const options = $derived<ComboOption[]>([...matches.map(source => ({
     key: String(source.id),
-    label: source.title || (source.container && [source.author, source.container].filter(Boolean).join(' · ')) || source.url || [source.author, kindName(source.source_kind)].filter(Boolean).join(' · ') || source.publisher || source.report_date || `#${source.id}`,
+    label: sourceHeading(source, t),
   })), ...(next !== null ? [{ key: 'more', more: true, label: t('browse.more') }] : [])])
+
+  function matchedSourceId(text: string, list: readonly SourceMatch[]): number | null {
+    const typed = sourceNameKey(text)
+    if (!typed) return null
+    const reading = titleReadingKey(text)
+    const exact = list.filter(source =>
+      (source.title && sourceNameKey(source.title) === typed)
+      || (source.alias && sourceNameKey(source.alias) === typed)
+      || (source.reading && sourceNameKey(source.reading) === typed)
+      || source.lookup === typed
+      || (reading && source.lookup === reading)
+      || sourceNameKey(sourceHeading(source, t)) === typed
+    )
+    // A title several citations share names none of them until one is picked.
+    const ids = new Set(exact.map(source => source.id))
+    return ids.size === 1 ? exact[0].id : null
+  }
+
+  const resolvedSourceId = $derived(pickedId ?? matchedSourceId(value, matches.length ? matches : quietMatches))
+  let lastSourceId: number | null = null
+  $effect(() => {
+    const nextId = resolvedSourceId
+    if (nextId === lastSourceId) return
+    lastSourceId = nextId
+    onsource?.(nextId)
+  })
+
+  // A title filled in without the list open, by a saved draft or a pasted link, is looked up quietly.
+  $effect(() => {
+    const text = value.trim()
+    if (!onsource || !text || pickedId !== null || untrack(() => query) === value) return
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      fetch('/api/sources?' + new URLSearchParams({ q: text }), { signal: controller.signal })
+        .then(response => response.ok ? response.json() as Promise<{ rows: SourceMatch[] }> : null)
+        .then(data => { if (!controller.signal.aborted) quietMatches = data?.rows ?? [] })
+        .catch(() => {})
+    }, 300)
+    return () => { clearTimeout(timer); controller.abort() }
+  })
 
   function search(text: string) {
     if (text !== query) { matches = []; page = { cursor: null }; next = null }
@@ -49,6 +94,7 @@
   function choose(option: ComboOption) {
     const source = byKey.get(option.key ?? '')
     if (source) {
+      pickedId = source.id
       chosenLabel = source.title ? '' : option.label
       value = source.title ?? ''
       onselect(source)
@@ -60,7 +106,7 @@
 <div class="field">
   <label for={id} id="{id}-label">{t('field.title')}</label>
   <Combobox {id} {name} {options} filter={false} bind:value labelledby="{id}-label" maxlength={300} placeholder={chosenLabel}
-    onopen={() => search(value)} onquery={text => { chosenLabel = ''; search(text) }} onselect={choose} onmore={() => { if (next !== null) page = { cursor: next } }}>
+    onopen={() => search(value)} onquery={text => { pickedId = null; quietMatches = []; chosenLabel = ''; search(text) }} onselect={choose} onmore={() => { if (next !== null) page = { cursor: next } }}>
     {#snippet optionContent(option)}
       {@const source = byKey.get(option.key ?? '')}
       {#if source}

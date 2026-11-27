@@ -11,16 +11,9 @@ export const MAX_PICTURES_BODY = PICTURES_BODY_MAX
 // An agent's message names its pictures by address, so it is text alone.
 export const MAX_AGENT_BODY = 1024 * 1024
 
-/** Read at most the limit before handing the request to a form parser. */
-export async function limitWriteBody(request: Request, limit = MAX_WRITE_BODY): Promise<Request | null> {
-  const length = request.headers.get('content-length')
-  if (length && /^\d+$/.test(length) && Number(length) > limit) {
-    if (request.body) void request.body.cancel().catch(() => {})
-    return null
-  }
-  if (!request.body) return request
-
-  const reader = request.body.getReader()
+/** All of a body, or null once it passes the limit. */
+export async function boundedBody(body: ReadableStream<Uint8Array>, limit: number): Promise<Blob | null> {
+  const reader = body.getReader()
   const chunks: Uint8Array[] = []
   let size = 0
   try {
@@ -37,7 +30,21 @@ export async function limitWriteBody(request: Request, limit = MAX_WRITE_BODY): 
   } finally {
     reader.releaseLock()
   }
+  return new Blob(chunks as BlobPart[])
+}
+
+/** Read at most the limit before handing the request to a form parser. */
+export async function limitWriteBody(request: Request, limit = MAX_WRITE_BODY): Promise<Request | null> {
+  const length = request.headers.get('content-length')
+  if (length && /^\d+$/.test(length) && Number(length) > limit) {
+    if (request.body) void request.body.cancel().catch(() => {})
+    return null
+  }
+  if (!request.body) return request
+
+  const body = await boundedBody(request.body, limit)
+  if (!body) return null
   const headers = new Headers(request.headers)
-  headers.set('content-length', String(size))
-  return new Request(request, { headers, body: new Blob(chunks as BlobPart[]) })
+  headers.set('content-length', String(body.size))
+  return new Request(request, { headers, body })
 }

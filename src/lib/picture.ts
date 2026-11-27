@@ -2,6 +2,8 @@
 // drops what the camera recorded. The thumbnail is the first marked character, or the whole picture when none is marked.
 export const LONG_SIDE = 3200
 export const THUMB_SIDE = 640
+/** How much taller than wide a picture of a go-between is shown: a longer one is shown by its top. */
+export const TALL = 1.5
 
 export type Box = [number, number, number, number]
 
@@ -42,8 +44,10 @@ async function lossy(canvas: HTMLCanvasElement, quality: number) {
 const EXTENSION: Record<string, string> = { 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/png': 'png' }
 const named = (blob: Blob, stem: string) => new File([blob], `${stem}.${EXTENSION[blob.type] ?? 'img'}`, { type: blob.type })
 
-export async function prepare(source: Blob): Promise<Prepared> {
+/** `drawn` says the site drew the picture itself, at its own size: it is sent as it is. */
+export async function prepare(source: Blob, drawn = false): Promise<Prepared> {
   const bitmap = await createImageBitmap(source, { imageOrientation: 'from-image' })
+  if (drawn) return { file: named(source, 'evidence'), bitmap, width: bitmap.width, height: bitmap.height }
   const scale = Math.min(1, LONG_SIDE / Math.max(bitmap.width, bitmap.height))
   const width = Math.round(bitmap.width * scale), height = Math.round(bitmap.height * scale)
   const canvas = canvasOf(width, height)

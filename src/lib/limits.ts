@@ -1,6 +1,7 @@
 /** The largest image the upload and source-link paths accept. */
 export const MAX_IMAGE_BYTES = 16 * 1024 * 1024
-/** The most pictures one sighting holds: as many as one post on X carries. */
+/** The most pictures one sighting holds: as many as one post on X carries. The go-betweens of its chain share as many
+ * again for pictures of themselves, such as the screenshots of a long message. */
 export const MEDIA_MAX = 20
 /** The most characters one batch holds: the number of adds a rate window allows. */
 export const BATCH_ROWS_MAX = 10

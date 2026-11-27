@@ -2,16 +2,19 @@
   import '../app.css'
   import { afterNavigate } from '$app/navigation'
   import { page } from '$app/state'
-  import { tick } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import { LOCALES, LOCALE_NAMES, LOCALE_COOKIE } from '$lib/i18n'
   import { href, locale, t } from '$lib/t'
+  import { cleanBrowseSearch } from '$lib/browse-params'
+  import { clearDirectBrowseBack, hydrateBrowseReturn, trackBrowseNavigation } from '$lib/browse-return.svelte'
   import { syncFavourites } from '$lib/favourites.svelte'
   import { UNREAD_SHOWN } from '$lib/notifications'
   import ChatLinks from '$lib/components/ChatLinks.svelte'
   let { data, children } = $props()
 
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
-  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path === '/u' || path.startsWith('/u/') ? 'people' : path.startsWith('/mcp') ? 'mcp' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
+  const localeSearch = $derived(path === '' ? cleanBrowseSearch(page.url.search) : page.url.search)
+  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path === '/u' || path.startsWith('/u/') ? 'people' : path.startsWith('/duplicates') ? 'duplicates' : path.startsWith('/mcp') ? 'mcp' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
   $effect(() => { syncFavourites(data.person?.id ?? null, data.favourites) })
   type NavMode = 'full' | 'priority' | 'compact'
   let navMode = $state<NavMode>()
@@ -68,7 +71,14 @@
     return () => { live = false; observer.disconnect(); document.fonts.removeEventListener('loadingdone', fit) }
   })
 
-  afterNavigate(() => {
+  onMount(() => {
+    // Read by the stale-build reload in `app.html`, which acts only while the page starts up.
+    document.documentElement.dataset.started = ''
+    hydrateBrowseReturn()
+  })
+
+  afterNavigate(navigation => {
+    trackBrowseNavigation(navigation)
     if (navLinks?.hasAttribute('popover')) navLinks.hidePopover?.()
     if (menu) menu.open = false
   })
@@ -95,7 +105,7 @@
   const closeMenu = (event: PointerEvent) => { if (menu?.open && !menu.contains(event.target as Node)) menu.open = false }
 </script>
 
-<svelte:window onpointerdown={closeMenu} onkeydown={dismissSettings} />
+<svelte:window onpointerdown={closeMenu} onkeydown={dismissSettings} onhashchange={clearDirectBrowseBack} />
 
 {#snippet primaryLinks()}
   <a class:active={section === 'browse'} aria-current={section === 'browse' ? 'page' : undefined} href={href()}>{t('nav.browse')}</a>
@@ -143,12 +153,13 @@
         <div class="menu-group">
           <a href={href('/favourites')} class:on={section === 'favourites'} onclick={() => { if (menu) menu.open = false }}>{t('favourites.title')}</a>
           <a href={href('/u')} class:on={section === 'people'} aria-current={path === '/u' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('people.title')}</a>
+          <a href={href('/duplicates')} class:on={section === 'duplicates'} aria-current={section === 'duplicates' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('duplicates.title')}</a>
           <a href={href('/data')} class:on={section === 'data'} aria-current={section === 'data' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('data.title')}</a>
           <a href={href('/mcp')} class:on={section === 'mcp'} aria-current={section === 'mcp' ? 'page' : undefined} onclick={() => { if (menu) menu.open = false }}>{t('mcp.title')}</a>
         </div>
         <div class="menu-group">
           <span class="menu-label">{t('nav.language')}</span>
-          {#each LOCALES as tag}<a href="/{tag}{path}{page.url.search}" class:on={tag === locale()} lang={tag} data-sveltekit-reload onclick={() => remember(tag)}>{LOCALE_NAMES[tag]}</a>{/each}
+          {#each LOCALES as tag}<a href="/{tag}{path}{localeSearch}" class:on={tag === locale()} lang={tag} data-sveltekit-reload onclick={() => remember(tag)}>{LOCALE_NAMES[tag]}</a>{/each}
         </div>
         <div class="menu-group">
           <span class="menu-label">{t('nav.theme')}</span>

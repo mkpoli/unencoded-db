@@ -155,10 +155,11 @@ export function bearerOf(request: Request) {
   return match ? match[1].toLowerCase() : undefined
 }
 
-/** The person a token names. One who has since signed in to an account is that account's person. */
+/** The person a token names. One who has since signed in to an account is that account's person;
+ * an explicit agent row keeps its own actor id while taking the commander's account state. */
 export async function tokenPerson(db: D1Database, token: string | undefined): Promise<Person | null> {
   if (!token) return null
-  const row = await db.prepare('SELECT e.id, e.name, e.atlas_sub, e.role, e.banned_at FROM agent_tokens t JOIN people p ON p.id = t.person JOIN people e ON e.id = COALESCE(p.merged_into, p.id) WHERE t.token_hash = ? AND t.created_at > ?')
+  const row = await db.prepare('SELECT CASE WHEN p.agent = 1 THEN p.id ELSE e.id END AS id, e.name, e.atlas_sub, e.role, COALESCE(e.banned_at, p.banned_at) AS banned_at FROM agent_tokens t JOIN people p ON p.id = t.person JOIN people e ON e.id = COALESCE(p.merged_into, p.id) WHERE t.token_hash = ? AND t.created_at > ?')
     .bind(await hashHex(token), ago(TOKEN_LIFE)).first<{ id: string; name: string; atlas_sub: string | null; role: string; banned_at: string | null }>()
   return row ? { id: row.id, name: row.name, atlas: Boolean(row.atlas_sub), moderator: row.role === 'moderator', banned: Boolean(row.banned_at) } : null
 }

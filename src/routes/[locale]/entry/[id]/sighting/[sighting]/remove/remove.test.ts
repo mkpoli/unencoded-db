@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { createPerson } from '$lib/server/people'
-import { addSighting, createEntry, getEntry, globalHistory, list, mergeEntry, openReports, putBackSighting, redactRevision, removeSighting, report, setHidden, unmergeEntry, type SightingFields } from '$lib/server/entries'
+import { addSighting, createEntry, editEntry, getEntry, globalHistory, list, mergeEntry, openReports, putBackSighting, redactRevision, removeSighting, report, setHidden, unmergeEntry, type SightingFields } from '$lib/server/entries'
 import { notificationsOf, thankable, unreadCount } from '$lib/server/notifications'
 import { openTestDb } from '$lib/server/testdb'
 import { actions as history, load as loadHistory } from '../../../history/+page.server'
@@ -67,9 +67,12 @@ test('a record keeps its last evidence, and a removal of an edited or a missing 
   expect(await actions.default(event({ rev: '1' }, left))).toMatchObject({ status: 409, data: { error: 'only' } })
   expect(await visible()).toEqual([left])
   // A merged record takes no removal.
-  raw.exec(`UPDATE entries SET merged_into = ${other} WHERE id = ${id}`)
-  await expect(load(event({}, left))).rejects.toMatchObject({ status: 404 })
-  expect(await putBackSighting(db, id, second, who)).toBe('merged')
+  const duplicate = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, seen('Dup 1'), [], who)
+  const dupSecond = (await addSighting(db, duplicate, seen('Dup 2'), [], who))!
+  expect(await removeSighting(db, duplicate, dupSecond, 1, who, null)).toBe('done')
+  raw.exec(`UPDATE entries SET merged_into = ${id} WHERE id = ${duplicate}`)
+  await expect(load(event({}, dupSecond, duplicate))).rejects.toMatchObject({ status: 404 })
+  expect(await putBackSighting(db, duplicate, dupSecond, who)).toBe('merged')
 })
 
 test('what a moderator hid is not put back by a reader, and its history stays closed', async () => {
@@ -141,17 +144,45 @@ test('what people are counted for agrees with what the history shows through a r
 })
 
 test('evidence removed before or after a merge can be put back from the record that holds it', async () => {
-  const { db, id, second, event, who, gone } = await fixture()
-  const other = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, seen('Other'), [], who)
+  const { db, id: kept, event, who } = await fixture()
+  const dup = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, seen('Dup 1'), [], who)
+  const second = (await addSighting(db, dup, seen('Dup 2'), [], who))!
   const lost = async (entry: number) => ((await loadHistory(event({}, second, entry))) as any).removed.map((s: { id: number }) => s.id)
-  await removeSighting(db, id, second, 1, who, null)
-  await mergeEntry(db, id, other, who, null)
-  expect(await lost(other)).toEqual([second])
+  await removeSighting(db, dup, second, 1, who, null)
+  await mergeEntry(db, dup, kept, who, null)
+  expect(await lost(kept)).toEqual([second])
   // Removed as one of the other record's, and left alone on its own after the merge is undone.
-  const first = (await getEntry(db, other))!.sightings.find(s => s.first_entry === id && !s.hidden_at)!
-  await removeSighting(db, other, first.id, 1, who, null)
-  await unmergeEntry(db, id, who)
-  expect((await gone()).map(s => s.id).sort()).toEqual([first.id, second].sort())
-  expect(await putBackSighting(db, id, first.id, who)).toBe('done')
-  expect((await gone()).map(s => s.id)).toEqual([second])
+  const first = (await getEntry(db, kept))!.sightings.find(s => s.first_entry === dup && !s.hidden_at)!
+  await removeSighting(db, kept, first.id, 1, who, null)
+  await unmergeEntry(db, dup, who)
+  expect((await lost(dup)).sort()).toEqual([first.id, second].sort())
+  expect(await putBackSighting(db, dup, first.id, who)).toBe('done')
+  expect(await lost(dup)).toEqual([second])
+})
+
+test('a merge and its undoing carry removed evidence, with the counts, the claims that rest on it and its redaction', async () => {
+  const { db, raw, id: other, who, moderator } = await fixture()
+  const id = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, seen('Dup 1'), [], who)
+  const second = (await addSighting(db, id, seen('Dup 2'), [], who))!
+  // The duplicate is the one whose evidence was removed, and a reading of it rests on that evidence.
+  const claim = { key: 'read0001', kind: 'reading' as const, value: 'bak6', data: null, sightings: [second], under: [] }
+  const entry = (await getEntry(db, id))!.entry
+  expect(await editEntry(db, id, entry.rev, { script: 'han', script_other: null, radical: null, strokes: null, claims: [claim], description: null }, who, null)).toMatchObject({ ok: true })
+  expect(await removeSighting(db, id, second, 1, who, 'a private reason')).toBe('done')
+  const counted = () => (raw.query('SELECT changes FROM people WHERE id = ?').get(who.actor) as { changes: number }).changes
+  const shown = async () => (await globalHistory(db)).rows.filter(row => row.by_id === who.actor).length
+  expect(counted()).toBe(await shown())
+  expect(await mergeEntry(db, id, other, who, null)).toEqual({ ok: true })
+  expect(counted()).toBe(await shown())
+  const joined = (await getEntry(db, other))!
+  expect(joined.sightings.map(s => [s.id, Boolean(s.removed_by)])).toContainEqual([second, true])
+  expect(joined.claims).toMatchObject([{ value: 'bak6', sightings: [second] }])
+  const removal = raw.query("SELECT id FROM revisions WHERE kind = 'hide'").get() as { id: number }
+  expect(await redactRevision(db, id, removal.id, moderator, null)).toBe(true)
+  expect(await unmergeEntry(db, id, who)).toBe(true)
+  expect(counted()).toBe(await shown())
+  expect((await getEntry(db, other))!.claims).toEqual([])
+  expect((await getEntry(db, id))!.claims).toMatchObject([{ value: 'bak6', sightings: [second] }])
+  expect(await putBackSighting(db, id, second, who)).toBe('done')
+  expect(counted()).toBe(await shown())
 })

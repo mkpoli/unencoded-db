@@ -118,3 +118,13 @@ test('the count stays what a person\'s page shows through hiding, merging and si
   expect(merged.length).toBeGreaterThan(0)
   expect((raw.query("SELECT COUNT(DISTINCT kind) AS n FROM revisions").get() as { n: number }).n).toBe(8)
 })
+
+test('a person who signed in is told apart, without the account itself', async () => {
+  const { db } = openTestDb()
+  const anon = await createPerson(db, null, 'Anon'), account = await createPerson(db, 'atlas-1', 'Account')
+  const id = await createEntry(db, fields, sighting, [], who(anon))
+  await editEntry(db, id, 1, { ...fields, description: 'Later' }, who(account), null)
+  const { people } = await list(db)
+  expect(people.map((person: any) => [person.name, person.atlas])).toEqual([['Anon', 0], ['Account', 1]])
+  expect(JSON.stringify(people)).not.toContain('atlas-1')
+})

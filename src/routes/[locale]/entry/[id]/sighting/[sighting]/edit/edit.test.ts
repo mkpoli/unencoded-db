@@ -106,11 +106,14 @@ test('rejects invalid, hidden, merged and mismatched targets on load and write',
     await expect(load(event(form(), id, sighting))).rejects.toMatchObject({ status: 404 })
     await expect(actions.default(event(form(), id, sighting))).rejects.toMatchObject({ status: 404 })
   }
-  for (const sql of ["UPDATE sightings SET hidden_at = 'now'", "UPDATE sightings SET hidden_at = NULL; UPDATE entries SET hidden_at = 'now'", "UPDATE entries SET hidden_at = NULL, merged_into = 2"]) {
+  for (const sql of ["UPDATE sightings SET hidden_at = 'now' WHERE id = 1", "UPDATE sightings SET hidden_at = NULL WHERE id = 1; UPDATE entries SET hidden_at = 'now' WHERE id = 1"]) {
     raw.exec(sql)
     await expect(load(event())).rejects.toMatchObject({ status: 404 })
     await expect(actions.default(event(form()))).rejects.toMatchObject({ status: 404 })
   }
+  raw.exec('UPDATE entries SET hidden_at = NULL WHERE id = 1; UPDATE entries SET merged_into = 1 WHERE id = 2')
+  await expect(load(event(form(), '2', '2'))).rejects.toMatchObject({ status: 404 })
+  await expect(actions.default(event(form(), '2', '2'))).rejects.toMatchObject({ status: 404 })
 })
 
 test('write guard rejects paused and rate-limited edits', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { CLAIM_LIMITS, CLAIM_SCOPES_MAX, CLAIM_SIGHTINGS_MAX, claimsUnder, idsForms, isClaimKey, mapSightings, newClaimKey, parseClaims, readClaims, scopesOf, splitCharacters, supportedBy, validClaim, type Claim } from './claims'
+import { CLAIM_LIMITS, CLAIMS_LENGTH_MAX, CLAIM_SCOPES_MAX, CLAIM_SIGHTINGS_MAX, claimsUnder, idsForms, isClaimKey, joinClaims, mapSightings, partClaims, newClaimKey, parseClaims, readClaims, scopesOf, splitCharacters, supportedBy, validClaim, type Claim } from './claims'
 import { cleanTag } from './tags'
 import { cleanIds, IDS_LENGTH_MAX, IDS_MAX } from './ids'
 
@@ -409,4 +409,95 @@ test('preserves UCV compatibility spellings along with nested selections', () =>
   for (const ids of ['⿰半\u{E0101}肖\u{E0100}', '⿰査舍', '⿱&GW-u51ab-01;木']) {
     expect(cleanIds(ids)).toBe(ids)
   }
+})
+
+describe('joining a duplicate', () => {
+  const make = (kind: Claim['kind'], value: string, key: string, links: Partial<Pick<Claim, 'sightings' | 'under' | 'data'>> = {}): Claim => ({ key, kind, value, data: links.data ?? null, sightings: links.sightings ?? [], under: links.under ?? [] })
+
+  test('a claim both records state is kept once and rests on the sightings of both', () => {
+    const kept = [make('ids', '⿱赤相', 'aaaaaaaa'), make('meaning', 'fish', 'mmmmmmmm', { sightings: [1] }), make('reading', 'sou', 'rrrrrrrr', { sightings: [1], under: ['mmmmmmmm'], data: { doculect: 'ja' } })]
+    const joining = [make('ids', '⿱赤相', 'bbbbbbbb'), make('meaning', 'fish', 'mmmmmmmm', { sightings: [2] }), make('reading', 'sou', 'rrrrrrrr', { sightings: [2], under: ['mmmmmmmm'], data: { doculect: 'ja' } })]
+    const { claims, added } = joinClaims(kept, joining)
+    expect(added).toEqual([])
+    expect(claims).toEqual([kept[0], { ...kept[1], sightings: [1, 2] }, { ...kept[2], sightings: [1, 2] }])
+  })
+
+  test('other claims are added with their scopes, under a new key where theirs is taken', () => {
+    const kept = [make('ids', '⿰木木', 'aaaaaaaa'), make('meaning', 'grove', 'mmmmmmmm')]
+    const joining = [make('ids', '⿰木林', 'bbbbbbbb'), make('meaning', 'wood', 'mmmmmmmm', { sightings: [7] }), make('reading', 'rin', 'rrrrrrrr', { under: ['mmmmmmmm'] }), make('reading', 'rin', 'ssssssss', { sightings: [8] })]
+    const { claims, added } = joinClaims(kept, joining)
+    const wood = claims.find(claim => claim.value === 'wood')!
+    expect(wood.key).not.toBe('mmmmmmmm')
+    expect(added).toEqual(['bbbbbbbb', wood.key, 'rrrrrrrr'])
+    expect(claims.find(claim => claim.value === 'rin')).toEqual(make('reading', 'rin', 'rrrrrrrr', { sightings: [8], under: [wood.key] }))
+    expect(parseClaims(claims)).toEqual(claims)
+  })
+
+  test('a kind that is full takes no more, and the list stays one the app writes', () => {
+    const kept = [make('ivd', 'none', 'aaaaaaaa')]
+    const { claims, added } = joinClaims(kept, [make('ivd', 'U+4E00 U+E0100', 'bbbbbbbb')])
+    expect(claims).toEqual(kept)
+    expect(added).toEqual([])
+  })
+
+  test('a claim comes only with a scope it holds under, and a full list of claims takes no longer links', () => {
+    const meanings = Array.from({ length: CLAIM_LIMITS.meaning.max }, (_, index) => make('meaning', `m${index}`, `m${String(index).padStart(7, '0')}`))
+    const joined = joinClaims(meanings, [make('meaning', 'one more', 'nnnnnnnn'), make('reading', 'rin', 'rrrrrrrr', { under: ['nnnnnnnn'] }), make('reading', 'free', 'ssssssss')])
+    expect(joined.added).toEqual(['ssssssss'])
+    const relations = (last: number) => [make('meaning', 'x'.repeat(480), 'mmmmmmmm'), ...Array.from({ length: 14 }, (_, index) => make('relation', '木', `r${String(index).padStart(7, '0')}`, { data: { relationship: 'variant', difference: 'y'.repeat(index === 13 ? last : 5000) } }))]
+    const long = relations(CLAIMS_LENGTH_MAX - 10 - JSON.stringify(relations(0)).length)
+    expect(JSON.stringify(long).length).toBe(CLAIMS_LENGTH_MAX - 10)
+    expect(parseClaims(long)).toEqual(long)
+    const full = joinClaims(long, [make('meaning', 'x'.repeat(480), 'bbbbbbbb', { sightings: Array.from({ length: 20 }, (_, index) => 1000 + index) })])
+    expect(JSON.stringify(full.claims).length).toBeLessThanOrEqual(CLAIMS_LENGTH_MAX)
+    expect(parseClaims(full.claims)).toEqual(full.claims)
+  })
+
+  test('parting strips the sightings that leave and the added claims that rested only on them', () => {
+    const claims = [make('meaning', 'grove', 'mmmmmmmm', { sightings: [1, 2] }), make('meaning', 'wood', 'nnnnnnnn', { sightings: [2] }), make('reading', 'rin', 'rrrrrrrr', { sightings: [1], under: ['nnnnnnnn'] }), make('ids', '⿰木林', 'bbbbbbbb')]
+    expect(partClaims(claims, new Set([2]), { added: ['nnnnnnnn', 'rrrrrrrr', 'bbbbbbbb'], scoped: [] })).toEqual([make('meaning', 'grove', 'mmmmmmmm', { sightings: [1] }), make('reading', 'rin', 'rrrrrrrr', { sightings: [1] })])
+  })
+
+  test('what two duplicates gave stays until the last of them parts', () => {
+    const kept = [make('ids', '⿰木木', 'aaaaaaaa')]
+    const b = [make('reading', 'rin', 'bbbbbbbb')], c = [make('reading', 'rin', 'cccccccc')]
+    const first = joinClaims(kept, b), second = joinClaims(first.claims, c)
+    const merged = { added: [...first.added, ...second.added], scoped: [] }
+    expect(partClaims(second.claims, new Set(), merged, [c])).toEqual(second.claims)
+    expect(partClaims(second.claims, new Set(), merged)).toEqual(kept)
+  })
+
+  test('a scope a duplicate gave a claim leaves with it', () => {
+    const kept = [make('meaning', 'one', 'mmmmmmmm'), make('meaning', 'two', 'nnnnnnnn'), make('reading', 'rin', 'rrrrrrrr', { under: ['mmmmmmmm'] })]
+    const b = [make('meaning', 'two', 'xxxxxxxx'), make('reading', 'rin', 'yyyyyyyy', { under: ['xxxxxxxx'] })]
+    const joined = joinClaims(kept, b)
+    expect(joined.claims[2].under).toEqual(['mmmmmmmm', 'nnnnnnnn'])
+    expect(joined.scoped).toEqual(['rrrrrrrr>nnnnnnnn'])
+    expect(partClaims(joined.claims, new Set(), joined, [b])).toEqual(joined.claims)
+    expect(partClaims(joined.claims, new Set(), joined)).toEqual(kept)
+  })
+})
+
+describe('creators', () => {
+  test('rows name who made the character, drop empty and repeated rows and keep their evidence', () => {
+    expect(read([['creators_present', '1'], ['creator', ' 陸貫一 '], ['creator_key', 'aaaaaaa1'], ['sightings.aaaaaaa1', '7'], ['creator', ''], ['creator_key', 'aaaaaaa2'], ['creator', '陸貫一'], ['creator_key', 'aaaaaaa3'], ['creator', 'Lu  Guanyi'], ['creator_key', 'aaaaaaa4']]))
+      .toEqual({ claims: [claim('creator', '陸貫一', null, { sightings: [7] }), claim('creator', 'Lu Guanyi')] })
+  })
+
+  test('two spellings of one name are one claim that rests on the evidence of both', () => {
+    expect(read([['creator', 'Ａlice'], ['creator_key', 'aaaaaaa1'], ['sightings.aaaaaaa1', '1'], ['creator', 'Alice'], ['creator_key', 'aaaaaaa2'], ['sightings.aaaaaaa2', '2']]))
+      .toEqual({ claims: [claim('creator', 'Ａlice', null, { sightings: [1, 2] })] })
+  })
+
+  test('a name with a bar, or more names than a record holds, is refused', () => {
+    expect(read([['creator', '陸|貫一']])).toEqual({ error: 'creators' })
+    expect(read(Array.from({ length: CLAIM_LIMITS.creator.max + 1 }, (_, index): [string, string] => ['creator', `甲${index}`]))).toEqual({ error: 'creators' })
+    expect(valid(claim('creator', '陸貫一'))).toBe(true)
+    expect(valid(claim('creator', '陸\n貫一'))).toBe(false)
+  })
+
+  test('an empty list clears the record\'s creators, and a form without the field keeps them', () => {
+    expect(read([['creators_present', '1']], [claim('creator', '陸貫一')])).toEqual({ claims: [] })
+    expect(read([['ivd_status', '']], [claim('creator', '陸貫一')])).toEqual({ claims: [claim('creator', '陸貫一')] })
+  })
 })

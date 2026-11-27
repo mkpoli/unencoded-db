@@ -1,10 +1,11 @@
 import { fail, redirect } from '@sveltejs/kit'
 import { BATCH_ROWS_MAX } from '$lib/limits'
-import { createEntry, hasLink, readEntryFields, readSightingFields } from '$lib/server/entries'
+import { citesEvidence, createEntry, readEntryFields, readSightingFields } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
+import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
-import { uploadedImages } from '../../_submission.server'
+import { readViaPictures, storeImages, uploadedImages } from '../../_submission.server'
 import type { Actions } from './$types'
 
 // Row 0 names no row.
@@ -27,6 +28,9 @@ export const actions: Actions = {
     const count = Math.max(ids.length, notes.length, files.length)
     const typed = Array.from({ length: Math.min(count, BATCH_ROWS_MAX) }, (_, i) => ({ ids: ids[i] ?? '', note: notes[i] ?? '' }))
     const values = { script: base.script, script_other: base.script_other, ...shared, rows: typed }
+    const shots = await readViaPictures(form)
+    if (shots.error) return reject(400, shots.error, values)
+    const cited = readSightingFields(form, shots.all)
     if (count > BATCH_ROWS_MAX) return reject(400, 'batchTooMany', values)
     // A row with nothing in it is skipped, so a spare row costs nothing.
     const chosen = typed.map((row, index) => ({ ...row, index, picture: filled(files[index]) })).filter(row => row.ids.trim() || row.note.trim() || row.picture)
@@ -39,7 +43,7 @@ export const actions: Actions = {
       entry.set('ids', row.ids)
       const { fields, error } = readEntryFields(entry, [])
       if (error) return reject(400, error, values, row.index + 1)
-      if (!row.picture && !hasLink(shared)) return reject(400, 'evidence', values, row.index + 1)
+      if (!row.picture && !citesEvidence(cited)) return reject(400, 'evidence', values, row.index + 1)
       rows.push({ ...row, fields })
     }
     if (!(await chargeWrites(event, 'ADDS', rows.length - 1))) return reject(429, 'slow', values)
@@ -58,16 +62,18 @@ export const actions: Actions = {
       pictures.push(media)
     }
 
+    await storeImages(MEDIA, shots.files)
     const person = await writer(event, DB)
     const who = { actor: person.id, ip: await ipHash(event) }
     let first = 0
     const created: number[] = []
     for (const [i, row] of rows.entries()) {
-      const id = await createEntry(DB, row.fields, { ...shared, note: row.note.trim() || shared.note }, pictures[i], who)
+      const id = await createEntry(DB, row.fields, { ...cited, note: row.note.trim() || cited.note }, pictures[i], who)
       first ||= id
       created.push(id)
     }
     notifyIndexNow(event, { entries: created })
+    scheduleAtlasSync(event, created)
     redirect(303, `/${event.params.locale}/entry/${first}`)
   },
 }

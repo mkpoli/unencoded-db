@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { parse } from 'svelte/compiler'
 import { createEntry, type EntryFields, type SightingFields } from '$lib/server/entries'
 import { createPerson } from '$lib/server/people'
@@ -48,32 +50,42 @@ test('a comment is saved under its writer and may name only the record\'s own ev
   await expect(hide({ ...reader, moderator: true })).rejects.toMatchObject({ status: 303 })
 })
 
-test('sighting media loops key by position rather than image_key alone', () => {
-  const templates = [
-    new URL('./+page.svelte', import.meta.url),
-    new URL('./sighting/[sighting]/edit/+page.svelte', import.meta.url),
-    new URL('../../source/[id]/+page.svelte', import.meta.url),
-  ]
-  const visit = (node: unknown, onEach: (block: { expression: { start: number; end: number }; index?: string; key?: { start: number; end: number } }) => void) => {
+test('picture loops and lightbox keys never rely on image_key alone', () => {
+  const srcRoot = fileURLToPath(new URL('../../../..', import.meta.url))
+  const svelteFiles = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) return svelteFiles(full)
+    return entry.name.endsWith('.svelte') ? [full] : []
+  })
+  const visit = (node: unknown, onNode: (record: Record<string, unknown>) => void) => {
     if (!node || typeof node !== 'object') return
-    if (Array.isArray(node)) { for (const item of node) visit(item, onEach); return }
+    if (Array.isArray(node)) { for (const item of node) visit(item, onNode); return }
     const record = node as Record<string, unknown>
-    if (record.type === 'EachBlock') onEach(record as never)
-    for (const value of Object.values(record)) visit(value, onEach)
+    onNode(record)
+    for (const value of Object.values(record)) visit(value, onNode)
   }
-  let checked = 0
-  for (const file of templates) {
+  const bareImageKey = /^[\w$]+\.image_key$/
+  let checkedEach = 0
+  let checkedKey = 0
+  for (const file of svelteFiles(srcRoot)) {
     const source = readFileSync(file, 'utf8')
+    if (!source.includes('image_key')) continue
     const ast = parse(source, { modern: true })
-    visit(ast.fragment, block => {
-      const expr = source.slice(block.expression.start, block.expression.end)
-      if (!expr.endsWith('.media')) return
-      checked++
-      expect(block.key).toBeDefined()
-      expect(block.index).toBeTruthy()
-      const key = source.slice(block.key!.start, block.key!.end)
-      expect(key).toContain(block.index!)
+    visit(ast.fragment, record => {
+      if (record.type === 'EachBlock' && record.key) {
+        const keyNode = record.key as { start: number; end: number }
+        const key = source.slice(keyNode.start, keyNode.end).trim()
+        expect(bareImageKey.test(key), `${file}: each key ${key}`).toBe(false)
+        if (key.includes('image_key')) checkedEach++
+      }
+      if (record.type === 'KeyBlock' && record.expression) {
+        const exprNode = record.expression as { start: number; end: number }
+        const expr = source.slice(exprNode.start, exprNode.end).trim()
+        expect(bareImageKey.test(expr), `${file}: key block ${expr}`).toBe(false)
+        if (expr.includes('image_key')) checkedKey++
+      }
     })
   }
-  expect(checked).toBe(templates.length)
+  expect(checkedEach).toBeGreaterThanOrEqual(3)
+  expect(checkedKey).toBeGreaterThanOrEqual(1)
 })

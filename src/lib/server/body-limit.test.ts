@@ -24,7 +24,7 @@ function streamed(chunks: Uint8Array[], length?: string) {
 async function runHook(request: Request, resolve: (event: any) => Promise<Response>, overrides: Record<string, unknown> = {}) {
   const event = {
     request, url: new URL(request.url), cookies: { get: () => undefined }, locals: {},
-    route: { id: '/[locale]/entry/[id]/sighting/new' }, platform: { env: {} }, ...overrides,
+    route: { id: '/[locale]/entry/[id]/report' }, platform: { env: {} }, ...overrides,
   }
   return handle({ event, resolve } as any)
 }
@@ -37,6 +37,33 @@ describe('plain http', () => {
     expect(resolved).toBe(false)
     expect(response.status).toBe(308)
     expect(response.location).toBe('https://rare.glyphatlas.org/en?q=1')
+  })
+
+  test('refuses authenticated plain-http MCP requests instead of redirecting them', async () => {
+    let resolved = false
+    const request = new Request('http://rare.glyphatlas.org/mcp', {
+      method: 'POST',
+      headers: { authorization: 'Bearer secret', 'content-type': 'application/json', 'mcp-session-id': 'anon' },
+      body: '{}',
+    })
+    const response = await runHook(request, async () => { resolved = true; return new Response() }, { route: { id: '/mcp' }, platform: { env: { DB: {} } } })
+    expect(resolved).toBe(false)
+    expect(response.status).toBe(426)
+    expect(response.headers.get('upgrade')).toBe('TLS/1.2')
+    expect(await response.json()).toEqual({
+      jsonrpc: '2.0',
+      id: null,
+      error: { code: -32600, message: 'HTTPS is required for authenticated MCP requests' },
+    })
+  })
+
+  test('still redirects unauthenticated plain-http MCP requests to https', async () => {
+    let resolved = false
+    const request = new Request('http://rare.glyphatlas.org/mcp', { method: 'POST', body: '{}' })
+    const response = await runHook(request, async () => { resolved = true; return new Response() }, { route: { id: '/mcp' }, platform: { env: { DB: {} } } }).catch(thrown => thrown)
+    expect(resolved).toBe(false)
+    expect(response.status).toBe(308)
+    expect(response.location).toBe('https://rare.glyphatlas.org/mcp')
   })
 })
 
@@ -61,8 +88,8 @@ describe('write body limit', () => {
     })
   }
 
-  test('a form of several pictures has a higher ceiling', async () => {
-    for (const id of ['/[locale]/new', '/[locale]/batch']) {
+  test('a form of pictures has a higher ceiling', async () => {
+    for (const id of ['/[locale]/new', '/[locale]/batch', '/[locale]/entry/[id]/sighting/new', '/[locale]/entry/[id]/sighting/[sighting]/edit']) {
       const within = streamed([new Uint8Array(1)], String(MAX_WRITE_BODY + 1))
       expect((await runHook(within.request, async () => new Response('ok'), { route: { id } })).status).toBe(200)
       const over = streamed([new Uint8Array(1)], String(MAX_PICTURES_BODY + 1))
@@ -108,7 +135,7 @@ describe('write body limit', () => {
 
   test('rejects rate-limited requests before reading the body', async () => {
     const request = streamed([new Uint8Array(1)]).request
-    await expect(runHook(request, async () => new Response(), { platform: { env: { ADDS: { limit: async () => ({ success: false }) } } } })).rejects.toMatchObject({ status: 429 })
+    await expect(runHook(request, async () => new Response(), { route: { id: '/[locale]/entry/[id]/sighting/new' }, platform: { env: { ADDS: { limit: async () => ({ success: false }) } } } })).rejects.toMatchObject({ status: 429 })
     expect(request.bodyUsed).toBe(false)
   })
 
@@ -128,11 +155,12 @@ describe('write body limit', () => {
 
   test('maps each existing guarded action to its limiter', () => {
     const routes: [string, string, 'ADDS' | 'EDITS'][] = [
-      ['/[locale]/new', '', 'ADDS'], ['/[locale]/batch', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/new', '', 'ADDS'],
+      ['/[locale]/new', '', 'ADDS'], ['/[locale]/batch', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/new', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/[sighting]/split', '', 'ADDS'],
       ['/[locale]/entry/[id]', '?/edit', 'EDITS'], ['/[locale]/entry/[id]', '?/comment', 'EDITS'], ['/[locale]/entry/[id]', '?/hideComment', 'EDITS'], ['/[locale]/entry/[id]', '?/unhideComment', 'EDITS'], ['/[locale]/me', '', 'EDITS'], ['/[locale]/notifications', '', 'EDITS'], ['/api/tags', '', 'EDITS'],
-      ['/[locale]/entry/[id]/report', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/edit', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/remove', '', 'EDITS'],
+      ['/[locale]/entry/[id]/report', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/edit', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/remove', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/move', '', 'EDITS'],
       ['/[locale]/entry/[id]/history', '?/restore', 'EDITS'],
-      ['/[locale]/entry/[id]/history', '?/thank', 'EDITS'], ['/[locale]/entry/[id]/history', '?/putBack', 'EDITS'],
+      ...['addAlias', 'removeAlias', 'addArchive', 'removeArchive'].map(action => ['/[locale]/source/[id]', `?/${action}`, 'EDITS'] as [string, string, 'ADDS' | 'EDITS']),
+      ['/[locale]/entry/[id]/history', '?/thank', 'EDITS'], ['/[locale]/u/[id]', '?/merge', 'EDITS'], ['/[locale]/entry/[id]/history', '?/putBack', 'EDITS'],
       ...['restoreEntry', 'restoreSighting', 'hide', 'unhide', 'resolve'].map(action => ['/[locale]/moderate', `?/${action}`, 'EDITS'] as [string, string, 'ADDS' | 'EDITS']),
     ]
     for (const [id, search, expected] of routes) {
@@ -150,6 +178,10 @@ describe('write body limit', () => {
     expect((await runHook(request('entry/1?/hideComment'), async () => new Response('ok'), options('moderator'))).status).toBe(200)
     await expect(runHook(request('entry/1?/hideComment'), async () => new Response('ok'), options('member'))).rejects.toMatchObject({ status: 403 })
     await expect(runHook(request('entry/1?/comment'), async () => new Response('ok'), options('moderator'))).rejects.toMatchObject({ status: 503 })
+    const person = (role: string) => ({ ...options(role), route: { id: '/[locale]/u/[id]' } })
+    expect((await runHook(request('u/abcdefabcdef?/merge'), async () => new Response('ok'), person('moderator'))).status).toBe(200)
+    await expect(runHook(request('u/abcdefabcdef?/merge'), async () => new Response('ok'), person('member'))).rejects.toMatchObject({ status: 403 })
+    expect((await runHook(request('u/abcdefabcdef?/other'), async () => new Response('ok'), person('moderator'))).status).toBe(404)
   })
 
   test('pause allows only authorized, rate-limited moderation actions through the hook', async () => {

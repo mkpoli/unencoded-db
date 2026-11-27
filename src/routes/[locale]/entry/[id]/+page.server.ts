@@ -9,6 +9,7 @@ import { readNewTag } from '$lib/tags'
 import { newClaim } from '$lib/claims'
 import { filedUnder, radicalPath } from '$lib/radicals'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
+import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
 import { relatedRecords } from '$lib/server/related-records'
@@ -93,6 +94,7 @@ export const actions: Actions = {
     const result = await editEntry(DB, id, rev, values, who, summary)
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code, values })
     notifyIndexNow(event, { entries: [id] })
+    scheduleAtlasSync(event, [id], { onlyIfChanged: true })
     redirect(303, `/${event.params.locale}/entry/${id}`)
   },
 }
