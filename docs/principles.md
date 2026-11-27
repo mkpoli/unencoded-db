@@ -38,6 +38,11 @@ page. Each work that writes the character anew is a sighting of its own, and nam
 its text quotes. A sighting cites the original work and, separately, where the contributor found it,
 so a post that relayed the evidence keeps its credit without standing in for the source.
 
+A sighting takes an original date only when its picture reproduces the older work directly: a
+photo, scan, facsimile, rubbing, tracing or line drawing of it in the cited publication. A typeset
+transcription (隸定) or a later dictionary citing an older text has no original date; its report
+date dates it, and the older text can be named in a quote's locator or the note.
+
 ## Credit every source
 
 Posts on social media, blogs, chat messages and personal communications are cited like books: the
