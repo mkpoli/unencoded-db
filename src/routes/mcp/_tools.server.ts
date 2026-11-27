@@ -6,7 +6,7 @@ import { readDates, sightingDates } from '$lib/server/date-readings'
 // (https://modelcontextprotocol.io/specification/2025-11-25/server/tools).
 import { isHttpError, type RequestEvent } from '@sveltejs/kit'
 import { isDescription } from 'ids-input'
-import { newClaimKey, type Claim, type ClaimKind } from '$lib/claims'
+import { creatorKey, newClaimKey, type Claim, type ClaimKind } from '$lib/claims'
 import { parseRecordCode, recordCode } from '$lib/code'
 import { DOCULECTS } from '$lib/doculects'
 import { COLLECTIONS } from '$lib/tags'
@@ -23,7 +23,8 @@ import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { MAX_WRITE_BODY } from '$lib/server/body-limit'
-import { MAX_IMAGE, prepareImage } from '$lib/server/image'
+import { MAX_IMAGE, prepareImage, sniff } from '$lib/server/image'
+import { isPdf, PDF_SIDE, renderPdfPage } from '$lib/server/pdf'
 import { agentWriter } from '$lib/server/people'
 import { described, storeImages, type ReadImage } from '../_submission.server'
 
@@ -80,9 +81,11 @@ const PICTURE_WAIT = 20_000
 const REDIRECTS_MAX = 3
 /** The most pictures one call has the site fetch from other sites. */
 export const FETCHES_MAX = 10
+/** The most PDF pages one call has the site draw; each takes about a second of the request's time. */
+export const PDF_PAGES_MAX = 4
 
 // What one call may still take in: bytes held in memory, and fetches from other sites.
-type Budget = { bytes: number; fetches: number; seen?: Map<string, ReadImage['image']> }
+type Budget = { bytes: number; fetches: number; pages?: number; seen?: Map<string, ReadImage['image']> }
 
 // The bytes behind a picture's address, within what the call has left. A picture this site already shows
 // comes from its own store. Another site's is fetched, following a few redirects by hand so that each
@@ -110,7 +113,7 @@ async function pictureBytes(event: RequestEvent, address: string, budget: Budget
   let response: Response
   try {
     for (let hop = 0; ; hop++) {
-      response = await fetch(url, { headers: { accept: 'image/jpeg, image/png, image/webp' }, redirect: 'manual', signal })
+      response = await fetch(url, { headers: { accept: 'image/jpeg, image/png, image/webp, application/pdf' }, redirect: 'manual', signal })
       const next = response.status >= 300 && response.status < 400 ? response.headers.get('location') : null
       if (!next) break
       void response.body?.cancel().catch(() => {})
@@ -235,10 +238,11 @@ async function readViaPictures(event: RequestEvent, planned: PlannedVia, budget:
 function pictureItems(value: unknown) {
   const pictures = items(value).map(item => typeof item === 'string' ? { url: item } : record(item))
   if (pictures.length > MEDIA_MAX) throw new Refusal(`A sighting holds up to ${MEDIA_MAX} pictures.`)
-  return pictures.map(({ url, marks }) => {
+  return pictures.map(({ url, marks, page }) => {
     const address = text(url).trim()
     if (!address) throw new Refusal('Each picture needs a url.')
-    return { address, marks }
+    if (page !== undefined && !(Number.isInteger(page) && (page as number) >= 1)) throw new Refusal('page is a whole number counted from 1.')
+    return { address, marks, page: page as number | undefined }
   })
 }
 
@@ -250,15 +254,26 @@ function marksOn(marks: unknown, width: number, height: number) {
   return box
 }
 
-async function readPicture(event: RequestEvent, { address, marks }: { address: string; marks: unknown }, budget: Budget): Promise<ReadImage> {
-  // An address asked twice in one call is fetched once.
-  let image = budget.seen?.get(address)
+async function readPicture(event: RequestEvent, { address, marks, page }: { address: string; marks: unknown; page?: number }, budget: Budget): Promise<ReadImage> {
+  // An address asked twice in one call is fetched once; a PDF, once for each page asked.
+  const asked = `${page ?? ''} ${address}`
+  let image = budget.seen?.get(asked)
   if (!image) {
-    const bytes = await pictureBytes(event, address, budget)
+    let bytes: Uint8Array = await pictureBytes(event, address, budget)
     budget.bytes -= bytes.byteLength
+    // An image is told by its own first bytes before anything in it is read as a PDF's header.
+    if (!sniff(bytes) && isPdf(bytes)) {
+      budget.pages ??= PDF_PAGES_MAX
+      if (budget.pages < 1) throw new Refusal(`One call draws up to ${PDF_PAGES_MAX} PDF pages.`)
+      budget.pages--
+      // The page is drawn here and kept as a picture; the PDF itself is not kept.
+      const drawn = await renderPdfPage(bytes, page ?? 1)
+      if (!drawn) throw new Refusal(`Page ${page ?? 1} of this PDF could not be drawn: ${address}`)
+      bytes = drawn.bytes
+    } else if (page !== undefined) throw new Refusal(`page is for a PDF, and this address is not one: ${address}`)
     image = await prepareImage(new File([bytes as BlobPart], 'picture'), MAX_IMAGE) ?? undefined
     if (!image) throw new Refusal(`${said('image')} (${address})`)
-    ;(budget.seen ??= new Map()).set(address, image)
+    ;(budget.seen ??= new Map()).set(asked, image)
   }
   return { image, thumb: image, box: marksOn(marks, image.width, image.height) }
 }
@@ -289,7 +304,7 @@ function sightingForm(input: Json) {
 }
 
 // The record's own fields as its form sends them. A field the input leaves out is left out of the form, so
-// an edit keeps it; a list the input gives replaces the record's. A row of meanings, readings or related
+// an edit keeps it; a list the input gives replaces the record's. A row of meanings, readings, creators or related
 // characters keeps the key of the claim it names by `key`, or gets a new one, so a later row can name it and
 // each row can name the sightings behind it. `cite` reads the sightings a row names; a row that names none
 // keeps those of the claim it continues.
@@ -313,6 +328,7 @@ function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) 
   const same = (value: unknown) => text(value).normalize('NFC').trim()
   const repeats = (kind: ClaimKind, row: Json) => (claim: Claim) => claim.kind === kind && !taken.has(claim.key) && (
     kind === 'relation' ? claim.value === same(row.character) && claim.data?.relationship === same(row.relationship)
+    : kind === 'creator' ? creatorKey(claim.value) === creatorKey(same(row.name))
     : claim.value === same(row.text) && (kind !== 'reading' || (claim.data?.doculect ?? '') === same(row.doculect)))
   const rows = (value: unknown, field: string, kind: ClaimKind) => items(value).map(row => typeof row === 'string' ? { [field]: row } : record(row)).map(row => {
     const named = held.get(text(row.key))
@@ -346,6 +362,12 @@ function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) 
     form.append('related_difference', text(row.difference)); form.append('related_evidence', text(row.basis)); form.append('related_key', key)
     under(key, row.meanings, meanings, 'meanings', 'meaning', kept)
     under(key, row.readings, readings, 'readings', 'reading', kept)
+    evidence(key, row, kept)
+  }
+
+  if (given('creators')) form.set('creators_present', '1')
+  for (const { row, key, kept } of rows(input.creators, 'name', 'creator')) {
+    form.append('creator', text(row.name)); form.append('creator_key', key)
     evidence(key, row, kept)
   }
 
@@ -530,6 +552,7 @@ async function editedPictures(event: RequestEvent, held: readonly StoredImage[],
     const key = ownKey(event, picture.address)
     const candidates = unkept.filter(stored => stored.image_key === key)
     const marked = picture.marks === undefined ? undefined : JSON.stringify(picture.marks)
+    if (key && picture.page !== undefined) throw new Refusal(`page is for a PDF, and this address is not one: ${picture.address}`)
     const kept = candidates.find(stored => marked !== undefined && JSON.stringify(stored.box ? JSON.parse(stored.box) : []) === marked) ?? candidates[0]
     if (!kept) { pictures.push(await readPicture(event, picture, budget)); continue }
     unkept.splice(unkept.indexOf(kept), 1)
@@ -601,7 +624,7 @@ To add a character:
 
 To correct a record or a sighting, read it with get_record and call edit_record or edit_sighting with the rev it shows, giving only what changes. Say what changed and why in summary.
 
-Record every attested form, whether or not Unicode encodes it; an encoded character takes an encoding with charset "unicode". State only the readings, meanings and relations the evidence gives.`
+Record every attested form, whether or not Unicode encodes it; an encoded character takes an encoding with charset "unicode". State only the readings, meanings, creators and relations the evidence gives.`
 
 const CITATION = {
   url: { type: 'string', description: 'Web address, http or https.' },
@@ -625,11 +648,12 @@ const SIGHTING = {
   note: { type: 'string', description: 'A note on this source.' },
   vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' }, pictures: { type: 'array', maxItems: MEDIA_MAX, description: `Pictures of this source, such as a screenshot of the post, from their addresses, without marks. A picture belongs to one source, the chain holds ${MEDIA_MAX} in all, and the source needs a citation.`, items: { oneOf: [{ type: 'string' }, { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string' } } }], description: 'Address of the image file itself.' } } } } },
   pictures: {
-    type: 'array', maxItems: MEDIA_MAX, description: `Evidence pictures, fetched from their addresses and kept by the site. JPEG, PNG or WebP, up to ${FETCHES_MAX} from other sites in one call.`,
+    type: 'array', maxItems: MEDIA_MAX, description: `Evidence pictures, fetched from their addresses and kept by the site. JPEG, PNG or WebP, or one page of a PDF, up to ${FETCHES_MAX} from other sites and ${PDF_PAGES_MAX} PDF pages in one call.`,
     items: {
       type: 'object', required: ['url'],
       properties: {
-        url: { type: 'string', description: 'Address of the image file itself.' },
+        url: { type: 'string', description: 'Address of the image file itself, or of a PDF.' },
+        page: { type: 'integer', minimum: 1, description: `For a PDF: the page to draw, counted from 1; the first when left out. The page is kept as a picture whose longer side is ${PDF_SIDE} pixels, fewer for a page nearer to square than a sheet of paper, and marks are in pixels of that picture.` },
         marks: { type: 'array', maxItems: BOXES_MAX, description: 'Boxes around the character, each [x, y, width, height] in pixels of the picture.', items: { type: 'array', items: { type: 'number' }, minItems: 4, maxItems: 4 } },
       },
     },
@@ -657,6 +681,7 @@ function recordFields(evidence: Json, key?: Json) {
       meanings: { type: 'array', items: { type: 'integer', minimum: 1 }, description: 'The meanings this reading goes with, by their place in `meanings`, from 1.' },
       evidence,
     } } },
+    creators: { type: 'array', description: 'Who made the character, when a source says so: each person by name as the source writes it.', items: { type: 'object', required: ['name'], properties: { ...own, name: { type: 'string' }, evidence } } },
     encodings: { type: 'array', description: 'The character sets, dictionaries and glyph registries that hold the character.', items: { type: 'object', required: ['charset', 'code'], properties: {
       charset: { type: 'string', description: `One of ${REGISTRIES.map(registry => registry.id).join(', ')}, or another work's name.` },
       code: { type: 'string', description: 'The code as the work writes it, such as U+2D6DD for unicode.' },
@@ -701,7 +726,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'get_record', title: 'Read a record', annotations: READS, run: getRecord,
-    description: 'A record with its claims (descriptions, readings, meanings, codes, relations) and its sightings, each with its citation and picture addresses.',
+    description: 'A record with its claims (descriptions, readings, meanings, creators, codes, relations) and its sightings, each with its citation and picture addresses.',
     inputSchema: { type: 'object', required: ['record'], properties: { record: RECORD } },
   },
   {

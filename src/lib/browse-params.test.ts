@@ -218,3 +218,9 @@ test('BrowseReturnTracker records returning entry for highlight and multi-hop sc
   tracker.track({ type: 'link', fromRoute: '/[locale]/entry/[id]', fromEntryId: 99, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '' })
   expect(tracker.consumeReturning()).toBeNull()
 })
+
+test('a maker is kept in the address as written', () => {
+  expect(browseSearchParams({ creator: ' 陸貫一 ' }).get('creator')).toBe('陸貫一')
+  expect(cleanBrowseSearch('?creator=&decade=')).toBe('')
+  expect(cleanBrowseSearch('?creator=%E9%99%B8%E8%B2%AB%E4%B8%80&unknown=1')).toBe('?creator=%E9%99%B8%E8%B2%AB%E4%B8%80')
+})

@@ -9,6 +9,7 @@ export interface BrowseState {
   filter?: string | null
   collection?: string | null
   tag?: string | null
+  creator?: string | null
   radical?: string | null
   decade?: string | null
   within?: readonly string[]
@@ -52,6 +53,8 @@ export function browseSearchParams(state: BrowseState): URLSearchParams {
   const tag = state.tag?.trim() ?? ''
   if (collection) params.set('collection', collection)
   else if (tag) params.set('tag', tag)
+  const creator = state.creator?.trim() ?? ''
+  if (creator) params.set('creator', creator)
   const radical = state.radical?.trim() ?? ''
   if (radical) params.set('radical', radical)
   const decade = state.decade?.trim() ?? ''
@@ -99,6 +102,7 @@ export function cleanBrowseSearch(search: string | URLSearchParams): string {
     filter: input.get('filter'),
     collection: input.get('collection'),
     tag: (input.get('tag') ?? input.get('genre'))?.normalize('NFC') ?? null,
+    creator: input.get('creator')?.normalize('NFC') ?? null,
     radical: input.get('radical')?.normalize('NFC') ?? null,
     decade: input.get('decade'),
     within: input.getAll('in'),

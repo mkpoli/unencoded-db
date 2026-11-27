@@ -14,6 +14,7 @@ import type { Choice } from './components/ChoiceGroup.svelte'
 
 type Links = { key: string; evidence: string[]; under: string[] }
 type Meaning = Links & { value: string }
+type Creator = Links & { value: string }
 type Reading = Links & { value: string; doculect: string; other: string }
 type Relation = Links & { character: string; relationship: string; difference: string; note: string }
 
@@ -36,6 +37,9 @@ export function createSenseDraft({ claims = [], evidence = [] }: { claims?: Clai
   let readings = $state<Reading[]>(untrack(() => { const found = claimsOf(claims, 'reading').map(claim => ({ ...links(claim), value: claim.value, ...stated(claim.data?.doculect) })); return found.length ? found : [{ ...blank(), value: '', doculect: '', other: '' }] }))
   let relations = $state<Relation[]>(untrack(() => claimsOf(claims, 'relation').map(claim => ({ ...links(claim), character: claim.value, relationship: String(claim.data?.relationship ?? 'uncertain'), difference: String(claim.data?.difference ?? ''), note: String(claim.data?.evidence ?? '') }))))
 
+  // Who made the character. The list opens empty, since most records name nobody.
+  let creators = $state<Creator[]>(untrack(() => claimsOf(claims, 'creator').map(claim => ({ ...links(claim), value: claim.value }))))
+
   let focusRequest = $state('')
 
   const meaningChoices = $derived(meanings.filter(row => row.key && row.value.trim()).map((row): Choice => ({ token: row.key, value: row.key, label: row.value.trim() })))
@@ -45,11 +49,12 @@ export function createSenseDraft({ claims = [], evidence = [] }: { claims?: Clai
   }))
 
   function start() {
-    for (const row of [...meanings, ...readings, ...relations]) row.key ||= newClaimKey()
+    for (const row of [...meanings, ...readings, ...relations, ...creators]) row.key ||= newClaimKey()
   }
   function requestFocus(key: string) { focusRequest = key }
   function clearFocus() { focusRequest = '' }
   function addMeaning() { const row = { ...fresh(), value: '' }; meanings.push(row); return row }
+  function addCreator() { const row = { ...fresh(), value: '' }; creators.push(row); return row }
   function addReading(under: string[] = []) { const row = { ...fresh(under), value: '', doculect: '', other: '' }; readings.push(row); return row }
   function addRelation(under: string[] = []) { const row = { ...fresh(under), character: '', relationship: 'uncertain', difference: '', note: '' }; relations.push(row); return row }
 
@@ -83,6 +88,7 @@ export function createSenseDraft({ claims = [], evidence = [] }: { claims?: Clai
     get meanings() { return meanings },
     get readings() { return readings },
     get relations() { return relations },
+    get creators() { return creators },
     get meaningChoices() { return meaningChoices },
     get readingChoices() { return readingChoices },
     get unlisted() { return unlisted },
@@ -91,6 +97,7 @@ export function createSenseDraft({ claims = [], evidence = [] }: { claims?: Clai
     requestFocus,
     clearFocus,
     addMeaning,
+    addCreator,
     addReading,
     addRelation,
     applyFill,

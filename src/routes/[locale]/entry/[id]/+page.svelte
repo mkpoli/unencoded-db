@@ -59,6 +59,23 @@
   let filled = $state<Fill | null>(null)
   let editOpen = $state(untrack(() => editing || data.idsAdd !== null))
   $effect(() => { if (editing) editOpen = true })
+  // Tags other records of the same sources carry, read once the form opens.
+  let sourceTags = $state<string[]>([])
+  let sourceTagsOf = ''
+  $effect(() => {
+    if (!editOpen) return
+    const ids = [...new Set(data.sightings.map(sighting => sighting.source_id).filter((id): id is number => id !== null))]
+    const key = `${entry.id}:${ids.join(',')}`
+    if (key === sourceTagsOf) return
+    sourceTagsOf = key
+    if (!ids.length) { sourceTags = []; return }
+    const params = new URLSearchParams({ exclude: String(entry.id) })
+    for (const id of ids) params.append('source', String(id))
+    fetch('/api/sources/tags?' + params)
+      .then(response => response.ok ? response.json() as Promise<{ tags?: string[] }> : null)
+      .then(payload => { if (sourceTagsOf === key) sourceTags = payload?.tags ?? [] })
+      .catch(() => { if (sourceTagsOf === key) sourceTags = [] })
+  })
   let fields = $state<CharacterFields>()
   // The description groups on the page, so each one's report shows its own drawing.
   let formsShown = $state<HTMLElement[]>([])
@@ -272,7 +289,7 @@
     </dl>
     <div class="senses">
       <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} records={data.related} />
-      {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
+      {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation' || claim.kind === 'creator')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
       {:else}<EditLink field="senses" name={t('entry.addSenses')} add />{/if}
     </div>
     {#if entry.by_name && entry.created_at}
@@ -299,7 +316,7 @@
         <div id="edit-senses"><SenseEditor claims={editValues.claims} evidence={options} fill={filled} /></div>
         <details class="filing" id="edit-filing" open>
           <summary class="section-title">{t('field.filing')}</summary>
-          <div class="stack filed"><TagFields tags={data.tags} groups={data.groups} selected={valuesOf(editValues.claims, 'tag')} collections={valuesOf(editValues.claims, 'collection')} /></div>
+          <div class="stack filed"><TagFields tags={data.tags} groups={data.groups} selected={valuesOf(editValues.claims, 'tag')} collections={valuesOf(editValues.claims, 'collection')} suggested={sourceTags} /></div>
         </details>
       {/key}
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" /></div>

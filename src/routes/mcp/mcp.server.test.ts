@@ -4,7 +4,9 @@ import { openTestDb } from '$lib/server/testdb'
 import { mergeEntry } from '$lib/server/entries'
 import { personOf } from '$lib/server/people'
 import { MEDIA_MAX } from '$lib/limits'
-import { FETCHES_MAX } from './_tools.server'
+import { PDF_SIDE } from '$lib/server/pdf'
+import { pdfOf } from '$lib/server/pdf.test'
+import { FETCHES_MAX, PDF_PAGES_MAX } from './_tools.server'
 import { POST } from './+server'
 
 const png = new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,10,0,0,0,10,8,6,0,0,0,0,0,0,0])
@@ -97,6 +99,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
     script: 'han', ids: ['⿰山東', '⿰山⿻日木'], description: 'On a shop sign.',
     meanings: [{ text: 'mountain pass', evidence: [2] }],
     readings: [{ text: 'tōge', doculect: 'ja', meanings: [1], evidence: [1, 2] }],
+    creators: [{ name: '陸貫一', evidence: [2] }],
     encodings: [{ charset: 'unicode', code: 'U+5D20' }],
     related: [{ character: '峠', relationship: 'variant', difference: 'right side', readings: [1] }],
     categories: ['kokuji'], tags: ['signage'],
@@ -111,7 +114,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
   expect(raw.query('SELECT ids, script, status, sightings, first_year FROM entries').get()).toEqual({ ids: '⿰山東', script: 'han', status: 'encoded', sightings: 2, first_year: '1936' })
   expect(raw.query('SELECT box, image_w FROM sighting_media').get()).toEqual({ box: '[[1,1,6,6]]', image_w: 10 })
   const claims = raw.query('SELECT key, kind, value, sightings, under FROM claims ORDER BY position').all() as { key: string; kind: string; value: string; sightings: string; under: string }[]
-  expect(claims.map(claim => [claim.kind, claim.value])).toEqual([['ids', '⿰山東'], ['ids', '⿰山⿻日木'], ['reading', 'tōge'], ['meaning', 'mountain pass'], ['encoding', 'U+5D20'], ['relation', '峠'], ['tag', 'kokuji'], ['tag', 'signage']])
+  expect(claims.map(claim => [claim.kind, claim.value])).toEqual([['ids', '⿰山東'], ['ids', '⿰山⿻日木'], ['reading', 'tōge'], ['meaning', 'mountain pass'], ['encoding', 'U+5D20'], ['relation', '峠'], ['tag', 'kokuji'], ['tag', 'signage'], ['creator', '陸貫一']])
   const of = (kind: string) => claims.find(claim => claim.kind === kind)!
   expect(JSON.parse(of('meaning').sightings)).toEqual([2])
   expect(JSON.parse(of('reading').sightings)).toEqual([1, 2])
@@ -214,6 +217,35 @@ test('what cannot be saved is refused whole', async () => {
   expect(count('people')).toBe(0)
   expect(objects.size).toBe(0)
 })
+
+test('a PDF address is kept as a picture of the page asked for', async () => {
+  const { call, objects } = fixture()
+  const pdf = pdfOf([[600, 300], [200, 400]])
+  const asked = pictures(url => url.includes('.pdf') ? new Response(pdf, { headers: { 'content-type': 'application/pdf' } }) : new Response(png))
+  const added = await call('add_record', { ids: ['⿰山東'], sightings: [{ place: 'A leaflet', pictures: [
+    { url: 'https://img.example/leaflet.pdf', marks: [[100, 100, 200, 200]] },
+    { url: 'https://img.example/leaflet.pdf', page: 2 },
+  ] }] })
+  expect(added.failed).toBe(false)
+  // Each page is fetched for itself, and neither keeps the PDF.
+  expect(asked).toHaveLength(2)
+  expect([...objects.keys()].every(key => key.endsWith('.webp'))).toBe(true)
+  expect((await call('get_record', { record: 1 })).value.sightings[0].pictures).toMatchObject([
+    { url: expect.stringMatching(/\.webp$/), width: PDF_SIDE, height: PDF_SIDE / 2, marks: [[100, 100, 200, 200]] },
+    { url: expect.stringMatching(/\.webp$/), width: PDF_SIDE / 2, height: PDF_SIDE },
+  ])
+  const refused = async (picture: Record<string, unknown>) => (await call('add_sighting', { record: 1, pictures: [picture] })).value as string
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', page: 3 })).toContain('Page 3')
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', page: 0 })).toContain('counted from 1')
+  expect(await refused({ url: 'https://img.example/sign.png', page: 1 })).toContain('not one')
+  // An address ending like a page mark is its own address, and a call draws a bounded number of pages.
+  const both = await call('add_sighting', { record: 1, pictures: [{ url: 'https://img.example/leaflet.pdf#page=2' }, { url: 'https://img.example/leaflet.pdf', page: 2 }] })
+  expect(both.failed).toBe(false)
+  expect((await call('get_record', { record: 1 })).value.sightings[1].pictures).toMatchObject([{ width: PDF_SIDE }, { height: PDF_SIDE }])
+  const many = Array.from({ length: PDF_PAGES_MAX + 1 }, (_, index) => ({ url: `https://img.example/${index}.pdf` }))
+  expect((await call('add_sighting', { record: 1, pictures: many })).value).toContain(`up to ${PDF_PAGES_MAX} PDF pages`)
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', marks: [[0, 0, 2, 2]] })).toContain(`${PDF_SIDE} × ${PDF_SIDE / 2}`)
+}, 60_000)
 
 test('a picture larger than the limit is not read to its end', async () => {
   const { call, count, objects } = fixture()
@@ -424,6 +456,21 @@ test('an edit matches rows as the claims store them, and keeps the one of two eq
   const [, second] = read.sightings[0].pictures
   expect((await call('edit_sighting', { record: 1, sighting: read.sightings[0].id, rev: 1, pictures: [{ url: second.url, marks: second.marks }] })).failed).toBe(false)
   expect((await call('get_record', { record: 1 })).value.sightings[0].pictures.map((picture: { marks: number[][] }) => picture.marks)).toEqual([[[2, 2, 5, 5]]])
+})
+
+test('a creator named again without a key keeps its claim and evidence, whatever its spacing', async () => {
+  const { call } = fixture()
+  pictures()
+  await call('add_record', { ids: ['⿻十〇'], creators: [{ name: 'Lu  Guanyi', evidence: [1] }], sightings: [sighting] })
+  const before = (await call('get_record', { record: 1 })).value.claims.find((claim: { kind: string }) => claim.kind === 'creator')
+  expect(before).toMatchObject({ value: 'Lu Guanyi', evidence: [1] })
+  expect(await call('edit_record', { record: 1, rev: 1, creators: ['Lu  Guanyi'], summary: 'Same maker.' })).toMatchObject({ failed: false })
+  const after = (await call('get_record', { record: 1 })).value.claims.find((claim: { kind: string }) => claim.kind === 'creator')
+  expect(after).toEqual(before)
+  // A compatibility spelling of the name is the same maker, written anew.
+  expect(await call('edit_record', { record: 1, rev: 2, creators: ['Ｌu Guanyi'], summary: 'Spelling.' })).toMatchObject({ failed: false })
+  const respelt = (await call('get_record', { record: 1 })).value.claims.find((claim: { kind: string }) => claim.kind === 'creator')
+  expect(respelt).toEqual({ ...before, value: 'Ｌu Guanyi' })
 })
 
 // A second picture, taller than the first, so the two keep different keys.
