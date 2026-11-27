@@ -36,6 +36,16 @@ test('the vias are cited once after the works, with their container, and a via t
   expect(onlyVia.citation).toHaveLength(1)
 })
 
+test('each citation of a record lists the archived copies of its source as archivedAt', () => {
+  const post = { id: 9, title: '乙帖', url: 'https://example.org/post' }
+  const copy = 'https://web.archive.org/web/2024/https://example.org/kx', postCopy = 'https://archive.ph/AbCd'
+  const archives = new Map([[7, [copy, 'javascript:alert(1)']], [9, [postCopy]], [11, ['https://archive.ph/other']]])
+  const [work] = recordData({ locale: 'en', id: 1, name: 'n', description: 'd', siteName: 's', sources: [source], vias: [post], archives }) as any[]
+  expect(work.citation.map((entry: any) => entry.archivedAt)).toEqual([[copy], [postCopy]])
+  const [bare] = recordData({ locale: 'en', id: 1, name: 'n', description: 'd', siteName: 's', sources: [source], vias: [post], archives: new Map([[7, ['ftp://example.org/a']]]) }) as any[]
+  expect(bare.citation.some((entry: any) => 'archivedAt' in entry)).toBe(false)
+})
+
 test('a record without a picture or sources leaves those fields out', () => {
   const [work] = recordData({ locale: 'en', id: 1, name: 'n', description: 'd', siteName: 's', sources: [] }) as any[]
   expect('image' in work).toBe(false)

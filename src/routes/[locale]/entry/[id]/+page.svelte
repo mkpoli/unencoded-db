@@ -32,6 +32,7 @@
   import { COMMENTS_SHOWN } from '$lib/comments'
   import Discussion from '$lib/components/Discussion.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
+  import ArchiveLinks from '$lib/components/ArchiveLinks.svelte'
   import type { Fill } from '$lib/encoded'
   import { compositionOf, encodingsOf, idsForms, primaryLayoutOf, supportedBy, valuesOf } from '$lib/claims'
   import { analyze } from '$lib/composition'
@@ -163,7 +164,7 @@
   const cover = $derived(data.sightings.find(sighting => sighting.media.length)?.media[0])
   const sources = $derived(data.sightings.filter(sighting => sighting.source_id !== null).map(sighting => ({ ...sighting, id: sighting.source_id! })))
   const vias = $derived(data.sightings.flatMap(sighting => sighting.vias))
-  const structured = $derived(recordData({ locale: locale(), id: entry.id, name: seoTitle, description: seoDescription, siteName: t('app.name'), image: cover && media(cover.image_key), sources, vias }))
+  const structured = $derived(recordData({ locale: locale(), id: entry.id, name: seoTitle, description: seoDescription, siteName: t('app.name'), image: cover && media(cover.image_key), sources, vias, archives: data.archives }))
   const marks = $derived(marksOf(encodings))
   const tagsByName = $derived(tagLookup(data.tags))
   const labels = $derived(tagLabels(localized(data.tags, locale())))
@@ -336,12 +337,19 @@
     {#each data.sightings as sighting (sighting.id)}
       {@const types = parseSightingTypes(sighting.types)}
       {@const contexts = parseContexts(sighting.contexts)}
+      {@const web = sighting.url && /^https?:\/\//i.test(sighting.url) ? sighting.url : null}
+      {@const copies = (sighting.source_id && data.archives.get(sighting.source_id)) || []}
       <article class="panel stack" id="sighting-{sighting.id}">
         <EvidencePictures pictures={sighting.media} alt={position => pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} preparing={position => Boolean(preparing[`${sighting.id}:${position}`])} ondownload={(picture, position) => download(sighting, picture, position)} />
         {#if sighting.place}<h3>{sighting.place}</h3>{/if}
         {#if types.length || data.earliest?.sighting === sighting.id}<div class="row badges">{#if data.earliest?.sighting === sighting.id}<span class="badge earliest">{t('entry.earliest')}</span>{/if}{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
-        {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
-        {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} pictures />{/if}
+        {#if web || copies.length}
+          <div class="cited">
+            {#if web}<a class="text-link url" href={web} target="_blank" rel="noopener noreferrer">{web} ↗</a>{/if}
+            <ArchiveLinks archives={copies} />
+          </div>
+        {/if}
+        {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} archives={data.archives} pictures />{/if}
         <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else if field.key === 'source_kind'}{kindName(sighting.source_kind)}{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
           {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
@@ -417,6 +425,7 @@
   .checks li { display:flex; gap:8px } .checks li.done { color:var(--ink) } .checks li.done .tick { color:var(--good) } .tick { flex:none; width:1em; text-align:center }
   .button.small { min-height:32px; padding:4px 10px; font-size:12.5px }
   .url { overflow-wrap:anywhere }
+  .cited { display:flex; flex-direction:column; align-items:start; gap:4px; min-width:0 }
   @media(max-width:700px) { .panel { padding:16px } .styles { --face-size:64px; gap:8px } }
   .first-seen { align-self:center; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; text-decoration:underline; text-decoration-color:var(--line-strong); text-underline-offset:3px }
   .first-seen:hover { color:var(--ink) }

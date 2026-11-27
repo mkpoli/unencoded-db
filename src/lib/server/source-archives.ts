@@ -16,6 +16,19 @@ export async function sourceArchives(db: D1Database, id: number) {
   return results.map(row => row.url)
 }
 
+// The copies of the public sources a record page cites, by source, in one statement. The page names at most
+// SIGHTINGS_MAX sightings of 1 + VIAS_MAX sources, each source holds at most ARCHIVES_MAX copies, and each
+// source named costs a lookup by `sources` key and one by the key of `source_archives`.
+export async function archivesOfSources(db: D1Database, ids: readonly number[]) {
+  const found = new Map<number, string[]>()
+  if (!ids.length) return found
+  const { results } = await db.prepare(`SELECT a.source_id, a.url FROM json_each(?) j CROSS JOIN sources c ON c.id = j.value
+    CROSS JOIN source_archives a ON a.source_id = c.id WHERE c.records > 0`).bind(JSON.stringify([...new Set(ids)])).all<{ source_id: number; url: string }>()
+  for (const { source_id, url } of results) found.set(source_id, [...(found.get(source_id) ?? []), url])
+  for (const urls of found.values()) urls.sort()
+  return found
+}
+
 export async function sourceArchiveChanges(db: D1Database, id: number, before: number | null) {
   const { results } = await db.prepare(`SELECT h.id, h.url, h.removed, h.at, coalesce(m.id, p.id) AS actor,
     coalesce(m.name, p.name) AS name FROM source_archive_changes h JOIN people p ON h.actor = p.id

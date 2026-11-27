@@ -2,7 +2,7 @@ import { beforeEach, expect, test } from 'bun:test'
 import { ARCHIVES_MAX, archiveUrl } from '$lib/source-archives'
 import { createEntry, editSighting, getEntry, setHidden, type EntryFields, type SightingFields } from './entries'
 import { createPerson } from './people'
-import { editSourceArchive, sourceArchiveChanges, sourceArchives } from './source-archives'
+import { archivesOfSources, editSourceArchive, sourceArchiveChanges, sourceArchives } from './source-archives'
 import { openTestDb } from './testdb'
 
 const fields: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] }
@@ -108,4 +108,34 @@ test('reading and writing copies use the indexes on the source', async () => {
   expect(plan(read('INSERT INTO source_archives').sql, [id, copy])).toMatch(/SEARCH source_archives USING PRIMARY KEY \(source_id=\?\)/)
   expect(plan(read('DELETE FROM source_archives').sql, [id, copy])).toMatch(/^SEARCH source_archives USING PRIMARY KEY \(source_id=\? AND url=\?\)$/)
   expect(plan(read('DELETE FROM sources').sql, [id])).toMatch(/SEARCH source_archive_changes USING COVERING INDEX source_archive_changes_by_source \(source_id=\?\)/)
+})
+
+const via = (title: string) => ({ url: `https://example.org/${title}`, title, author: null, publisher: null, report_date: null, container: null, source_kind: null, quote: null, quote_locator: null }) as never
+
+test('a record page reads the copies of the public sources it cites, works and go-betweens, in one index-served statement', async () => {
+  const entry = await createEntry(db, fields, seen({ title: '壬', vias: [via('癸'), via('子')] }), [], who)
+  const hidden = await createEntry(db, fields, seen({ title: '丑' }), [], who)
+  const [work, first, second, gone] = ['壬', '癸', '子', '丑'].map(sourceOf)
+  for (const [id, url] of [[work, copy], [work, 'https://archive.ph/AbCd'], [second, 'https://archive.ph/Zz'], [gone, copy]] as const)
+    expect(await editSourceArchive(db, id, url, false, who.actor)).toBe('ok')
+  await setHidden(db, { entry: hidden }, true, who, null)
+  const sent: { sql: string; values: unknown[] }[] = []
+  const traced = { prepare(sql: string) {
+    const statement = db.prepare(sql)
+    return { bind(...values: unknown[]) { sent.push({ sql, values }); return statement.bind(...values) } }
+  } } as D1Database
+  const found = await archivesOfSources(traced, [work, first, second, work, gone, 999])
+  expect([...found]).toEqual([[work, ['https://archive.ph/AbCd', copy]], [second, ['https://archive.ph/Zz']]])
+  expect(sent).toHaveLength(1)
+  expect(plan(sent[0].sql, sent[0].values).split('\n')).toEqual([
+    expect.stringMatching(/^SCAN j VIRTUAL TABLE INDEX \d+:/),
+    'SEARCH c USING INTEGER PRIMARY KEY (rowid=?)',
+    'SEARCH a USING PRIMARY KEY (source_id=?)',
+  ])
+  expect(await archivesOfSources(traced, [])).toEqual(new Map())
+  expect(sent).toHaveLength(1)
+  // The record page passes every source its visible evidence cites.
+  const { load } = await import('../../routes/[locale]/entry/[id]/+page.server')
+  const page = await load({ params: { locale: 'en', id: String(entry) }, url: new URL(`https://example.test/en/entry/${entry}`), locals: { person: null }, platform: { env: { DB: db } } } as never) as { archives: Map<number, string[]> }
+  expect([...page.archives]).toEqual([[work, ['https://archive.ph/AbCd', copy]], [second, ['https://archive.ph/Zz']]])
 })

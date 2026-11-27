@@ -5,6 +5,7 @@
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import EvidencePictures from '$lib/components/EvidencePictures.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
+  import ArchiveLinks from '$lib/components/ArchiveLinks.svelte'
   import { href, locale, t, when } from '$lib/t'
   import { kindName } from '$lib/source-kind'
   import { sourceHeading } from '$lib/source-name'
@@ -31,9 +32,6 @@
   // The card draws the thumbnail of the first picture of the first sighting that cites the work itself.
   const artwork = $derived(data.sightings.find(sighting => !sighting.via && sighting.media.length)?.media[0]?.thumb_key ?? '')
   const records = $derived(new Set(data.sightings.map(sighting => sighting.entry_id)).size)
-  // A copy is named by its archive's host, with its path and query when the source has another copy there.
-  const copies = $derived(data.archives.map(archive => new URL(archive)).map((url, _, all) =>
-    ({ href: url.href, label: all.filter(other => other.host === url.host).length > 1 ? `${url.host}${url.pathname}${url.search}` : url.host })))
 </script>
 
 <Seo data={structured} title={heading} description={[t('source.title'), heading, source.author, source.publisher, source.report_date].filter(Boolean).join(' · ')}
@@ -44,7 +42,7 @@
     <span class="badge">{t('source.title')}</span>
     <h1>{heading}</h1>
     {#if source.url && /^https?:\/\//i.test(source.url)}<a class="text-link url" href={source.url} target="_blank" rel="noopener noreferrer">{source.url} ↗</a>{/if}
-    {#if data.archives.length}<p class="archived"><span class="muted">{t('source.archives')}</span>{#each copies as archive}<a class="text-link" href={archive.href} title={archive.href} target="_blank" rel="noopener noreferrer ugc nofollow">{archive.label} ↗</a>{/each}</p>{/if}
+    <ArchiveLinks archives={data.archives} />
     <dl class="facts">{#each facts as fact}{#if source[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{#if fact.key === 'report_date'}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} />{:else if fact.key === 'source_kind'}{kindName(source.source_kind)}{:else}{source[fact.key]}{/if}</dd></div>{/if}{/each}</dl>
     {#if data.copy}<a class="text-link" href={href(`/sources/copy/${data.copy.slug}`)}>{t('sources.digitizedCopy')} · {data.copy.title} · {data.copy.collection}</a>{/if}
     <details class="edits" open={form?.aliasError !== undefined || data.aliases.length > 0 || data.before !== null}>
@@ -136,7 +134,6 @@
   .edits form { margin-top:8px; overflow-wrap:anywhere } .edits li { overflow-wrap:anywhere }
   .add .input { width:min(100%, 18rem) } .add [type=url] { flex:1 1 16rem; min-width:0; max-width:32rem }
   .url { overflow-wrap:anywhere }
-  .archived { display:flex; flex-wrap:wrap; gap:4px 12px; margin:0; overflow-wrap:anywhere }
   .facts { display:flex; flex-wrap:wrap; gap:12px 28px; margin:0 } .facts:empty { display:none } dt { color:var(--muted); font-size:12px } dd { margin:2px 0 0; overflow-wrap:anywhere }
   .seen { display:grid; grid-template-columns:110px minmax(0,1fr); gap:20px; align-items:start }
   .record { display:flex; flex-direction:column; align-items:center; gap:4px; color:inherit; text-decoration:none; min-width:0 }
