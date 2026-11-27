@@ -17,9 +17,14 @@ afterEach(() => { globalThis.fetch = realFetch })
 // Every picture address answers the same small PNG unless a test says otherwise.
 function pictures(answer: (url: string) => Response = () => new Response(png, { headers: { 'content-type': 'image/png' } })) {
   const asked: string[] = []
-  globalThis.fetch = (async (input: RequestInfo | URL) => { asked.push(String(input)); return answer(String(input)) }) as typeof fetch
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    asked.push(String(input))
+    agents.push(new Headers(init?.headers).get('user-agent'))
+    return answer(String(input))
+  }) as typeof fetch
   return asked
 }
+const agents: (string | null)[] = []
 
 function fixture(bindings: Record<string, unknown> = {}) {
   const { db, raw } = openTestDb()
@@ -110,6 +115,8 @@ test('a record is added with its claims, sightings and fetched pictures', async 
   })
   expect(added).toEqual({ failed: false, value: { id: 1, code: 'R+0001', url: `${ORIGIN}/entry/1` } })
   expect(asked).toEqual(['https://img.example/sign.png'])
+  // Some image hosts refuse a request without one.
+  expect(agents.at(-1)).toBe(`GlyphAtlasRare/1.0 (+${ORIGIN}/mcp)`)
   expect(objects.size).toBe(1)
   expect(raw.query('SELECT ids, script, status, sightings, first_year FROM entries').get()).toEqual({ ids: '⿰山東', script: 'han', status: 'encoded', sightings: 2, first_year: '1936' })
   expect(raw.query('SELECT box, image_w FROM sighting_media').get()).toEqual({ box: '[[1,1,6,6]]', image_w: 10 })
