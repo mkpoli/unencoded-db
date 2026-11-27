@@ -12,7 +12,7 @@ import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
-import { encodingsOf, joinClaims, mapSightings, moveClaims, newClaim, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, relationsTo, restoreClaims, valuesOf, type Brought, type Claim, type ClaimError } from '$lib/claims'
+import { creatorKey, encodingsOf, joinClaims, mapSightings, moveClaims, newClaim, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, relationsTo, restoreClaims, validCreator, valuesOf, type Brought, type Claim, type ClaimError } from '$lib/claims'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { FILE_ROWS, ensureTags, filedUnder } from './tags'
@@ -91,23 +91,28 @@ export const tidyVias = (vias: readonly Via[]): Via[] => {
   }
   return [...kept.values()].slice(0, VIAS_MAX)
 }
-const viaKey = (via: Via) => citationKey(via) + '\u0000' + (via.quote ?? '')
+export const viaKey = (via: Via) => citationKey(via) + '\u0000' + (via.quote ?? '')
 // The chain of an edit that names no pictures, a restore or an agent's: the text is the one given, and the pictures
 // stay as they are: no picture comes back and none is lost. A
 // picture the sighting still holds goes where the version had it, so undoing a change to a link's words brings its
 // pictures back to it; a link with the same words keeps its own; any other link with pictures left stays in the chain
-// with them, after the links of the version.
-export function heldPictures(vias: readonly Via[], current: readonly Via[]): Via[] {
+// with them, after the links of the version. A link whose words `stated` names (by `viaKey`) gets exactly the
+// pictures listed there, and the pictures it held and left out are let go. When `stated` names any link it
+// declares the chain's pictures: the links of `vias` keep their own by their words, and the pictures of a link
+// that `vias` no longer names go with it.
+export function heldPictures(vias: readonly Via[], current: readonly Via[], stated: ReadonlyMap<string, readonly ViaPicture[]> = new Map()): Via[] {
   const live = new Map(current.flatMap(via => via.pictures ?? []).map(picture => [picture.image_key, picture]))
-  const placed = new Set<string>()
+  const placed = new Set<string>([...stated.values()].flatMap(pictures => pictures.map(picture => picture.image_key)))
+  for (const via of current) if (stated.has(viaKey(via))) for (const picture of via.pictures ?? []) placed.add(picture.image_key)
   const place = (keys: readonly string[]) => keys.flatMap(key => { const picture = live.get(key); if (!picture || placed.has(key)) return []; placed.add(key); return [picture] })
-  const was = vias.map(via => place((via.pictures ?? []).map(picture => picture.image_key)))
+  const was = vias.map(via => stated.has(viaKey(via)) ? [] : place((via.pictures ?? []).map(picture => picture.image_key)))
   const same = new Map(current.map(via => [viaKey(via), via]))
   const text = vias.map((via, index) => {
-    const pictures = [...was[index], ...place((same.get(viaKey(via))?.pictures ?? []).map(picture => picture.image_key))]
+    const own = stated.get(viaKey(via))
+    const pictures = own ? [...own] : [...was[index], ...place((same.get(viaKey(via))?.pictures ?? []).map(picture => picture.image_key))]
     return { ...via, pictures: pictures.length ? pictures : undefined }
   })
-  const kept = current.flatMap(via => {
+  const kept = stated.size ? [] : current.flatMap(via => {
     const pictures = place((via.pictures ?? []).map(picture => picture.image_key))
     return pictures.length ? [{ ...snapshotOf(via, CITATION_FIELDS), quote: via.quote, pictures } as Via] : []
   })
@@ -122,7 +127,7 @@ export function heldPictures(vias: readonly Via[], current: readonly Via[]): Via
 // Whether a sighting names a web address, as its source or in its chain, or pictures a source it was found in.
 export const citesEvidence = (fields: Pick<SightingFields, 'url' | 'vias'>) => Boolean(fields.url) || fields.vias.some(via => via.url || via.pictures?.length)
 // The rows of vias a form sends, in the order of the page.
-function viaRows(form: FormData): Via[] {
+export function viaRows(form: FormData): Via[] {
   const columns = VIA_INPUTS.map(name => form.getAll(name))
   const rows = Math.max(...columns.map(column => column.length))
   return Array.from({ length: rows }, (_, index) => ({
@@ -243,6 +248,7 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   const own = new Set<string>()
   for (const claim of claims) {
     if (claim.kind === 'collection') own.add(`c:${claim.value}`)
+    if (claim.kind === 'creator') own.add(`m:${creatorKey(claim.value)}`)
   }
   // A record is counted in or out of every marked work, so a list of either is one range.
   const held = marksHeld(claims)
@@ -256,7 +262,7 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks, ...filed, ...decade]
 }
 
-const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'tag']
+const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'tag', 'creator']
 function wordTags(entry: TagInput, claims: readonly Claim[], sightings: SightingFields[]) {
   const words = new Set<string>()
   const add = (value: unknown) => { if (typeof value === 'string') for (const term of terms(value)) words.add(term) }
@@ -468,7 +474,7 @@ function insertVias(db: D1Database, sighting: number | string, vias: readonly { 
 
 const snapshotOf = <T extends object>(row: T, fields: readonly (keyof T)[]) => Object.fromEntries(fields.map(field => [field, row[field] ?? null]))
 const entrySnapshot = (fields: EntryFields) => JSON.stringify({ ...snapshotOf(fields, ENTRY_FIELDS), claims: fields.claims })
-const sightingSnapshot = (row: SightingFields, media: readonly StoredImage[]) => JSON.stringify({ ...snapshotOf(row, SIGHTING_FIELDS), vias: row.vias.map(via => ({ ...snapshotOf(via, CITATION_FIELDS), quote: via.quote ?? null, ...(via.pictures?.length ? { pictures: via.pictures.map(picture => snapshotOf(picture, VIA_IMAGE_FIELDS)) } : {}) })), media })
+const sightingSnapshot = (row: SightingFields, media: readonly StoredImage[]) => JSON.stringify({ ...snapshotOf(row, SIGHTING_FIELDS), vias: tidyVias(row.vias).map(via => ({ ...snapshotOf(via, CITATION_FIELDS), quote: via.quote ?? null, ...(via.pictures?.length ? { pictures: via.pictures.map(picture => snapshotOf(picture, VIA_IMAGE_FIELDS)) } : {}) })), media })
 
 type Who = { actor: string; ip: string | null }
 function revision(db: D1Database, who: Who, row: { entry: number; sighting?: number | null; kind: string; rev: number; snapshot: string; summary?: string | null }) {
@@ -712,7 +718,7 @@ async function writeSighting(db: D1Database, id: number, baseRev: number, sent: 
         db.prepare('DELETE FROM sighting_vias WHERE sighting_id = ?').bind(id),
         ...insertVias(db, id, source.vias),
         // A source no sighting cites any more, as its work or as a via, is not kept.
-        ...[...new Set([current.source_id, ...current.vias.map(via => via.id)])].filter(id => id !== null).map(id => db.prepare('DELETE FROM sources WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM sightings WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM sighting_vias WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_aliases WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_alias_changes WHERE source_id = ?1)').bind(id)),
+        ...[...new Set([current.source_id, ...current.vias.map(via => via.id)])].filter(id => id !== null).map(id => db.prepare('DELETE FROM sources WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM sightings WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM sighting_vias WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_aliases WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_alias_changes WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_archives WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_archive_changes WHERE source_id = ?1)').bind(id)),
         ...(media ? [db.prepare('DELETE FROM sighting_media WHERE sighting_id = ?').bind(id), insertMedia(db, id, media)] : []),
         db.prepare('UPDATE entries SET updated_at = ? WHERE id = ?').bind(now(), current.entry_id),
         revision(db, who, { entry: current.entry_id, sighting: id, kind: 'sighting_edit', rev, snapshot: sightingSnapshot(fields, kept), summary }),
@@ -1166,7 +1172,7 @@ export async function mediaVisible(db: D1Database, key: string) {
     UNION ALL SELECT 1 FROM sighting_via_media x INDEXED BY sighting_via_media_by_image ${live} AND x.image_key = ?1 UNION ALL SELECT 1 FROM sighting_via_media x INDEXED BY sighting_via_media_by_thumb ${live} AND x.thumb_key = ?1 LIMIT 1`).bind(key).first())
 }
 
-export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; radical?: string | null; decade?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; also?: readonly string[]; order?: Order; seed?: number | null; after?: string | null; limit?: number }
+export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; creator?: string | null; radical?: string | null; decade?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; also?: readonly string[]; order?: Order; seed?: number | null; after?: string | null; limit?: number }
 export const SEARCH_WINDOW = 256
 
 // The one key a script and a filter name, or null for a filter that is not one.
@@ -1181,6 +1187,13 @@ export function facetTag(facet?: string | null) {
   if (!facet) return null
   const match = /^([ct]):([^|\s]{1,40})$/u.exec(facet.normalize('NFC'))
   return match ? `${match[1]}:${match[2]}` : undefined
+}
+
+// Who made a character (`m:`), as the key the records that name them are listed under.
+export function creatorTag(creator?: string | null) {
+  if (!creator) return null
+  const name = creatorKey(creator.normalize('NFC').trim())
+  return validCreator(name) ? `m:${name}` : undefined
 }
 
 // A radical's path (`b:`), as the key its records and its branches' records are listed under.
@@ -1252,15 +1265,15 @@ export const alsoSearch = (query: string, values: readonly string[] = []) => exa
 
 // The keys every row of a listing holds and the words it is searched for. Each word is the rows any of which
 // holds it; `spelt` are the other spellings of a query of parts, each the rows of its parts. Null names a listing that is not one.
-function listPlan({ script, filter, facet, radical, decade, within, without, query, also }: Listing) {
-  const base = listTag(script, filter), own = facetTag(facet), filed = radicalTag(radical), period = decadeTag(decade), marks = markTags(within, without)
-  if (!base || own === undefined || filed === undefined || period === undefined || !marks) return null
+function listPlan({ script, filter, facet, creator, radical, decade, within, without, query, also }: Listing) {
+  const base = listTag(script, filter), own = facetTag(facet), maker = creatorTag(creator), filed = radicalTag(radical), period = decadeTag(decade), marks = markTags(within, without)
+  if (!base || own === undefined || maker === undefined || filed === undefined || period === undefined || !marks) return null
   if ((query?.trim().length ?? 0) > SEARCH_LENGTH_MAX) return null
   const typed = exactSearchIds(query ?? '')
   const exact = typed ? [typed, ...alsoSearchIds(query ?? '', also)] : null
   const words = exact ? [] : [...new Set(terms(query ?? ''))]
   if (!exact && (words.length > SEARCH_TERMS_MAX || (query?.trim() && !words.length))) return null
-  const keys = [...(own ? [own] : []), ...(filed ? [filed] : []), ...(period ? [period] : []), ...marks, ...(base !== 'all' ? [base] : [])]
+  const keys = [...(own ? [own] : []), ...(maker ? [maker] : []), ...(filed ? [filed] : []), ...(period ? [period] : []), ...marks, ...(base !== 'all' ? [base] : [])]
   // A spelling that is one character, the one the parts make, is found wherever a record names it: as a
   // part, a related character, a code, or a word of its notes and sources.
   const spelt = exact ? [] : alsoSearchParts(query ?? '', also).map(run => [...run]).map(run => run.map(part => run.length === 1 ? [`w:${part}`, ...partRows(part)] : partRows(part)))
@@ -1545,7 +1558,7 @@ export function chroniclePlace(at: string | null, before: string | null, from: s
 
 // The counts a page shows beside its filters. Tags are counted too, and read where they are listed. The
 // radical paths (`b!`, `b:`) are stepped over by key, so the read does not grow with them.
-export const countsStatement = (db: D1Database) => db.prepare(`SELECT tag, n FROM tag_counts WHERE (tag < 'b!' OR tag >= 'b;') AND n > 0 AND tag NOT LIKE '%|%' AND tag NOT LIKE 't:%'`)
+export const countsStatement = (db: D1Database) => db.prepare(`SELECT tag, n FROM tag_counts WHERE (tag < 'b!' OR tag >= 'b;') AND n > 0 AND tag NOT LIKE '%|%' AND tag NOT LIKE 't:%' AND tag NOT LIKE 'm:%'`)
 export async function counts(db: D1Database) {
   const { results } = await countsStatement(db).all<{ tag: string; n: number }>()
   return Object.fromEntries(results.map(row => [row.tag, row.n])) as Record<string, number>
@@ -1567,6 +1580,14 @@ export function radicalCountsStatement(db: D1Database, under?: string) {
 export async function radicalCounts(db: D1Database, under?: string) {
   const { results } = await radicalCountsStatement(db, under).all<{ stated: number; path: string; n: number }>()
   return { counts: new Map(results.filter(row => !row.stated).map(row => [row.path, row.n])), stated: new Set(results.filter(row => row.stated).map(row => row.path)) }
+}
+
+/** The people records name as the maker of their character, those named most first, and how many records name each. */
+export const CREATORS_MAX = 200
+export const creatorCountsStatement = (db: D1Database) => db.prepare(`SELECT substr(tag, 3) AS name, n FROM tag_counts WHERE tag >= 'm:' AND tag < 'm;' AND n > 0 ORDER BY n DESC, tag LIMIT ${CREATORS_MAX}`)
+export async function creatorCounts(db: D1Database) {
+  const { results } = await creatorCountsStatement(db).all<{ name: string; n: number }>()
+  return results
 }
 
 export const TAGS_MAX = 200
@@ -1821,6 +1842,45 @@ export async function exportPage(db: D1Database, after: number, limit: number, s
     for (const row of results) found.get(row.entry_id)?.push(toClaim(row))
   }
   return { entries: page, next: rows.length > limit ? page.at(-1)!.id : null, next_sighting: rows.length > limit ? lastSighting : null }
+}
+
+export type IndexEntry = {
+  id: number
+  script: string
+  script_other: string | null
+  ids: string | null
+  cover_key: string | null
+  status: string | null
+  description: string | null
+  radical: string | null
+  strokes: number | null
+  first_year: string | null
+  sightings: number
+  claims: Claim[]
+}
+
+/** One page of live entries and their claims without evidence rows, for lightweight index consumers. */
+export async function exportIndexPage(db: D1Database, after: number, limit: number) {
+  const { results: entries } = await db.prepare(
+    `SELECT id, script, script_other, ids, cover_key, status, description, radical, strokes, first_year, sightings
+     FROM entries INDEXED BY entries_live_export
+     WHERE id > ? AND merged_into IS NULL AND hidden_at IS NULL
+     ORDER BY id LIMIT ?`,
+  ).bind(after, limit + 1).all<Omit<IndexEntry, 'claims'>>()
+  const page: IndexEntry[] = entries.slice(0, limit).map(entry => ({ ...entry, claims: [] }))
+  if (page.length) {
+    // Leave per-entry claim ordering to JS so the IN-list lookup walks `claims_by_entry` without a temp B-tree.
+    const { results } = await db.prepare(
+      `SELECT entry_id, position, ${CLAIM_COLUMNS.join(', ')}
+       FROM claims INDEXED BY claims_by_entry
+       WHERE entry_id IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(page.map(entry => entry.id))).all<ClaimRow & { entry_id: number; position: number }>()
+    const found = new Map(page.map(entry => [entry.id, entry.claims]))
+    for (const row of [...results].sort((a, b) => a.entry_id - b.entry_id || a.position - b.position)) {
+      found.get(row.entry_id)?.push(toClaim(row))
+    }
+  }
+  return { entries: page, next: entries.length > limit ? page.at(-1)!.id : null }
 }
 
 export const CUSTOM_SCRIPTS_MAX = 100

@@ -8,6 +8,8 @@ import { tileGlyphs } from '$lib/server/glyphs'
 import { positiveId } from '../../../_submission.server'
 import { writer } from '$lib/server/people'
 import { editSourceAlias, sourceAliasChanges, sourceAliases } from '$lib/server/source-aliases'
+import { editSourceArchive, sourceArchiveChanges, sourceArchives } from '$lib/server/source-archives'
+import { ARCHIVE_URL_MAX, archiveUrl } from '$lib/source-archives'
 import type { Actions, PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async (event) => {
@@ -17,11 +19,17 @@ export const load: PageServerLoad = async (event) => {
   if (!found) error(404)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, found.sightings.map(sighting => sighting.tile), event.locals.glyphStyle)
   const dates = await readDates(env(event).DB, [found.source.report_date, ...found.sightings.flatMap(s => [s.original_date, ...s.vias.map(via => via.report_date)])])
-  const param = event.url.searchParams.get('before')
-  const before = param === null ? null : positiveId(param)
-  if (param !== null && !before) error(404)
-  const [aliases, history, copy] = await Promise.all([sourceAliases(env(event).DB, id), sourceAliasChanges(env(event).DB, id, before), copyOfSource(env(event).DB, id)])
-  return { ...found, glyphs, dates, aliases, copy, ...history, before }
+  const cursor = (name: string) => {
+    const param = event.url.searchParams.get(name)
+    const value = param === null ? null : positiveId(param)
+    if (param !== null && !value) error(404)
+    return value
+  }
+  const before = cursor('before'), archivesBefore = cursor('archivesBefore')
+  const db = env(event).DB
+  const [aliases, history, archives, archiveHistory, copy] = await Promise.all([sourceAliases(db, id), sourceAliasChanges(db, id, before),
+    sourceArchives(db, id), sourceArchiveChanges(db, id, archivesBefore), copyOfSource(db, id)])
+  return { ...found, glyphs, dates, aliases, copy, ...history, before, archives, archiveChanges: archiveHistory.changes, olderArchives: archiveHistory.older, archivesBefore }
 }
 
 async function aliasAction(event: RequestEvent, remove: boolean) {
@@ -36,7 +44,22 @@ async function aliasAction(event: RequestEvent, remove: boolean) {
   return { aliasError: false, value: '' }
 }
 
+async function archiveAction(event: RequestEvent, remove: boolean) {
+  await guardWrite(event, 'EDITS')
+  const id = positiveId(event.params.id)
+  if (!id) error(404)
+  const value = (await event.request.formData()).get('archive')
+  const db = env(event).DB
+  const url = typeof value === 'string' ? archiveUrl(value) : null
+  const result = url ? await editSourceArchive(db, id, url, remove, (await writer(event, db)).id) : 'invalid'
+  if (result !== 'ok') return fail(400, { archiveError: result, archive: remove || typeof value !== 'string' ? '' : value.slice(0, ARCHIVE_URL_MAX) })
+  notifyIndexNow(event, { sources: [id] })
+  return { archiveError: null, archive: '' }
+}
+
 export const actions: Actions = {
   addAlias: event => aliasAction(event, false),
   removeAlias: event => aliasAction(event, true),
+  addArchive: event => archiveAction(event, false),
+  removeArchive: event => archiveAction(event, true),
 }

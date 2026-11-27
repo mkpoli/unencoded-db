@@ -89,11 +89,12 @@ An agent can sign in, and then writes under a person's name. The site is the OAu
 | Table | Holds |
 |---|---|
 | `entries` | One character: script, status, description, radical, strokes, and the summary a gallery tile draws |
-| `claims` | What a record states more than once: description sequences, composition, readings, meanings, codes, related characters, IVD, categories, collections, tags |
+| `claims` | What a record states more than once: description sequences, composition, readings, meanings, codes, related characters, IVD, categories, collections, tags, creators |
 | `sightings` | One place the character was seen: where, page, date, contexts, style, source types |
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
 | `sighting_via_media` | The pictures of a go-between itself, by its place in the chain |
 | `source_aliases`, `source_alias_changes`, `source_search_names` | Alternate names for individual citations, their contributor history, and the lookup index for visible sources |
+| `source_archives`, `source_archive_changes` | Archived copies of a citation's link and their contributor history |
 | `source_keys` | The authors, containers, links and account numbers the Sources page finds a source by |
 | `date_readings`, `evidence_dates` | Calendar readings and the view of transcribed dates in sources, sightings and revision history |
 | `date_index_state` | Generation used to retry writes when their date readings change |
@@ -115,7 +116,7 @@ Each claim also carries three links, all inside its own record:
 | `sightings` | A JSON array of the ids of the sightings that support the claim: none, one or several, each a sighting of the same record, at most 20 |
 | `under` | A JSON array of the keys of the claims under which this one holds |
 
-Only a meaning or a reading can be a scope. A reading may hold under meanings, and a related character under meanings, readings or both; a meaning and every other kind (descriptions, composition, codes, IVD, categories, collections, tags) state a fact of the whole record and have no scope. A reference to a key that names no claim, or a claim that cannot be a scope, is refused, and removing a meaning or a reading removes it from every scope in the same save. A revision's snapshot repeats the claims with their keys and links, so a restored version brings its links back, without the sightings the record no longer has.
+Only a meaning or a reading can be a scope. A reading may hold under meanings, and a related character under meanings, readings or both; a meaning and every other kind (descriptions, composition, codes, IVD, categories, collections, tags, creators) state a fact of the whole record and have no scope. A reference to a key that names no claim, or a claim that cannot be a scope, is refused, and removing a meaning or a reading removes it from every scope in the same save. A revision's snapshot repeats the claims with their keys and links, so a restored version brings its links back, without the sightings the record no longer has.
 
 The CSV export has one column for each kind of claim, and a claim names its links after its value: `東 (usage) [under: east | cmn:dōng] [evidence: #3 #7]`, where the numbers are values of `sighting_id`. The JSON export carries `key`, `sightings` and `under` as stored.
 
@@ -163,7 +164,7 @@ Each entry indexes at most 400 distinct terms, drawn from its fields, its claims
 
 ## Character drawings
 
-The gallery draws each record's IDS with [han-compose](https://github.com/mkpoli/han-compose), from the composer export at `https://ids-input-composer.mkpoli.workers.dev/`. The export's files and the drawn paths stay in the `MEDIA` bucket under `composer/` and `glyphs/`. A missing drawing is composed in the background, and `/api/glyph?ids=…&v=…` answers one the page did not have. Only descriptions on visible records are drawn. A record's page draws one set of styles for each form its descriptions name; descriptions that normalize or spell the same form share the drawing.
+The gallery draws each record's IDS with [han-compose](https://github.com/mkpoli/han-compose), from the composer export at `https://ids-input-composer.mkpoli.workers.dev/`. The export's files and the drawn paths stay in the `MEDIA` bucket under `composer/` and `glyphs/`. A missing drawing is composed in the background, and `/api/glyph?ids=…&v=…` answers one the page did not have. Only descriptions on visible records are drawn. A description the composer cannot draw answers 404 with `{"undrawable": true}`, kept at the edge for ten minutes and never stored; a failed read or write of storage answers 503 and is never cached. After each deploy the `Warm glyphs` workflow asks for the addresses no completed run has settled; `gh cache delete --all` makes the next run ask for every address again. A record's page draws one set of styles for each form its descriptions name; descriptions that normalize or spell the same form share the drawing.
 In the character form, the drawing shows one glyph style large and the other four small; click a small one to make it the large one. Open **Adjust layout** to move or resize the large style's parts. Each of the five styles saves its own placement.
 
 A description can carry a layout. The keys are component paths such as `1.0`, the first part of the second part, and the values are six-number SVG affine matrices. The character form adjusts the first description, and the gallery uses the saved layout for each drawing.

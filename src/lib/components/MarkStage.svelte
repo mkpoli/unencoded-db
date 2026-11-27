@@ -1,7 +1,8 @@
 <script lang="ts">
   // A picture with boxes drawn over the characters, up to BOXES_MAX, in the picture's own pixels. It can
   // be enlarged and moved while marking, so a character on a whole page can be found and boxed. Box
-  // numbers sit outside the box, clear of the character they name. `onchange` runs after a box is added
+  // numbers sit outside the box, clear of the character they name. One scrim dims the picture around
+  // the boxes, however many there are. `onchange` runs after a box is added
   // or removed; `actions` adds buttons after the marking ones.
   import type { Snippet } from 'svelte'
   import type { Box } from '$lib/picture'
@@ -22,6 +23,7 @@
   let zoom = $state(1)
   let pan = $state<Pan>({ x: 0, y: 0 })
   let ready = $state(false)
+  const maskId = $props.id()
 
   const point = (event: PointerEvent) => {
     const rect = image!.getBoundingClientRect()
@@ -70,7 +72,17 @@
   <ZoomablePicture {src} {width} {height} alt="" bind:image bind:frame bind:zoom bind:pan marking={marking && !disabled} {disabled}
     onstart={down} onmove={move} onend={up} onload={() => ready = true}>
     {#snippet overlay()}
-      {#each draft ? [...boxes, draft] : boxes as box, index}
+      {@const drawn = draft ? [...boxes, draft] : boxes}
+      {#if drawn.length}
+        <svg class="scrim" viewBox="0 0 {width} {height}" preserveAspectRatio="none" aria-hidden="true">
+          <mask id={maskId}>
+            <rect {width} {height} fill="#fff" />
+            {#each drawn as box}<rect x={box[0]} y={box[1]} width={box[2]} height={box[3]} fill="#000" />{/each}
+          </mask>
+          <rect {width} {height} mask="url(#{maskId})" />
+        </svg>
+      {/if}
+      {#each drawn as box, index}
         {@const space = room(box)}
         {@const numbered = boxes.length > 1 || draft}
         <div class="box" style:left="{box[0] / width * 100}%" style:top="{box[1] / height * 100}%" style:width="{box[2] / width * 100}%" style:height="{box[3] / height * 100}%">
@@ -92,7 +104,8 @@
 
 <style>
   .stage-wrap { --picture-height: 62vh; display: flex; justify-content: center; padding: 10px; border-radius: 10px; background: var(--surface-sunken) }
-  .box { position: absolute; border: calc(2px * var(--inv, 1)) solid var(--mark); box-shadow: 0 0 0 9999px rgb(0 0 0 / 28%); pointer-events: none }
+  .box { position: absolute; border: calc(2px * var(--inv, 1)) solid var(--mark); pointer-events: none }
+  .scrim { position: absolute; inset: 0; width: 100%; height: 100%; fill: rgb(0 0 0 / 28%); pointer-events: none }
   .number { position: absolute; bottom: calc(100% + 2px * var(--inv, 1)); left: calc(-2px * var(--inv, 1)); padding: 0 calc(4px * var(--inv, 1)); border-radius: calc(2px * var(--inv, 1)); background: var(--mark); color: #fff; font-size: calc(11px * var(--inv, 1)); font-weight: 600; line-height: 1.5; white-space: nowrap }
   .number.below { bottom: auto; top: calc(100% + 2px * var(--inv, 1)) }
   .number.right { left: auto; right: calc(-2px * var(--inv, 1)) }

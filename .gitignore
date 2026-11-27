@@ -8,3 +8,4 @@ shots/
 .playwright-mcp/
 worktrees/
 tmp/
+.warm-glyphs/

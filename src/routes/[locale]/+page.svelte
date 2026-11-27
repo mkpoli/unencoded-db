@@ -32,6 +32,7 @@
     filter: data.filter,
     collection: data.collection,
     tag: data.tag,
+    creator: data.creator,
     radical: data.radical,
     decade: data.decade,
     within: data.within,
@@ -109,15 +110,17 @@
   let script = $state(untrack(() => data.script ?? ''))
   let need = $state(untrack(() => NEEDS.includes(data.filter as never) ? (data.filter ?? '') : ''))
   let tag = $state(untrack(() => data.tag ?? ''))
+  let creator = $state(untrack(() => data.creator ?? ''))
   let decade = $state(untrack(() => data.decade ?? ''))
   const searchInvalid = $derived(Boolean(data.searchError && query.trim() === data.query))
-  const hasFilters = $derived(Boolean(data.query || data.script || data.filter || data.collection || data.tag || data.radical || data.decade || data.within.length || data.without.length))
+  const hasFilters = $derived(Boolean(data.query || data.script || data.filter || data.collection || data.tag || data.creator || data.radical || data.decade || data.within.length || data.without.length))
   const clearedFilters = $derived(browseHref(href(), { order: data.order, seed: data.seed, per: data.per }))
   function syncControls() {
     query = data.query ?? ''
     script = data.script ?? ''
     need = NEEDS.includes(data.filter as never) ? (data.filter ?? '') : ''
     tag = data.tag ?? ''
+    creator = data.creator ?? ''
     decade = data.decade ?? ''
   }
   // Returning to the list brings back the pages read so far; a reload starts again from the first.
@@ -262,6 +265,7 @@
       filter: mergeFilter(need, data.filter),
       collection: pinned?.name === 'collection' ? pinned.value : null,
       tag: pinned?.name === 'tag' ? pinned.value : pinned ? null : tag,
+      creator,
       radical: data.radical,
       decade,
       within: data.within,
@@ -289,6 +293,7 @@
     script !== (data.script ?? '') ||
     need !== (NEEDS.includes(data.filter as never) ? (data.filter ?? '') : '') ||
     (!pinned && tag !== (data.tag ?? '')) ||
+    creator !== (data.creator ?? '') ||
     decade !== (data.decade ?? '')
   function search(event: SubmitEvent) {
     event.preventDefault()
@@ -344,6 +349,8 @@
     }
     return [...byCentury]
   })
+  // The makers records name, those named most first. The chosen one stays an option when the list leaves it out.
+  const makers = $derived(data.creator && !data.creators.some(item => item.name === data.creator) ? [{ name: data.creator, n: null }, ...data.creators] : data.creators)
   const knownTag = $derived(data.tag ? data.tags.find(item => item.name === data.tag) ?? null : null)
   // A collection or an unlisted tag is chosen by following a link, and stays until it is cleared.
   const pinned = $derived(data.collection ? { name: 'collection', value: data.collection, label: COLLECTIONS.find(item => item.slug === data.collection)?.label ?? data.collection } : data.tag && !knownTag ? { name: 'tag', value: data.tag, label: `#${data.tag}` } : null)
@@ -414,6 +421,12 @@
       <div class="field"><label for="tag">{t('field.tags')}</label><select class="input" class:active={Boolean(tag)} id="tag" name="tag" bind:value={tag} onchange={() => applyFilters({ noScroll: true, keepFocus: true })}>
         <option value="">{t('browse.all')}</option>
         {#each tagSections as section (section.type)}{#each section.shelves as shelf (shelf.group?.id ?? 0)}<optgroup label={shelf.group ? `${t(`tagType.${section.type}`)} › ${shelf.group.label}` : t(`tagType.${section.type}`)}>{#each shelf.tags as item (item.name)}<option value={item.name}>{item.label} ({item.n})</option>{/each}</optgroup>{/each}{/each}
+      </select></div>
+    {/if}
+    {#if makers.length}
+      <div class="field"><label for="creator">{t('field.creator')}</label><select class="input" class:active={Boolean(creator)} id="creator" name="creator" bind:value={creator} onchange={() => applyFilters({ noScroll: true, keepFocus: true })}>
+        <option value="">{t('browse.all')}</option>
+        {#each makers as item (item.name)}<option value={item.name}>{item.name}{#if item.n !== null} ({item.n}){/if}</option>{/each}
       </select></div>
     {/if}
     <div class="field decade"><label for="decade">{t('browse.decadeLabel')}</label><select class="input" class:active={Boolean(decade)} id="decade" name="decade" bind:value={decade} onchange={() => applyFilters({ noScroll: true, keepFocus: true })}>

@@ -14,7 +14,7 @@ import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
 import { decadeOf } from '$lib/dates'
 import { recordCode } from '$lib/code'
-import { type Via, addSighting, moveSighting, getSighting, claimedBy, counts, countsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { type Via, addSighting, moveSighting, getSighting, claimedBy, counts, countsStatement, creatorCounts, creatorCountsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { PAGE, PAGE_SIZES, pageSizeOf } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
@@ -1093,6 +1093,30 @@ describe('order', () => {
     expect(counted()).toEqual([{ tag: 'y:1930', n: 1 }])
     expect((await list(db, { decade: '1930' }))!.tiles.map(tile => tile.id)).toEqual([id])
     expect(await list(db, { decade: '1935' })).toBeNull()
+  })
+
+  test('a record is listed under each person it names as the maker of its character', async () => {
+    const counted = () => raw.query("SELECT tag, n FROM tag_counts WHERE tag GLOB 'm:*' AND n > 0 ORDER BY tag").all()
+    const id = await createEntry(db, fields({ claims: [claim('ids', '⿻十〇'), claim('creator', '陸貫一')] }), seen(), [], who)
+    const other = await createEntry(db, fields({ claims: [claim('ids', '⿴囗五'), claim('creator', '陸貫一'), claim('creator', '薛德炯')] }), seen(), [], who)
+    await createEntry(db, fields({ claims: [claim('ids', '⿰山東')] }), seen({ author: '陸貫一' }), [], who)
+    expect(counted()).toEqual([{ tag: 'm:薛德炯', n: 1 }, { tag: 'm:陸貫一', n: 2 }])
+    expect(await creatorCounts(db)).toEqual([{ name: '陸貫一', n: 2 }, { name: '薛德炯', n: 1 }])
+    expect((await list(db, { creator: '陸貫一' }))!.tiles.map(tile => tile.id).sort()).toEqual([id, other])
+    expect((await list(db, { creator: '薛德炯', script: 'han' }))!.tiles.map(tile => tile.id)).toEqual([other])
+    expect((await list(db, { creator: '無名氏' }))!.tiles).toEqual([])
+    expect(await list(db, { creator: '陸|貫一' })).toBeNull()
+    expect((raw.query((countsStatement(db) as unknown as { sql: string }).sql).all() as { tag: string }[]).filter(row => row.tag.startsWith('m:'))).toEqual([])
+    const found = (await getEntry(db, other))!
+    await editEntry(db, other, found.entry.rev, fields({ claims: found.claims.filter(item => item.value !== '陸貫一') }), who, null)
+    expect(counted()).toEqual([{ tag: 'm:薛德炯', n: 1 }, { tag: 'm:陸貫一', n: 1 }])
+  })
+
+  test('the makers are one range of the counts', () => {
+    const statement = creatorCountsStatement(db) as unknown as { sql: string; values: unknown[] }
+    const details = (raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')
+    expect(details).toMatch(/SEARCH tag_counts USING PRIMARY KEY \(tag>\? AND tag<\?\)/)
+    expect(details).not.toMatch(/SCAN tag_counts/)
   })
 
   test('a record keeps its first year on every row it is listed under, and its words keep none', async () => {
@@ -2226,7 +2250,7 @@ describe('search total', () => {
 })
 
 test('source names find the exact public citation, including via-only works and shared aliases', async () => {
-  const citations = [via({ title: 'Dictionary', publisher: 'Press A', report_date: '明萬曆34年' }), via({ title: 'Dictionary', publisher: 'Press B' })]
+  const citations = [via({ title: 'Dictionary', publisher: 'Press A', report_date: '1606' }), via({ title: 'Dictionary', publisher: 'Press B' })]
   const entry = await createEntry(db, fields(), seen({ ...citations[0], vias: [citations[1]] }), [], who)
   const editions = await suggestSources(db, 'dict')
   expect(editions).toHaveLength(2)
@@ -2237,7 +2261,7 @@ test('source names find the exact public citation, including via-only works and 
   }
   const matches = await suggestSources(db, 'dic 甲')
   expect(matches.map(s => s.id)).toEqual(editions.map(s => s.id))
-  expect(matches.find(s => s.publisher === 'Press A')?.report_date).toBe('明萬曆34年')
+  expect(matches.find(s => s.publisher === 'Press A')?.report_date).toBe('1606')
   const press = await publicPublisher(db, 'Press B')
   expect((await sourceList(db, 'earliest', null, press!.id, 'dic 甲')).sources.map(s => s.publisher)).toEqual(['Press B'])
   expect(await editSourceAlias(db, editions[0].id, 'dic 甲', true, who.actor)).toBe(true)
