@@ -1,6 +1,6 @@
 name: Warm glyphs
 
-# Draws every record's glyph once a deploy has finished. A newer deploy takes over from a run still going.
+# Draws the glyphs no earlier run settled, once a deploy has finished. A newer deploy takes over from a run still going.
 on:
   workflow_run:
     workflows: [Deploy]
@@ -32,4 +32,22 @@ jobs:
         with:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile
-      - run: bun scripts/warm-glyphs.ts https://rare.glyphatlas.org
+      # The key names every address wanted now, each carrying its export and composer.
+      - id: plan
+        run: bun scripts/warm-glyphs.ts plan .warm-glyphs
+      # The same key means a completed run settled all of them. An earlier list spares the addresses it holds.
+      - id: settled
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .warm-glyphs/settled.json
+          key: ${{ steps.plan.outputs.key }}
+          restore-keys: warm-glyphs-v1-
+      - id: warm
+        if: steps.settled.outputs.cache-hit != 'true'
+        run: bun scripts/warm-glyphs.ts warm https://rare.glyphatlas.org .warm-glyphs
+      # Reached only when the run before it completed: a failed or cancelled one keeps no key.
+      - if: steps.settled.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .warm-glyphs/settled.json
+          key: ${{ steps.plan.outputs.key }}
