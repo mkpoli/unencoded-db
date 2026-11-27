@@ -41,7 +41,7 @@
     <section class="panel stack">
       {#if data.seed}<input type="hidden" name="seed" value={data.seed.id} />{/if}
       <PictureList bind:this={pictures} max={MEDIA_MAX} onready={(working) => preparing = working} />
-      <SightingFields values={form?.values ?? data.seed?.values ?? {}} onphotos={files => pictures?.offer(files)} onready={working => found = working} />
+      <SightingFields values={form?.values ?? data.seed?.values ?? {}} siblings={data.siblings} onphotos={files => pictures?.offer(files)} onready={working => found = working} />
     </section>
     <SubmitBar {busy} label={t('entry.addSighting')} cancel={href(`/entry/${data.id}`)} />
   </form>

@@ -46,7 +46,7 @@
         </div>
       {/if}
       <PictureList bind:this={pictures} max={room} onready={(working) => adding = working} />
-      <SightingFields values={form?.values ?? data.sighting} onphotos={files => pictures?.offer(files)} onready={working => found = working} />
+      <SightingFields values={form?.values ?? data.sighting} siblings={data.siblings} onphotos={files => pictures?.offer(files)} onready={working => found = working} />
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" value={form?.summary ?? ''} /></div>
     </section>
     {#if form?.error === 'conflict'}<button class="button" type="submit" disabled>{t('form.save')}</button>{:else}<SubmitBar {busy} cancel={href(`/entry/${data.id}`)} />{/if}

@@ -1,10 +1,10 @@
 import { parseRecordCode } from '$lib/code'
-import { CITATION_FIELDS, getEntryRow, getSighting, namedVias, readBoxes, SIGHTING_FIELDS, VIA_INPUTS, type SightingFields, type StoredImage, type Via, type ViaPicture } from '$lib/server/entries'
+import { CITATION_FIELDS, CITE_INPUTS, getEntryRow, getSighting, namedVias, readBoxes, SIGHTING_FIELDS, VIA_INPUTS, type SightingFields, type StoredImage, type Via, type ViaPicture } from '$lib/server/entries'
 import { MAX_IMAGE, MAX_THUMB, prepareImage, storeImage } from '$lib/server/image'
 import { MEDIA_MAX } from '$lib/limits'
 import { SIGHTING_START } from '$lib/scripts'
 
-const SIGHTING_NAMES = new Set<string>([...SIGHTING_FIELDS, ...VIA_INPUTS, 'quote_text', 'quote_locator', 'image', 'thumb', 'box', 'via_keep', 'via_drop', 'via_image', 'via_thumb'])
+const SIGHTING_NAMES = new Set<string>([...SIGHTING_FIELDS, ...VIA_INPUTS, ...CITE_INPUTS, 'cites_present', 'quote_text', 'quote_locator', 'image', 'thumb', 'box', 'via_keep', 'via_drop', 'via_image', 'via_thumb'])
 
 // The sightings of a form, in the order of the page: one form of its own for each, with the fields and
 // pictures between its opening field and the next. Fields of the record itself are left out, wherever
