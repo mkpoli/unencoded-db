@@ -119,7 +119,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
       { place: 'A dictionary', title: 'Book', author: 'Someone', report_date: '1936', page: '12', types: ['definition', 'reading'], contexts: ['running_text', 'heading'], vias: [{ url: 'https://example.test/post/1', author: '@poster', publisher: 'X', report_date: '2026-11-14', container: null, source_kind: null, quote: '書影 p. 3' }] },
     ],
   })
-  expect(added).toEqual({ failed: false, value: { id: 1, code: 'R+0001', url: `${ORIGIN}/entry/1` } })
+  expect(added).toEqual({ failed: false, value: { id: 1, code: 'R+0001', url: `${ORIGIN}/R+0001` } })
   expect(asked).toEqual(['https://img.example/sign.png'])
   // Some image hosts refuse a request without one.
   expect(agents.at(-1)).toBe(`GlyphAtlasRare/1.0 (+${ORIGIN}/mcp)`)
@@ -320,7 +320,7 @@ test('a sighting is added to a record, with a picture the site already shows', a
   await call('add_record', { ids: ['⿰山西'], sightings: [sighting] })
   const shown = (await call('get_record', { record: 1 })).value.sightings[0].pictures[0].url as string
   const added = await call('add_sighting', { record: 'R+0002', place: 'The same sign', pictures: [{ url: shown }], original_date: '1920' })
-  expect(added).toEqual({ failed: false, value: { record: { id: 2, code: 'R+0002', url: `${ORIGIN}/entry/2` }, sighting: 3 } })
+  expect(added).toEqual({ failed: false, value: { record: { id: 2, code: 'R+0002', url: `${ORIGIN}/R+0002` }, sighting: 3 } })
   expect(asked).toEqual(['https://img.example/sign.png'])
   expect(raw.query('SELECT sightings, first_year, cover_key IS NOT NULL AS covered FROM entries WHERE id = 2').get()).toEqual({ sightings: 2, first_year: '1920', covered: 1 })
 
@@ -336,7 +336,7 @@ test('a sighting is added to a record, with a picture the site already shows', a
   const moderator = (raw.query('SELECT id FROM people LIMIT 1').get() as { id: string }).id
   await mergeEntry(db, 2, 1, { actor: moderator, ip: null }, null)
   expect(await call('add_sighting', { record: 2, url: 'https://example.test/x' })).toMatchObject({ failed: true, value: expect.stringContaining('R+0001') })
-  expect((await call('get_record', { record: 2 })).value).toEqual({ id: 2, code: 'R+0002', url: `${ORIGIN}/entry/2`, merged_into: { id: 1, code: 'R+0001', url: `${ORIGIN}/entry/1` } })
+  expect((await call('get_record', { record: 2 })).value).toEqual({ id: 2, code: 'R+0002', url: `${ORIGIN}/R+0002`, merged_into: { id: 1, code: 'R+0001', url: `${ORIGIN}/R+0001` } })
   expect(count('sightings')).toBe(3)
 })
 
@@ -346,8 +346,8 @@ test('records are found by description, by word and by parts', async () => {
   await call('add_record', { ids: ['⿱山東'], sightings: [{ ...sighting, title: 'Gazetteer' }] })
   await call('add_record', { ids: ['⿰氵西'], sightings: [sighting] })
   expect((await call('find_similar_records', { ids: '⿰山東' })).value).toEqual({
-    same: [{ id: 1, code: 'R+0001', url: `${ORIGIN}/entry/1`, ids: '⿰山東' }],
-    similar: [{ id: 2, code: 'R+0002', url: `${ORIGIN}/entry/2`, ids: '⿱山東' }],
+    same: [{ id: 1, code: 'R+0001', url: `${ORIGIN}/R+0001`, ids: '⿰山東' }],
+    similar: [{ id: 2, code: 'R+0002', url: `${ORIGIN}/R+0002`, ids: '⿱山東' }],
   })
   expect((await call('find_similar_records', { ids: '⿰木木' })).value).toEqual({ same: [], similar: [] })
   expect((await call('find_similar_records', {})).failed).toBe(true)
@@ -402,7 +402,7 @@ test('a record is edited field by field, against the revision read', async () =>
   expect(read.rev).toBe(1)
   const meaning = read.claims.find((claim: { kind: string }) => claim.kind === 'meaning')
   // Only the codes change; the readings, meanings and their evidence stay.
-  expect(await call('edit_record', { record: 'R+0001', rev: 1, encodings: [{ charset: 'unicode', code: 'U+2C9E7' }], summary: 'Encoded as U+2C9E7.' })).toEqual({ failed: false, value: { record: { id: 1, code: 'R+0001', url: `${ORIGIN}/entry/1` }, rev: 2 } })
+  expect(await call('edit_record', { record: 'R+0001', rev: 1, encodings: [{ charset: 'unicode', code: 'U+2C9E7' }], summary: 'Encoded as U+2C9E7.' })).toEqual({ failed: false, value: { record: { id: 1, code: 'R+0001', url: `${ORIGIN}/R+0001` }, rev: 2 } })
   const after = (await call('get_record', { record: 1 })).value
   expect(after.rev).toBe(2)
   expect(after.claims.filter((claim: { kind: string }) => claim.kind !== 'encoding')).toEqual(read.claims)

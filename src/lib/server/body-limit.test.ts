@@ -24,7 +24,7 @@ function streamed(chunks: Uint8Array[], length?: string) {
 async function runHook(request: Request, resolve: (event: any) => Promise<Response>, overrides: Record<string, unknown> = {}) {
   const event = {
     request, url: new URL(request.url), cookies: { get: () => undefined }, locals: {},
-    route: { id: '/[locale]/entry/[id]/report' }, platform: { env: {} }, ...overrides,
+    route: { id: '/[locale]/[code=recordCode]/report' }, platform: { env: {} }, ...overrides,
   }
   return handle({ event, resolve } as any)
 }
@@ -89,7 +89,7 @@ describe('write body limit', () => {
   }
 
   test('a form of pictures has a higher ceiling', async () => {
-    for (const id of ['/[locale]/new', '/[locale]/batch', '/[locale]/entry/[id]/sighting/new', '/[locale]/entry/[id]/sighting/[sighting]/edit']) {
+    for (const id of ['/[locale]/new', '/[locale]/batch', '/[locale]/[code=recordCode]/sighting/new', '/[locale]/[code=recordCode]/sighting/[sighting]/edit']) {
       const within = streamed([new Uint8Array(1)], String(MAX_WRITE_BODY + 1))
       expect((await runHook(within.request, async () => new Response('ok'), { route: { id } })).status).toBe(200)
       const over = streamed([new Uint8Array(1)], String(MAX_PICTURES_BODY + 1))
@@ -135,7 +135,7 @@ describe('write body limit', () => {
 
   test('rejects rate-limited requests before reading the body', async () => {
     const request = streamed([new Uint8Array(1)]).request
-    await expect(runHook(request, async () => new Response(), { route: { id: '/[locale]/entry/[id]/sighting/new' }, platform: { env: { ADDS: { limit: async () => ({ success: false }) } } } })).rejects.toMatchObject({ status: 429 })
+    await expect(runHook(request, async () => new Response(), { route: { id: '/[locale]/[code=recordCode]/sighting/new' }, platform: { env: { ADDS: { limit: async () => ({ success: false }) } } } })).rejects.toMatchObject({ status: 429 })
     expect(request.bodyUsed).toBe(false)
   })
 
@@ -155,12 +155,12 @@ describe('write body limit', () => {
 
   test('maps each existing guarded action to its limiter', () => {
     const routes: [string, string, 'ADDS' | 'EDITS'][] = [
-      ['/[locale]/new', '', 'ADDS'], ['/[locale]/batch', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/new', '', 'ADDS'], ['/[locale]/entry/[id]/sighting/[sighting]/split', '', 'ADDS'],
-      ['/[locale]/entry/[id]', '?/edit', 'EDITS'], ['/[locale]/entry/[id]', '?/comment', 'EDITS'], ['/[locale]/entry/[id]', '?/hideComment', 'EDITS'], ['/[locale]/entry/[id]', '?/unhideComment', 'EDITS'], ['/[locale]/me', '', 'EDITS'], ['/[locale]/notifications', '', 'EDITS'], ['/api/tags', '', 'EDITS'],
-      ['/[locale]/entry/[id]/report', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/edit', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/remove', '', 'EDITS'], ['/[locale]/entry/[id]/sighting/[sighting]/move', '', 'EDITS'],
-      ['/[locale]/entry/[id]/history', '?/restore', 'EDITS'],
+      ['/[locale]/new', '', 'ADDS'], ['/[locale]/batch', '', 'ADDS'], ['/[locale]/[code=recordCode]/sighting/new', '', 'ADDS'], ['/[locale]/[code=recordCode]/sighting/[sighting]/split', '', 'ADDS'],
+      ['/[locale]/[code=recordCode]', '?/edit', 'EDITS'], ['/[locale]/[code=recordCode]', '?/comment', 'EDITS'], ['/[locale]/[code=recordCode]', '?/hideComment', 'EDITS'], ['/[locale]/[code=recordCode]', '?/unhideComment', 'EDITS'], ['/[locale]/me', '', 'EDITS'], ['/[locale]/notifications', '', 'EDITS'], ['/api/tags', '', 'EDITS'],
+      ['/[locale]/[code=recordCode]/report', '', 'EDITS'], ['/[locale]/[code=recordCode]/sighting/[sighting]/edit', '', 'EDITS'], ['/[locale]/[code=recordCode]/sighting/[sighting]/remove', '', 'EDITS'], ['/[locale]/[code=recordCode]/sighting/[sighting]/move', '', 'EDITS'],
+      ['/[locale]/[code=recordCode]/history', '?/restore', 'EDITS'],
       ...['addAlias', 'removeAlias', 'addArchive', 'removeArchive', 'archiveNow'].map(action => ['/[locale]/source/[id]', `?/${action}`, 'EDITS'] as [string, string, 'ADDS' | 'EDITS']),
-      ['/[locale]/entry/[id]/history', '?/thank', 'EDITS'], ['/[locale]/u/[id]', '?/merge', 'EDITS'], ['/[locale]/entry/[id]/history', '?/putBack', 'EDITS'],
+      ['/[locale]/[code=recordCode]/history', '?/thank', 'EDITS'], ['/[locale]/u/[id]', '?/merge', 'EDITS'], ['/[locale]/[code=recordCode]/history', '?/putBack', 'EDITS'],
       ...['restoreEntry', 'restoreSighting', 'hide', 'unhide', 'resolve'].map(action => ['/[locale]/moderate', `?/${action}`, 'EDITS'] as [string, string, 'ADDS' | 'EDITS']),
     ]
     for (const [id, search, expected] of routes) {
@@ -168,12 +168,12 @@ describe('write body limit', () => {
       expect(writeLimitFor({ request, url: new URL(request.url), route: { id } } as any)).toBe(expected)
     }
     const request = new Request('https://example.test/en?/bogus&/sighting', { method: 'POST' })
-    expect(writeLimitFor({ request, url: new URL(request.url), route: { id: '/[locale]/entry/[id]' } } as any)).toBeNull()
+    expect(writeLimitFor({ request, url: new URL(request.url), route: { id: '/[locale]/[code=recordCode]' } } as any)).toBeNull()
   })
 
   test('a moderator hides a comment while writes are paused, and nobody comments', async () => {
     const db = (role: string) => ({ prepare: () => ({ bind: () => ({ first: async () => ({ id: '1', name: 'x', atlas_sub: null, role, banned_at: null, created_at: new Date().toISOString() }) }) }) })
-    const options = (role: string) => ({ route: { id: '/[locale]/entry/[id]' }, cookies: { get: () => 'token' }, platform: { env: { DB: db(role), WRITES_PAUSED: '1' } } })
+    const options = (role: string) => ({ route: { id: '/[locale]/[code=recordCode]' }, cookies: { get: () => 'token' }, platform: { env: { DB: db(role), WRITES_PAUSED: '1' } } })
     const request = (path: string) => new Request(`https://example.test/en/${path}`, { method: 'POST', body: 'x' })
     expect((await runHook(request('entry/1?/hideComment'), async () => new Response('ok'), options('moderator'))).status).toBe(200)
     await expect(runHook(request('entry/1?/hideComment'), async () => new Response('ok'), options('member'))).rejects.toMatchObject({ status: 403 })
@@ -202,7 +202,7 @@ describe('write body limit', () => {
     await expect(runHook(request('moderate?/hide'), async () => new Response(), options('moderator', false))).rejects.toMatchObject({ status: 429 })
     expect((await runHook(request('moderate?/unknown'), async () => new Response(), options('moderator'))).status).toBe(404)
     await expect(runHook(request('new'), async () => new Response(), { platform: { env: { WRITES_PAUSED: '1' } } })).rejects.toMatchObject({ status: 503 })
-    await expect(runHook(request('entry/1?/edit'), async () => new Response(), { route: { id: '/[locale]/entry/[id]' }, platform: { env: { WRITES_PAUSED: '1' } } })).rejects.toMatchObject({ status: 503 })
+    await expect(runHook(request('entry/1?/edit'), async () => new Response(), { route: { id: '/[locale]/[code=recordCode]' }, platform: { env: { WRITES_PAUSED: '1' } } })).rejects.toMatchObject({ status: 503 })
   })
 
   test('leaves GET requests untouched', async () => {

@@ -23,9 +23,9 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
   switch (event.route?.id) {
     case '/[locale]/new':
     case '/[locale]/batch': return action === 'default' ? 'ADDS' : null
-    case '/[locale]/entry/[id]': return ['edit', 'comment', 'hideComment', 'unhideComment'].includes(action) ? 'EDITS' : null
-    case '/[locale]/entry/[id]/sighting/[sighting]/split':
-    case '/[locale]/entry/[id]/sighting/new': return action === 'default' ? 'ADDS' : null
+    case '/[locale]/[code=recordCode]': return ['edit', 'comment', 'hideComment', 'unhideComment'].includes(action) ? 'EDITS' : null
+    case '/[locale]/[code=recordCode]/sighting/[sighting]/split':
+    case '/[locale]/[code=recordCode]/sighting/new': return action === 'default' ? 'ADDS' : null
     case '/[locale]/source/[id]': return ['addAlias', 'removeAlias', 'addArchive', 'removeArchive', 'archiveNow'].includes(action) ? 'EDITS' : null
     case '/api/tags': return action === 'default' ? 'EDITS' : null
     case '/oauth/register':
@@ -37,12 +37,12 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
     case '/api/favourites':
     case '/api/report':
     case '/api/pdf-page':
-    case '/[locale]/entry/[id]/report':
-    case '/[locale]/entry/[id]/sighting/[sighting]/remove':
-    case '/[locale]/entry/[id]/sighting/[sighting]/move':
-    case '/[locale]/entry/[id]/sighting/[sighting]/edit': return action === 'default' ? 'EDITS' : null
-    case '/[locale]/entry/[id]/duplicate': return action === 'merge' || action === 'apart' ? 'EDITS' : null
-    case '/[locale]/entry/[id]/history': return ['restore', 'redact', 'thank', 'putBack', 'unmerge'].includes(action) ? 'EDITS' : null
+    case '/[locale]/[code=recordCode]/report':
+    case '/[locale]/[code=recordCode]/sighting/[sighting]/remove':
+    case '/[locale]/[code=recordCode]/sighting/[sighting]/move':
+    case '/[locale]/[code=recordCode]/sighting/[sighting]/edit': return action === 'default' ? 'EDITS' : null
+    case '/[locale]/[code=recordCode]/duplicate': return action === 'merge' || action === 'apart' ? 'EDITS' : null
+    case '/[locale]/[code=recordCode]/history': return ['restore', 'redact', 'thank', 'putBack', 'unmerge'].includes(action) ? 'EDITS' : null
     case '/[locale]/u/[id]': return action === 'merge' ? 'EDITS' : null
     case '/[locale]/moderate': return ['restoreEntry', 'restoreSighting', 'hide', 'unhide', 'resolve'].includes(action) ? 'EDITS' : null
     default: return null
@@ -53,7 +53,7 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
 export function moderationAction(event: RequestEvent) {
   if (event.route?.id === '/[locale]/moderate') return true
   const route = event.route?.id
-  if (route !== '/[locale]/entry/[id]' && route !== '/[locale]/u/[id]') return false
+  if (route !== '/[locale]/[code=recordCode]' && route !== '/[locale]/u/[id]') return false
   for (const [key] of event.url.searchParams) if (key.startsWith('/')) return route === '/[locale]/u/[id]' ? key === '/merge' : key === '/hideComment' || key === '/unhideComment'
   return false
 }

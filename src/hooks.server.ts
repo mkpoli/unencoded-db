@@ -1,3 +1,4 @@
+import { canonicalRecordSubpath } from '$lib/code'
 import { GLYPH_STYLE_COOKIE, glyphStyleOf } from '$lib/composer'
 import { redirect, type Handle, type RequestEvent } from '@sveltejs/kit'
 import { isLocale, LOCALE_COOKIE, negotiate } from '$lib/i18n'
@@ -22,7 +23,7 @@ function foreignForm(event: Pick<RequestEvent, 'request' | 'url' | 'route'>) {
 }
 
 // The forms that send pictures: a sighting's own and those of its chain.
-const PICTURE_FORMS = new Set(['/[locale]/batch', '/[locale]/new', '/[locale]/entry/[id]/sighting/new', '/[locale]/entry/[id]/sighting/[sighting]/edit'])
+const PICTURE_FORMS = new Set(['/[locale]/batch', '/[locale]/new', '/[locale]/[code=recordCode]/sighting/new', '/[locale]/[code=recordCode]/sighting/[sighting]/edit'])
 
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname, search } = event.url
@@ -50,7 +51,12 @@ export const handle: Handle = async ({ event, resolve }) => {
   const first = pathname.split('/')[1]
   if (!isLocale(first) && !UNPREFIXED.test(pathname) && event.route.id !== '/[short=shortRecord]') {
     const locale = negotiate(event.cookies.get(LOCALE_COOKIE), event.request.headers.get('accept-language'))
-    redirect(302, `/${locale}${pathname === '/' ? '' : pathname}${search}`)
+    const rewritten = canonicalRecordSubpath(pathname)
+    redirect(302, `/${locale}${rewritten ?? (pathname === '/' ? '' : pathname)}${search}`)
+  }
+  if (isLocale(first) && ['GET', 'HEAD'].includes(event.request.method)) {
+    const rewritten = canonicalRecordSubpath(pathname.slice(first.length + 1))
+    if (rewritten) redirect(308, `/${first}${rewritten}${search}`)
   }
   const theme = event.cookies.get('ug.theme')
   event.locals.theme = theme === 'light' || theme === 'dark' ? theme : 'system'

@@ -1,3 +1,4 @@
+import { recordCode } from '$lib/code'
 import { LOCALES } from '$lib/i18n'
 import { SITE_ORIGIN } from '$lib/seo'
 import { env } from '$lib/server/guard'
@@ -10,8 +11,8 @@ type Changed = { entries?: readonly number[]; sources?: readonly number[] }
 
 export function indexNowUrls({ entries = [], sources = [] }: Changed): string[] {
   const urls = new Set<string>()
-  for (const [kind, ids] of [['entry', entries], ['source', sources]] as const)
-    for (const id of ids) for (const locale of LOCALES) urls.add(`${SITE_ORIGIN}/${locale}/${kind}/${id}`)
+  for (const id of entries) for (const locale of LOCALES) urls.add(`${SITE_ORIGIN}/${locale}/${recordCode(id)}`)
+  for (const id of sources) for (const locale of LOCALES) urls.add(`${SITE_ORIGIN}/${locale}/source/${id}`)
   return [...urls].slice(0, URL_LIMIT)
 }
 

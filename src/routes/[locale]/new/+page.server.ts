@@ -1,6 +1,7 @@
 import { createTag, taxonomy } from '$lib/server/tags'
 import { fail, redirect } from '@sveltejs/kit'
 import { mapSightings, newClaim } from '$lib/claims'
+import { recordCode } from '$lib/code'
 import { readNewTag } from '$lib/tags'
 import { ADD_SIGHTINGS_MAX } from '$lib/limits'
 import { citesEvidence, type SightingFields, createEntry, readEntryFields, readSightingFields, validateCiteTargets } from '$lib/server/entries'
@@ -86,6 +87,6 @@ export const actions: Actions = {
     notifyIndexNow(event, { entries: [id] })
     scheduleAtlasSync(event, [id])
     archiveCited(event, drafts.map(draft => draft.fields))
-    redirect(303, `/${event.params.locale}/entry/${id}`)
+    redirect(303, `/${event.params.locale}/${recordCode(id)}`)
   },
 }

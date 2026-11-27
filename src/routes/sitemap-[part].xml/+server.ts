@@ -1,4 +1,5 @@
 import { error } from '@sveltejs/kit'
+import { recordCode } from '$lib/code'
 import { PUBLIC_SECTIONS } from '$lib/seo'
 import { env } from '$lib/server/guard'
 import { ENTRIES_PER_SITEMAP, pageSitemap } from '$lib/server/sitemap'
@@ -32,6 +33,6 @@ export const GET: RequestHandler = async event => {
   `).bind(end - ENTRIES_PER_SITEMAP, end).all<{ entry_id: number; image_key: string }>()
   const images = Map.groupBy(pictures, picture => picture.entry_id)
   return pageSitemap(results.map(({ id, updated_at }) => ({
-    path: `/entry/${id}`, updated: updated_at, images: (images.get(id) ?? []).map(picture => media(picture.image_key)),
+    path: `/${recordCode(id)}`, updated: updated_at, images: (images.get(id) ?? []).map(picture => media(picture.image_key)),
   })))
 }

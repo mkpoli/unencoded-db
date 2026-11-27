@@ -59,11 +59,11 @@
   <span class="revision-change">
     <span class="revision-main">
       <span class="revision-kind">{t(`history.kind.${row.kind}`)}</span>
-      {#if showEntry}<a class="revision-entry text-link" href={href(`/entry/${row.entry_id}`)} onclick={stop}>{row.ids || t('entry.record', { id: recordCode(row.entry_id) })}</a>{/if}
+      {#if showEntry}<a class="revision-entry text-link" href={href(`/${recordCode(row.entry_id)}`)} onclick={stop}>{row.ids || t('entry.record', { id: recordCode(row.entry_id) })}</a>{/if}
       {#if row.sighting_id && row.removed}<span class="revision-number">#{row.sighting_id}</span>
-      {:else if row.sighting_id}<a class="revision-number" href={href(`/entry/${row.entry_id}#sighting-${row.sighting_id}`)} onclick={stop}>#{row.sighting_id}</a>{/if}
-      {#if row.merge}{@const other = 'from' in row.merge ? row.merge.from : row.merge.into}<a class="revision-number" href={href(`/entry/${other}`)} onclick={stop}>{t('from' in row.merge ? 'history.mergedFrom' : 'history.mergedTo', { id: recordCode(other) })}</a>{/if}
-      {#if row.moved}{@const holder = row.moved.to ?? row.entry_id}<a class="revision-number" href={href(`/entry/${holder}#sighting-${row.moved.sighting}`)} onclick={stop}>#{row.moved.sighting}</a><a class="revision-number" href={href(`/entry/${row.moved.to ?? row.moved.from}`)} onclick={stop}>{t(row.moved.to ? 'history.movedTo' : 'history.movedFrom', { id: recordCode((row.moved.to ?? row.moved.from)!) })}</a>{/if}
+      {:else if row.sighting_id}<a class="revision-number" href={href(`/${recordCode(row.entry_id)}#sighting-${row.sighting_id}`)} onclick={stop}>#{row.sighting_id}</a>{/if}
+      {#if row.merge}{@const other = 'from' in row.merge ? row.merge.from : row.merge.into}<a class="revision-number" href={href(`/${recordCode(other)}`)} onclick={stop}>{t('from' in row.merge ? 'history.mergedFrom' : 'history.mergedTo', { id: recordCode(other) })}</a>{/if}
+      {#if row.moved}{@const holder = row.moved.to ?? row.entry_id}<a class="revision-number" href={href(`/${recordCode(holder)}#sighting-${row.moved.sighting}`)} onclick={stop}>#{row.moved.sighting}</a><a class="revision-number" href={href(`/${recordCode((row.moved.to ?? row.moved.from)!)}`)} onclick={stop}>{t(row.moved.to ? 'history.movedTo' : 'history.movedFrom', { id: recordCode((row.moved.to ?? row.moved.from)!) })}</a>{/if}
       {#if !showActor && row.by_agent}<AgentBadge name={row.by_agent} model={row.by_model ?? null} standalone={row.by_agent === row.by_name} />{/if}
     </span>
     {#if row.redacted || row.redacted_at}<span class="revision-comment">{t('history.redacted')}</span>{:else if row.summary}<span class="revision-comment">{row.summary}</span>{/if}
@@ -135,8 +135,8 @@
             <time datetime={line.at}>{when(line.at)}</time>
             <span class="run-change">
               <span>{t(`history.kind.${line.kind}`)}</span>
-              <a class="text-link" href={href(`/entry/${line.entry_id}`)}>{line.ids || t('entry.record', { id: recordCode(line.entry_id) })}</a>
-              {#if line.sighting_id && !line.removed}<a class="revision-number" href={href(`/entry/${line.entry_id}#sighting-${line.sighting_id}`)}>#{line.sighting_id}</a>{/if}
+              <a class="text-link" href={href(`/${recordCode(line.entry_id)}`)}>{line.ids || t('entry.record', { id: recordCode(line.entry_id) })}</a>
+              {#if line.sighting_id && !line.removed}<a class="revision-number" href={href(`/${recordCode(line.entry_id)}#sighting-${line.sighting_id}`)}>#{line.sighting_id}</a>{/if}
               {#if line.summary && !run.summary}<span class="revision-comment">{line.summary}</span>{/if}
             </span>
           </li>
@@ -159,7 +159,7 @@
           <div class="revision-body">
             {#if !showEntry}
               <div class="revision-links">
-                <a class="text-link" href={href(`/entry/${row.entry_id}`)}>{t('entry.record', { id: recordCode(row.entry_id) })}</a>
+                <a class="text-link" href={href(`/${recordCode(row.entry_id)}`)}>{t('entry.record', { id: recordCode(row.entry_id) })}</a>
               </div>
             {/if}
             {#if row.fields}<RevisionFields fields={row.fields} {labels} {tagTypes} />{/if}

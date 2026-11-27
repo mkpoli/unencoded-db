@@ -1,4 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit'
+import { recordCode } from '$lib/code'
 import { BATCH_ROWS_MAX } from '$lib/limits'
 import { citesEvidence, createEntry, readEntryFields, readSightingFields, validateCiteTargets } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
@@ -78,6 +79,6 @@ export const actions: Actions = {
     notifyIndexNow(event, { entries: created })
     scheduleAtlasSync(event, created)
     archiveCited(event, [cited])
-    redirect(303, `/${event.params.locale}/entry/${first}`)
+    redirect(303, `/${event.params.locale}/${recordCode(first)}`)
   },
 }

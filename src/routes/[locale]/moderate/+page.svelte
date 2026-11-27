@@ -18,7 +18,7 @@
   <ol class="reports">
     {#each data.reports as report (report.id)}
       <li>
-        <div><a class="text-link" href={href(`/entry/${report.entry_id}`)}>{report.ids || t('entry.record', { id: recordCode(report.entry_id) })}</a>{#if report.sighting_id}{' · '}{t('entry.sightings')} #{report.sighting_id}{/if}</div>
+        <div><a class="text-link" href={href(`/${recordCode(report.entry_id)}`)}>{report.ids || t('entry.record', { id: recordCode(report.entry_id) })}</a>{#if report.sighting_id}{' · '}{t('entry.sightings')} #{report.sighting_id}{/if}</div>
         <div class="muted small">{report.by_name} · <time datetime={report.at}>{when(report.at)}</time></div>
         <p class="reason">{report.reason}</p>
         <form method="POST" action={report.target_hidden_at ? '?/unhide' : '?/hide'}>

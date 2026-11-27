@@ -14,11 +14,11 @@ function request(short: string, preferred?: string, browser = 'en') {
 test('short record links redirect to the reader’s language without caching the preference', async () => {
   const preferred = await request('RN', 'zh-Hant', 'ja')
   expect(preferred.status).toBe(302)
-  expect(preferred.headers.get('location')).toBe('/zh-Hant/entry/1734')
+  expect(preferred.headers.get('location')).toBe('/zh-Hant/R+06C6')
   expect(preferred.headers.get('vary')).toBe('Accept-Language, Cookie')
   expect(preferred.headers.get('cache-control')).toContain('no-store')
-  expect((await request('RN', undefined, 'ja-JP')).headers.get('location')).toBe('/ja/entry/1734')
-  expect((await request('RN', 'invalid', 'fr')).headers.get('location')).toBe('/en/entry/1734')
+  expect((await request('RN', undefined, 'ja-JP')).headers.get('location')).toBe('/ja/R+06C6')
+  expect((await request('RN', 'invalid', 'fr')).headers.get('location')).toBe('/en/R+06C6')
 })
 
 test('the codec uses the shortest available length and round-trips safe record IDs', () => {

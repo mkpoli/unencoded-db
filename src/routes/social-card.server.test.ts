@@ -3,8 +3,10 @@ import { getSocialPage, socialPageFor } from '$lib/social-pages'
 import { encode } from 'fast-png'
 import { openTestDb } from '$lib/server/testdb'
 import { getSourceArtwork, getVisibleSource } from '$lib/server/entries'
+import { recordCode } from '$lib/code'
 import { lines, panelView, recordArtwork } from '$lib/server/social-card'
-import { GET } from './[locale]/[kind]/[id]/card.png/+server'
+import { GET as entryCard } from './[locale]/[code=recordCode]/card.png/+server'
+import { GET as sourceCard } from './[locale]/source/[id]/card.png/+server'
 import { copyCardSpecimen, copyPage } from '$lib/server/digitized-copies'
 import { GET as copyCard } from './[locale]/sources/copy/[slug]/card.png/+server'
 
@@ -39,9 +41,9 @@ test('card requests reject hidden or merged records and sources without visible 
     INSERT INTO sighting_media(sighting_id, position, image_key, image_type, image_w, image_h, thumb_key) VALUES
       (1, 0, 'hidden.png', 'image/png', 1, 1, 'hidden-thumb.png'),
       (2, 0, 'public.png', 'image/png', 1, 1, 'public-thumb.png');`)
-  const card = (kind: string, id: number) => Promise.resolve(GET({
-    params: { locale: 'en', kind, id: String(id) }, platform: { env: { DB: db } },
-  } as Parameters<typeof GET>[0]))
+  const card = (kind: 'entry' | 'source', id: number) => Promise.resolve(kind === 'entry'
+    ? entryCard({ params: { locale: 'en', code: recordCode(id) }, platform: { env: { DB: db } } } as Parameters<typeof entryCard>[0])
+    : sourceCard({ params: { locale: 'en', id: String(id) }, platform: { env: { DB: db } } } as Parameters<typeof sourceCard>[0]))
 
   await expect(card('entry', 2)).rejects.toMatchObject({ status: 404 })
   await expect(card('entry', 3)).rejects.toMatchObject({ status: 404 })
@@ -135,9 +137,9 @@ test('cards are looked up in the cache only after visibility, under an address m
   const original = globals.caches
   globals.caches = { default: { match: async (request: Request) => (looked.push(request.url), cached.clone()) } }
   try {
-    const card = (id: number, search = '') => Promise.resolve(GET({
-      params: { locale: 'en', kind: 'entry', id: String(id) }, url: new URL(`https://rare.glyphatlas.org/en/entry/${id}/card.png${search}`), platform: { env: { DB: db } },
-    } as unknown as Parameters<typeof GET>[0]))
+    const card = (id: number, search = '') => Promise.resolve(entryCard({
+      params: { locale: 'en', code: recordCode(id) }, url: new URL(`https://rare.glyphatlas.org/en/${recordCode(id)}/card.png${search}`), platform: { env: { DB: db } },
+    } as unknown as Parameters<typeof entryCard>[0]))
     await expect(card(2)).rejects.toMatchObject({ status: 404 })
     expect(looked).toEqual([])
     const response = await card(1, '?v=2026-01-01')
@@ -146,7 +148,7 @@ test('cards are looked up in the cache only after visibility, under an address m
     await card(1, '?v=another')
     expect(looked).toHaveLength(2)
     expect(looked[0]).toBe(looked[1])
-    expect(looked[0]).toMatch(/^https:\/\/rare\.glyphatlas\.org\/en\/entry\/1\/card\.png\?v=[0-9a-f]{16}$/)
+    expect(looked[0]).toMatch(/^https:\/\/rare\.glyphatlas\.org\/en\/R\+0001\/card\.png\?v=[0-9a-f]{16}$/)
     raw.exec("UPDATE entries SET ids = '木' WHERE id = 1")
     await card(1, '?v=2026-01-01')
     expect(looked[2]).not.toBe(looked[0])

@@ -86,7 +86,7 @@ function recordId(value: unknown) {
 }
 // A record's page without a locale opens in the reader's language.
 const shownPicture = (event: RequestEvent, picture: ViaPicture) => ({ url: `${event.url.origin}/media/v2/${picture.image_key}`, width: picture.image_w, height: picture.image_h })
-const shown = (event: RequestEvent, id: number) => ({ id, code: recordCode(id), url: `${event.url.origin}/entry/${id}` })
+const shown = (event: RequestEvent, id: number) => ({ id, code: recordCode(id), url: `${event.url.origin}/${recordCode(id)}` })
 
 // ---------- Writes ----------
 

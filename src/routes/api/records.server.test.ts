@@ -29,6 +29,8 @@ test('finds records by description, part, meaning, number, code and address, lea
   expect(await ask(String(c))).toEqual([c])
   expect(await ask(`R+${c.toString(16).toUpperCase().padStart(4, '0')}`)).toEqual([c])
   expect(await ask(`https://example.test/en/entry/${c}`)).toEqual([c])
+  expect(await ask(`https://rare.glyphatlas.org/zh-Hant/R+${c.toString(16).toUpperCase().padStart(4, '0')}`)).toEqual([c])
+  expect(await ask(`https://mkpo.li/r/${c.toString(16).toUpperCase().padStart(4, '0')}`)).toEqual([c])
   expect(await ask('')).toEqual([])
   expect(await ask('x'.repeat(201))).toEqual([])
 })
