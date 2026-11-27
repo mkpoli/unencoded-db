@@ -79,6 +79,7 @@ claude mcp add --scope user --transport http rare https://rare.glyphatlas.org/mc
 | `add_sighting` | Adds evidence to a record |
 | `edit_record` | Changes a record's fields |
 | `edit_sighting` | Changes one piece of evidence on a record |
+| `link_sightings` | Links a sighting to an older work or earlier witness (`quotes`, `edition`, or `derived`) |
 
 A write passes the same checks and rate limits as the forms, and an edit is made against the revision `get_record` answered. A picture is given by its address and fetched by the site, up to ten from other sites in one call, and stands as its own thumbnail. The writes of one connection carry one anonymous name, kept by the `Mcp-Session-Id` the endpoint hands out; that id is no browser session and cannot be signed in. The tools are defined in `src/routes/mcp/_tools.server.ts`.
 
@@ -95,6 +96,7 @@ An agent with no browser, such as a chat bot, gets its token from the maintainer
 | `sightings` | One place the character was seen: where, page, date, contexts, style, source types |
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
 | `sighting_via_media` | The pictures of a go-between itself, by its place in the chain |
+| `sighting_cites` | Directed provenance links from a sighting to an older work it quotes, re-sets as a later edition, or derives from |
 | `source_aliases`, `source_alias_changes`, `source_search_names` | Alternate names for individual citations, their contributor history, and the lookup index for visible sources |
 | `source_archives`, `source_archive_changes` | Archived copies of a citation's link and their contributor history |
 | `source_keys` | The authors, containers, links and account numbers the Sources page finds a source by, marked where the author gives them for the author field |

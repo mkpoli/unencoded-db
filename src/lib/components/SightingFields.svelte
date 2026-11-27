@@ -10,16 +10,18 @@
   import ViaPictures from './ViaPictures.svelte'
   import { tick, untrack } from 'svelte'
   import { flip } from 'svelte/animate'
-  import { CONTEXTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, parseContexts, parseSightingTypes } from '$lib/scripts'
+  import { CITE_KINDS, CITES_MAX, CONTEXTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, parseContexts, parseSightingTypes, type CiteKind } from '$lib/scripts'
+  import { dateOrderWarnings } from '$lib/cites'
   import { cleanLinkInput } from '$lib/link-input'
   import { fetchPost, postId, type PostInfo } from '$lib/source-url'
   import { westernDate } from '$lib/dates'
   import { eraRead, t } from '$lib/t'
-  import type { Citation, SightingFields, Via, ViaPicture } from '$lib/server/entries'
+  import type { Citation, Cite, SightingFields, Via, ViaPicture } from '$lib/server/entries'
   import { VIAS_MAX } from '$lib/scripts'
   import { MEDIA_MAX } from '$lib/limits'
 
-  let { values = {}, onphotos, onsource, onready }: { values?: Partial<SightingFields>; onphotos?: (files: File[] | null) => void; onsource?: (sourceId: number | null) => void; onready?: (busy: boolean) => void } = $props()
+  type Sibling = { id: number; title: string | null; place: string; report_date: string | null; original_date: string | null }
+  let { values = {}, siblings = [], onphotos, onsource, onready }: { values?: Partial<SightingFields>; siblings?: readonly Sibling[]; onphotos?: (files: File[] | null) => void; onsource?: (sourceId: number | null) => void; onready?: (busy: boolean) => void } = $props()
   const uid = $props.id()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
   const appears = $derived(new Set(parseContexts(values.contexts)))
@@ -49,6 +51,76 @@
     return saved.length ? saved.map(passage) : [passage()]
   }))
   let postedPassage: number | null = null
+  type CiteRow = { key: number; kind: CiteKind; sighting: string; url: string; title: string; author: string; publisher: string; date: string; container: string; sourceKind: string; quote: string; note: string }
+  const makeCite = (from?: Partial<Cite>): CiteRow => ({
+    key: nextKey++,
+    kind: from?.kind ?? 'quotes',
+    sighting: from?.sighting ? String(from.sighting) : '',
+    url: from?.url ?? '',
+    title: from?.title ?? '',
+    author: from?.author ?? '',
+    publisher: from?.publisher ?? '',
+    date: from?.report_date ?? '',
+    container: from?.container ?? '',
+    sourceKind: from?.source_kind ?? '',
+    quote: from?.quote ?? '',
+    note: from?.note ?? '',
+  })
+  let cites = $state<CiteRow[]>(untrack(() => values.cites?.length ? values.cites.map(makeCite) : [makeCite()]))
+  let citesOpen = $state(untrack(() => Boolean(values.cites?.length)))
+  const blankCite = (row: CiteRow) => !(row.sighting.trim() || row.url || row.title || row.author || row.publisher || row.date || row.container || row.sourceKind || row.quote.trim() || row.note.trim())
+  function removeCite(key: number) {
+    cites = cites.filter(row => row.key !== key)
+    if (!cites.length) cites = [makeCite()]
+  }
+  function chooseCite(row: CiteRow, source: Citation) {
+    row.url = source.url ?? ''
+    row.title = source.title ?? ''
+    row.author = source.author ?? ''
+    row.publisher = source.publisher ?? ''
+    row.date = source.report_date ?? ''
+    row.container = source.container ?? ''
+    row.sourceKind = source.source_kind ?? ''
+  }
+  function moveViaToCites(key: number) {
+    const row = vias.find(item => item.key === key)
+    if (!row || cites.length >= CITES_MAX) return
+    const next = makeCite({ kind: 'quotes', url: row.url, title: row.title, author: row.author, publisher: row.publisher, report_date: row.date, container: row.container, source_kind: row.kind || null, quote: row.quote })
+    const emptyIndex = cites.findIndex(blankCite)
+    if (emptyIndex >= 0) cites[emptyIndex] = next
+    else cites.push(next)
+    citesOpen = true
+    removeVia(key)
+  }
+  function moveCiteToVias(key: number) {
+    const row = cites.find(item => item.key === key)
+    if (!row || vias.length >= VIAS_MAX) return
+    const next = via({ url: row.url, title: row.title, author: row.author, publisher: row.publisher, report_date: row.date, container: row.container, source_kind: row.sourceKind || null, quote: row.quote })
+    const emptyIndex = vias.findIndex(blankVia)
+    if (emptyIndex >= 0) vias[emptyIndex] = next
+    else vias.push(next)
+    viaOpen = true
+    removeCite(key)
+  }
+  const siblingById = $derived(new Map(siblings.map(item => [String(item.id), item])))
+  const dateWarnings = $derived.by(() => {
+    const list = dateOrderWarnings(
+      { report_date: reportDate, original_date: originalDate },
+      vias.map(row => ({ report_date: row.date })),
+      cites.map(row => {
+        const sibling = siblingById.get(row.sighting.trim().replace(/^#/, ''))
+        return { report_date: row.date, target_report_date: sibling?.report_date ?? null, target_original_date: sibling?.original_date ?? null }
+      }),
+    )
+    const viaMap = new Map<number, { viaYear: number; workYear: number }>()
+    const citeMap = new Map<number, { citeYear: number; workYear: number }>()
+    for (const warning of list) {
+      if (warning.side === 'via') viaMap.set(vias[warning.index]?.key ?? -1, warning)
+      else citeMap.set(cites[warning.index]?.key ?? -1, warning)
+    }
+    return { via: viaMap, cite: citeMap }
+  })
+
   let vias = $state<Row[]>(untrack(() => values.vias?.length ? values.vias.map(via) : [via()]))
   let viaOpen = $state(untrack(() => Boolean(values.vias?.length)))
   const blankVia = (row: Row) => !(row.url || row.title || row.author || row.publisher || row.date || row.container)
@@ -311,6 +383,92 @@
   <button type="button" class="button small" disabled={passages.length >= QUOTATIONS_MAX} onclick={() => passages.push(passage())}>{t('field.addQuote')}</button>
   <div class="field"><label for="{uid}-note">{t('field.note')}</label><textarea id="{uid}-note" class="input" name="note" rows="2" maxlength="5000">{values.note ?? ''}</textarea></div>
 </details>
+<details class="more" bind:open={citesOpen}>
+  <summary>{t('field.cites')}</summary>
+  <input type="hidden" name="cites_present" value="1" />
+  <div class="via-list">
+    {#each cites as row, index (row.key)}
+      {@const warn = dateWarnings.cite.get(row.key)}
+      <fieldset class="via">
+        <legend class="sr-only">{t('field.citeRow', { n: index + 1 })}</legend>
+        <input type="hidden" name="cite_kind" value={row.kind} />
+        <div class="cite-kinds" role="radiogroup" aria-label={t('field.citeKind')}>
+          {#each CITE_KINDS as option}
+            <label class="kind-pill">
+              <input type="radio" name="cite_kind_{index}" value={option} checked={row.kind === option} onchange={() => row.kind = option} />
+              <span>{t(`cite.kind.${option}`)}</span>
+            </label>
+          {/each}
+        </div>
+        <div class="field">
+          <label for="{uid}-cite_sighting-{row.key}">{t('field.citeSighting')}</label>
+          <input id="{uid}-cite_sighting-{row.key}" class="input" name="cite_sighting" bind:value={row.sighting} inputmode="numeric" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder={t('field.citeSightingPlaceholder')} />
+          {#if siblings.length}
+            <div class="sibling-picks">
+              {#each siblings.slice(0, 16) as sibling (sibling.id)}
+                {@const picked = row.sighting.trim().replace(/^#/, '') === String(sibling.id)}
+                {@const year = sibling.original_date ?? sibling.report_date}
+                <button type="button" class="sibling-chip" class:picked aria-pressed={picked} onclick={() => row.sighting = picked ? '' : String(sibling.id)}>
+                  <span>#{sibling.id}</span>
+                  <span>{sibling.title || sibling.place}</span>
+                  {#if year}<span class="muted">{year}</span>{/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+        <div class="field"><label for="{uid}-cite_url-{row.key}">{t('field.url')}</label><input id="{uid}-cite_url-{row.key}" class="input" type="url" name="cite_url" bind:value={row.url} use:cleanLinkInput placeholder="https://" maxlength="1000" autocorrect="off" autocapitalize="none" spellcheck="false" /></div>
+        <div class="grid-2">
+          <SourceTitleField id="{uid}-cite_title-{row.key}" name="cite_title" bind:value={row.title} onselect={source => chooseCite(row, source)} />
+          <AuthorField id="{uid}-cite_author-{row.key}" name="cite_author" bind:value={row.author} />
+          <ContainerField id="{uid}-cite_container-{row.key}" name="cite_container" bind:value={row.container} bind:publisher={row.publisher} />
+          <PublisherField id="{uid}-cite_publisher-{row.key}" name="cite_publisher" bind:value={row.publisher} />
+          {@render kindField(`${uid}-cite_source_kind-${row.key}`, 'cite_source_kind', row.sourceKind, value => row.sourceKind = value)}
+          <div class="field"><label for="{uid}-cite_report_date-{row.key}">{t('field.reportDate')}</label><input id="{uid}-cite_report_date-{row.key}" class="input" name="cite_report_date" bind:value={row.date} aria-describedby="{uid}-cite_report_date-{row.key}-read" />{@render yearRead(`${uid}-cite_report_date-${row.key}`, row.date)}</div>
+        </div>
+        {#if row.kind === 'quotes'}
+          <div class="field"><label for="{uid}-cite_quote-{row.key}">{t('field.citeQuote')}</label><textarea id="{uid}-cite_quote-{row.key}" class="input" name="cite_quote" rows="2" maxlength="5000" bind:value={row.quote}></textarea></div>
+          <input type="hidden" name="cite_note" value={row.note} />
+        {:else if row.kind === 'derived'}
+          <input type="hidden" name="cite_quote" value="" />
+          <div class="field"><label for="{uid}-cite_note-{row.key}">{t('field.citeNote')}</label><textarea id="{uid}-cite_note-{row.key}" class="input" name="cite_note" rows="2" maxlength="5000" required={!blankCite(row)} bind:value={row.note}></textarea></div>
+        {:else}
+          <input type="hidden" name="cite_quote" value="" />
+          <input type="hidden" name="cite_note" value="" />
+        {/if}
+        {#if warn}
+          <div class="date-guard" role="status">
+            <span>{t('field.citeDateLater', { citeYear: warn.citeYear, workYear: warn.workYear })}</span>
+            {#if !row.sighting.trim() && vias.length < VIAS_MAX}<button type="button" class="text-button" onclick={() => moveCiteToVias(row.key)}>{t('field.moveToVia')}</button>{/if}
+          </div>
+        {/if}
+        <div class="via-actions">
+          <button type="button" class="text-button" onclick={() => removeCite(row.key)}>{t('field.viaRemove')}</button>
+        </div>
+      </fieldset>
+    {/each}
+  </div>
+  {#if cites.length < CITES_MAX && !blankCite(cites.at(-1)!)}
+    <noscript><fieldset class="via">
+      <legend class="sr-only">{t('field.citeAdd')}</legend>
+      <div class="field"><label for="{uid}-cite_kind-next">{t('field.citeKind')}</label>
+        <select id="{uid}-cite_kind-next" class="input" name="cite_kind">{#each CITE_KINDS as option}<option value={option}>{t(`cite.kind.${option}`)}</option>{/each}</select></div>
+      <div class="field"><label for="{uid}-cite_sighting-next">{t('field.citeSighting')}</label><input id="{uid}-cite_sighting-next" class="input" name="cite_sighting" inputmode="numeric" /></div>
+      <div class="field"><label for="{uid}-cite_url-next">{t('field.url')}</label><input id="{uid}-cite_url-next" class="input" type="url" name="cite_url" placeholder="https://" maxlength="1000" /></div>
+      <div class="grid-2">
+        <div class="field"><label for="{uid}-cite_title-next">{t('field.title')}</label><input id="{uid}-cite_title-next" class="input" name="cite_title" maxlength="300" /></div>
+        <div class="field"><label for="{uid}-cite_author-next">{t('field.author')}</label><input id="{uid}-cite_author-next" class="input" name="cite_author" maxlength="300" /></div>
+        <div class="field"><label for="{uid}-cite_container-next">{t('field.container')}</label><input id="{uid}-cite_container-next" class="input" name="cite_container" maxlength="300" /></div>
+        <div class="field"><label for="{uid}-cite_publisher-next">{t('field.publisher')}</label><input id="{uid}-cite_publisher-next" class="input" name="cite_publisher" maxlength="300" /></div>
+        <div class="field"><label for="{uid}-cite_report_date-next">{t('field.reportDate')}</label><input id="{uid}-cite_report_date-next" class="input" name="cite_report_date" /></div>
+        {@render kindField(`${uid}-cite_source_kind-next`, 'cite_source_kind', '', () => {})}
+      </div>
+      <div class="field"><label for="{uid}-cite_quote-next">{t('field.citeQuote')}</label><textarea id="{uid}-cite_quote-next" class="input" name="cite_quote" rows="2" maxlength="5000"></textarea></div>
+      <div class="field"><label for="{uid}-cite_note-next">{t('field.citeNote')}</label><textarea id="{uid}-cite_note-next" class="input" name="cite_note" rows="2" maxlength="5000"></textarea></div>
+    </fieldset></noscript>
+  {/if}
+  {#if cites.length < CITES_MAX}<div><button type="button" class="button" onclick={() => cites.push(makeCite())}>{t('field.citeAdd')}</button></div>{/if}
+</details>
 <details class="more" bind:open={viaOpen}>
   <summary>{t('field.via')}</summary>
   <p class="hint">{t('field.viaHint')}</p>
@@ -331,6 +489,13 @@
       </div>
       <div class="field"><label for="{uid}-via_quote-{row.key}">{t('field.quote')}</label><textarea id="{uid}-via_quote-{row.key}" class="input" name="via_quote" rows="2" maxlength="5000" bind:value={row.quote}></textarea></div>
       <ViaPictures bind:this={shots[row.key]} stored={row.pictures} room={room(row.key)} oncount={count => held[row.key] = count} onready={ready} />
+      {#if dateWarnings.via.has(row.key)}
+        {@const warn = dateWarnings.via.get(row.key)!}
+        <div class="date-guard" role="status">
+          <span>{t('field.viaDateEarlier', { viaYear: warn.viaYear, workYear: warn.workYear })}</span>
+          {#if cites.length < CITES_MAX && !row.pictures.length && !(held[row.key] > 0)}<button type="button" class="text-button" onclick={() => moveViaToCites(row.key)}>{t('field.moveToCite')}</button>{/if}
+        </div>
+      {/if}
       <div class="via-actions">
         {#if vias.length > 1}
           <button type="button" id="{uid}-via-earlier-{row.key}" class="text-button" disabled={index === 0} onclick={() => moveVia(row.key, -1, 'earlier')}><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6" /></svg>{t('field.viaEarlier')}</button>
@@ -384,6 +549,16 @@
   .grip:hover, .via.dragged .grip { color: var(--ink) }
   .via-list.sorting .grip { cursor: grabbing }
   .via-actions { display: flex; flex-wrap: wrap; gap: 4px 16px }
+  .cite-kinds { display: flex; flex-wrap: wrap; gap: 8px }
+  .kind-pill { display: inline-flex; align-items: center; gap: 6px; min-block-size: max(34px, var(--target-size)); padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; font-size: 13px }
+  .kind-pill:hover { border-color: var(--line-strong) }
+  .kind-pill:has(input:checked) { border-color: var(--accent); background: var(--accent-light); color: var(--accent); font-weight: 500 }
+  .kind-pill input { margin: 0; accent-color: var(--accent) }
+  .sibling-picks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px }
+  .sibling-chip { display: inline-flex; align-items: center; gap: 6px; min-block-size: max(30px, var(--target-size)); padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-sunken); font-size: 12.5px; cursor: pointer }
+  .sibling-chip:hover { border-color: var(--line-strong) }
+  .sibling-chip.picked { border-color: var(--accent); background: var(--accent-light); color: var(--accent) }
+  .date-guard { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--uncertain-badge); color: var(--uncertain-ink); font-size: 12.5px }
   .text-button:disabled { color: var(--muted); cursor: default; text-decoration: none }
   .more { display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 12px }
   .more[open] > :global(* + *) { margin-top: 12px }
