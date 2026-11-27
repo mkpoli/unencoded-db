@@ -1,3 +1,4 @@
+import { authorSuggestions } from './authors'
 import { containerSuggestions } from './containers'
 import { hashHex } from './image'
 import { copyOfSource, copyPage, matchingCopies } from './digitized-copies'
@@ -2577,6 +2578,50 @@ describe('personal communications', () => {
     expect(readSightingFields(form).source_kind).toBeNull()
     const id = await createEntry(db, fields(), seen({ url: null, title: null, source_kind: 'personal' }), [], who)
     expect((await getEntry(db, id))!.sightings[0].source_id).toBeNull()
+  })
+})
+
+describe('authors', () => {
+  const message = (author: string, quote: string) => via({ author, report_date: '2026-11-17', container: '某討論羣（7654321）', publisher: 'QQ', quote })
+  const labels = async (query: string) => (await authorSuggestions(db, query)).map(row => row.label)
+
+  test('an author is offered once, by name, account or number, as the first source spells them', async () => {
+    const entry = await createEntry(db, fields(), seen({ title: '某字典', author: '乙、丙', vias: [message('甲（10001）', 'one'), message('甲(10001)', 'two'), message('乙（@yi）', 'three')] }), [], who)
+    for (const query of ['甲', '甲（1', '１０００', '10001']) expect(await labels(query)).toEqual(['甲（10001）'])
+    for (const query of ['@Y', 'yi', '乙（@']) expect(await labels(query)).toEqual(['乙（@yi）'])
+    expect(await labels('乙')).toEqual(['乙', '乙（@yi）', '乙、丙'])
+    expect(await labels('丙')).toEqual(['丙'])
+    // What a source appeared in, a publisher and the middle of a name are no author.
+    for (const query of ['', ' ', '某討論', '7654321', 'QQ', '0001']) expect(await labels(query)).toEqual([])
+    await setHidden(db, { entry }, true, who, null)
+    for (const query of ['甲', 'yi', '乙']) expect(await labels(query)).toEqual([])
+    await setHidden(db, { entry }, false, who, null)
+    expect(await labels('yi')).toEqual(['乙（@yi）'])
+  })
+
+  test('the keys of hidden sources leave the index the walk reads', async () => {
+    const insert = raw.prepare('INSERT INTO sources(hash, author, name_lookup, records) VALUES (?, ?, ?, 1)'), key = raw.prepare('INSERT INTO source_keys(lookup, source_id, author) VALUES (?, ?, 1)')
+    raw.transaction(() => { for (let id = 1; id <= 2000; id++) { insert.run(String(id), `甲${id}`, `甲${id}`); key.run('甲', id) } })()
+    raw.exec('UPDATE sources SET author = \'甲\' WHERE id = 2000; UPDATE sources SET records = 0 WHERE id < 2000')
+    expect(raw.query('SELECT source_id FROM source_keys INDEXED BY source_keys_by_author WHERE author = 1').all()).toEqual([{ source_id: 2000 }])
+    expect(await labels('甲')).toEqual(['甲'])
+    raw.exec('UPDATE sources SET records = 1 WHERE id = 1')
+    expect(raw.query('SELECT source_id FROM source_keys WHERE author = 1 ORDER BY source_id').all()).toEqual([{ source_id: 1 }, { source_id: 2000 }])
+  })
+
+  test('each step of the walk is a seek in the author keys', async () => {
+    const insert = raw.prepare('INSERT INTO sources(hash, author, name_lookup, records) VALUES (?, ?, ?, 1)'), key = raw.prepare('INSERT INTO source_keys(lookup, source_id, author) VALUES (?, ?, ?)')
+    raw.transaction(() => { for (let id = 1; id <= 2000; id++) { insert.run(String(id), `甲${id % 40}`, `甲${id % 40}`); key.run(`甲${id % 40}`, id, 1); key.run('甲羣', id, 0) } })()
+    const statements: { sql: string; values: unknown[] }[] = []
+    const traced = { prepare(sql: string) {
+      const statement = db.prepare(sql)
+      return { bind(...values: unknown[]) { statements.push({ sql, values }); return statement.bind(...values) } }
+    } } as D1Database
+    expect(await authorSuggestions(traced, '甲')).toHaveLength(25)
+    const [{ sql, values }] = statements
+    const plan = (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
+    expect(plan.filter(detail => /USING (COVERING )?INDEX source_keys_by_author/.test(detail)).length).toBe(3)
+    expect(plan.filter(detail => /^SCAN (?!(keys|k)$)|TEMP B-TREE/.test(detail))).toEqual([])
   })
 })
 
