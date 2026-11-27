@@ -2345,7 +2345,7 @@ test('the Sources page finds a source by its author, container, link and account
 })
 
 test('a search reads the sightings of the sources on its page alone', async () => {
-  const insert = raw.prepare('INSERT INTO sources(hash, title, name_lookup, records) VALUES (?, ?, ?, 1)'), key = raw.prepare("INSERT INTO source_keys VALUES ('某討論羣', ?)")
+  const insert = raw.prepare('INSERT INTO sources(hash, title, name_lookup, records) VALUES (?, ?, ?, 1)'), key = raw.prepare("INSERT INTO source_keys(lookup, source_id) VALUES ('某討論羣', ?)")
   raw.transaction(() => { for (let id = 1; id <= 4000; id++) { insert.run(String(id), `${id}`, `${id}`); key.run(id) } })()
   const statements: { sql: string; values: unknown[] }[] = []
   const traced = { prepare(sql: string) {

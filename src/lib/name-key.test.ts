@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { sourceKeys } from './name-key'
+import { authorKeys, authorNamed, sourceKeys } from './name-key'
 
 test('a source is found by each of its authors, its container, its link and the account or number given with a name', () => {
   const keys = (author: string | null, container: string | null = null, url: string | null = null) => sourceKeys({ author, container, url })
@@ -14,4 +14,13 @@ test('a source is found by each of its authors, its container, its link and the 
   // A year or a note in brackets is no number of an account, and a number alone is the name.
   expect(keys('許某（1920）')).toEqual(['許某(1920)'])
   expect(keys('許某（編）')).toEqual(['許某(編)'])
+})
+
+test('the keys an author gives, and the one of several authors a key names', () => {
+  expect(authorKeys('甲（1234567）')).toEqual(['甲(1234567)', '1234567'])
+  expect(authorKeys(null)).toEqual([])
+  expect(authorNamed('乙（@yi）、丙', 'yi')).toBe('乙（@yi）')
+  expect(authorNamed('乙（@yi）；丙', '丙')).toBe('丙')
+  expect(authorNamed('乙（@yi）、丙', '乙(@yi)、丙')).toBe('乙（@yi）、丙')
+  for (const author of ['甲､乙', '甲﹑乙', '甲﹔乙']) expect(authorNamed(author, '乙')).toBe('乙')
 })

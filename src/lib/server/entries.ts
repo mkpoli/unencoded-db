@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit'
 import { quotations, QUOTATIONS_MAX } from '../quotations'
 import { sampledSightings } from './source-sightings'
 import { sourceMatches, sourceMatchParams } from './source-aliases'
-import { nameKey, nameLabel, sourceKeys, sourceNameKey } from '../name-key'
+import { authorKeys, nameKey, nameLabel, sourceKeys, sourceNameKey } from '../name-key'
 // The store of records: an entry is a character, a claim is one thing the record states about it, a
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
@@ -458,7 +458,10 @@ async function citationOf(db: D1Database, citation: Citation, dates: DateBook) {
   const sourceName = sourceNameKey(title || url || author || imprint || date || container || '')
   statements.push(db.prepare(`INSERT INTO sources(hash, ${CITATION_FIELDS.join(', ')}, year, publisher_lookup, name_lookup, container_lookup) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`).bind(hash, ...values, year, key || null, sourceName, container && nameKey(container) || null))
   const keys = sourceKeys(citation)
-  if (keys.length) statements.push(db.prepare('INSERT OR IGNORE INTO source_keys(lookup, source_id) SELECT k.value, s.id FROM sources s CROSS JOIN json_each(?2) k WHERE s.hash = ?1').bind(hash, JSON.stringify(keys)))
+  if (keys.length) statements.push(db.prepare(`INSERT INTO source_keys(lookup, source_id, author)
+    SELECT k.value, s.id, CASE WHEN k.value NOT IN (SELECT value FROM json_each(?3)) THEN 0 WHEN s.records > 0 THEN 1 ELSE 2 END
+    FROM sources s CROSS JOIN json_each(?2) k WHERE s.hash = ?1
+    ON CONFLICT DO UPDATE SET author = excluded.author WHERE (source_keys.author = 0) <> (excluded.author = 0)`).bind(hash, JSON.stringify(keys), JSON.stringify(authorKeys(citation.author))))
   return { hash, statements }
 }
 // The hash of the cited work, and the links of the chain with the words each quotes.

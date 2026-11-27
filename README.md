@@ -97,7 +97,7 @@ An agent with no browser, such as a chat bot, gets its token from the maintainer
 | `sighting_via_media` | The pictures of a go-between itself, by its place in the chain |
 | `source_aliases`, `source_alias_changes`, `source_search_names` | Alternate names for individual citations, their contributor history, and the lookup index for visible sources |
 | `source_archives`, `source_archive_changes` | Archived copies of a citation's link and their contributor history |
-| `source_keys` | The authors, containers, links and account numbers the Sources page finds a source by |
+| `source_keys` | The authors, containers, links and account numbers the Sources page finds a source by, marked where the author gives them for the author field |
 | `date_readings`, `evidence_dates` | Calendar readings and the view of transcribed dates in sources, sightings and revision history |
 | `date_index_state` | Generation used to retry writes when their date readings change |
 | `publishers`, `publisher_aliases` | Publisher identities and reviewed alternative spellings for the source filter |
