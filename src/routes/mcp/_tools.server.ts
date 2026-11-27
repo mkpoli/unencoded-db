@@ -1077,7 +1077,7 @@ const CITATION = {
 const SIGHTING = {
   place: { type: 'string', description: 'Where the character was found, in words that help someone find it again: a book and page, a street, a website.' },
   ...CITATION,
-  original_date: { type: 'string', description: 'The date of an older work shown in the picture, when the cited publication reproduces one. Written as report_date is.' },
+  original_date: { type: 'string', description: 'The date of an older work the picture reproduces directly: a photo, scan, facsimile, rubbing, tracing or line drawing of it in the cited publication. Leave it out for a typeset transcription (隸定) or a later dictionary citing an older text; report_date dates those. Written as report_date is.' },
   page: { type: 'string', description: 'Page, folio or volume within the work.' },
   contexts: { type: 'array', items: { type: 'string', enum: CONTEXTS }, description: 'How the character appears, in every way the source shows it.' },
   style: { type: 'string', enum: STYLES, description: 'The writing style.' },

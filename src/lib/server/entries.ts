@@ -412,8 +412,8 @@ export function earliestSighting<T extends Pick<SightingFields, 'report_date' | 
 type SightingState = SightingFields & { media?: StoredImage[]; hidden_at?: string | null }
 
 // What a tile shows of a record, read from its visible sightings: the cover, where it was seen, which
-// source types it has and the earliest year among them. An older work in a recent post dates the
-// sighting, not the post.
+// source types it has and the earliest year among them. An older work reproduced in a recent post
+// dates the sighting, not the post.
 function summarize(sightings: SightingState[], dates: DateBook) {
   const visible = sightings.filter(sighting => !sighting.hidden_at)
   const cover = visible.find(sighting => sighting.media?.length)
