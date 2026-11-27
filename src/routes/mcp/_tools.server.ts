@@ -113,10 +113,12 @@ async function pictureBytes(event: RequestEvent, address: string, budget: Budget
   if (budget.fetches < 1) throw new Refusal(`One call fetches up to ${FETCHES_MAX} pictures from other sites.`)
   budget.fetches--
   const signal = AbortSignal.timeout(PICTURE_WAIT)
+  // Wikimedia and the National Archives of Japan refuse a request that does not say who sends it.
+  const headers = { accept: 'image/jpeg, image/png, image/webp, application/pdf', 'user-agent': `GlyphAtlasRare/1.0 (+${event.url.origin}/mcp)` }
   let response: Response
   try {
     for (let hop = 0; ; hop++) {
-      response = await fetch(url, { headers: { accept: 'image/jpeg, image/png, image/webp, application/pdf' }, redirect: 'manual', signal })
+      response = await fetch(url, { headers, redirect: 'manual', signal })
       const next = response.status >= 300 && response.status < 400 ? response.headers.get('location') : null
       if (!next) break
       void response.body?.cancel().catch(() => {})

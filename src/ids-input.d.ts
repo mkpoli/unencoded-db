@@ -44,6 +44,7 @@ declare module 'ids-input/svelte' {
   /** The tables an editor looks parts up in. The sequence field alone needs none. */
   export type IdsAdapter = {
     fontStyle?: import('$lib/composer').GlyphStyle
+    variationSequences?(): Promise<Map<string, string[]>>
     structure(char: string): Promise<unknown[]>
     variationFamilies?(text: string): readonly import('ids-input').VariationFamily[]
   }
@@ -54,8 +55,8 @@ declare module 'ids-input/svelte' {
   export const IdsPicker: Component<{ editor: IdsEditor; pickers?: ('find' | 'parts' | 'from' | 'templates')[]; recentKey?: string | null }>
   export function createUnifiable(editor: () => IdsEditor): { readonly entries: readonly { id: string }[] }
   export function grassForm(editor: IdsEditor): string | null | undefined
-  export const IdsAlternatives: Component<{ editor: IdsEditor; variations?: boolean; onchoose?: () => void }>
-  export const IdsCharacterInfo: Component<{ root: HTMLElement | null; adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; onpick?: (part: string, path?: number[]) => void; extra?: import('svelte').Snippet<[{ path: number[] | undefined; close: () => void }]> }>
+  export const IdsAlternatives: Component<{ editor: IdsEditor; variations?: boolean; showFamilies?: boolean; onchoose?: () => void }>
+  export const IdsCharacterInfo: Component<{ root: HTMLElement | null; adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; onpick?: (part: string, path?: number[]) => void; extra?: import('svelte').Snippet<[{ path: number[] | undefined; close: () => void; hasFamilies: boolean }]> }>
   /** A description drawn by the adapter's `preview`. A `document` draws its parts where it moves them; with a `session` and `editable`, its parts are moved, scaled and turned on the drawing. */
   export const IdsPreview: Component<{
     adapter: { preview?: import('han-compose').ComposerPreview }; tree: import('ids-input').IdsPart; chosen?: number[] | null
@@ -116,6 +117,10 @@ declare module 'han-compose' {
   export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'regular' | 'fangsong' | 'pen-writing' }): Promise<Drawing>
   /** The composer in a Web Worker, reading han-compose's export at `base`. */
   export function composerPreview(options: { base: string; separate?: boolean; fontStyle?: 'sans' | 'serif' | 'regular' | 'fangsong' | 'pen-writing'; loaders?: Record<string, string> }): ComposerPreview
+}
+
+declare module 'han-compose/variants' {
+  export function variationSequences(base: string): Promise<Map<string, string[]>>
 }
 
 declare module 'han-compose/tree' {

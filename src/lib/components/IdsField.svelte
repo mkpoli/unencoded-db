@@ -19,7 +19,7 @@
   import { recordCode } from '$lib/code'
   import { LOOSE_MIN, MADE_OF } from '$lib/similar'
   import { browser } from '$app/environment'
-  import type { GlyphStyle } from '$lib/composer'
+  import { composerUrl, type GlyphStyle } from '$lib/composer'
   import type { IdsAdapter, IdsEditor } from 'ids-input/svelte'
   import IdsGlyph from './IdsGlyph.svelte'
   import IdsLine from './IdsLine.svelte'
@@ -94,7 +94,13 @@
   // editor the tables it looks parts up in.
   let editor = $state.raw<IdsEditor | null>(null)
   let tools = $state.raw<{ Builder: typeof import('./IdsBuilder.svelte').default; adapter: IdsAdapter; messages: Record<string, string> | undefined } | null>(null)
-  const adapter = $derived(tools ? { ...tools.adapter, fontStyle } : undefined)
+  const adapter = $derived.by(() => {
+    if (!tools) return undefined
+    const base = composerUrl(fontStyle)
+    return { ...tools.adapter, fontStyle,
+      variationSequences: () => import('han-compose/variants').then(engine => engine.variationSequences(base)),
+    }
+  })
   let building = $state(false)
   let root = $state<HTMLElement | null>(null)
   async function build() {

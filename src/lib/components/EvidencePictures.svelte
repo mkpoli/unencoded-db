@@ -9,12 +9,12 @@
   let {
     pictures,
     alt,
-    preparing = null,
+    preparing,
     ondownload,
   }: {
     pictures: readonly StoredImage[]
     alt: (position: number) => string
-    preparing?: string | null
+    preparing?: (position: number) => boolean
     ondownload?: (picture: StoredImage, position: number) => void
   } = $props()
 
@@ -24,7 +24,7 @@
 
 {#if pictures.length}
   <div class="pictures" class:single={pictures.length === 1}>
-    {#each pictures as picture, position (picture.image_key)}
+    {#each pictures as picture, position (`${position}:${picture.image_key}`)}
       <figure class:wide={pictures.length > 1 && isWide(picture)}>
         <MarkedPicture {picture} alt={alt(position)} onopen={() => lightbox?.open(position)} />
         <figcaption class="actions">
@@ -33,7 +33,7 @@
             {t('picture.view')}
           </button>
           {#if ondownload}
-            <button type="button" class="button small" title={t('sighting.evidenceHint')} disabled={preparing === picture.image_key} onclick={() => ondownload(picture, position)}>{t('sighting.evidence')}</button>
+            <button type="button" class="button small" title={t('sighting.evidenceHint')} disabled={Boolean(preparing?.(position))} onclick={() => ondownload(picture, position)}>{t('sighting.evidence')}</button>
           {/if}
         </figcaption>
       </figure>

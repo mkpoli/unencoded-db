@@ -21,7 +21,6 @@
   // The IDS Workshop's tools over the editor of a description's own field: the operators, the
   // description as a tree, the chosen part, and the pickers a part is taken from. They edit the text in
   // the field, so the drawing beside it follows each part as it is placed.
-  import { variationFamiliesOfPart } from 'ids-input'
   import { createUnifiable, grassForm, IdsAlternatives, IdsCharacterInfo, IdsOperators, IdsPartTools, IdsPicker, IdsTree, type IdsEditor } from 'ids-input/svelte'
   // ids-input loads a font shard for each rare character a panel shows; its entry point does not export the watcher.
   import { watchFallback } from '../../../node_modules/ids-input/src/svelte/fallback-font.js'
@@ -57,13 +56,13 @@
     <button type="button" class="button" disabled={!editor.canRedo} onclick={() => editor.redo()}>{say('ids.redo.label')}</button>
   </div>
 </div>
-{#snippet formChoices({ path, close }: { path: number[] | undefined; close: () => void })}
+{#snippet formChoices({ path, close, hasFamilies }: { path: number[] | undefined; close: () => void; hasFamilies: boolean })}
   {#if path && path.join('.') === editor.chosen?.join('.')}
-    <IdsAlternatives {editor} variations onchoose={close} />
+    <IdsAlternatives {editor} variations showFamilies={!hasFamilies} onchoose={close} />
   {/if}
 {/snippet}
 <IdsCharacterInfo root={scope ?? root} adapter={editor.adapter} {messages} {locale} onpick={(part, path) => editor.take(part, path)}
-  extra={grassForm(editor) || variationFamiliesOfPart(editor.picked, editor.adapter.variationFamilies).length || unifiable.entries.length ? formChoices : undefined} />
+  extra={grassForm(editor) || unifiable.entries.length ? formChoices : undefined} />
 
 <style>
   .builder {
