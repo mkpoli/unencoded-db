@@ -477,3 +477,27 @@ describe('joining a duplicate', () => {
     expect(partClaims(joined.claims, new Set(), joined)).toEqual(kept)
   })
 })
+
+describe('creators', () => {
+  test('rows name who made the character, drop empty and repeated rows and keep their evidence', () => {
+    expect(read([['creators_present', '1'], ['creator', ' 陸貫一 '], ['creator_key', 'aaaaaaa1'], ['sightings.aaaaaaa1', '7'], ['creator', ''], ['creator_key', 'aaaaaaa2'], ['creator', '陸貫一'], ['creator_key', 'aaaaaaa3'], ['creator', 'Lu  Guanyi'], ['creator_key', 'aaaaaaa4']]))
+      .toEqual({ claims: [claim('creator', '陸貫一', null, { sightings: [7] }), claim('creator', 'Lu Guanyi')] })
+  })
+
+  test('two spellings of one name are one claim that rests on the evidence of both', () => {
+    expect(read([['creator', 'Ａlice'], ['creator_key', 'aaaaaaa1'], ['sightings.aaaaaaa1', '1'], ['creator', 'Alice'], ['creator_key', 'aaaaaaa2'], ['sightings.aaaaaaa2', '2']]))
+      .toEqual({ claims: [claim('creator', 'Ａlice', null, { sightings: [1, 2] })] })
+  })
+
+  test('a name with a bar, or more names than a record holds, is refused', () => {
+    expect(read([['creator', '陸|貫一']])).toEqual({ error: 'creators' })
+    expect(read(Array.from({ length: CLAIM_LIMITS.creator.max + 1 }, (_, index): [string, string] => ['creator', `甲${index}`]))).toEqual({ error: 'creators' })
+    expect(valid(claim('creator', '陸貫一'))).toBe(true)
+    expect(valid(claim('creator', '陸\n貫一'))).toBe(false)
+  })
+
+  test('an empty list clears the record\'s creators, and a form without the field keeps them', () => {
+    expect(read([['creators_present', '1']], [claim('creator', '陸貫一')])).toEqual({ claims: [] })
+    expect(read([['ivd_status', '']], [claim('creator', '陸貫一')])).toEqual({ claims: [claim('creator', '陸貫一')] })
+  })
+})

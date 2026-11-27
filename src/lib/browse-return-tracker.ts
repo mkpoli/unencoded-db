@@ -6,6 +6,7 @@ export interface BrowseNavEvent {
   fromRoute: string | null
   fromLocale?: string | null
   fromSearch?: string
+  fromEntryId?: number | null
   toRoute: string | null
   toLocale?: string | null
   toSearch?: string
@@ -24,6 +25,7 @@ interface EntryBackState {
 export class BrowseReturnTracker {
   savedSearch = ''
   directFromBrowse = false
+  private returningEntry: { id: number; scroll: boolean } | null = null
   private cursor = 0
   private readonly entries = new Map<number, EntryBackState>()
 
@@ -62,6 +64,9 @@ export class BrowseReturnTracker {
     if (event.toRoute === '/[locale]') {
       const clean = this.remember(event.toSearch ?? '')
       this.directFromBrowse = false
+      if (!this.returningEntry && event.type === 'popstate' && event.fromRoute === '/[locale]/entry/[id]' && event.fromEntryId) {
+        this.returningEntry = { id: event.fromEntryId, scroll: false }
+      }
       return clean
     }
 
@@ -105,5 +110,17 @@ export class BrowseReturnTracker {
     this.directFromBrowse = false
     const recorded = this.entries.get(this.cursor)
     if (recorded) this.entries.set(this.cursor, { search: recorded.search, direct: false })
+  }
+
+  /** Marks the record the user is leaving via "← Records" so the browse grid can re-anchor on it. */
+  markReturning(id: number, scroll: boolean) {
+    this.returningEntry = { id, scroll }
+  }
+
+  /** Consumes the pending return target once the browse list renders. */
+  consumeReturning(): { id: number; scroll: boolean } | null {
+    const value = this.returningEntry
+    this.returningEntry = null
+    return value
   }
 }

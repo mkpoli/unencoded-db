@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AgentBadge from '$lib/components/AgentBadge.svelte'
   import RelatedRecords from '$lib/components/RelatedRecords.svelte'
   import SourceQuotations from '$lib/components/SourceQuotations.svelte'
   import EvidenceDate from '$lib/components/EvidenceDate.svelte'
@@ -12,7 +13,7 @@
   import GlyphFace from '$lib/components/GlyphFace.svelte'
   import SpellingReport from '$lib/components/SpellingReport.svelte'
   import { GLYPH_STYLES } from '$lib/composer'
-  import MarkedPicture from '$lib/components/MarkedPicture.svelte'
+  import EvidencePictures from '$lib/components/EvidencePictures.svelte'
   import CopyButton from '$lib/components/CopyButton.svelte'
   import EditLink from '$lib/components/EditLink.svelte'
   import FavouriteButton from '$lib/components/FavouriteButton.svelte'
@@ -31,6 +32,7 @@
   import { COMMENTS_SHOWN } from '$lib/comments'
   import Discussion from '$lib/components/Discussion.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
+  import ArchiveLinks from '$lib/components/ArchiveLinks.svelte'
   import type { Fill } from '$lib/encoded'
   import { compositionOf, encodingsOf, idsForms, primaryLayoutOf, supportedBy, valuesOf } from '$lib/claims'
   import { analyze } from '$lib/composition'
@@ -44,7 +46,8 @@
   import { recordData } from '$lib/structured-data'
   import type { Sighting, StoredImage } from '$lib/server/entries'
   import { href, locale, media, t, day, yearName } from '$lib/t'
-  import { browseReturnHref, canReturnViaHistory } from '$lib/browse-return.svelte'
+  import { browseHref } from '$lib/browse-params'
+  import { browseReturnHref, canReturnViaHistory, markReturningFrom } from '$lib/browse-return.svelte'
   import { kindName } from '$lib/source-kind'
   import { recordCode, recordName } from '$lib/code'
   let { data, form } = $props()
@@ -57,6 +60,23 @@
   let filled = $state<Fill | null>(null)
   let editOpen = $state(untrack(() => editing || data.idsAdd !== null))
   $effect(() => { if (editing) editOpen = true })
+  // Tags other records of the same sources carry, read once the form opens.
+  let sourceTags = $state<string[]>([])
+  let sourceTagsOf = ''
+  $effect(() => {
+    if (!editOpen) return
+    const ids = [...new Set(data.sightings.map(sighting => sighting.source_id).filter((id): id is number => id !== null))]
+    const key = `${entry.id}:${ids.join(',')}`
+    if (key === sourceTagsOf) return
+    sourceTagsOf = key
+    if (!ids.length) { sourceTags = []; return }
+    const params = new URLSearchParams({ exclude: String(entry.id) })
+    for (const id of ids) params.append('source', String(id))
+    fetch('/api/sources/tags?' + params)
+      .then(response => response.ok ? response.json() as Promise<{ tags?: string[] }> : null)
+      .then(payload => { if (sourceTagsOf === key) sourceTags = payload?.tags ?? [] })
+      .catch(() => { if (sourceTagsOf === key) sourceTags = [] })
+  })
   let fields = $state<CharacterFields>()
   // The description groups on the page, so each one's report shows its own drawing.
   let formsShown = $state<HTMLElement[]>([])
@@ -143,7 +163,8 @@
   ].filter(Boolean).join(' · '))
   const cover = $derived(data.sightings.find(sighting => sighting.media.length)?.media[0])
   const sources = $derived(data.sightings.filter(sighting => sighting.source_id !== null).map(sighting => ({ ...sighting, id: sighting.source_id! })))
-  const structured = $derived(recordData({ locale: locale(), id: entry.id, name: seoTitle, description: seoDescription, siteName: t('app.name'), image: cover && media(cover.image_key), sources }))
+  const vias = $derived(data.sightings.flatMap(sighting => sighting.vias))
+  const structured = $derived(recordData({ locale: locale(), id: entry.id, name: seoTitle, description: seoDescription, siteName: t('app.name'), image: cover && media(cover.image_key), sources, vias, archives: data.archives }))
   const marks = $derived(marksOf(encodings))
   const tagsByName = $derived(tagLookup(data.tags))
   const labels = $derived(tagLabels(localized(data.tags, locale())))
@@ -165,11 +186,13 @@
   ] as const
   const at = locale()
 
-  let preparing = $state<string | null>(null)
+  let preparing = $state<Record<string, boolean>>({})
   let favError = $state('')
   $effect(() => { void entry.id; favError = '' })
   async function download(sighting: Sighting, picture: StoredImage, position: number) {
-    preparing = picture.image_key
+    const key = `${sighting.id}:${position}`
+    if (preparing[key]) return
+    preparing[key] = true
     try {
       const file = await evidenceFile(media(picture.image_key), boxesOf(picture.box), `${recordCode(entry.id)}-${sighting.id}-${position + 1}`)
       const link = document.createElement('a')
@@ -177,12 +200,14 @@
       link.download = file.name
       link.click()
       setTimeout(() => URL.revokeObjectURL(link.href), 1000)
-    } finally { preparing = null }
+    } finally { delete preparing[key] }
   }
   const backHref = $derived(browseReturnHref(href()))
   function returnToBrowse(event: MouseEvent) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-    if (!canReturnViaHistory()) return
+    const direct = canReturnViaHistory()
+    markReturningFrom(entry.id, !direct)
+    if (!direct) return
     event.preventDefault()
     history.back()
   }
@@ -191,7 +216,7 @@
 <svelte:window onclick={edit} />
 <Seo data={structured} title={seoTitle} description={seoDescription} image={href(`/entry/${entry.id}/card.png?v=${encodeURIComponent(entry.updated_at)}`)} imageAlt={seoTitle} />
 <div class="page narrow stack">
-  <div class="row"><a class="text-link back" href={backHref} onclick={returnToBrowse}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href="#discussion">{t('discussion.title')}{#if shownComments} <span class="count">{shownComments}</span>{/if}</a><a class="text-link" href={href(`/entry/${entry.id}/duplicate`)}>{t('entry.duplicate')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
+  <div class="row"><a class="text-link back" href={backHref} onclick={returnToBrowse}>← {t('nav.browse')}</a><a class="text-link" href={href(`/entry/${entry.id}/history`)}>{t('entry.history')}</a><a class="text-link" href="#discussion">{t('discussion.title')}{#if shownComments}{' '}<span class="count">{shownComments}</span>{/if}</a><a class="text-link" href={href(`/entry/${entry.id}/duplicate`)}>{t('entry.duplicate')}</a><a class="text-link" href={href(`/entry/${entry.id}/report`)}>{t('entry.report')}</a></div>
   <div class="heading"><div class="stack title"><h1><span class="code">{recordCode(entry.id)}</span> <span class="code-name" lang="zh-Hant">{recordName(entry.id)}</span></h1><div class="row"><span class="badge">{entry.script === 'other' && entry.script_other ? entry.script_other : t(`script.${entry.script}`)}</span>{#if entry.status}<span class="badge {entry.status}">{t(`status.${entry.status}`)}</span>{/if}{#if data.earliest}<a class="first-seen" href="#sighting-{data.earliest.sighting}" title={t(data.earliest.kind === 'original' ? 'field.originalDate' : 'field.reportDate')}>{t('entry.firstSeen', { year: yearName(Number(data.earliest.year), true) })}</a>{/if}</div></div><div class="row"><ShareRecord id={entry.id} /><FavouriteButton id={entry.id} initial={data.favourites.includes(entry.id)} onerror={message => favError = message} /></div></div>
   {#if favError}<p class="notice bad" role="alert">{favError}</p>{/if}
   {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
@@ -209,7 +234,10 @@
       </div>
       <p class="sites">{#each descriptionLinks(sequences[0], at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</p>
     {:else}
-      <p><EditLink field="ids" name={t('entry.addIds')} add /></p>
+      <div class="identity">
+        {#if entry.cover_key}<a class="pictured" href={media(entry.cover_key)} target="_blank" rel="noopener"><img src={media(entry.cover_key)} alt={t('entry.record', { id: recordCode(entry.id) })} decoding="async" /></a>{/if}
+        <EditLink field="ids" name={t('entry.addIds')} add />
+      </div>
     {/if}
     {#if analysis?.tagged}
       <p class="formation"><span class="label">{t('field.formation')}</span><span class="method">{formationLabel(at, analysis.formation)}</span>{#each analysis.parts.filter(part => part.role) as part, index (index)}<span class="part">{part.part} · {roleLabel(at, part.role)}</span>{/each}</p>
@@ -222,7 +250,7 @@
       <p class="chips">
         {#each closure.direct as value (value)}
           {@const info = tagsByName.get(value)}
-          <a class="tag-chip" data-tag-type={info?.type ?? 'general'} href={href(`/?tag=${encodeURIComponent(value)}`)}>
+          <a class="tag-chip" data-tag-type={info?.type ?? 'general'} href={browseHref(href(), { tag: value })}>
             {info?.label ?? value}
           </a>
         {/each}
@@ -233,12 +261,12 @@
             class="tag-chip implied"
             data-tag-type={info?.type ?? 'general'}
             title={t('tags.carriedBy', { via: viaNames })}
-            href={href(`/?tag=${encodeURIComponent(implied.name)}`)}
+            href={browseHref(href(), { tag: implied.name })}
           >
             {info?.label ?? implied.name}
           </a>
         {/each}
-        {#each collections as collection (collection.slug)}<a class="chip-link" href={href(`/?collection=${collection.slug}`)}>{collection.label}</a>{/each}
+        {#each collections as collection (collection.slug)}<a class="chip-link" href={browseHref(href(), { collection: collection.slug })}>{collection.label}</a>{/each}
         <EditLink field="filing" name={t('field.filing')} />
       </p>
     {:else}
@@ -256,18 +284,23 @@
       {#each encodings as encoding (encoding.charset + '|' + encoding.code)}
         {@const character = encoding.charset === 'unicode' ? encodedCharacter(encoding.code) : ''}
         {@const page = character ? null : codePage(encoding)}
-        <div><dt>{registryLabel(encoding.charset)}</dt><dd>{#if character}<span class="character encoded">{character}</span><CopyButton text={character} /> {/if}{#if page}<a class="mono text-link" href={page} target="_blank" rel="noopener">{encoding.code} ↗</a>{:else}<span class="mono">{encoding.code}</span>{/if}{#if character}<span class="sites">{#each characterLinks(character, at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</span>{/if}</dd></div>
+        <div><dt>{registryLabel(encoding.charset)}</dt><dd>{#if character}<span class="character encoded">{character}</span><CopyButton text={character} />{' '}{/if}{#if page}<a class="mono text-link" href={page} target="_blank" rel="noopener">{encoding.code} ↗</a>{:else}<span class="mono">{encoding.code}</span>{/if}{#if character}<span class="sites">{#each characterLinks(character, at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</span>{/if}</dd></div>
       {/each}
       {#if ivd}<div><dt>{t('field.ivd')}</dt><dd class:mono={ivd !== 'none'}>{ivd === 'none' ? t('field.ivdNone') : ivd}</dd></div>{/if}
-      {#if data.filed.length}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd class="radicals">{#each data.filed as radical, index (radical.path)}{#if index}<span class="muted" aria-hidden="true">›</span>{/if}<a class="character text-link" href={href(`?radical=${encodeURIComponent(radical.path)}`)}>{radical.radical}</a>{/each}</dd></div>{:else if entry.radical}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd>{entry.radical}</dd></div>{:else}<div><dt>{t('field.radical')}</dt><dd><EditLink field="identity" name={t('entry.addRadical')} add /></dd></div>{/if}
+      {#if data.filed.length}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd class="radicals">{#each data.filed as radical, index (radical.path)}{#if index}<span class="muted" aria-hidden="true">›</span>{/if}<a class="character text-link" href={browseHref(href(), { radical: radical.path })}>{radical.radical}</a>{/each}</dd></div>{:else if entry.radical}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd>{entry.radical}</dd></div>{:else}<div><dt>{t('field.radical')}</dt><dd><EditLink field="identity" name={t('entry.addRadical')} add /></dd></div>{/if}
       {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
     </dl>
     <div class="senses">
       <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} records={data.related} />
-      {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
+      {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation' || claim.kind === 'creator')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
       {:else}<EditLink field="senses" name={t('entry.addSenses')} add />{/if}
     </div>
-    {#if entry.by_name && entry.created_at}<p class="hint">{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</p>{/if}
+    {#if entry.by_name && entry.created_at}
+      <p class="hint attribution">
+        <span>{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</span>
+        {#if entry.by_agent}<AgentBadge name={entry.by_agent} model={entry.by_model ?? null} standalone={entry.by_agent === entry.by_name} />{/if}
+      </p>
+    {/if}
   </section>
   <details class="panel" id="edit" bind:open={editOpen}>
     <summary>{t('entry.edit')}</summary>
@@ -286,7 +319,7 @@
         <div id="edit-senses"><SenseEditor claims={editValues.claims} evidence={options} fill={filled} /></div>
         <details class="filing" id="edit-filing" open>
           <summary class="section-title">{t('field.filing')}</summary>
-          <div class="stack filed"><TagFields tags={data.tags} groups={data.groups} selected={valuesOf(editValues.claims, 'tag')} collections={valuesOf(editValues.claims, 'collection')} /></div>
+          <div class="stack filed"><TagFields tags={data.tags} groups={data.groups} selected={valuesOf(editValues.claims, 'tag')} collections={valuesOf(editValues.claims, 'collection')} suggested={sourceTags} /></div>
         </details>
       {/key}
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" /></div>
@@ -304,21 +337,19 @@
     {#each data.sightings as sighting (sighting.id)}
       {@const types = parseSightingTypes(sighting.types)}
       {@const contexts = parseContexts(sighting.contexts)}
+      {@const web = sighting.url && /^https?:\/\//i.test(sighting.url) ? sighting.url : null}
+      {@const copies = (sighting.source_id && data.archives.get(sighting.source_id)) || []}
       <article class="panel stack" id="sighting-{sighting.id}">
-        {#if sighting.media.length}
-          <div class="pictures" class:single={sighting.media.length === 1}>
-            {#each sighting.media as picture, position (picture.image_key)}
-              <figure>
-                <MarkedPicture {picture} alt={pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} />
-                <figcaption><button class="button small" type="button" title={t('sighting.evidenceHint')} disabled={preparing === picture.image_key} onclick={() => download(sighting, picture, position)}>{t('sighting.evidence')}</button></figcaption>
-              </figure>
-            {/each}
-          </div>
-        {/if}
+        <EvidencePictures pictures={sighting.media} alt={position => pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} preparing={position => Boolean(preparing[`${sighting.id}:${position}`])} ondownload={(picture, position) => download(sighting, picture, position)} />
         {#if sighting.place}<h3>{sighting.place}</h3>{/if}
         {#if types.length || data.earliest?.sighting === sighting.id}<div class="row badges">{#if data.earliest?.sighting === sighting.id}<span class="badge earliest">{t('entry.earliest')}</span>{/if}{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
-        {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
-        {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} />{/if}
+        {#if web || copies.length}
+          <div class="cited">
+            {#if web}<a class="text-link url" href={web} target="_blank" rel="noopener noreferrer">{web} ↗</a>{/if}
+            <ArchiveLinks archives={copies} />
+          </div>
+        {/if}
+        {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} archives={data.archives} pictures />{/if}
         <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else if field.key === 'source_kind'}{kindName(sighting.source_kind)}{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
           {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
@@ -330,7 +361,12 @@
             {#each supportedBy(claims, sighting.id) as claim (claim.key)}<a class="supported" href="#claim-{claim.key}"><span class="kind">{t(claim.kind === 'relation' ? 'field.relatedCharacter' : `field.${claim.kind}`)}</span><span class="text">{claimLabel(claim)}</span></a>{/each}
           </p>
         {/if}
-        {#if sighting.by_name}<p class="hint">{t('sighting.by', { name: sighting.by_name })}</p>{/if}
+        {#if sighting.by_name}
+          <p class="hint attribution">
+            <span>{t('sighting.by', { name: sighting.by_name })}</span>
+            {#if sighting.by_agent}<AgentBadge name={sighting.by_agent} model={sighting.by_model ?? null} standalone={sighting.by_agent === sighting.by_name} />{/if}
+          </p>
+        {/if}
         <div class="row">
           {#if sighting.source_id}<a class="text-link small" href={href(`/source/${sighting.source_id}`)}>{t('source.view')}</a>{/if}
           <a class="text-link small" href={href(`/entry/${entry.id}/sighting/${sighting.id}/edit`)}>{t('sighting.edit')}</a>
@@ -357,6 +393,8 @@
   .back { align-self:start; color:var(--muted) } .title { gap:8px } .code { font-variant-numeric:tabular-nums } .code-name { margin-inline-start:6px; font-weight:400; color:var(--muted) } .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface) }
   h3 { font-size:14px; font-weight:600 }
   .identity { display:flex; flex-wrap:wrap; align-items:center; gap:12px 18px; min-width:0 }
+  .pictured { display:grid; place-items:center; width:160px; aspect-ratio:1; overflow:hidden; border-radius:6px; background:var(--surface-tile) }
+  .pictured img { max-width:100%; max-height:100%; object-fit:contain }
   /* The description drawn in each style the site composes, side by side, in place of one plate. */
   .forms { display:flex; flex-wrap:wrap; align-items:flex-start; gap:14px 22px; min-width:0; margin:0; padding:0; list-style:none }
   .form { display:flex; flex-direction:column; gap:6px; min-width:0 }
@@ -385,13 +423,12 @@
   article:target { outline:2px solid var(--accent); outline-offset:2px } article { scroll-margin-block:16px }
   .checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr)); gap:6px 16px; margin:0; padding:0; list-style:none; color:var(--muted) }
   .checks li { display:flex; gap:8px } .checks li.done { color:var(--ink) } .checks li.done .tick { color:var(--good) } .tick { flex:none; width:1em; text-align:center }
-  .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr)); gap:12px } .pictures.single { grid-template-columns:minmax(0,1fr) }
-  figure { display:flex; flex-direction:column; gap:6px; margin:0; min-width:0 }
-  .pictures:not(.single) { --picture-height: 260px }
   .button.small { min-height:32px; padding:4px 10px; font-size:12.5px }
   .url { overflow-wrap:anywhere }
+  .cited { display:flex; flex-direction:column; align-items:start; gap:4px; min-width:0 }
   @media(max-width:700px) { .panel { padding:16px } .styles { --face-size:64px; gap:8px } }
   .first-seen { align-self:center; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; text-decoration:underline; text-decoration-color:var(--line-strong); text-underline-offset:3px }
   .first-seen:hover { color:var(--ink) }
   .badge.earliest { background:var(--accent-light); color:var(--accent) }
+  .attribution { display:flex; flex-wrap:wrap; align-items:center; gap:6px }
 </style>

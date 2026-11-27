@@ -4,26 +4,29 @@
   // tools are working on, over the other glyph styles. While the drawing's layout is adjusted the plate
   // takes the width of the form.
   import type { Snippet } from 'svelte'
+  import { page } from '$app/state'
+  import { glyphStyleOf } from '$lib/composer'
   import type { Fill } from '$lib/encoded'
   import type { Layout } from '$lib/layout'
   import IdsDrawing from './IdsDrawing.svelte'
   import IdsField from './IdsField.svelte'
 
-  let { values = [], layout = null, primary = $bindable(''), exclude = null, placed, anchor, onfill, children }: {
-    values?: string[]; layout?: Layout | null; primary?: string; exclude?: number | null; placed?: (id: number) => string; anchor?: string; onfill?: (fill: Fill) => void; children?: Snippet
+  let { values = [], layout = null, primary = $bindable(''), exclude = null, placed, seed = null, anchor, onfill, children }: {
+    values?: string[]; layout?: Layout | null; primary?: string; exclude?: number | null; placed?: (id: number) => string; seed?: { id: number; entry: number } | null; anchor?: string; onfill?: (fill: Fill) => void; children?: Snippet
   } = $props()
   let field = $state<IdsField>()
   export const focus = () => field?.focus()
   export const append = (value?: string) => field?.append(value)
   let adjusting = $state(false)
+  let style = $derived(glyphStyleOf(page.data.glyphStyle))
   let chosen = $state.raw<number[] | null>(null)
 </script>
 
 <div class="character-container">
   <div class="character" class:adjusting>
-    <div class="plate"><IdsDrawing ids={primary} {layout} {chosen} bind:adjusting /></div>
+    <div class="plate"><IdsDrawing ids={primary} {layout} {chosen} bind:adjusting bind:style /></div>
     <div class="described">
-      <IdsField bind:this={field} {values} bind:primary bind:chosen {exclude} {placed} {anchor} {onfill} />
+      <IdsField bind:this={field} {values} bind:primary bind:chosen fontStyle={style} {exclude} {placed} {seed} {anchor} {onfill} />
       {@render children?.()}
     </div>
   </div>

@@ -31,7 +31,7 @@
   <a class="text-link back" href={href(`/entry/${data.id}#sighting-${data.sighting.id}`)}>← {t('history.back')}</a>
   <h1>{title}</h1>
   {#if only}<p class="notice bad" role="alert" tabindex="-1" bind:this={notice}>{t('error.only')}</p>
-  {:else if form?.error}<p class="notice bad" role="alert" tabindex="-1" bind:this={notice}>{t(`error.${form.error}`, form.error === 'described' ? { id: recordCode(form.described!) } : {})}{#if form.error === 'described'} <a class="text-link" href={there(form.described!)}>{t('sighting.moveThere')}</a>{/if}</p>{/if}
+  {:else if form?.error}<p class="notice bad" role="alert" tabindex="-1" bind:this={notice}>{t(`error.${form.error}`, form.error === 'described' ? { id: recordCode(form.described!) } : {})}{#if form.error === 'described'}{' '}<a class="text-link" href={there(form.described!)}>{t('sighting.moveThere')}</a>{/if}</p>{/if}
   <SightingCard sighting={data.sighting} />
   {#if !only}
     <form method="POST" class="stack">

@@ -19,16 +19,18 @@
   import { recordCode } from '$lib/code'
   import { LOOSE_MIN, MADE_OF } from '$lib/similar'
   import { browser } from '$app/environment'
+  import { composerUrl, type GlyphStyle } from '$lib/composer'
   import type { IdsAdapter, IdsEditor } from 'ids-input/svelte'
   import IdsGlyph from './IdsGlyph.svelte'
   import IdsLine from './IdsLine.svelte'
 
-  let { values = [], primary = $bindable(''), chosen = $bindable(null), exclude = null, placed, anchor, onfill }: {
-    values?: string[]; primary?: string; chosen?: number[] | null; exclude?: number | null; placed?: (id: number) => string; anchor?: string; onfill?: (fill: Fill) => void
+  let { values = [], primary = $bindable(''), chosen = $bindable(null), fontStyle, exclude = null, placed, seed = null, anchor, onfill }: {
+    fontStyle: GlyphStyle; values?: string[]; primary?: string; chosen?: number[] | null; exclude?: number | null; placed?: (id: number) => string; seed?: { id: number; entry: number } | null; anchor?: string; onfill?: (fill: Fill) => void
   } = $props()
 
-  // `placed` answers where the evidence at hand goes to a record that describes it already; without it, evidence is added there.
-  const evidenceHref = (id: number) => placed?.(id) ?? href(`/entry/${id}/sighting/new`)
+  // `placed` answers where the evidence at hand moves to a record that describes it already;
+  // `seed` carries a seeded sighting to another existing record's add-evidence form.
+  const evidenceHref = (id: number) => placed?.(id) ?? href(`/entry/${id}/sighting/new${seed && seed.entry !== id ? `?sighting=${seed.id}` : ''}`)
   const evidenceTab = $derived(placed ? undefined : '_blank')
 
   const uid = $props.id()
@@ -92,6 +94,13 @@
   // editor the tables it looks parts up in.
   let editor = $state.raw<IdsEditor | null>(null)
   let tools = $state.raw<{ Builder: typeof import('./IdsBuilder.svelte').default; adapter: IdsAdapter; messages: Record<string, string> | undefined } | null>(null)
+  const adapter = $derived.by(() => {
+    if (!tools) return undefined
+    const base = composerUrl(fontStyle)
+    return { ...tools.adapter, fontStyle,
+      variationSequences: () => import('han-compose/variants').then(engine => engine.variationSequences(base)),
+    }
+  })
   let building = $state(false)
   let root = $state<HTMLElement | null>(null)
   async function build() {
@@ -172,7 +181,7 @@
 
 <div class="descriptions" id={anchor} bind:this={root}>
   <div class="main">
-    <IdsLine bind:this={main} bind:value={first} label={t('field.ids')} titled adapter={tools?.adapter} oneditor={found => editor = found} />
+    <IdsLine bind:this={main} bind:value={first} label={t('field.ids')} titled {adapter} oneditor={found => editor = found} />
     <button type="button" class="button build" aria-expanded={building} aria-controls="{uid}-tools" disabled={!hydrated} onclick={build}>{t('field.idsBuild')}<span class="chevron" aria-hidden="true">⌄</span></button>
   </div>
   <div class="tools" id="{uid}-tools" hidden={!building}>
@@ -189,7 +198,7 @@
           <span class="body"><span class="line">{lone.facts.code}</span><span class="ids">{lone.facts.ids ?? ''}</span></span>
           <span class="choices">
             {#each lone.records as record (record.id)}
-              <a class="button" href={evidenceHref(record.id)} target={evidenceTab}>{t(placed ? 'sighting.moveThere' : 'field.encodedSame')} · {recordCode(record.id)}</a>
+              <a class="button" href={!placed && seed?.entry === record.id ? href(`/entry/${record.id}`) : evidenceHref(record.id)} target={evidenceTab}>{t(placed ? 'sighting.moveThere' : 'field.encodedSame')} · {recordCode(record.id)}</a>
             {:else}
               <button type="button" class="button" onclick={() => take(lone!.facts, false)}>{t('field.encodedSame')}</button>
             {/each}
@@ -213,13 +222,13 @@
                     {:else if item.record.cover_key}<img src={media(item.record.cover_key)} alt="" loading="lazy" decoding="async" />{/if}
                   </span>
                   <span class="body">
-                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier !== 'similar'} <a class="text-link" href={evidenceHref(item.record.id)} target={evidenceTab}>{t(placed ? 'sighting.moveThere' : 'field.candidateAdd')}</a>{/if}{#if whole && group.tier !== 'same' && !placed} <a class="text-link" href={href(`/entry/${item.record.id}?ids_add=${encodeURIComponent(sequence)}#edit-ids`)} target="_blank">{t('field.candidateAddIds')}</a>{/if}</span>
+                    <span class="line"><a class="text-link" href={href(`/entry/${item.record.id}`)} target="_blank">{recordCode(item.record.id)}</a>{#if group.tier !== 'similar' && (placed || !seed || seed.entry !== item.record.id)}{' '}<a class="text-link" href={evidenceHref(item.record.id)} target={evidenceTab}>{t(placed ? 'sighting.moveThere' : 'field.candidateAdd')}</a>{/if}{#if whole && group.tier !== 'same' && !placed}{' '}<a class="text-link" href={href(`/entry/${item.record.id}?ids_add=${encodeURIComponent(sequence)}#edit-ids`)} target="_blank">{t('field.candidateAddIds')}</a>{/if}</span>
                     <span class="ids">{item.record.ids ?? ''}</span>
                   </span>
                 {:else}
                   <span class="plate char" lang="zh">{item.char}</span>
                   <span class="body">
-                    <span class="line">{codePoints(item.char)}{#if onfill} <button type="button" class="text-button" onclick={() => fill(item.char, false, item.ids)}>{t('field.idsFill')}</button> <button type="button" class="text-button" onclick={() => fill(item.char, true, item.ids)}>{t('field.encodedHomograph')}</button>{/if}</span>
+                    <span class="line">{codePoints(item.char)}{#if onfill}{' '}<button type="button" class="text-button" onclick={() => fill(item.char, false, item.ids)}>{t('field.idsFill')}</button> <button type="button" class="text-button" onclick={() => fill(item.char, true, item.ids)}>{t('field.encodedHomograph')}</button>{/if}</span>
                     <span class="ids">{item.ids}</span>
                   </span>
                 {/if}

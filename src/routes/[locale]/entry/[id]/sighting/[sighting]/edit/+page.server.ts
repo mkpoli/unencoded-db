@@ -1,10 +1,11 @@
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
-import { editSighting, hasLink, getEntryRow, getSighting, readSightingFields } from '$lib/server/entries'
+import { archiveCited } from '$lib/server/archive'
+import { citesEvidence, editSighting, getEntryRow, getSighting, readSightingFields } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
 import { MEDIA_MAX } from '$lib/limits'
-import { keptPictures, positiveId, readMarks, uploadedImages } from '../../../../../../_submission.server'
+import { keptPictures, positiveId, readMarks, readViaPictures, storeImages, uploadedImages } from '../../../../../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
 async function target(event: RequestEvent) {
@@ -25,7 +26,8 @@ export const actions: Actions = {
     await guardWrite(event, 'EDITS')
     const { id, sighting } = await target(event)
     const form = await event.request.formData()
-    const values = readSightingFields(form)
+    const shots = await readViaPictures(form, sighting.vias)
+    const values = readSightingFields(form, shots.kept)
     if (!form.has('quote_text')) values.quotes = sighting.quotes
     const summary = String(form.get('summary') ?? '').trim().slice(0, 500)
     // The positions of the pictures the form takes away; new ones follow those that stay.
@@ -36,19 +38,23 @@ export const actions: Actions = {
     const rev = positiveId(String(form.get('rev') ?? ''))
     if (!rev || rev !== sighting.rev) return fail(409, { error: 'conflict', values, summary, removeMedia, marks: null })
     const { DB, MEDIA } = env(event)
+    if (shots.error) return fail(400, { error: shots.error, values, summary, removeMedia, marks })
+    const fields = { ...values, vias: readSightingFields(form, shots.all).vias }
     const read = await readMarks(form, sighting.media)
     const gone = new Set(sighting.media.map((_, position) => position).filter(position => removed.has(String(position))))
     const keptCount = sighting.media.length - gone.size
     if (read === 'invalid') return fail(400, { error: 'image', values, summary, removeMedia, marks })
     const added = await uploadedImages(form, MEDIA)
     if (added === 'invalid' || keptCount + added.length > MEDIA_MAX) return fail(400, { error: 'image', values, summary, removeMedia, marks })
-    if (!keptCount && !added.length && !hasLink(values) && !values.place) return fail(400, { error: 'evidence', values, summary, removeMedia, marks })
+    if (!keptCount && !added.length && !citesEvidence(fields) && !values.place) return fail(400, { error: 'evidence', values, summary, removeMedia, marks })
     const kept = await keptPictures(MEDIA, sighting.media, read, gone)
     const media = read || added.length || kept.length !== sighting.media.length ? [...kept, ...added] : null
+    await storeImages(MEDIA, shots.files)
     const person = await writer(event, DB)
-    const result = await editSighting(DB, sighting.id, rev, values, media, { actor: person.id, ip: await ipHash(event) }, summary || null, id)
+    const result = await editSighting(DB, sighting.id, rev, fields, media, { actor: person.id, ip: await ipHash(event) }, summary || null, id)
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code, values, summary, removeMedia, marks: null })
     notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
+    archiveCited(event, [fields])
     redirect(303, `/${event.params.locale}/entry/${id}`)
   },
 }

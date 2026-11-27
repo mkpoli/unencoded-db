@@ -6,6 +6,9 @@ declare module 'ids-input' {
   export function isDescription(text: string | null | undefined): boolean
   export function parse(ids: string | null | undefined, options?: { open?: boolean }): { tree?: IdsPart; problem?: IdsProblem }
   export function isNode(part: IdsPart | undefined): part is IdsNode
+  export function rateFormsOfPart(part: IdsPart | undefined): readonly { id: string; label: string; text: string }[]
+  export type VariationFamily = { id: string; subjects: readonly string[]; evidenceOnly?: boolean; forms: readonly { id: string; text: string; outline?: { d: string; viewBox?: string } }[] }
+  export function variationFamiliesOfPart(part: IdsPart | undefined, lookup?: (text: string) => readonly VariationFamily[]): readonly VariationFamily[]
   export function write(tree: IdsPart): string
 }
 
@@ -18,6 +21,7 @@ declare module 'ids-input/svelte' {
   export const IdsSequence: Component<{ editor: IdsEditor; label?: boolean; placeholder?: string; onenter?: () => void }>
   /** What a host needs of the editor behind a sequence field. */
   export type IdsEditor = {
+    readonly adapter: IdsAdapter
     /** The text in the field, `⬚` for each empty slot. */
     readonly draft: string
     /** What is wrong with the text, in the editor's language, or '' when nothing is. */
@@ -38,7 +42,12 @@ declare module 'ids-input/svelte' {
     listen(heard: (text: string, whole: boolean) => void): () => void
   }
   /** The tables an editor looks parts up in. The sequence field alone needs none. */
-  export type IdsAdapter = { structure(char: string): Promise<unknown[]> }
+  export type IdsAdapter = {
+    fontStyle?: import('$lib/composer').GlyphStyle
+    variationSequences?(): Promise<Map<string, string[]>>
+    structure(char: string): Promise<unknown[]>
+    variationFamilies?(text: string): readonly import('ids-input').VariationFamily[]
+  }
   export function createEditor(options: () => { adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; disabled?: boolean; tintMode?: 'hover' | 'on' | 'off' }): IdsEditor
   export const IdsOperators: Component<{ editor: IdsEditor; keyHints?: boolean }>
   export const IdsTree: Component<{ editor: IdsEditor; variations?: boolean; keyHints?: boolean }>
@@ -46,8 +55,8 @@ declare module 'ids-input/svelte' {
   export const IdsPicker: Component<{ editor: IdsEditor; pickers?: ('find' | 'parts' | 'from' | 'templates')[]; recentKey?: string | null }>
   export function createUnifiable(editor: () => IdsEditor): { readonly entries: readonly { id: string }[] }
   export function grassForm(editor: IdsEditor): string | null | undefined
-  export const IdsAlternatives: Component<{ editor: IdsEditor; variations?: boolean; onchoose?: () => void }>
-  export const IdsCharacterInfo: Component<{ root: HTMLElement | null; adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; onpick?: (part: string, path?: number[]) => void; extra?: import('svelte').Snippet<[{ path: number[] | undefined; close: () => void }]> }>
+  export const IdsAlternatives: Component<{ editor: IdsEditor; variations?: boolean; showFamilies?: boolean; onchoose?: () => void }>
+  export const IdsCharacterInfo: Component<{ root: HTMLElement | null; adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; onpick?: (part: string, path?: number[]) => void; extra?: import('svelte').Snippet<[{ path: number[] | undefined; close: () => void; hasFamilies: boolean }]> }>
   /** A description drawn by the adapter's `preview`. A `document` draws its parts where it moves them; with a `session` and `editable`, its parts are moved, scaled and turned on the drawing. */
   export const IdsPreview: Component<{
     adapter: { preview?: import('han-compose').ComposerPreview }; tree: import('ids-input').IdsPart; chosen?: number[] | null
@@ -108,6 +117,10 @@ declare module 'han-compose' {
   export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'regular' | 'fangsong' | 'pen-writing' }): Promise<Drawing>
   /** The composer in a Web Worker, reading han-compose's export at `base`. */
   export function composerPreview(options: { base: string; separate?: boolean; fontStyle?: 'sans' | 'serif' | 'regular' | 'fangsong' | 'pen-writing'; loaders?: Record<string, string> }): ComposerPreview
+}
+
+declare module 'han-compose/variants' {
+  export function variationSequences(base: string): Promise<Map<string, string[]>>
 }
 
 declare module 'han-compose/tree' {

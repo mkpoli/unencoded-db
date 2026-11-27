@@ -188,3 +188,22 @@ test('changed marks need their thumbnail, and come back with a refused form', as
   expect(await actions.default(stored(event(unreadable)))).toMatchObject({ status: 400, data: { error: 'image', marks: ['[[3,4,10,10]]'] } })
   expect(media(raw)).toEqual([{ position: 0, image_key: 'original', thumb_key: 'original-thumb', box: '[[1,2,10,10]]' }])
 })
+
+test('retains, marks and removes duplicate image_key pictures by position', async () => {
+  const { raw, event } = await fixture()
+  raw.prepare("INSERT INTO sighting_media(sighting_id, position, image_key, image_type, image_w, image_h, thumb_key, box) VALUES (1, 0, 'same.webp', 'image/webp', 100, 80, 'crop-thumb.webp', '[[1,2,10,10]]'), (1, 1, 'same.webp', 'image/webp', 100, 80, 'full-thumb.webp', NULL)").run()
+  const loaded = await load(event()) as any
+  expect(loaded.sighting.media).toHaveLength(2)
+  expect(loaded.sighting.media.map((item: { image_key: string }) => item.image_key)).toEqual(['same.webp', 'same.webp'])
+  const keys: string[] = []
+  const reMark = event(marked(['[[1,2,10,10]]', '[[20,30,40,20]]'], [null, png]))
+  reMark.platform.env.MEDIA = { put: async (key: string) => { keys.push(key) } }
+  await expect(actions.default(reMark)).rejects.toMatchObject({ status: 303 })
+  const [first, second] = media(raw) as { position: number; image_key: string; thumb_key: string; box: string }[]
+  expect(first).toEqual({ position: 0, image_key: 'same.webp', thumb_key: 'crop-thumb.webp', box: '[[1,2,10,10]]' })
+  expect(second).toMatchObject({ position: 1, image_key: 'same.webp', box: '[[20,30,40,20]]' })
+  expect(keys).toEqual([second.thumb_key])
+  const removeFirst = form('2'); removeFirst.append('remove_media', '0')
+  await expect(actions.default(event(removeFirst))).rejects.toMatchObject({ status: 303 })
+  expect(media(raw)).toEqual([{ position: 0, image_key: 'same.webp', thumb_key: second.thumb_key, box: '[[20,30,40,20]]' }])
+})

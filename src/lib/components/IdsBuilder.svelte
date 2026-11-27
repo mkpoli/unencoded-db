@@ -56,12 +56,12 @@
     <button type="button" class="button" disabled={!editor.canRedo} onclick={() => editor.redo()}>{say('ids.redo.label')}</button>
   </div>
 </div>
-{#snippet formChoices({ path, close }: { path: number[] | undefined; close: () => void })}
+{#snippet formChoices({ path, close, hasFamilies }: { path: number[] | undefined; close: () => void; hasFamilies: boolean })}
   {#if path && path.join('.') === editor.chosen?.join('.')}
-    <IdsAlternatives {editor} variations onchoose={close} />
+    <IdsAlternatives {editor} variations showFamilies={!hasFamilies} onchoose={close} />
   {/if}
 {/snippet}
-<IdsCharacterInfo root={scope ?? root} {adapter} {messages} {locale} onpick={(part, path) => editor.take(part, path)}
+<IdsCharacterInfo root={scope ?? root} adapter={editor.adapter} {messages} {locale} onpick={(part, path) => editor.take(part, path)}
   extra={grassForm(editor) || unifiable.entries.length ? formChoices : undefined} />
 
 <style>
