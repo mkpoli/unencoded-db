@@ -6,6 +6,7 @@
   import SourceTitleField from './SourceTitleField.svelte'
   import PublisherField from './PublisherField.svelte'
   import ContainerField from './ContainerField.svelte'
+  import AuthorField from './AuthorField.svelte'
   import ViaPictures from './ViaPictures.svelte'
   import { tick, untrack } from 'svelte'
   import { flip } from 'svelte/animate'
@@ -287,7 +288,7 @@
   <summary>{t('field.source')}</summary>
   <div class="grid-2">
     <SourceTitleField id="{uid}-title" name="title" bind:value={title} onselect={chooseSource} {onsource} />
-    <div class="field"><label for="{uid}-author">{t('field.author')}</label><input id="{uid}-author" class="input" name="author" bind:value={author} maxlength="300" /></div>
+    <AuthorField id="{uid}-author" name="author" bind:value={author} />
     <ContainerField id="{uid}-container" name="container" bind:value={container} bind:publisher />
     <PublisherField id="{uid}-publisher" name="publisher" bind:value={publisher} />
     {@render kindField(`${uid}-source_kind`, 'source_kind', kind, value => kind = value)}
@@ -322,7 +323,7 @@
       <div class="field"><label for="{uid}-via_url-{row.key}">{t('field.url')}</label><input id="{uid}-via_url-{row.key}" class="input" type="url" name="via_url" bind:value={row.url} use:cleanLinkInput placeholder="https://" maxlength="1000" autocorrect="off" autocapitalize="none" spellcheck="false" /></div>
       <div class="grid-2">
         <SourceTitleField id="{uid}-via_title-{row.key}" name="via_title" bind:value={row.title} onselect={source => chooseVia(row, source)} />
-        <div class="field"><label for="{uid}-via_author-{row.key}">{t('field.author')}</label><input id="{uid}-via_author-{row.key}" class="input" name="via_author" bind:value={row.author} maxlength="300" /></div>
+        <AuthorField id="{uid}-via_author-{row.key}" name="via_author" bind:value={row.author} />
         <ContainerField id="{uid}-via_container-{row.key}" name="via_container" bind:value={row.container} bind:publisher={row.publisher} />
         <PublisherField id="{uid}-via_publisher-{row.key}" name="via_publisher" bind:value={row.publisher} />
         {@render kindField(`${uid}-via_source_kind-${row.key}`, 'via_source_kind', row.kind, value => row.kind = value)}
