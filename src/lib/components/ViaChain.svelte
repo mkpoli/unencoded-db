@@ -35,7 +35,7 @@
             <span class="title">
               {#if via.id}
                 <a class="text-link" href={href(`/source/${via.id}`)}>{name.text}</a>
-                {#if web(via.url)} <a class="text-link url" href={via.url} target="_blank" rel="noopener noreferrer" aria-label={t('field.url')}>↗</a>{/if}
+                {#if web(via.url)}{' '}<a class="text-link url" href={via.url} target="_blank" rel="noopener noreferrer" aria-label={t('field.url')}>↗</a>{/if}
               {:else if web(via.url)}
                 <a class="text-link" href={via.url} target="_blank" rel="noopener noreferrer">{name.text}</a>
               {:else}
