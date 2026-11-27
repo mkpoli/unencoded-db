@@ -13,3 +13,9 @@ export function archiveUrl(text: string) {
   if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) return null
   return url.href.length > ARCHIVE_URL_MAX ? null : url.href
 }
+
+// A copy is named by its archive's host, with its path and query when the list has another copy there.
+export function archiveLinks(archives: readonly string[]) {
+  const urls = archives.map(archive => new URL(archive))
+  return urls.map(url => ({ href: url.href, label: urls.filter(other => other.host === url.host).length > 1 ? `${url.host}${url.pathname}${url.search}` : url.host }))
+}
