@@ -356,3 +356,31 @@ test('mergedBatches chunks target lookups below D1 parameter limits', async () =
   expect(rows).toHaveLength(120)
   expect(maxBinds).toBeLessThanOrEqual(90)
 })
+
+test('mergedBatches resolves each batch fresh under concurrent unmerge and re-merge', async () => {
+  const { db, raw } = openTestDb()
+  raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026');
+    INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at) VALUES
+      (1, 'han', NULL, 'p', '2026', '2026'),
+      (2, 'han', 1, 'p', '2026', '2026'),
+      (3, 'han', 1, 'p', '2026', '2026'),
+      (4, 'han', NULL, 'p', '2026', '2026');`)
+  let pages = 0
+  const mutating = { prepare(sql: string) {
+    const stmt = db.prepare(sql)
+    return { bind(...values: unknown[]) {
+      if (sql.includes('entries_merged_export')) {
+        pages++
+        if (pages === 2) raw.exec('UPDATE entries SET merged_into = NULL WHERE id = 2; UPDATE entries SET merged_into = 2 WHERE id = 4')
+      }
+      return stmt.bind(...values)
+    } }
+  } } as D1Database
+  const rows = []
+  for await (const batch of mergedBatches(mutating, 1)) rows.push(...batch)
+  expect(rows).toEqual([
+    { id: 2, code: 'R+0002', merged_into: 1, merged_into_code: 'R+0001' },
+    { id: 3, code: 'R+0003', merged_into: 1, merged_into_code: 'R+0001' },
+    { id: 4, code: 'R+0004', merged_into: 2, merged_into_code: 'R+0002' },
+  ])
+})

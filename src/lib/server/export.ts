@@ -349,14 +349,14 @@ const MERGE_HOPS_MAX = 16
  *  Hidden records and merges into hidden records are omitted. */
 export async function* mergedBatches(db: D1Database, size = EXPORT_BATCH_MAX): AsyncGenerator<MergedRow[]> {
   const limit = Math.min(Math.max(size, 1), EXPORT_BATCH_MAX)
-  // Because `merged_into < id` is enforced on every row, walking in ascending id order resolves
-  // earlier merged hops before later ones. `null` marks a hidden or missing terminal target.
-  const resolved = new Map<number, number | null>()
   let after = 0
   for (;;) {
     const { results } = await db.prepare(MERGED_QUERY).bind(after, limit + 1).all<{ id: number; merged_into: number }>()
     const page = results.slice(0, limit)
     if (!page.length) return
+    // Resolve targets fresh per batch so a concurrent unmerge/re-merge between pages (as allowed in
+    // `format=index`) never reuses a stale redirect from an earlier batch.
+    const resolved = new Map<number, number | null>()
     const direct = new Map(page.map(row => [row.id, row.merged_into]))
     const endpoint = (start: number): number | null => {
       let current = start
