@@ -136,6 +136,7 @@
   "field.imageRemove": "Remove",
   "field.imageWorking": "Preparing the picture…",
   "field.imageBad": "This file could not be read as an image or a PDF.",
+  "field.pdfTooLarge": "This PDF is too large for the site to draw. Use a JPEG or PNG of the page.",
   "field.pdfPages": "Pages",
   "field.imageZoom": "Picture scale",
   "field.imageZoomIn": "Zoom in",

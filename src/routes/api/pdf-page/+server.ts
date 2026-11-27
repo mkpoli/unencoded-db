@@ -10,8 +10,9 @@ export const POST: RequestHandler = async (event) => {
   if (event.request.headers.get('origin') !== event.url.origin) error(403)
   const page = Number(event.url.searchParams.get('page') ?? '1')
   const bytes = new Uint8Array(await event.request.arrayBuffer())
-  if (!bytes.byteLength || bytes.byteLength > MAX_IMAGE || !isPdf(bytes)) error(422, 'pdf')
-  if (heavyJpx(bytes)) error(422, 'jpx')
+  if (!bytes.byteLength || !isPdf(bytes)) error(422, 'pdf')
+  // A file the site cannot draw for its size is named apart, so the form can ask for a picture of the page.
+  if (bytes.byteLength > MAX_IMAGE || heavyJpx(bytes)) error(422, 'large')
   const drawn = await renderPdfPage(bytes, page)
   if (!drawn) error(422, 'page')
   return new Response(drawn.bytes as BodyInit, { headers: { 'content-type': 'image/webp', 'cache-control': 'no-store', 'x-pdf-pages': String(drawn.pages) } })

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { sniff } from '$lib/server/image'
+import { MAX_IMAGE, sniff } from '$lib/server/image'
 import { imageObject, pdfOf } from '$lib/server/pdf.test'
 import { POST } from './+server'
 
@@ -9,6 +9,7 @@ const ask = (body: Uint8Array, page: string, origin = 'https://site.example') =>
 } as never) as Promise<Response>
 
 const status = (call: Promise<unknown>) => call.then(() => 200, (thrown: { status: number }) => thrown.status)
+const refusal = (call: Promise<unknown>) => call.then(() => null, (thrown: { status: number; body?: { message?: string } }) => `${thrown.status} ${thrown.body?.message}`)
 
 test('a page of a PDF comes back as a picture, with the number of pages', async () => {
   const response = await ask(pdfOf([[595, 842], [842, 595]]), '2')
@@ -23,5 +24,12 @@ test('another site, a missing page and a file that is no PDF are refused', async
   expect(await status(ask(pdf, '1', 'https://other.example'))).toBe(403)
   expect(await status(ask(pdf, '2'))).toBe(422)
   expect(await status(ask(new TextEncoder().encode('plain text'), '1'))).toBe(422)
-  expect(await status(ask(pdfOf([[595, 842]], [imageObject(3433, 2706, '/JPXDecode')]), '1'))).toBe(422)
+  expect(await refusal(ask(new TextEncoder().encode('plain text'), '1'))).toBe('422 pdf')
+})
+
+test('a PDF too large to draw is named apart, so the form can ask for a picture of the page', async () => {
+  expect(await refusal(ask(pdfOf([[595, 842]], [imageObject(3433, 2706, '/JPXDecode')]), '1'))).toBe('422 large')
+  const padded = new Uint8Array(MAX_IMAGE + 1)
+  padded.set(pdfOf([[595, 842]]))
+  expect(await refusal(ask(padded, '1'))).toBe('422 large')
 })
