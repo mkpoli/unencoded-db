@@ -20,6 +20,7 @@ import { WHO, WHO_COLUMNS } from './people'
 import type { Tag } from '$lib/tags'
 import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
 import { groupMates } from '$lib/similar'
+import { partRowsOf, partsOf, structurePattern } from '$lib/structure'
 import { codedRecord, recordCode } from '$lib/code'
 import type { RelationKind } from '$lib/related'
 import { PART_RUN_MAX, PART_SPELLINGS_MAX } from '$lib/ids-variants'
@@ -375,11 +376,10 @@ function wordTags(entry: TagInput, claims: readonly Claim[], sightings: Sighting
   return [...words].slice(0, WORDS_MAX).map(word => `w:${word}`)
 }
 
-/** The parts of a description: its characters other than the operators and spaces, radical code points as the ideographs they stand for. */
-export const partsOf = (ids: string) => [...new Set([...ids].filter(char => !/[\s\u2FF0-\u2FFF\u31EF]/u.test(char)).map(radicalEquivalent))]
-// A record is found by the parts of each description it states (`p:`), read by key like a word and kept the same way.
+export { partsOf }
+// A record is found by the parts and the structures of each description it states (`p:`), read by key like a word and kept the same way.
 function partTags(claims: readonly Claim[]) {
-  return [...new Set(claims.filter(claim => claim.kind === 'ids').flatMap(claim => partsOf(claim.value)))].map(part => `p:${part}`)
+  return [...new Set(claims.filter(claim => claim.kind === 'ids').flatMap(claim => partRowsOf(claim.value)))]
 }
 
 // The year a list is read by: a record's first year as a number, which keeps no leading zero.
@@ -1608,11 +1608,32 @@ export const MATES_MAX = 2
 // The part rows a part is found under: the ideograph its radical code point stands for, then the parts IWDS counts as one with it.
 const partRows = (part: string) => { const own = radicalEquivalent(part); return [...new Set([own, ...groupMates(own).slice(0, MATES_MAX).map(radicalEquivalent)])].map(spelling => `p:${spelling}`) }
 
-/** The parts of a query that is parts alone, such as 艹時, or null for a description or a query with a longer word. */
+/** Structure keys at most in one search, over all the structures typed. */
+export const SEARCH_KEYS_MAX = 8
+// A query as the structures and the words typed in it. A whole description is one structure, spaces and
+// all; otherwise each run between spaces that starts with an operator is one (⿲, ⿰氵, ⿰氵⿱？木), read into
+// the keys a record must hold (see `$lib/structure`), and the rest are words.
+function readQuery(query: string) {
+  const whole = exactSearchIds(query)
+  const typed = whole ? [whole] : query.trim().split(/\s+/u).filter(Boolean)
+  const structures: string[][] = [], rest: string[] = []
+  for (const term of typed) { const keys = structurePattern(term); if (keys) structures.push(keys); else rest.push(term) }
+  return { structures, words: [...new Set(terms(rest.join(' ')))] }
+}
+
+/** Why a query cannot be searched, or null for one that can, the empty one included. */
+export function searchProblem(query: string): 'queryTooLong' | 'noSearchTerms' | 'tooManyTerms' | null {
+  const typed = query.trim()
+  if (typed.length > SEARCH_LENGTH_MAX) return 'queryTooLong'
+  const { structures, words } = readQuery(typed)
+  if (typed && !structures.length && !words.length) return 'noSearchTerms'
+  return structures.length + words.length > SEARCH_TERMS_MAX || structures.flat().length > SEARCH_KEYS_MAX ? 'tooManyTerms' : null
+}
+
+/** The parts of a query that is parts alone, such as 艹時, or null for a description, a structure or a query with a longer word. */
 export function searchParts(query: string) {
-  if (exactSearchIds(query)) return null
-  const parts = [...new Set(terms(query))]
-  return parts.length && parts.length <= SEARCH_TERMS_MAX && parts.every(isPart) ? parts : null
+  const { structures, words } = readQuery(query)
+  return !structures.length && words.length && words.length <= SEARCH_TERMS_MAX && words.every(isPart) ? words : null
 }
 
 // Other spellings of the parts searched for, found in the browser, are searched with them: at most
@@ -1639,16 +1660,16 @@ export const alsoSearch = (query: string, values: readonly string[] = []) => exa
 function listPlan({ script, filter, facet, creator, radical, decade, within, without, query, also }: Listing) {
   const base = listTag(script, filter), own = facetTag(facet), maker = creatorTag(creator), filed = radicalTag(radical), period = decadeTag(decade), marks = markTags(within, without)
   if (!base || own === undefined || maker === undefined || filed === undefined || period === undefined || !marks) return null
-  if ((query?.trim().length ?? 0) > SEARCH_LENGTH_MAX) return null
-  const typed = exactSearchIds(query ?? '')
-  const exact = typed ? [typed, ...alsoSearchIds(query ?? '', also)] : null
-  const words = exact ? [] : [...new Set(terms(query ?? ''))]
-  if (!exact && (words.length > SEARCH_TERMS_MAX || (query?.trim() && !words.length))) return null
+  if (searchProblem(query ?? '')) return null
+  const { structures, words } = readQuery(query ?? '')
+  // A whole description is found under its other spellings too, each one structure of its own.
+  const others = alsoSearchIds(query ?? '', also).flatMap(ids => { const keys = structurePattern(ids); return keys?.length === 1 ? keys : [] })
+  const held = structures.flatMap(keys => keys.map(key => [...new Set([key, ...(keys.length === 1 ? others : [])])].map(row => `p:${row}`)))
   const keys = [...(own ? [own] : []), ...(maker ? [maker] : []), ...(filed ? [filed] : []), ...(period ? [period] : []), ...marks, ...(base !== 'all' ? [base] : [])]
   // A spelling that is one character, the one the parts make, is found wherever a record names it: as a
   // part, a related character, a code, or a word of its notes and sources.
-  const spelt = exact ? [] : alsoSearchParts(query ?? '', also).map(run => [...run]).map(run => run.map(part => run.length === 1 ? [`w:${part}`, ...partRows(part)] : partRows(part)))
-  return { keys, exact, words: words.map(word => [`w:${word}`, ...(isPart(word) ? partRows(word) : [])]), spelt }
+  const spelt = alsoSearchParts(query ?? '', also).map(run => [...run]).map(run => run.map(part => run.length === 1 ? [`w:${part}`, ...partRows(part)] : partRows(part)))
+  return { keys, words: [...held, ...words.map(word => [`w:${word}`, ...(isPart(word) ? partRows(word) : [])])], spelt }
 }
 type Plan = NonNullable<ReturnType<typeof listPlan>>
 
@@ -1665,7 +1686,7 @@ function wordsTest(plan: Plan, from: 't' | 'd', given?: readonly string[]) {
 function listRead(plan: Plan, range = plan.keys[0] ?? 'all') {
   const words = wordsTest(plan, 't'), keys = plan.keys.filter(key => key !== range)
   const tests = [...words.tests, ...keys.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = t.entry_id)')]
-  return { tag: range, tests, values: [...words.values, ...keys], searching: plan.exact !== null || tests.length > 0 }
+  return { tag: range, tests, values: [...words.values, ...keys], searching: tests.length > 0 }
 }
 
 export const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind, e.marks'
@@ -1718,13 +1739,10 @@ export function listStatement(db: D1Database, listing: Listing, range?: string, 
   const read = listRead(plan, range)
   // The range drives the query. Tests are projections, not filters:
   // LIMIT therefore bounds candidates read even when no row passes.
-  const tests = [
-    ...(plan.exact ? [`EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value IN (${plan.exact.map(() => '?')}) AND k.entry_id = t.entry_id)`] : []),
-    ...read.tests,
-  ].join(' AND ') || '1'
+  const tests = read.tests.join(' AND ') || '1'
   const { by, past, key } = order === 'random' ? { by: RANK, past: `${RANK} >= ? AND ${RANK} < ? AND ${LISTED}`, key: RANK } : ORDER_READS[order]
   return db.prepare(`SELECT ${TILE_COLUMNS}, ${key} AS counted, (${tests}) AS matches FROM entry_tags t CROSS JOIN entries e ON e.id = t.entry_id WHERE t.tag = ? AND ${past} ORDER BY ${by} LIMIT ?`)
-    .bind(...(plan.exact ?? []), ...read.values, read.tag, ...(ranks ?? cursor), (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1 - taken)
+    .bind(...read.values, read.tag, ...(ranks ?? cursor), (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1 - taken)
 }
 
 export type TileRow = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind' | 'marks'>
@@ -1798,45 +1816,40 @@ export async function pageCount(db: D1Database, listing: Listing): Promise<{ rec
   return { records, pages: Math.ceil(records / (listing.limit ?? PAGE)), floor: records === PAGED_MAX }
 }
 
-// A search is counted once, from the shortest range it is tested against: a key, a word or the exact
-// description. A query of parts with other spellings is counted from one word of each spelling, since a
+// A search is counted once, from the shortest range it is tested against: a key or a word. A query of parts with other spellings is counted from one word of each spelling, since a
 // record found holds every word of one of them. At most TOTAL_READ records of that range are read; past
 // that the count is a floor.
 export const TOTAL_READ = 1000
-type TotalRange = { tag: string; exact?: undefined; words?: undefined } | { tag?: undefined; exact: readonly string[]; words?: undefined } | { tag?: undefined; exact?: undefined; words: readonly string[] }
+type TotalRange = { tag: string; words?: undefined } | { tag?: undefined; words: readonly string[] }
 const rowsIn = (rows: number) => rows === 1 ? '= ?' : `IN (${Array(rows).fill('?')})`
 export const wordSize = (rows: number) => `SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags WHERE tag ${rowsIn(rows)} LIMIT ${TOTAL_READ + 1})`
-export const exactSize = (spellings: number) => `SELECT count(*) AS n FROM (SELECT entry_id FROM claims WHERE kind = 'ids' AND value IN (${Array(spellings).fill('?')}) LIMIT ${TOTAL_READ + 1})`
 // The records of a range that the search finds, as `d`: at most TOTAL_READ read. When `newest`, each tag or
 // spelling of the range is read newest first on its own, an equal share of TOTAL_READ each, since the index
 // gives several of them in no one order and sorting them all would read every row.
 function rangeFound(plan: Plan, from: TotalRange, newest = false) {
   const tags = (plan.keys.length ? plan.keys : ['all']).filter(tag => tag !== from.tag)
-  const exact = from.exact ? null : plan.exact
   // The rows of one word read alone are known to hold it, unless another spelling could do without it.
-  const read = from.exact ?? from.words ?? [from.tag]
+  const read = from.words ?? [from.tag]
   const given = from.words && !plan.spelt.length ? plan.words.find(rows => rows.length === read.length && rows.every((row, i) => row === read[i])) : undefined
   const words = wordsTest(plan, 'd', given)
   const tests = [
-    ...(exact ? [`EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value IN (${exact.map(() => '?')}) AND k.entry_id = d.entry_id)`] : []),
     ...words.tests,
     ...tags.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = d.entry_id)'),
   ].join(' AND ') || '1'
   // Several spellings or rows are read unordered, since none of them is one range of the index.
   const each = Math.ceil(TOTAL_READ / read.length)
-  const one = from.exact ? `SELECT entry_id FROM claims WHERE kind = 'ids' AND value = ? ORDER BY entry_id DESC LIMIT ${each}` : `SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id DESC LIMIT ${each}`
+  const one = `SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id DESC LIMIT ${each}`
   const range = newest ? read.map(() => `SELECT entry_id FROM (${one})`).join(' UNION ALL ')
-    : from.exact ? `SELECT entry_id FROM claims WHERE kind = 'ids' AND value IN (${from.exact.map(() => '?')}) LIMIT ${TOTAL_READ}`
     : read.length > 1 ? `SELECT entry_id FROM entry_tags WHERE tag ${rowsIn(read.length)} LIMIT ${TOTAL_READ}`
     : `SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id LIMIT ${TOTAL_READ}`
-  return { range, tests, values: [...read, ...(exact ?? []), ...words.values, ...tags] }
+  return { range, tests, values: [...read, ...words.values, ...tags] }
 }
 export function totalStatement(db: D1Database, listing: Listing, from: TotalRange) {
   const plan = listPlan(listing)
   if (!plan) return null
   const { range, tests, values } = rangeFound(plan, from)
   // A tag range holds each record once; only several spellings or rows can name one record twice.
-  const several = from.tag === undefined && (from.exact ?? from.words).length > 1
+  const several = from.tag === undefined && from.words.length > 1
   return db.prepare(`SELECT ${several ? 'count(DISTINCT d.entry_id)' : 'count(*)'} AS n FROM (${range}) d WHERE ${tests}`).bind(...values)
 }
 
@@ -1845,12 +1858,11 @@ export function totalStatement(db: D1Database, listing: Listing, from: TotalRang
 async function searchRange(db: D1Database, listing: Listing) {
   const plan = listPlan(listing)
   const keys = plan?.keys.length ? plan.keys : ['all']
-  if (!plan || (!plan.exact && !plan.words.length && keys.length < 2)) return null
+  if (!plan || (!plan.words.length && keys.length < 2)) return null
   const spellings = [plan.words, ...plan.spelt].filter(spelling => spelling.length), words = spellings.flat()
   const [known, ...read] = await db.batch<{ tag: string; n: number }>([
     db.prepare('SELECT tag, n FROM tag_counts WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(keys)),
     ...words.map(rows => db.prepare(wordSize(rows.length)).bind(...rows)),
-    ...(plan.exact ? [db.prepare(exactSize(plan.exact.length)).bind(...plan.exact)] : []),
   ])
   const sizes = new Map(known.results.map(row => [row.tag, row.n]))
   const sized = new Map(words.map((rows, i) => [rows, read[i].results[0]?.n ?? 0]))
@@ -1859,7 +1871,6 @@ async function searchRange(db: D1Database, listing: Listing) {
   const ranges: (TotalRange & { size: number })[] = [
     ...keys.map(tag => ({ tag, size: sizes.get(tag) ?? 0 })),
     ...(spellings.length > 1 ? [{ words: [...new Set(least.flat())], size: least.reduce((sum, rows) => sum + sized.get(rows)!, 0) }] : plan.words.map(rows => ({ words: rows, size: sized.get(rows)! }))),
-    ...(plan.exact ? [{ exact: plan.exact, size: read[words.length].results[0]?.n ?? 0 }] : []),
   ]
   return { plan, from: ranges.reduce((least, range) => range.size < least.size ? range : least), pool: Math.min(...keys.map(tag => sizes.get(tag) ?? 0)) }
 }

@@ -54,7 +54,7 @@
   "browse.search": "구성 요소, 장소, 책, 독음으로 검색…",
   "browse.searchLabel": "기록 검색",
   "browse.tooManyTerms": "단어나 구성 요소는 다섯 개까지 검색할 수 있습니다.",
-  "browse.idsHint": "완성된 IDS는 정확히 일치하는 항목을 찾습니다.",
+  "browse.idsHint": "IDS로 검색하면 해당 구조가 포함된 모든 자형 설명을 찾습니다: ⿰氵五, ⿰氵？ 또는 ⿲ 단독.",
   "browse.noSearchTerms": "검색할 단어나 문자를 입력하세요.",
   "browse.queryTooLong": "검색어는 200자 이내로 입력하세요.",
   "browse.all": "전체",

@@ -54,7 +54,7 @@
   "browse.search": "按部件、地點、書名、讀音等搜尋…",
   "browse.searchLabel": "搜尋記錄",
   "browse.tooManyTerms": "詞語或部件最多可輸入5個。",
-  "browse.idsHint": "完整的IDS以完全相符搜尋。",
+  "browse.idsHint": "輸入IDS可找出所有包含該結構的字形描述：⿰氵五、⿰氵？或單獨的⿲。",
   "browse.noSearchTerms": "請輸入要搜尋的詞或字元。",
   "browse.queryTooLong": "搜尋內容不能超過200個字元。",
   "browse.all": "全部",

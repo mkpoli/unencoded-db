@@ -10,6 +10,12 @@ declare module 'ids-input' {
   export type VariationFamily = { id: string; subjects: readonly string[]; evidenceOnly?: boolean; forms: readonly { id: string; text: string; outline?: { d: string; viewBox?: string } }[] }
   export function variationFamiliesOfPart(part: IdsPart | undefined, lookup?: (text: string) => readonly VariationFamily[]): readonly VariationFamily[]
   export function write(tree: IdsPart): string
+  /** `text` with the ASCII names of the operators (LR, UD) written as operators. */
+  export function unalias(text: string | null | undefined): string
+  /** A part of a structure searched for; null stands for any part. */
+  export type QueryPattern = null | string | { anyOf: string[] } | { op: string; parts: QueryPattern[] }
+  export type QueryTerm = { kind: 'structure'; text: string; tree: QueryPattern; leaves: unknown[] } | { kind: 'components'; text: string; leaves: unknown[] }
+  export function parseQuery(text: string, options?: { literal?: boolean }): { terms: QueryTerm[]; problem?: 'empty' | 'extra' | 'terms' }
 }
 
 declare module 'ids-input/adapter' {
