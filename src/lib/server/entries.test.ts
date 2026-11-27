@@ -633,6 +633,9 @@ describe('the wiki', () => {
     for (const column of ['id', 'rowid']) {
       expect(() => raw.run(`INSERT OR REPLACE INTO entries(${column}, script, created_by, created_at, updated_at) VALUES (?, 'han', ?, '2026', '2026')`, [b, who.actor])).toThrow('entries cannot be replaced')
     }
+    for (const badId of [0, -1]) {
+      expect(() => raw.run("INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES (?, 'han', ?, '2026', '2026')", [badId, who.actor])).toThrow('entry id must be positive')
+    }
     expect(() => raw.run('UPDATE entries SET merged_into = ? WHERE id = ?', [a, a])).toThrow('a record can only merge into an earlier record')
     expect(() => raw.run('UPDATE entries SET merged_into = ? WHERE id = ?', [b, a])).toThrow('a record can only merge into an earlier record')
     expect(() => raw.run("INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at) VALUES (10, 'han', 10, ?, '2026', '2026')", [who.actor])).toThrow('a record can only merge into an earlier record')
