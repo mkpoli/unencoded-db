@@ -97,6 +97,8 @@ An agent with no browser, such as a chat bot, gets its token from the maintainer
 
 `server.json` holds the [MCP Registry](https://registry.modelcontextprotocol.io/) manifest under the `org.glyphatlas` DNS namespace. Publishing is manual: verify `glyphatlas.org` ownership with `mcp-publisher login dns`, bump `version` for each release (published versions are immutable), and run `mcp-publisher publish`.
 
+When an agent presents a bearer token belonging to an unbanned moderator, `tools/list` additionally exposes five moderator-only tools (`set_hidden`, `list_reports`, `resolve_report`, `set_comment_hidden`, `redact_revision`), and `get_record` and `get_history` accept `include_hidden: true` to inspect hidden records, sightings and comments. Non-moderators do not see those tools in `tools/list` and receive a permission refusal if they call them.
+
 ## Data model
 
 | Table | Holds |
