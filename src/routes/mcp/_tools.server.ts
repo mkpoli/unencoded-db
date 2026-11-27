@@ -15,10 +15,11 @@ import { cleanIds, IDS_LENGTH_MAX } from '$lib/ids'
 import { ADD_SIGHTINGS_MAX, BOXES_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
 import { REGISTRIES } from '$lib/registries'
 import { RELATION_KINDS } from '$lib/related'
-import { CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX } from '$lib/scripts'
+import { dateOrderWarnings } from '$lib/cites'
+import { CITE_KINDS, CITES_MAX, CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX, type CiteKind } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
 import { tagList } from '$lib/server/tags'
-import { addSighting, CITATION_FIELDS, citesEvidence, createEntry, editEntry, editSighting, getEntry, heldPictures, list, mediaVisible, namedVias, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, viaKey, viaRows, type StoredImage, type ViaPicture } from '$lib/server/entries'
+import { addSighting, CITATION_FIELDS, citesEvidence, CiteValidationError, createEntry, editEntry, editSighting, getEntry, getSighting, heldPictures, linkSightings, list, mediaVisible, namedVias, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, validateCiteTargets, viaKey, viaRows, type Cite, type SightingFields, type StoredImage, type ViaPicture } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { archiveCited } from '$lib/server/archive'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
@@ -327,7 +328,41 @@ function sightingForm(input: Json) {
     for (const field of CITATION_FIELDS) form.append(`via_${field}`, field === 'url' ? link(via.url, 'A via url') : field === 'source_kind' ? choice(via.source_kind, SOURCE_KINDS, 'A via source_kind') : text(via[field]))
     form.append('via_quote', text(via.quote))
   }
+  const cites = items(input.cites).map(record)
+  if (cites.length > CITES_MAX) throw new Refusal(`A sighting names up to ${CITES_MAX} cited older works.`)
+  for (const cite of cites) {
+    const kind = choice(cite.kind, CITE_KINDS, 'A cite kind') || 'quotes'
+    const target = cite.sighting === undefined || cite.sighting === null || cite.sighting === '' ? '' : Number.isInteger(cite.sighting) && (cite.sighting as number) >= 1 ? String(cite.sighting) : (() => { throw new Refusal('A cite sighting is a positive integer sighting id.') })()
+    form.append('cite_kind', kind)
+    form.append('cite_sighting', target)
+    for (const field of CITATION_FIELDS) form.append(`cite_${field}`, field === 'url' ? link(cite.url, 'A cite url') : field === 'source_kind' ? choice(cite.source_kind, SOURCE_KINDS, 'A cite source_kind') : text(cite[field]))
+    form.append('cite_quote', text(cite.quote))
+    form.append('cite_note', text(cite.note))
+  }
   return form
+}
+
+async function citeDateWarnings(db: D1Database, list: readonly SightingFields[]): Promise<string[]> {
+  const targetIds = [...new Set(list.flatMap(fields => (fields.cites ?? []).map(cite => cite.sighting)).filter((id): id is number => id !== null))]
+  const targets = new Map<number, { report_date: string | null; original_date: string | null }>()
+  if (targetIds.length) {
+    const { results } = await db.prepare(`SELECT s.id, s.original_date, c.report_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.id IN (${targetIds.map(() => '?').join(', ')})`).bind(...targetIds).all<{ id: number; original_date: string | null; report_date: string | null }>()
+    for (const row of results) targets.set(row.id, row)
+  }
+  const allDates = [...sightingDates(list), ...[...targets.values()].flatMap(target => [target.report_date, target.original_date])]
+  const book = await readDates(db, allDates)
+  const messages: string[] = []
+  for (const fields of list) {
+    const citesWithTargets = (fields.cites ?? []).map(cite => {
+      const target = cite.sighting ? targets.get(cite.sighting) : undefined
+      return { report_date: cite.report_date, target_report_date: target?.report_date ?? null, target_original_date: target?.original_date ?? null }
+    })
+    for (const warning of dateOrderWarnings(fields, fields.vias, citesWithTargets, book)) {
+      if (warning.side === 'via') messages.push(`Via #${warning.index + 1} (${warning.viaYear}) predates the work (${warning.workYear}); if it is an older work this source quotes, record it under cites instead.`)
+      else messages.push(`Cite #${warning.index + 1} (${warning.citeYear}) postdates the work (${warning.workYear}); if it is where you found this source, record it under vias instead.`)
+    }
+  }
+  return messages
 }
 
 // The record's own fields as its form sends them. A field the input leaves out is left out of the form, so
@@ -441,12 +476,18 @@ async function addRecord(event: RequestEvent, input: Json) {
   const tags = await tagList(env(event).DB)
   const { fields: entry, error } = readEntryFields(entryForm(input, tags.map(tag => tag.name), value => places(value, inputs.length, 'evidence')), tags)
   if (error) throw new Refusal(said(error))
+  const { DB, MEDIA } = env(event)
   const stated = inputs.map((sighting, index) => {
     const form = sightingForm(sighting)
     const vias = viaPictureItems(items(sighting.vias).map(record), form)
-    if (!items(sighting.pictures).length && !vias.some(row => row?.length) && !citesEvidence(readSightingFields(form))) throw new Refusal(`Sighting ${index + 1}: ${said('evidence')}`)
-    return { form, vias, pictures: sighting.pictures }
+    const preview = readSightingFields(form)
+    if (!items(sighting.pictures).length && !vias.some(row => row?.length) && !citesEvidence(preview)) throw new Refusal(`Sighting ${index + 1}: ${said('evidence')}`)
+    return { form, vias, pictures: sighting.pictures, cites: preview.cites }
   })
+  for (const [index, item] of stated.entries()) {
+    const badCite = await validateCiteTargets(DB, item.cites)
+    if (badCite) throw new Refusal(`Sighting ${index + 1}: ${said(badCite)}`)
+  }
   if (!(await chargeWrites(event, 'ADDS', stated.length - 1))) throw new Refusal(said('slow'))
   const budget = { bytes: PICTURES_BODY_MAX, fetches: FETCHES_MAX }
   const read = []
@@ -455,7 +496,6 @@ async function addRecord(event: RequestEvent, input: Json) {
     const via = await readViaPictures(event, planViaPictures(event, vias), budget)
     read.push({ fields: readSightingFields(form, via.pictures.map(row => row ?? [])), pictures: own, files: via.files })
   }
-  const { DB, MEDIA } = env(event)
   const drafts = []
   for (const { fields, pictures, files } of read) {
     await storeImages(MEDIA, files)
@@ -466,7 +506,8 @@ async function addRecord(event: RequestEvent, input: Json) {
   notifyIndexNow(event, { entries: [id] })
   scheduleAtlasSync(event, [id])
   archiveCited(event, drafts.map(draft => draft.fields))
-  return shown(event, id)
+  const warnings = await citeDateWarnings(DB, drafts.map(draft => draft.fields))
+  return { ...shown(event, id), ...(warnings.length ? { warnings } : {}) }
 }
 
 async function addSightingTo(event: RequestEvent, input: Json) {
@@ -476,7 +517,10 @@ async function addSightingTo(event: RequestEvent, input: Json) {
   if (found.sightings.length >= SIGHTINGS_MAX) throw new Refusal(said('sightingLimit'))
   const form = sightingForm(input)
   const vias = viaPictureItems(items(input.vias).map(record), form)
-  if (!items(input.pictures).length && !vias.some(row => row?.length) && !citesEvidence(readSightingFields(form))) throw new Refusal(said('evidence'))
+  const preview = readSightingFields(form)
+  if (!items(input.pictures).length && !vias.some(row => row?.length) && !citesEvidence(preview)) throw new Refusal(said('evidence'))
+  const badCite = await validateCiteTargets(DB, preview.cites)
+  if (badCite) throw new Refusal(said(badCite))
   // One sighting takes what its form takes in one request, its pictures and those of its vias together.
   const budget = { bytes: MAX_WRITE_BODY, fetches: FETCHES_MAX }
   const pictures = await readPictures(event, input.pictures, budget)
@@ -488,12 +532,14 @@ async function addSightingTo(event: RequestEvent, input: Json) {
   let sighting: number | null
   try { sighting = await addSighting(DB, id, fields, media, { actor: person.id, ip: await ipHash(event) }) } catch (cause) {
     if (cause instanceof SightingLimitError) throw new Refusal(said('sightingLimit'))
+    if (cause instanceof CiteValidationError) throw new Refusal(said(cause.code))
     throw cause
   }
   if (!sighting) throw new Refusal(said('missing'))
   notifyIndexNow(event, { entries: [id] })
   archiveCited(event, [fields])
-  return { record: shown(event, id), sighting }
+  const warnings = await citeDateWarnings(DB, [fields])
+  return { record: shown(event, id), sighting, ...(warnings.length ? { warnings } : {}) }
 }
 
 // Like the record's edit form: what the input leaves out stays, and the edit is made against the
@@ -533,6 +579,7 @@ async function editSightingOf(event: RequestEvent, input: Json) {
     place: sighting.place, ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
     original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, types: parseSightingTypes(sighting.types), note: sighting.note,
     quotes: quotations(sighting.quotes), vias: sighting.vias.map(({ id: _, ...via }) => via),
+    cites: sighting.cites.map(({ source_id: _, target: _target, status: _status, ...cite }) => cite),
   }
   const stated = Object.fromEntries(Object.keys(now).filter(name => input[name] !== undefined).map(name => [name, input[name]]))
   // A via that states pictures gets those; any other keeps its own, as a restore does.
@@ -540,6 +587,10 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   const rows = viaPictureItems(stated.vias === undefined ? [] : items(stated.vias).map(record), form)
   const planned = planViaPictures(event, rows, new Map(sighting.vias.flatMap(via => via.pictures ?? []).map(picture => [picture.image_key, picture])))
   const read = readSightingFields(form)
+  const { DB, MEDIA } = env(event)
+  const heldTargets = new Set(sighting.cites.map(cite => cite.sighting).filter((target): target is number => target !== null))
+  const badCite = await validateCiteTargets(DB, read.cites, sighting.id, heldTargets)
+  if (badCite) throw new Refusal(said(badCite))
   const chain = (pictures: readonly (ViaPicture[] | undefined)[]) => {
     const stating = new Map<string, ViaPicture[]>()
     for (const [index, row] of viaRows(form).entries()) {
@@ -557,7 +608,6 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   const via = await readViaPictures(event, planned, budget)
   const fields = { ...read, vias: chain(via.pictures) }
   if (!(pictures ?? sighting.media).length && !citesEvidence(fields) && !fields.place) throw new Refusal(said('evidence'))
-  const { DB, MEDIA } = env(event)
   await storeImages(MEDIA, via.files)
   let media: StoredImage[] | null = null
   if (pictures) {
@@ -569,7 +619,37 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   if (!result.ok) throw result.code === 'conflict' ? changed((await getEntry(DB, id))?.sightings.find(row => row.id === sighting.id)?.rev ?? rev) : new Refusal(said(result.code))
   notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
   archiveCited(event, [fields])
-  return { record: shown(event, id), sighting: sighting.id, rev: result.rev }
+  const warnings = await citeDateWarnings(DB, [fields])
+  return { record: shown(event, id), sighting: sighting.id, rev: result.rev, ...(warnings.length ? { warnings } : {}) }
+}
+
+async function linkSightingsOf(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const sightingId = Number(text(input.sighting))
+  if (!Number.isInteger(sightingId) || sightingId < 1) throw new Refusal('sighting is a positive integer sighting id.')
+  const kind = (choice(input.kind, CITE_KINDS, 'kind') || 'quotes') as CiteKind
+  const citedRaw = input.cited_sighting
+  const citedId = citedRaw === undefined || citedRaw === null || citedRaw === '' ? null : Number.isInteger(citedRaw) && (citedRaw as number) >= 1 ? citedRaw as number : (() => { throw new Refusal('cited_sighting is a positive integer sighting id.') })()
+  const src = input.source ? record(input.source) : {}
+  const form = sightingForm({
+    cites: [{
+      kind,
+      sighting: citedId,
+      ...Object.fromEntries(CITATION_FIELDS.map(field => [field, src[field]])),
+      quote: input.quote,
+      note: input.note,
+    }],
+  })
+  const [cite] = readSightingFields(form).cites ?? []
+  if (!cite) throw new Refusal('Give cited_sighting or a source citation.')
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const result = await linkSightings(DB, sightingId, cite, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
+  if (!result.ok) throw new Refusal(result.code === 'full' ? `A sighting names up to ${CITES_MAX} cited older works.` : said(result.code))
+  notifyIndexNow(event, { entries: [result.entry_id] })
+  const updated = await getSighting(DB, sightingId)
+  const warnings = updated ? await citeDateWarnings(DB, [updated]) : []
+  return { record: shown(event, result.entry_id), sighting: sightingId, rev: result.rev, ...(warnings.length ? { warnings } : {}) }
 }
 
 // The pictures an edit leaves a sighting with, none stored yet.
@@ -637,6 +717,29 @@ async function getRecord(event: RequestEvent, input: Json) {
       ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
       original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note,
       vias: sighting.vias.map(({ id: _, pictures, ...via }) => ({ ...via, pictures: (pictures ?? []).map(picture => shownPicture(event, picture)) })),
+      cites: sighting.cites.map(cite => ({
+        kind: cite.kind,
+        status: cite.status,
+        sighting: cite.sighting,
+        entry_id: cite.target?.entry_id ?? null,
+        record: cite.target ? recordCode(cite.target.entry_id) : null,
+        source_id: cite.source_id,
+        ...Object.fromEntries(CITATION_FIELDS.map(field => [field, cite[field]])),
+        quote: cite.quote,
+        note: cite.note,
+      })),
+      cited_by: sighting.cited_by.map(item => ({
+        kind: item.kind,
+        sighting: item.sighting_id,
+        entry_id: item.entry_id,
+        record: recordCode(item.entry_id),
+        title: item.title,
+        place: item.place,
+        report_date: item.report_date,
+        original_date: item.original_date,
+        quote: item.quote,
+        note: item.note,
+      })),
       pictures: sighting.media.map(picture => ({ ...shownPicture(event, picture), marks: picture.box ? JSON.parse(picture.box) as number[][] : [] })),
     })),
   }
@@ -679,6 +782,20 @@ const SIGHTING = {
   quotes: { type: 'array', maxItems: QUOTATIONS_MAX, items: { type: 'object', required: ['text'], properties: { text: { type: 'string' }, locator: { type: 'string' } } }, description: 'Quoted passages, each with an optional attribution or location in the source.' },
   note: { type: 'string', description: 'A note on this source.' },
   vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' }, pictures: { type: 'array', maxItems: MEDIA_MAX, description: `Pictures of this source, such as a screenshot of the post, from their addresses, without marks. A picture belongs to one source, the chain holds ${MEDIA_MAX} in all, and the source needs a citation.`, items: { oneOf: [{ type: 'string' }, { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string' } } }], description: 'Address of the image file itself.' } } } } },
+  cites: {
+    type: 'array', maxItems: CITES_MAX,
+    description: 'Older works this sighting quotes, re-sets as a later edition, or derives from. Each row names a witness sighting by id, a source citation, or both.',
+    items: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: CITE_KINDS, description: 'quotes (the text names the older work), edition (re-typeset/re-keyed later edition of a base printing), or derived (dependence argued without explicit naming; requires note).' },
+        sighting: { type: 'integer', minimum: 1, description: 'The identified older witness sighting id, in this or any other record.' },
+        ...CITATION,
+        quote: { type: 'string', description: 'Short excerpt naming the older work (for quotes).' },
+        note: { type: 'string', description: 'Rationale for dependence (required for derived).' },
+      },
+    },
+  },
   pictures: {
     type: 'array', maxItems: MEDIA_MAX, description: `Evidence pictures, fetched from their addresses and kept by the site. JPEG, PNG or WebP, or pages of a PDF, up to ${FETCHES_MAX} from other sites and ${PDF_PAGES_MAX} PDF pages in one call.`,
     items: {
@@ -796,9 +913,23 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'edit_sighting', title: 'Edit evidence on a record', annotations: EDITS, run: editSightingOf,
-    description: `Change one sighting of a record. A field left out stays as it is; quotes, vias and pictures given replace the whole list. Keep a picture by giving its address from get_record. When a via gives pictures, the chain's pictures are those given: a via holds exactly its own list, and a via that leaves them out keeps the ones it has. When no via gives pictures, each via keeps its own, even one left out of vias. ${SIGHTING_RULE} Answers the new rev.`,
+    description: `Change one sighting of a record. A field left out stays as it is; quotes, vias, cites and pictures given replace the whole list. Keep a picture by giving its address from get_record. When a via gives pictures, the chain's pictures are those given: a via holds exactly its own list, and a via that leaves them out keeps the ones it has. When no via gives pictures, each via keeps its own, even one left out of vias. ${SIGHTING_RULE} Answers the new rev.`,
     inputSchema: { type: 'object', required: ['record', 'sighting', 'rev', 'agent'], properties: {
       agent: AGENT, record: RECORD, sighting: { type: 'integer', minimum: 1, description: 'The sighting\'s id in get_record.' }, rev: REV, summary: SUMMARY, ...SIGHTING,
+    } },
+  },
+  {
+    name: 'link_sightings', title: 'Link a sighting to an older work', annotations: EDITS, run: linkSightingsOf,
+    description: 'Add or upgrade one provenance edge on a sighting (quotes, edition, or derived) against its current state without sending the whole sighting. Matches by cited_sighting or source citation.',
+    inputSchema: { type: 'object', required: ['sighting', 'kind', 'agent'], properties: {
+      agent: AGENT,
+      sighting: { type: 'integer', minimum: 1, description: 'The later (citing) sighting id.' },
+      kind: { type: 'string', enum: CITE_KINDS, description: 'quotes, edition, or derived.' },
+      cited_sighting: { type: 'integer', minimum: 1, description: 'The older witness sighting id (in any record).' },
+      source: { type: 'object', description: 'The work as named by the text, used when no witness is linked yet or to record the attested name.', properties: CITATION },
+      quote: { type: 'string', description: 'Short excerpt naming the older work.' },
+      note: { type: 'string', description: 'Rationale (required for derived).' },
+      summary: SUMMARY,
     } },
   },
 ]

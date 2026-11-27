@@ -1251,15 +1251,16 @@ describe('query cost', () => {
     await claimedBy(traced, 'ids', '⿰木木')
     await sourcePage(traced, 1)
     // claims, then the source itself (a lookup by key), then a direct and a via read of rows and pictures,
-    // then the chains of the listed sightings.
-    expect(plans).toHaveLength(7)
+    // unseen named cites, then the chains of the listed sightings.
+    expect(plans).toHaveLength(8)
     plans.splice(1, 1)
     expect(plans[0]).toMatch(/SEARCH k USING COVERING INDEX claims_by_value \(kind=\? AND value=\?\)/)
     expect(plans[1]).toMatch(/SEARCH s USING INDEX sightings_by_source \(source_id=\?\)/)
     expect(plans[2]).toMatch(/SEARCH s USING INDEX sightings_by_source \(source_id=\?\)/)
     expect(plans[3]).toMatch(VIA_SEARCH)
     expect(plans[4]).toMatch(VIA_SEARCH)
-    expect(plans[5]).toMatch(/SEARCH v USING PRIMARY KEY \(sighting_id=\?\)/)
+    expect(plans[5]).toMatch(/SEARCH sc USING INDEX sighting_cites_by_source \(source_id=\?\)/)
+    expect(plans[6]).toMatch(/SEARCH v USING PRIMARY KEY \(sighting_id=\?\)/)
     for (const details of plans) expect(details).not.toMatch(/TEMP B-TREE|SCAN (?!.*USING)/)
   })
 

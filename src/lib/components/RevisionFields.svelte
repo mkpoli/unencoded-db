@@ -17,6 +17,7 @@
   import type { EntryFields, SightingFields } from '$lib/server/entries'
   import { locale, t } from '$lib/t'
   import { kindName } from '$lib/source-kind'
+  import { sourceName } from '$lib/source-name'
   let { fields, dates, sighting = false, labels = new Map(), tagTypes = new Map() }: { dates?: Map<string, DateReading | null>; fields: EntryFields | SightingFields; sighting?: boolean; labels?: ReadonlyMap<string, string>; tagTypes?: ReadonlyMap<string, TagType> } = $props()
   const sourceFields = [
     { key: 'title', label: 'field.title' },
@@ -68,6 +69,20 @@
       {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
       {#if source.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${source.style}`)}</dd></div>{/if}
       {#if types.length}<div><dt>{t('field.sourceTypes')}</dt><dd>{types.map(type => t(`evidence.type.${type}`)).join(' · ')}</dd></div>{/if}
+      {#if source.cites?.length}
+        <div class="wide"><dt>{t('field.cites')}</dt><dd>
+          <ul class="claims">
+            {#each source.cites as cite, index (index)}
+              {@const named = cite.title || cite.url || cite.author || cite.publisher || cite.report_date || cite.container ? sourceName(cite, t).text : null}
+              <li>
+                <span class="scope"><span class="kind">{t(`cite.kind.${cite.kind}`)}</span><span class="text">{cite.sighting ? `#${cite.sighting}` : ''}{#if cite.sighting && named}{' · '}{/if}{named ?? ''}</span></span>
+                {#if cite.quote}<span class="basis">{cite.quote}</span>{/if}
+                {#if cite.note}<span class="basis">{cite.note}</span>{/if}
+              </li>
+            {/each}
+          </ul>
+        </dd></div>
+      {/if}
       {#if source.vias.length}<div class="wide"><dt>{t('field.via')}</dt><dd><ViaChain vias={source.vias} dates={dates} label={false} /></dd></div>{/if}
     </dl>
     <SourceQuotations quotes={source.quotes} url={source.url} />

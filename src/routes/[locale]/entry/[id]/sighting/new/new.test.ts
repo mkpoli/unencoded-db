@@ -22,7 +22,7 @@ async function fixture() {
 
 test('loads the record and adds a sighting', async () => {
   const { raw, event } = await fixture()
-  expect(await load(event())).toEqual({ id: 1, ids: null, seed: null })
+  expect(await load(event())).toEqual({ id: 1, ids: null, seed: null, siblings: [{ id: 1, title: null, place: 'Original', report_date: null, original_date: null }] })
   const form = new FormData(); form.set('place', 'Another source'); form.set('url', 'https://example.test/another'); form.set('types', 'attestation')
   await expect(actions.default(event(form))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
   expect(raw.query('SELECT place, types FROM sightings ORDER BY id DESC').get()).toEqual({ place: 'Another source', types: '["attestation"]' })
