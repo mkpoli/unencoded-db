@@ -5,6 +5,7 @@ import { sourceMatches, sourceMatchParams, editSourceAlias, sourceAliases, sugge
 import { publicPublisher, publisherDirectory, publisherSuggestions } from './publishers'
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
+import { isDescription, rateFormsOfPart } from 'ids-input'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TAG_IMPLY_DEPTH_MAX, TAG_TYPES, arrangeTags, canImply, cleanTag, implicationClosure, localized, tagLabels } from '$lib/tags'
@@ -124,6 +125,22 @@ describe('marked works', () => {
 })
 
 describe('adding a record', () => {
+  test('the four forms of 率 in a compound survive a record round trip', async () => {
+    const choices = rateFormsOfPart('𳅀')
+    const sequences = choices.map(choice => '⿰木' + choice.text)
+    expect(new Set(sequences).size).toBe(4)
+    const form = new FormData()
+    for (const sequence of sequences) {
+      expect(isDescription(sequence)).toBe(true)
+      form.append('ids', sequence)
+    }
+    const { fields: values, error } = readEntryFields(form, [])
+    expect(error).toBeNull()
+    const id = await createEntry(db, values, seen(), [], who)
+    const record = await getEntry(db, id)
+    expect(record?.claims.filter(claim => claim.kind === 'ids').map(claim => claim.value)).toEqual(sequences)
+  })
+
   test('rolls back the entry and sighting when indexing fails', async () => {
     raw.exec("CREATE TRIGGER fail_index BEFORE INSERT ON entry_tags BEGIN SELECT RAISE(ABORT, 'index failure'); END")
     await expect(createEntry(db, fields(), seen(), [image], who)).rejects.toThrow('index failure')
