@@ -432,6 +432,7 @@
   "me.signOut": "Đăng xuất",
   "agent.title": "Kết nối tác nhân",
   "agent.client": "Tác nhân",
+  "agent.unknown": "Không rõ",
   "agent.by": "Tác nhân: {agent}",
   "agent.byModel": "Tác nhân: {agent} · Mô hình: {model}",
   "agent.newName": "Tên ẩn danh mới",

@@ -432,6 +432,7 @@
   "me.signOut": "Sign out",
   "agent.title": "Connect an agent",
   "agent.client": "Agent",
+  "agent.unknown": "Unknown",
   "agent.by": "Agent: {agent}",
   "agent.byModel": "Agent: {agent} · Model: {model}",
   "agent.newName": "A new anonymous name",

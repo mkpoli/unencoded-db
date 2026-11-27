@@ -1,4 +1,5 @@
 import type { RequestEvent } from '@sveltejs/kit'
+import { AGENT_UNKNOWN } from '$lib/agent'
 import { hashHex } from './image'
 
 export type Person = { id: string; name: string; atlas: boolean; moderator: boolean; banned: boolean }
@@ -83,9 +84,33 @@ export function agentToken(request: Request) {
   const token = request.headers.get(AGENT_SESSION)
   return token && /^[0-9a-f]{64}$/.test(token) ? `mcp:${token}` : undefined
 }
-export async function agentWriter(event: RequestEvent, db: D1Database) {
-  if (event.locals.person) return event.locals.person
-  let person = await createPerson(db)
+/** What an agent says it is: the harness it runs in and the model it runs on. */
+export type AgentSaid = { harness: string | null; model: string | null }
+
+// Every write through the agent endpoint is an agent's, whether or not it says which. A signed-in agent
+// writes as an agent row of the person who allowed it, one row for each harness and model. A connection
+// that never signed in is an agent row of its own, and what it says later names the same row.
+export async function agentWriter(event: RequestEvent, db: D1Database, said: AgentSaid = { harness: null, model: null }) {
+  const name = said.harness ?? AGENT_UNKNOWN, model = said.model ?? ''
+  const signed = event.locals.person
+  if (signed) {
+    const own = await db.prepare('SELECT agent, merged_into, atlas_sub, name, agent_model FROM people WHERE id = ?').bind(signed.id)
+      .first<{ agent: number; merged_into: string | null; atlas_sub: string | null; name: string; agent_model: string }>()
+    if (!own) return signed
+    if (!own.atlas_sub && !own.merged_into) {
+      const next = { name: said.harness ?? (own.agent ? own.name : AGENT_UNKNOWN), model: said.model ?? (own.agent ? own.agent_model : '') }
+      if (!own.agent || next.name !== own.name || next.model !== own.agent_model) await db.prepare('UPDATE people SET agent = 1, name = ?, agent_model = ? WHERE id = ? AND atlas_sub IS NULL AND merged_into IS NULL').bind(next.name, next.model, signed.id).run()
+      return signed
+    }
+    // An agent row someone joined to a person keeps the labels it was given.
+    if (own.agent) return signed
+    const held = await db.prepare('SELECT id FROM people WHERE merged_into = ? AND agent = 1 AND name = ? AND agent_model = ? LIMIT 1').bind(signed.id, name, model).first<{ id: string }>()
+    if (held) return event.locals.person = { ...signed, id: held.id }
+    const id = randomHex(6)
+    await db.prepare('INSERT INTO people(id, name, created_at, merged_into, agent, agent_model) VALUES(?,?,?,?,1,?)').bind(id, name, new Date().toISOString(), signed.id, model).run()
+    return event.locals.person = { ...signed, id }
+  }
+  let person = await createPerson(db, null, name)
   const token = agentToken(event.request)
   if (token) {
     const hash = await hashHex(token), at = Date.now()
@@ -100,6 +125,7 @@ export async function agentWriter(event: RequestEvent, db: D1Database) {
       person = held
     }
   }
+  await db.prepare('UPDATE people SET agent = 1, agent_model = ? WHERE id = ? AND agent = 0 AND atlas_sub IS NULL AND merged_into IS NULL').bind(model, person.id).run()
   event.locals.person = person
   return person
 }

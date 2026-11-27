@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { AGENT_UNKNOWN } from '$lib/agent'
   import { t } from '$lib/t'
-  let { name, model = null, standalone = false, labeled = true }: { name: string; model?: string | null; standalone?: boolean; labeled?: boolean } = $props()
+  let { name: given, model = null, standalone = false, labeled = true }: { name: string; model?: string | null; standalone?: boolean; labeled?: boolean } = $props()
+  const name = $derived(given === AGENT_UNKNOWN ? t('agent.unknown') : given)
   const title = $derived(model ? t('agent.byModel', { agent: name, model }) : standalone ? t('agent.client') : t('agent.by', { agent: name }))
 </script>
 
