@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
+import { LOCALE_COOKIE } from '$lib/i18n'
 import { handle } from '../../hooks.server'
 import { openTestDb } from '$lib/server/testdb'
 import { mergeEntry } from '$lib/server/entries'
@@ -7,7 +8,7 @@ import { MEDIA_MAX } from '$lib/limits'
 import { PDF_SIDE } from '$lib/server/pdf'
 import { imageObject, pdfOf } from '$lib/server/pdf.test'
 import { FETCHES_MAX, PDF_PAGES_MAX } from './_tools.server'
-import { POST } from './+server'
+import { GET, POST } from './+server'
 
 const png = new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,10,0,0,0,10,8,6,0,0,0,0,0,0,0])
 const ORIGIN = 'https://example.test'
@@ -630,4 +631,62 @@ test('every write is an agent\'s, named by the harness and model it says', async
   expect((await call('add_record', { ids: ['⿰山南'], sightings: [sighting], agent: { harness: 'Codex' } }, other)).failed).toBe(false)
   expect(actor(3)).toMatchObject({ name: 'Codex', agent: 1, agent_model: '' })
   expect((await call('add_sighting', { record: 1, ...sighting, place: 'Elsewhere', agent: { harness: 'x'.repeat(81) } }, other)).value).toContain('agent.harness')
+})
+
+test('GET /mcp redirects browsers to the localized setup page and answers 405 to MCP clients', async () => {
+  const send = (method: 'GET' | 'HEAD', headers: Record<string, string> = {}, cookie?: string) => {
+    const request = new Request(`${ORIGIN}/mcp`, { method, headers })
+    const event = {
+      request,
+      url: new URL(request.url),
+      route: { id: '/mcp' },
+      params: {},
+      locals: {},
+      cookies: { get: (name: string) => name === LOCALE_COOKIE ? cookie : undefined },
+      platform: undefined,
+      getClientAddress: () => '127.0.0.1',
+    }
+    return handle({ event, resolve: (resolved: any) => GET(resolved) } as any)
+  }
+
+  const browser = await send('GET', { accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'accept-language': 'ja,en;q=0.8' })
+  expect(browser.status).toBe(302)
+  expect(browser.headers.get('location')).toBe('/ja/mcp')
+  expect(browser.headers.get('cache-control')).toBe('private, no-store')
+  expect(browser.headers.get('vary')).toBe('Accept, Accept-Language, Cookie')
+
+  const head = await send('HEAD', { accept: 'text/html', 'accept-language': 'ja' })
+  expect(head.status).toBe(302)
+  expect(head.headers.get('location')).toBe('/ja/mcp')
+
+  const preferred = await send('GET', { accept: 'text/html', 'accept-language': 'ja' }, 'zh-Hant')
+  expect(preferred.status).toBe(302)
+  expect(preferred.headers.get('location')).toBe('/zh-Hant/mcp')
+
+  const invalidCookie = await send('GET', { accept: 'text/html', 'accept-language': 'ko' }, 'xx-Invalid')
+  expect(invalidCookie.status).toBe(302)
+  expect(invalidCookie.headers.get('location')).toBe('/ko/mcp')
+
+  const zeroSse = await send('GET', { accept: 'text/html, text/event-stream;q=0', 'accept-language': 'en' })
+  expect(zeroSse.status).toBe(302)
+  expect(zeroSse.headers.get('location')).toBe('/en/mcp')
+
+  const nonHtml: Record<string, string>[] = [
+    {},
+    { accept: 'text/event-stream' },
+    { accept: 'text/html, text/event-stream' },
+    { accept: 'text/event-stream;q=0.5, text/html' },
+    { accept: 'text/html, text/event-stream;q=0.5' },
+    { accept: 'application/json' },
+    { accept: '*/*' },
+    { accept: 'text/html;q=0' },
+    { accept: 'text/html;q=2' },
+    { accept: 'text/html;q=0x1' },
+  ]
+  for (const headers of nonHtml) {
+    const response = await send('GET', headers)
+    expect(response.status).toBe(405)
+    expect(response.headers.get('allow')).toBe('POST')
+    expect(response.headers.get('vary')).toBe('Accept')
+  }
 })
