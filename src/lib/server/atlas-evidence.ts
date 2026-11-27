@@ -553,6 +553,8 @@ export function mapCropToSighting(crop: AtlasCropDetail, atlasOrigin = DEFAULT_A
     types: storeChosen(SIGHTING_TYPES, new Set(['attestation'])),
     note: noteLines.length ? noteLines.join('\n').slice(0, 5000) : null,
     quotes: null,
+    // A crop's document can be a dictionary or another compilation, so closeness is left for a person to say.
+    closeness: null,
   }
 }
 

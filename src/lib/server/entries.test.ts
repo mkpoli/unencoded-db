@@ -28,7 +28,7 @@ const relation = (character: string, relationship: string, difference = '', evid
 // A source is found among the sightings that passed through it by the index of the chain, never by a scan.
 const VIA_SEARCH = /SEARCH v USING (COVERING )?INDEX sighting_vias_by_source \(source_id=\?\)/
 const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, quote: null, ...over })
-const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
+const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
 const image: StoredImage = { image_key: 'a.webp', image_type: 'image/webp', image_w: 100, image_h: 100, thumb_key: 't.webp', box: null }
 
 let db: D1Database, raw: ReturnType<typeof openTestDb>['raw'], who: { actor: string; ip: null }
@@ -795,6 +795,22 @@ test('a sighting keeps every context checked, in the order of the list', () => {
   for (const context of ['heading', 'running_text', 'heading', 'unknown']) form.append('contexts', context)
   expect(readSightingFields(form).contexts).toBe(JSON.stringify(['running_text', 'heading']))
   expect(readSightingFields(new FormData()).contexts).toBeNull()
+})
+
+test('a sighting keeps one closeness of the list, and the table refuses any other', async () => {
+  const form = new FormData()
+  form.set('closeness', 'secondary_cited')
+  expect(readSightingFields(form).closeness).toBe('secondary_cited')
+  form.set('closeness', 'tertiary')
+  expect(readSightingFields(form).closeness).toBeNull()
+  expect(readSightingFields(new FormData()).closeness).toBeNull()
+  const id = await createEntry(db, fields(), seen({ closeness: 'memory' }), [], who)
+  const sighting = (await getEntry(db, id))!.sightings[0]
+  expect(sighting.closeness).toBe('memory')
+  expect(JSON.parse((await history(db, id)).find(row => row.kind === 'sighting')!.snapshot).closeness).toBe('memory')
+  expect(await editSighting(db, sighting.id, 1, seen({ closeness: 'primary' }), null, who, null, id)).toMatchObject({ ok: true })
+  expect((await getEntry(db, id))!.sightings[0].closeness).toBe('primary')
+  expect(() => raw.run("UPDATE sightings SET closeness = 'tertiary' WHERE id = ?", [sighting.id])).toThrow(/CHECK/)
 })
 
 describe('source types', () => {

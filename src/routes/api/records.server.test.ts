@@ -8,7 +8,7 @@ import { GET } from './records/+server'
 async function setup() {
   const { db } = openTestDb()
   const who = { actor: (await createPerson(db)).id, ip: null }
-  const seen: SightingFields = { place: 'A shop sign', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
+  const seen: SightingFields = { place: 'A shop sign', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
   const record = (ids: string, meaning?: string): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', ids), ...(meaning ? [newClaim('meaning', meaning)] : [])] })
   const ask = async (q: string, exclude?: number, also: string[] = []) => {
     const url = new URL(`https://example.test/api/records?q=${encodeURIComponent(q)}${exclude ? `&exclude=${exclude}` : ''}${also.map(spelling => `&also=${encodeURIComponent(spelling)}`).join('')}`)

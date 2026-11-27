@@ -92,7 +92,7 @@ An agent with no browser, such as a chat bot, gets its token from the maintainer
 |---|---|
 | `entries` | One character: script, status, description, radical, strokes, and the summary a gallery tile draws |
 | `claims` | What a record states more than once: description sequences, composition, readings, meanings, codes, related characters, IVD, categories, collections, tags, creators |
-| `sightings` | One place the character was seen: where, page, date, contexts, style, source types |
+| `sightings` | One place the character was seen: where, page, date, contexts, style, source types, closeness to the original |
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
 | `sighting_via_media` | The pictures of a go-between itself, by its place in the chain |
 | `source_aliases`, `source_alias_changes`, `source_search_names` | Alternate names for individual citations, their contributor history, and the lookup index for visible sources |

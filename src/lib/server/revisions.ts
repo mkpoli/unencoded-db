@@ -1,6 +1,6 @@
 import { quotations } from '../quotations'
 import { readDates, sightingDates } from './date-readings'
-import { STYLES, VIAS_MAX, isStoredContexts, isStoredSightingTypes, sourceKind } from '$lib/scripts'
+import { STYLES, VIAS_MAX, closenessOf, isStoredContexts, isStoredSightingTypes, sourceKind } from '$lib/scripts'
 import { historyFeed, type FeedCursor, type FeedScope } from './entries'
 import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, VIA_IMAGE_FIELDS, tidyVias, type EntryFields, type SightingFields, type Via, type ViaPicture } from './entries'
 
@@ -8,7 +8,7 @@ import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, VIA_IMAGE_
 export const entrySnapshot = (raw: string): EntryFields | null => entryFieldsOf(raw)
 
 // The chain of a snapshot: at most VIAS_MAX objects of the citation fields and an optional quote, each
-// link a web address or null. A snapshot written before quotes, containers or kinds were kept reads as one without them.
+// link a web address or null. A snapshot written before quotes, containers, kinds or closeness were kept reads as one without them.
 // What a version says a link's pictures were, which only places the pictures a sighting still holds.
 const isPicture = (raw: unknown): raw is ViaPicture => Boolean(raw) && typeof raw === 'object' && VIA_IMAGE_FIELDS.every(field => ['string', 'number'].includes(typeof (raw as Record<string, unknown>)[field]))
 function parseVias(raw: unknown): Via[] | null {
@@ -37,10 +37,12 @@ export function sightingSnapshot(raw: string): SightingFields | null {
     if (!('quotes' in value)) value.quotes = null
     if (!('container' in value)) value.container = null
     if (!('source_kind' in value)) value.source_kind = null
+    if (!('closeness' in value)) value.closeness = null
     for (const field of SIGHTING_FIELDS) {
       if (typeof value[field] !== 'string' && value[field] !== null) return null
     }
     if (value.source_kind !== sourceKind(value.source_kind)) return null
+    if (value.closeness !== closenessOf(value.closeness)) return null
     quotations(value.quotes)
     if (!isStoredContexts(value.contexts)) return null
     if (value.style !== null && !(STYLES as readonly string[]).includes(value.style)) return null
