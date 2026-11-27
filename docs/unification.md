@@ -36,7 +36,7 @@ page that compares the pair, puts the relation on the later record:
   meaning (relation: Variant, Erroneous variant, Similar);
 - the parts differ only in ways IRG treats as unifiable, such as 王 and 壬 in IWDS group 1. Unifiable
   variants are recorded in their own right (relation: Unify with, or status Unifiable with an encoded
-  character);
+  character). A relation to another record gives neither record a status;
 - the IDS are identical but the evidence shows a difference the IDS cannot express, such as a stroke
   added or left out. Write that difference in the relation claim (relation: Glyph);
 - the form is that of an encoded character. Such a record stays, with an encoding claim; it is merged
