@@ -245,6 +245,14 @@ test('a PDF address is kept as a picture of the page asked for', async () => {
   const many = Array.from({ length: PDF_PAGES_MAX + 1 }, (_, index) => ({ url: `https://img.example/${index}.pdf` }))
   expect((await call('add_sighting', { record: 1, pictures: many })).value).toContain(`up to ${PDF_PAGES_MAX} PDF pages`)
   expect(await refused({ url: 'https://img.example/leaflet.pdf', marks: [[0, 0, 2, 2]] })).toContain(`${PDF_SIDE} × ${PDF_SIDE / 2}`)
+  // A range of pages is one picture a page.
+  const ranged = await call('add_sighting', { record: 1, pictures: [{ url: 'https://img.example/leaflet.pdf', pages: '1-2' }] })
+  expect(ranged.failed).toBe(false)
+  expect((await call('get_record', { record: 1 })).value.sightings[2].pictures).toMatchObject([{ width: PDF_SIDE, height: PDF_SIDE / 2 }, { width: PDF_SIDE / 2, height: PDF_SIDE }])
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', pages: '2-3' })).toContain('Page 3')
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', pages: 'all' })).toContain('counted from 1')
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', pages: '1-2', page: 1 })).toContain('not both')
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', pages: '1-2', marks: [[100, 100, 200, 200]] })).toContain('one page')
 }, 60_000)
 
 test('a picture larger than the limit is not read to its end', async () => {
