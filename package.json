@@ -31,6 +31,7 @@
     "wrangler": "^4.158.0"
   },
   "dependencies": {
+    "@hyzyla/pdfium": "3.0.0",
     "@jsquash/webp": "1.5.0",
     "@resvg/resvg-wasm": "2.6.2",
     "d3-contour": "^4.0.3",

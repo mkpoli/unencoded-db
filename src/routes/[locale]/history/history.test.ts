@@ -62,13 +62,33 @@ test('global history carries the old version of every readable revision', async 
 
 test('global history uses an ordered revision primary-key range and keyed joins', () => {
   const { db, raw } = openTestDb()
-  for (const before of [null, 100]) {
-    const statement = globalHistoryStatement(db, before) as unknown as { sql: string; values: number[] }
+  for (const [before, by] of [[null, null], [100, null], [null, 'agent'], [100, 'agent'], [null, 'person'], [100, 'person']] as const) {
+    const statement = globalHistoryStatement(db, before, by) as unknown as { sql: string; values: number[] }
     const plan = raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...statement.values) as { detail: string }[]
     const details = plan.map(row => row.detail).join('\n')
-    expect(details).toMatch(/SEARCH r USING INTEGER PRIMARY KEY \(rowid<\?\)/)
+    expect(details).toMatch(by === 'agent' ? /SEARCH r USING (?:COVERING )?INDEX revisions_by_agents \(id<\?\)/ : by === 'person' ? /SEARCH r USING (?:COVERING )?INDEX revisions_by_people \(id<\?\)/ : /SEARCH r USING INTEGER PRIMARY KEY \(rowid<\?\)/)
     expect(details).toMatch(/SEARCH e USING INTEGER PRIMARY KEY/)
     expect(details).toMatch(/SEARCH s USING INTEGER PRIMARY KEY/)
     expect(details).not.toMatch(/USE TEMP B-TREE|SCAN (?:r|e|s|p|m)(?:\s|$)/)
   }
+})
+
+test('history lists the changes of agents or of people, and follows an actor that becomes an agent', async () => {
+  const { db, raw } = openTestDb()
+  raw.exec(`INSERT INTO people(id,name,created_at) VALUES ('p','Person','2026'), ('q','Other','2026');
+    INSERT INTO people(id,name,created_at,merged_into,agent) VALUES ('a','Harness','2026','p',1);
+    INSERT INTO entries(id,script,ids,created_by,created_at,updated_at) VALUES (1,'han','public','p','2026','2026');`)
+  const insert = raw.prepare("INSERT INTO revisions(entry_id,kind,rev,snapshot,summary,actor,at) VALUES (1,'edit',1,'{}',?,?,'2026')")
+  insert.run('by person', 'p')
+  insert.run('by agent', 'a')
+  insert.run('by other', 'q')
+  const listed = async (by?: string) => ((await load({ url: new URL(`http://localhost/en/history${by ? `?by=${by}` : ''}`), platform: { env: { DB: db } } } as any)) as any).rows.map((row: any) => row.summary)
+  expect(await listed()).toEqual(['by other', 'by agent', 'by person'])
+  expect(await listed('agent')).toEqual(['by agent'])
+  expect(await listed('person')).toEqual(['by other', 'by person'])
+  raw.exec("UPDATE people SET agent = 1, merged_into = 'p' WHERE id = 'q'")
+  expect(await listed('agent')).toEqual(['by other', 'by agent'])
+  raw.exec("UPDATE revisions SET actor = 'p' WHERE summary = 'by agent'")
+  expect(await listed('agent')).toEqual(['by other'])
+  await expect(load({ url: new URL('http://localhost/en/history?by=robot'), platform: { env: { DB: db } } } as any)).rejects.toMatchObject({ status: 404 })
 })

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { openTestDb } from '$lib/server/testdb'
-import { exportBatches, mediaBatches } from '$lib/server/export'
+import { exportBatches, indexChunks, mediaBatches } from '$lib/server/export'
 import { GET } from './+server'
 
 function fixture() {
@@ -151,21 +151,136 @@ test('the image list walks the media primary key without a scan or a sort', asyn
   expect(plans.flat().join('\n')).not.toMatch(/USE TEMP B-TREE FOR ORDER BY|SCAN m(?:\s|$)/)
 })
 
-test('exports preserve agent attribution alongside the commander name', async () => {
+test('exports preserve separated agent and model attribution alongside the commander name', async () => {
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id, name, atlas_sub, created_at) VALUES ('cmd', 'Commander', 'sub', '2026');
-    INSERT INTO people(id, name, created_at, merged_into, agent) VALUES ('ag1', 'Antigravity Gemini 4 Neon', '2026', 'cmd', 1);
+    INSERT INTO people(id, name, created_at, merged_into, agent, agent_model) VALUES ('ag1', 'Antigravity', '2026', 'cmd', 1, 'Gemini 4 Neon');
     INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES (1, 'han', '⿰亻木', 'ag1', '2026', '2026'), (2, 'han', '⿱木木', 'cmd', '2026', '2026');
     INSERT INTO claims(entry_id, position, key, kind, value) VALUES (1, 0, 'ids00001', 'ids', '⿰亻木'), (2, 0, 'ids00002', 'ids', '⿱木木');
     INSERT INTO sightings(entry_id, first_entry, place, created_by, created_at, updated_at) VALUES (1, 1, 'Book', 'ag1', '2026', '2026'), (2, 2, 'Note', 'cmd', '2026', '2026');`)
   const body = await (await GET(event(db))).json() as any
-  expect(body.entries[0]).toMatchObject({ created_by_name: 'Commander', created_by_agent: 'Antigravity Gemini 4 Neon' })
-  expect(body.entries[0].evidence[0]).toMatchObject({ by_id: 'cmd', by_name: 'Commander', by_agent: 'Antigravity Gemini 4 Neon' })
-  expect(body.entries[1]).toMatchObject({ created_by_name: 'Commander', created_by_agent: null })
-  expect(body.entries[1].evidence[0]).toMatchObject({ by_id: 'cmd', by_name: 'Commander', by_agent: null })
+  expect(body.entries[0]).toMatchObject({ created_by_name: 'Commander', created_by_agent: 'Antigravity', created_by_model: 'Gemini 4 Neon' })
+  expect(body.entries[0].evidence[0]).toMatchObject({ by_id: 'cmd', by_name: 'Commander', by_agent: 'Antigravity', by_model: 'Gemini 4 Neon' })
+  expect(body.entries[1]).toMatchObject({ created_by_name: 'Commander', created_by_agent: null, created_by_model: null })
+  expect(body.entries[1].evidence[0]).toMatchObject({ by_id: 'cmd', by_name: 'Commander', by_agent: null, by_model: null })
   const csv = await (await GET(event(db, '/api/export?format=csv'))).text()
   const [head, first, second] = csv.split('\r\n').filter(Boolean)
-  expect(head).toContain('"created_by_agent"')
-  expect(first).toContain('"Commander","Antigravity Gemini 4 Neon"')
-  expect(second).toContain('"Commander",""')
+  expect(head).toContain('"created_by_agent","created_by_model"')
+  expect(first).toContain('"Commander","Antigravity","Gemini 4 Neon"')
+  expect(second).toContain('"Commander","",""')
+})
+
+test('format=index serves a compact cached catalogue without evidence and tolerates mid-walk writes', async () => {
+  const { db, raw } = fixture()
+  const stored = new Map<string, { body: string; headers: Headers }>()
+  const waits: Promise<unknown>[] = []
+  const fakeCtx = {
+    waitUntil(this: unknown, promise: Promise<unknown>) {
+      // Workers ExecutionContext.waitUntil throws Illegal invocation if detached from its receiver.
+      if (this !== fakeCtx) throw new TypeError('Illegal invocation')
+      waits.push(promise)
+    },
+  }
+  const origCaches = (globalThis as any).caches
+  ;(globalThis as any).caches = {
+    default: {
+      async match(req: Request) {
+        const hit = stored.get(req.url)
+        return hit ? new Response(hit.body, { headers: hit.headers }) : undefined
+      },
+      async put(req: Request, res: Response) {
+        stored.set(req.url, { body: await res.text(), headers: new Headers(res.headers) })
+      },
+    },
+  }
+  try {
+    let queries = 0
+    const counting = { prepare(sql: string) { queries++; return db.prepare(sql) } } as D1Database
+    const first = await GET({ url: new URL('https://example.test/api/export?format=index&utm_source=ignored'), platform: { env: { DB: counting }, ctx: fakeCtx } } as any)
+    expect(first.status).toBe(200)
+    expect(first.headers.get('access-control-allow-origin')).toBe('*')
+    expect(first.headers.get('content-type')).toContain('application/json')
+    expect(first.headers.get('cache-control')).toBe('public, max-age=60, s-maxage=60')
+    expect(first.headers.get('content-disposition')).toBeNull()
+    const body = await first.json() as any
+    await Promise.all(waits)
+    expect(waits).toHaveLength(1)
+    expect(stored.has('https://example.test/api/export?format=index')).toBe(true)
+    expect(body.dataset).toMatchObject({ name: 'Rare Character Compendium', version: 2, license: 'CC BY-SA 4.0' })
+    expect(body.entries.map((entry: { id: number }) => entry.id)).toEqual([1, 3])
+    expect(body.entries[0]).toMatchObject({ id: 1, code: 'R+0001', ids: '⿰亻木' })
+    expect(body.entries[0].evidence).toBeUndefined()
+    expect(body.entries[0].claims).toEqual([
+      { kind: 'ids', value: '⿰亻木' },
+      { kind: 'reading', value: 'tung', data: { doculect: 'hak' } },
+    ])
+
+    // Second request (even with different extra query params) hits the edge cache with zero D1 reads.
+    const beforeHit = queries
+    const second = await GET({ url: new URL('https://example.test/api/export?format=index&v=2'), platform: { env: { DB: counting }, ctx: fakeCtx } } as any)
+    expect(await second.json()).toEqual(body)
+    expect(queries).toBe(beforeHit)
+  } finally {
+    ;(globalThis as any).caches = origCaches
+  }
+
+  // Concurrent entry + claim insertions between page 1 and page 2 still produce valid complete JSON.
+  let entryReads = 0
+  const mutating = {
+    prepare(sql: string) {
+      const stmt = db.prepare(sql)
+      return {
+        bind(...values: unknown[]) {
+          if (sql.includes('FROM entries')) {
+            entryReads++
+            if (entryReads === 2) {
+              raw.exec("INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES (4, 'han', '⿰水水', 'p', '2026', '2026')")
+              raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) VALUES (4, 0, 'ids00004', 'ids', '⿰水水')")
+              raw.exec("INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) VALUES (4, 'create', 1, '{}', 'p', '2026')")
+            }
+          }
+          return stmt.bind(...values)
+        },
+      }
+    },
+  } as D1Database
+  let text = ''
+  for await (const chunk of indexChunks(mutating, 'https://example.test', '2026-11-26T00:00:00.000Z', 1)) text += chunk
+  const liveDoc = JSON.parse(text) as { entries: { id: number }[] }
+  expect(liveDoc.entries.map(e => e.id)).toEqual([1, 3, 4])
+})
+
+test('format=index walks entries_live_export and claims_by_entry without scans or temp sorts', async () => {
+  const { db, raw } = fixture()
+  const plans: string[][] = []
+  const traced = { prepare(sql: string) {
+    const stmt = db.prepare(sql)
+    return {
+      first<T>() {
+        plans.push((raw.query(`EXPLAIN QUERY PLAN ${sql}`).all() as { detail: string }[]).map(row => row.detail))
+        return stmt.first<T>()
+      },
+      bind(...values: unknown[]) {
+        plans.push((raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...values as never[]) as { detail: string }[]).map(row => row.detail))
+        return stmt.bind(...values)
+      },
+    }
+  } } as D1Database
+  let text = ''
+  for await (const chunk of indexChunks(traced, 'https://example.test', '2026-11-26T00:00:00.000Z', 1)) text += chunk
+  const doc = JSON.parse(text) as { entries: unknown[] }
+  expect(doc.entries).toHaveLength(2)
+  const joined = plans.flat().join('\n')
+  expect(joined).toContain('entries_live_export')
+  expect(joined).toContain('claims_by_entry')
+  expect(joined).not.toMatch(/USE TEMP B-TREE FOR ORDER BY|SCAN (?:entries|claims)(?:\s|$)/)
+
+  // Prove the guard fails if either index is removed.
+  for (const index of ['entries_live_export', 'claims_by_entry']) {
+    const missing = fixture()
+    missing.raw.exec(`DROP INDEX ${index}`)
+    await expect((async () => {
+      for await (const _ of indexChunks(missing.db, 'https://example.test', '2026-11-26T00:00:00.000Z', 1)) {}
+    })()).rejects.toThrow()
+  }
 })

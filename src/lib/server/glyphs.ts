@@ -15,6 +15,8 @@ import { hashHex } from './image'
 
 type Bucket = Pick<R2Bucket, 'get' | 'put'>
 type Source = ReturnType<typeof sourceFor>
+// Runs one read or write of the bucket, the export or the build's files, and notes when it fails.
+type Storage = <T>(work: () => Promise<T>) => Promise<T>
 /** A description and, as its stored text, the layout it is drawn with. */
 export type Glyph = { ids: string | null; layout?: string | null }
 
@@ -25,32 +27,45 @@ const IMMUTABLE = 'public, max-age=31536000, immutable'
 
 const typeOf = (name: string) => /^[gp]\//.test(name) ? 'application/octet-stream' : 'application/json'
 
-// The export's files pass through the bucket, so a shard fetched once stays here.
-function reader(bucket: Bucket, style: GlyphStyle) {
+/** A description the composer cannot draw. Its storage answered, so asking again draws nothing more. */
+export class UndrawableError extends Error { name = 'UndrawableError' }
+
+// The export's files pass through the bucket, so a shard fetched once stays here. A shard the
+// export lacks is its answer; any other failure to read is the storage's.
+function reader(bucket: Bucket, style: GlyphStyle, storage: Storage) {
   return async (input: RequestInfo | URL): Promise<Response> => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
     const name = url.pathname.split(`/${composerVersion(style)}/`)[1] ?? ''
     if (!name) throw new Error(`${url} is not a composer export file.`)
     const key = `${folderOf(style)}/${name}`
-    const stored = await bucket.get(key)
-    if (stored) return new Response(await stored.arrayBuffer(), { headers: { 'content-type': typeOf(name) } })
-    const response = await fetch(url)
-    if (response.status === 404 && /^[gp]\//.test(name)) return response
-    if (!response.ok) throw new Error(`${name}: ${response.status}`)
-    const bytes = await response.arrayBuffer()
-    await bucket.put(key, bytes, { httpMetadata: { contentType: typeOf(name) } })
-    return new Response(bytes, { headers: { 'content-type': typeOf(name) } })
+    return storage(async () => {
+      const stored = await bucket.get(key)
+      if (stored) return new Response(await stored.arrayBuffer(), { headers: { 'content-type': typeOf(name) } })
+      const response = await fetch(url)
+      if (response.status === 404 && /^[gp]\//.test(name)) return response
+      if (!response.ok) throw new Error(`${name}: ${response.status}`)
+      const bytes = await response.arrayBuffer()
+      await bucket.put(key, bytes, { httpMetadata: { contentType: typeOf(name) } })
+      return new Response(bytes, { headers: { 'content-type': typeOf(name) } })
+    })
   }
 }
 
 export type ComposerAssets = { fetch(input: RequestInfo | URL): Promise<Response> }
 type Context = { assets?: ComposerAssets; origin?: string; style?: GlyphStyle }
 
-// The outlines the export lacks are files of this build; the asset binding answers them by URL.
-function bundled(context: Context) {
+// The outlines the export lacks are files of this build; the asset binding answers them by URL. The
+// build holds every file it lists, and the composer draws without one it cannot read, so a listed
+// file is read whole here, where its failure is noted.
+function bundled(context: Context, storage: Storage) {
   return async (path: string, url?: string): Promise<Response> => {
-    if (url && context.assets && context.origin) return context.assets.fetch(new URL(url, context.origin))
-    return new Response(null, { status: 404 })
+    const { assets, origin } = context
+    if (!url || !assets || !origin) return new Response(null, { status: 404 })
+    return storage(async () => {
+      const response = await assets.fetch(new URL(url, origin))
+      if (!response.ok) throw new Error(`${path}: ${response.status}`)
+      return new Response(await response.arrayBuffer())
+    })
   }
 }
 
@@ -96,13 +111,20 @@ async function adjusted(from: Source, ids: string, layout: string, name: string,
 function glyphDrawer(bucket: Bucket, context: Context) {
   const style = context.style ?? GLYPH_STYLE
   const sources = new Map<string, Source>()
+  // The composer draws on without a file it could not read and then reports a missing part, so the
+  // error alone does not tell an outage from a description nothing draws. Once storage has failed,
+  // no later failure of this drawer is laid to the description.
+  let failedStorage = false
+  const storage: Storage = async work => {
+    try { return await work() } catch (error) { failedStorage = true; throw error }
+  }
   let exported: ReturnType<typeof exportSource> | undefined
   function source(ids: string, separate = false) {
     const key = sourceKey(ids, context, separate)
     let found = sources.get(key)
     if (!found) {
-      exported ??= exportSource(composerUrl(style), { loaders: composerDataFor(style), fetch: reader(bucket, style), read: bundled(context) })
-      found = sourceFor(ids, { base: composerUrl(style), fontStyle: style, traits: traitsOf(ids), separate, exported, loaders: composerDataFor(style), read: bundled(context) })
+      exported ??= exportSource(composerUrl(style), { loaders: composerDataFor(style), fetch: reader(bucket, style, storage), read: bundled(context, storage) })
+      found = sourceFor(ids, { base: composerUrl(style), fontStyle: style, traits: traitsOf(ids), separate, exported, loaders: composerDataFor(style), read: bundled(context, storage) })
       sources.set(key, found)
     }
     return found
@@ -111,20 +133,23 @@ function glyphDrawer(bucket: Bucket, context: Context) {
     const name = glyphName(glyph, style)
     if (!name) return null
     try {
-      const stored = await read(bucket, name, style)
+      const stored = await storage(() => read(bucket, name, style))
       if (stored) return stored
       const [ids, layout] = name.split('\n')
       const drawn = (layout ? await adjusted(source(ids, true), ids, layout, name, style) : null) ?? (await compose(source(ids), ids, { fontStyle: style })).d
       if (!drawn) return null
-      await bucket.put(`${drawingsOf(style, name)}/${await hashHex(name)}.txt`, drawn, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } })
+      const key = `${drawingsOf(style, name)}/${await hashHex(name)}.txt`
+      await storage(() => bucket.put(key, drawn, { httpMetadata: { contentType: 'text/plain; charset=utf-8', cacheControl: IMMUTABLE } }))
       return drawn
     } catch (error) {
       console.error(`glyph ${style} ${name}:`, error)
-      throw error
+      throw failedStorage ? error : new UndrawableError(`${style} ${name}`, { cause: error })
     }
   }
 }
 
+/** The drawing, or null for a description that draws nothing. Throws `UndrawableError` when the
+ *  composer cannot draw it, and the storage's own error when a read or write failed. */
 export function drawGlyph(bucket: Bucket, glyph: Glyph, context: Context = {}) {
   return glyphDrawer(bucket, context)(glyph)
 }

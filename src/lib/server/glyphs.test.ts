@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test'
 import { readFile } from 'node:fs/promises'
+import { gzipSync } from 'node:zlib'
 import { composerDrawing, glyphStyleOf } from '$lib/composer'
-import { drawGlyph, glyphName, glyphPaths, sourceKey } from './glyphs'
+import { drawGlyph, glyphName, glyphPaths, sourceKey, UndrawableError } from './glyphs'
 import { hashHex } from './image'
 
 test('a page reads cached drawings by the cleaned description', async () => {
@@ -112,4 +113,37 @@ test('simultaneous requests for the same glyph own their R2 reads', async () => 
   } as unknown as Pick<R2Bucket, 'get' | 'put'>
   const paths = await Promise.all([drawGlyph(bucket, { ids: '木' }), drawGlyph(bucket, { ids: '木' })])
   expect(new Set(paths)).toEqual(new Set(['M1', 'M2']))
+})
+
+// A build whose Bopomofo file holds no outlines: its storage answers, and nothing draws the letter.
+const withoutOutlines = () => {
+  const kept: string[] = []
+  const bucket = { get: async () => null, put: async (key: string) => { kept.push(key) } } as unknown as Pick<R2Bucket, 'get' | 'put'>
+  return { bucket, kept, context: { assets: { fetch: async () => new Response(gzipSync('{}')) }, origin: 'https://example.test' } }
+}
+
+test('a description the composer cannot draw is told apart, and nothing is kept in its place', async () => {
+  const { bucket, kept, context } = withoutOutlines()
+  const failure = await drawGlyph(bucket, { ids: 'ㄍ' }, context).catch(error => error)
+  expect(failure).toBeInstanceOf(UndrawableError)
+  expect(failure.cause.name).toBe('LookupError')
+  expect(kept).toEqual([])
+})
+
+test('a file of the build that cannot be read is the storage\'s failure, whatever the composer then reports', async () => {
+  const { bucket, kept, context } = withoutOutlines()
+  for (const fetch of [async () => new Response(null, { status: 503 }), async () => { throw new Error('gone') }]) {
+    const failure = await drawGlyph(bucket, { ids: 'ㄍ' }, { ...context, assets: { fetch } }).catch(error => error)
+    expect(failure).toBeInstanceOf(Error)
+    expect(failure).not.toBeInstanceOf(UndrawableError)
+  }
+  expect(kept).toEqual([])
+})
+
+test('a drawing that cannot be stored is the storage\'s failure', async () => {
+  const { context } = await bopomofo()
+  const bucket = { get: async () => null, put: async () => { throw new Error('no room') } } as unknown as Pick<R2Bucket, 'get' | 'put'>
+  const failure = await drawGlyph(bucket, { ids: 'ㄍ' }, context).catch(error => error)
+  expect(failure.message).toBe('no room')
+  expect(failure).not.toBeInstanceOf(UndrawableError)
 })

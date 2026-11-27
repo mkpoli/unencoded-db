@@ -213,7 +213,8 @@ test('a token follows its person into the account they sign in to, and stops at 
   const headers = { authorization: `Bearer ${access}` }
   raw.exec("INSERT INTO people(id, name, atlas_sub, created_at) VALUES('account', 'Atlas Name', 'sub', '2026-01-01T00:00:00.000Z'); UPDATE people SET merged_into = 'account' WHERE id != 'account'")
   await call('add_record', record('⿰山東'), headers)
-  expect(raw.query('SELECT created_by FROM entries').get()).toEqual({ created_by: 'account' })
+  // The write is the account's, made by an agent of it.
+  expect(raw.query('SELECT p.merged_into, p.agent FROM entries e JOIN people p ON p.id = e.created_by').get()).toEqual({ merged_into: 'account', agent: 1 })
   raw.exec("UPDATE people SET banned_at = '2026-11-16T00:00:00.000Z' WHERE id = 'account'")
   expect((await (await call('add_record', record('⿰山西'), headers)).json()).result).toMatchObject({ isError: true })
   raw.exec(`UPDATE people SET banned_at = NULL; UPDATE agent_tokens SET created_at = '${new Date(Date.now() - TOKEN_LIFE - 1000).toISOString()}'`)
@@ -223,7 +224,7 @@ test('a token follows its person into the account they sign in to, and stops at 
 test('a token bound to an agent row records writes under the agent while honoring the commander', async () => {
   const { db, raw, call } = fixture()
   raw.exec("INSERT INTO people(id, name, atlas_sub, role, created_at) VALUES('cmd', 'Commander', 'sub', 'moderator', '2026-01-01T00:00:00.000Z')")
-  raw.exec("INSERT INTO people(id, name, created_at, merged_into, agent) VALUES('ag1', 'Antigravity Gemini 4 Neon', '2026-01-01T00:00:00.000Z', 'cmd', 1)")
+  raw.exec("INSERT INTO people(id, name, created_at, merged_into, agent, agent_model) VALUES('ag1', 'Antigravity', '2026-01-01T00:00:00.000Z', 'cmd', 1, 'Gemini 4 Neon')")
   raw.exec("INSERT INTO agent_clients(id, name, redirect_uris, created_at) VALUES('c1', 'Antigravity', '[]', '2026-01-01T00:00:00.000Z')")
   const access = 'b'.repeat(64)
   raw.run("INSERT INTO agent_tokens(token_hash, client, person, created_at) VALUES(?, 'c1', 'ag1', ?)", [await hashHex(access), new Date().toISOString()])
@@ -263,4 +264,23 @@ test('sign-in returns only to the consent page it was started from', () => {
   expect(parseFlow(JSON.stringify({ ...flow, next: page }))).toMatchObject({ next: page })
   expect(parseFlow(JSON.stringify({ ...flow, next: 'https://evil.example/' }))).toBeNull()
   expect(parseFlow(JSON.stringify(flow))).toMatchObject({ locale: 'ja' })
+})
+
+test('a signed-in agent writes as an agent row of its person, one for each harness and model', async () => {
+  const { raw, call } = fixture()
+  raw.exec("INSERT INTO people(id, name, atlas_sub, created_at) VALUES('cmd', 'Commander', 'sub', '2026-01-01T00:00:00.000Z')")
+  raw.exec("INSERT INTO agent_clients(id, name, redirect_uris, created_at) VALUES('c1', 'Client', '[]', '2026-01-01T00:00:00.000Z')")
+  const access = 'c'.repeat(64)
+  raw.run("INSERT INTO agent_tokens(token_hash, client, person, created_at) VALUES(?, 'c1', 'cmd', ?)", [await hashHex(access), new Date().toISOString()])
+  const headers = { authorization: `Bearer ${access}` }
+  const said = (ids: string, agent?: unknown) => call('add_record', { ...record(ids), ...(agent ? { agent } : {}) }, headers).then(response => response.json()).then((body: any) => body.result.isError)
+
+  expect(await said('⿰山東', { harness: 'DSH', model: 'DeepSeek-v4.1-Flash' })).toBeUndefined()
+  expect(await said('⿰山西', { harness: 'DSH', model: 'DeepSeek-v4.1-Flash' })).toBeUndefined()
+  expect(await said('⿰山南')).toBeUndefined()
+  expect(raw.query("SELECT name, agent_model, merged_into, agent, (SELECT count(*) FROM entries WHERE created_by = people.id) AS records FROM people WHERE id <> 'cmd' ORDER BY name").all()).toEqual([
+    { name: 'DSH', agent_model: 'DeepSeek-v4.1-Flash', merged_into: 'cmd', agent: 1, records: 2 },
+    { name: 'Unknown', agent_model: '', merged_into: 'cmd', agent: 1, records: 1 },
+  ])
+  expect(raw.query('SELECT changes FROM people WHERE id = ?').get('cmd')).toEqual({ changes: 6 })
 })

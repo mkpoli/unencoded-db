@@ -53,21 +53,25 @@ export const actions: Actions = {
     const form = await event.request.formData()
     const rawInto = String(form.get('into') ?? '')
     const rawAgent = String(form.get('agent') ?? '').trim()
+    const rawModel = String(form.get('model') ?? '').trim()
     const agent = rawAgent ? cleanAgentName(rawAgent) : null
-    if (rawAgent && !agent) return fail(400, { merge: 'agent' as const, into: rawInto, agent: rawAgent })
+    if (rawAgent && !agent) return fail(400, { merge: 'agent' as const, into: rawInto, agent: rawAgent, model: rawModel })
+    const model = rawModel ? cleanAgentName(rawModel) : null
+    if (rawModel && (!model || !agent)) return fail(400, { merge: 'model' as const, into: rawInto, agent: agent ?? '', model: rawModel })
     const into = named(form.get('into'))
-    if (!into) return fail(400, { merge: 'missing' as const, into: rawInto, agent: agent ?? '' })
+    if (!into) return fail(400, { merge: 'missing' as const, into: rawInto, agent: agent ?? '', model: model ?? '' })
     const db = env(event).DB
-    if (into === event.params.id) return fail(400, { merge: 'self' as const, into, agent: agent ?? '' })
+    if (into === event.params.id) return fail(400, { merge: 'self' as const, into, agent: agent ?? '', model: model ?? '' })
     const confirmAgent = String(form.get('confirm_agent') ?? '')
-    if (form.get('confirm') !== into || confirmAgent !== (agent ?? '')) {
+    const confirmModel = String(form.get('confirm_model') ?? '')
+    if (form.get('confirm') !== into || confirmAgent !== (agent ?? '') || confirmModel !== (model ?? '')) {
       const target = await db.prepare('SELECT id, name, changes, banned_at FROM people WHERE id = ? AND merged_into IS NULL').bind(into).first<{ id: string; name: string; changes: number; banned_at: string | null }>()
-      if (!target) return fail(400, { merge: 'missing' as const, into, agent: agent ?? '' })
-      if (target.banned_at) return fail(400, { merge: 'banned' as const, into, agent: agent ?? '' })
-      return { target: { id: target.id, name: target.name, changes: target.changes }, into, agent: agent ?? '' }
+      if (!target) return fail(400, { merge: 'missing' as const, into, agent: agent ?? '', model: model ?? '' })
+      if (target.banned_at) return fail(400, { merge: 'banned' as const, into, agent: agent ?? '', model: model ?? '' })
+      return { target: { id: target.id, name: target.name, changes: target.changes }, into, agent: agent ?? '', model: model ?? '' }
     }
-    const refused = await joinPerson(db, event.params.id, into, { agent })
-    if (refused) return fail(400, { merge: refused, into, agent: agent ?? '' })
+    const refused = await joinPerson(db, event.params.id, into, { agent, model })
+    if (refused) return fail(400, { merge: refused, into, agent: agent ?? '', model: model ?? '' })
     redirect(303, `/${event.params.locale}/u/${into}`)
   },
 }

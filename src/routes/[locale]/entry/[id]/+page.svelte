@@ -13,7 +13,7 @@
   import GlyphFace from '$lib/components/GlyphFace.svelte'
   import SpellingReport from '$lib/components/SpellingReport.svelte'
   import { GLYPH_STYLES } from '$lib/composer'
-  import MarkedPicture from '$lib/components/MarkedPicture.svelte'
+  import EvidencePictures from '$lib/components/EvidencePictures.svelte'
   import CopyButton from '$lib/components/CopyButton.svelte'
   import EditLink from '$lib/components/EditLink.svelte'
   import FavouriteButton from '$lib/components/FavouriteButton.svelte'
@@ -59,6 +59,23 @@
   let filled = $state<Fill | null>(null)
   let editOpen = $state(untrack(() => editing || data.idsAdd !== null))
   $effect(() => { if (editing) editOpen = true })
+  // Tags other records of the same sources carry, read once the form opens.
+  let sourceTags = $state<string[]>([])
+  let sourceTagsOf = ''
+  $effect(() => {
+    if (!editOpen) return
+    const ids = [...new Set(data.sightings.map(sighting => sighting.source_id).filter((id): id is number => id !== null))]
+    const key = `${entry.id}:${ids.join(',')}`
+    if (key === sourceTagsOf) return
+    sourceTagsOf = key
+    if (!ids.length) { sourceTags = []; return }
+    const params = new URLSearchParams({ exclude: String(entry.id) })
+    for (const id of ids) params.append('source', String(id))
+    fetch('/api/sources/tags?' + params)
+      .then(response => response.ok ? response.json() as Promise<{ tags?: string[] }> : null)
+      .then(payload => { if (sourceTagsOf === key) sourceTags = payload?.tags ?? [] })
+      .catch(() => { if (sourceTagsOf === key) sourceTags = [] })
+  })
   let fields = $state<CharacterFields>()
   // The description groups on the page, so each one's report shows its own drawing.
   let formsShown = $state<HTMLElement[]>([])
@@ -145,7 +162,8 @@
   ].filter(Boolean).join(' · '))
   const cover = $derived(data.sightings.find(sighting => sighting.media.length)?.media[0])
   const sources = $derived(data.sightings.filter(sighting => sighting.source_id !== null).map(sighting => ({ ...sighting, id: sighting.source_id! })))
-  const structured = $derived(recordData({ locale: locale(), id: entry.id, name: seoTitle, description: seoDescription, siteName: t('app.name'), image: cover && media(cover.image_key), sources }))
+  const vias = $derived(data.sightings.flatMap(sighting => sighting.vias))
+  const structured = $derived(recordData({ locale: locale(), id: entry.id, name: seoTitle, description: seoDescription, siteName: t('app.name'), image: cover && media(cover.image_key), sources, vias }))
   const marks = $derived(marksOf(encodings))
   const tagsByName = $derived(tagLookup(data.tags))
   const labels = $derived(tagLabels(localized(data.tags, locale())))
@@ -271,13 +289,13 @@
     </dl>
     <div class="senses">
       <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} records={data.related} />
-      {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
+      {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation' || claim.kind === 'creator')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
       {:else}<EditLink field="senses" name={t('entry.addSenses')} add />{/if}
     </div>
     {#if entry.by_name && entry.created_at}
       <p class="hint attribution">
         <span>{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</span>
-        {#if entry.by_agent}<AgentBadge name={entry.by_agent} standalone={entry.by_agent === entry.by_name} />{/if}
+        {#if entry.by_agent}<AgentBadge name={entry.by_agent} model={entry.by_model ?? null} standalone={entry.by_agent === entry.by_name} />{/if}
       </p>
     {/if}
   </section>
@@ -298,7 +316,7 @@
         <div id="edit-senses"><SenseEditor claims={editValues.claims} evidence={options} fill={filled} /></div>
         <details class="filing" id="edit-filing" open>
           <summary class="section-title">{t('field.filing')}</summary>
-          <div class="stack filed"><TagFields tags={data.tags} groups={data.groups} selected={valuesOf(editValues.claims, 'tag')} collections={valuesOf(editValues.claims, 'collection')} /></div>
+          <div class="stack filed"><TagFields tags={data.tags} groups={data.groups} selected={valuesOf(editValues.claims, 'tag')} collections={valuesOf(editValues.claims, 'collection')} suggested={sourceTags} /></div>
         </details>
       {/key}
       <div class="field"><label for="summary">{t('form.summary')}</label><input id="summary" class="input" name="summary" maxlength="500" /></div>
@@ -317,16 +335,7 @@
       {@const types = parseSightingTypes(sighting.types)}
       {@const contexts = parseContexts(sighting.contexts)}
       <article class="panel stack" id="sighting-{sighting.id}">
-        {#if sighting.media.length}
-          <div class="pictures" class:single={sighting.media.length === 1}>
-            {#each sighting.media as picture, position (picture.image_key)}
-              <figure>
-                <MarkedPicture {picture} alt={pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} />
-                <figcaption><button class="button small" type="button" title={t('sighting.evidenceHint')} disabled={preparing === picture.image_key} onclick={() => download(sighting, picture, position)}>{t('sighting.evidence')}</button></figcaption>
-              </figure>
-            {/each}
-          </div>
-        {/if}
+        <EvidencePictures pictures={sighting.media} alt={position => pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} {preparing} ondownload={(picture, position) => download(sighting, picture, position)} />
         {#if sighting.place}<h3>{sighting.place}</h3>{/if}
         {#if types.length || data.earliest?.sighting === sighting.id}<div class="row badges">{#if data.earliest?.sighting === sighting.id}<span class="badge earliest">{t('entry.earliest')}</span>{/if}{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}
@@ -345,7 +354,7 @@
         {#if sighting.by_name}
           <p class="hint attribution">
             <span>{t('sighting.by', { name: sighting.by_name })}</span>
-            {#if sighting.by_agent}<AgentBadge name={sighting.by_agent} standalone={sighting.by_agent === sighting.by_name} />{/if}
+            {#if sighting.by_agent}<AgentBadge name={sighting.by_agent} model={sighting.by_model ?? null} standalone={sighting.by_agent === sighting.by_name} />{/if}
           </p>
         {/if}
         <div class="row">
@@ -404,9 +413,6 @@
   article:target { outline:2px solid var(--accent); outline-offset:2px } article { scroll-margin-block:16px }
   .checks { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr)); gap:6px 16px; margin:0; padding:0; list-style:none; color:var(--muted) }
   .checks li { display:flex; gap:8px } .checks li.done { color:var(--ink) } .checks li.done .tick { color:var(--good) } .tick { flex:none; width:1em; text-align:center }
-  .pictures { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr)); gap:12px } .pictures.single { grid-template-columns:minmax(0,1fr) }
-  figure { display:flex; flex-direction:column; gap:6px; margin:0; min-width:0 }
-  .pictures:not(.single) { --picture-height: 260px }
   .button.small { min-height:32px; padding:4px 10px; font-size:12.5px }
   .url { overflow-wrap:anywhere }
   @media(max-width:700px) { .panel { padding:16px } .styles { --face-size:64px; gap:8px } }

@@ -1,6 +1,6 @@
 <script lang="ts">
-  // What a character means and how it is read, as two lists of one group: a reading holds under the
-  // meanings ticked beside it, and every row rests on the evidence ticked beside it. The related
+  // What a character means, how it is read and who made it, as lists of one group: a reading holds under
+  // the meanings ticked beside it, and every row rests on the evidence ticked beside it. The related
   // characters are the same draft, drawn by RelationFields wherever the page puts them.
   //
   // A row's choices are sent as `under.<key>` and `sightings.<key>`. The `…_present` markers save an
@@ -22,6 +22,7 @@
     group?.querySelector<HTMLElement>(`[data-row="${key}"] [data-first]`)?.focus()
   }
   async function addMeaning() { const row = senses.addMeaning(); await focus(row.key) }
+  async function addCreator() { const row = senses.addCreator(); await focus(row.key) }
   async function addReading(under: string[] = []) { const row = senses.addReading(under); await focus(row.key) }
   function addRelation(under: string[]) { const row = senses.addRelation(under); senses.requestFocus(row.key) }
 </script>
@@ -72,6 +73,22 @@
       </div>
     {/each}
     {#if senses.readings.length < CLAIM_LIMITS.reading.max}<div><button class="text-button" type="button" onclick={() => addReading()}>+ {t('field.readingAdd')}</button></div>{/if}
+  </fieldset>
+
+  <fieldset class="group">
+    <legend class="section-title">{t('field.creator')}</legend>
+    <input type="hidden" name="creators_present" value="1" />
+    {#each senses.creators as row, index (row)}
+      <div class="item" data-row={row.key}>
+        <input type="hidden" name="creator_key" value={row.key} />
+        <div class="line">
+          <input class="input" name="creator" maxlength={CLAIM_LIMITS.creator.length} bind:value={row.value} aria-label="{t('field.creator')} {index + 1}" autocomplete="off" data-first />
+          <button class="remove" type="button" aria-label="{t('form.remove')} {t('field.creator')} {index + 1}" title={t('form.remove')} onclick={() => senses.creators.splice(index, 1)}><span aria-hidden="true">×</span></button>
+        </div>
+        <ChoiceGroup legend={t('field.basis')} name={row.key ? `sightings.${row.key}` : undefined} options={sightings} bind:chosen={row.evidence} />
+      </div>
+    {/each}
+    {#if senses.creators.length < CLAIM_LIMITS.creator.max}<div><button class="text-button" type="button" onclick={addCreator}>+ {t('field.creatorAdd')}</button></div>{/if}
   </fieldset>
 
 </div>
