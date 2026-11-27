@@ -136,6 +136,7 @@
   "field.imageRemove": "削除",
   "field.imageWorking": "画像を準備しています…",
   "field.imageBad": "このファイルを画像またはPDFとして読み込めませんでした。",
+  "field.pdfTooLarge": "このPDFは大きすぎてサイト上で描画できません。そのページのJPEGまたはPNG画像を使ってください。",
   "field.pdfPages": "ページ",
   "field.imageZoom": "画像の大きさ",
   "field.imageZoomIn": "拡大",

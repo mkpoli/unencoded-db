@@ -17,7 +17,7 @@
   let picture = $state<Prepared | null>(null)
   let pdf = $state<{ file: Blob; pages: number; page: number } | null>(null)
   let previewUrl = $state<string | null>(null)
-  let busy = $state(false), bad = $state(false), over = $state(false)
+  let busy = $state(false), bad = $state<'field.imageBad' | 'field.pdfTooLarge' | null>(null), over = $state(false)
   let boxes = $state<Box[]>([])
   let marking = $state(false)
   let fetched = false
@@ -35,7 +35,7 @@
 
   export async function take(source: Blob | null | undefined, post = false, page = 1) {
     if (!source) return
-    bad = false; busy = true; onready?.(true)
+    bad = null; busy = true; onready?.(true)
     try {
       let sheet: typeof pdf = null, image = source
       if (await isPdf(source)) {
@@ -52,8 +52,8 @@
       previewUrl = URL.createObjectURL(picture.file)
       setFiles(thumbInput, await thumbnail(picture.bitmap, null))
       marking = matchMedia('(pointer: fine)').matches
-    } catch {
-      bad = true
+    } catch (error) {
+      bad = error instanceof Error && error.message === 'large' ? 'field.pdfTooLarge' : 'field.imageBad'
       clear()
     } finally { busy = false; onready?.(false) }
   }
@@ -104,7 +104,7 @@
     </label>
     {#if onremove}<div><button type="button" class="button" onclick={onremove}>{t('field.imageRemove')}</button></div>{/if}
   {/if}
-  {#if bad}<p class="notice bad small">{t('field.imageBad')}</p>{/if}
+  {#if bad}<p class="notice bad small">{t(bad)}</p>{/if}
 </div>
 
 <style>

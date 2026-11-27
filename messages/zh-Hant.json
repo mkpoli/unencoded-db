@@ -136,6 +136,7 @@
   "field.imageRemove": "移除",
   "field.imageWorking": "正在處理圖片…",
   "field.imageBad": "無法將此檔案讀取為圖片或PDF。",
+  "field.pdfTooLarge": "此PDF過大，網站無法顯示。請改用該頁的JPEG或PNG圖片。",
   "field.pdfPages": "頁碼",
   "field.imageZoom": "圖片縮放",
   "field.imageZoomIn": "放大",

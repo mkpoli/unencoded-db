@@ -136,6 +136,7 @@
   "field.imageRemove": "Xóa",
   "field.imageWorking": "Đang xử lý ảnh…",
   "field.imageBad": "Không thể đọc tệp này dưới dạng hình ảnh hoặc PDF.",
+  "field.pdfTooLarge": "Tệp PDF này quá lớn nên trang web không thể hiển thị. Hãy dùng ảnh JPEG hoặc PNG của trang đó.",
   "field.pdfPages": "Trang",
   "field.imageZoom": "Tỉ lệ ảnh",
   "field.imageZoomIn": "Phóng to",

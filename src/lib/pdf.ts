@@ -11,6 +11,9 @@ export async function isPdf(source: Blob) {
 /** One page of a PDF as an image, with the number of pages the file holds. */
 export async function drawPdfPage(pdf: Blob, page: number): Promise<{ image: Blob; pages: number }> {
   const response = await fetch(`/api/pdf-page?page=${page}`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: pdf })
-  if (!response.ok) throw new Error('pdf')
+  if (!response.ok) {
+    const said = await response.json().catch(() => null) as { message?: unknown } | null
+    throw new Error(said?.message === 'large' ? 'large' : 'pdf')
+  }
   return { image: await response.blob(), pages: Number(response.headers.get('x-pdf-pages')) || 1 }
 }

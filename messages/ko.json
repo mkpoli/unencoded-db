@@ -136,6 +136,7 @@
   "field.imageRemove": "삭제",
   "field.imageWorking": "사진을 준비하는 중…",
   "field.imageBad": "이 파일을 이미지나 PDF로 읽을 수 없습니다.",
+  "field.pdfTooLarge": "PDF 파일이 너무 커서 사이트에서 표시할 수 없습니다. 해당 페이지의 JPEG 또는 PNG 이미지를 사용해 주세요.",
   "field.pdfPages": "페이지",
   "field.imageZoom": "사진 크기",
   "field.imageZoomIn": "확대",
