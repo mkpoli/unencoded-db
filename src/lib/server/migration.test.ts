@@ -618,3 +618,22 @@ test('0047 turns each context into a list of one, in the rows and in past versio
   expect(JSON.parse(rows[0])).not.toHaveProperty('context')
   expect(rows.slice(2)).toEqual(['{}', '{"script":"han"}'])
 })
+
+test('0062 aborts when a legacy upward merge exists and otherwise hardens rekey and replace guards', () => {
+  const raw = new Database(':memory:')
+  raw.exec('PRAGMA foreign_keys = ON')
+  const all = readdirSync(join(import.meta.dir, '../../../migrations')).sort()
+  for (const name of all.filter(name => name < '0053')) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec("INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at) VALUES (1, 'han', NULL, 'p', '2026', '2026'), (2, 'han', NULL, 'p', '2026', '2026')")
+  raw.exec('UPDATE entries SET merged_into = 2 WHERE id = 1')
+  for (const name of all.filter(name => name >= '0053' && name < '0062')) raw.exec(migration(name))
+  // Trim trailing whitespace because bun:sqlite `exec` clears an earlier statement's error on an empty tail.
+  const apply = () => raw.transaction(() => raw.exec(migration('0062_harden_record_code_stability.sql').trimEnd()))()
+  expect(apply).toThrow('a record can only merge into an earlier record')
+  raw.exec('UPDATE entries SET merged_into = NULL WHERE id = 1; UPDATE entries SET merged_into = 1 WHERE id = 2')
+  expect(apply).not.toThrow()
+  expect(() => raw.exec('UPDATE entries SET rowid = 9 WHERE id = 2')).toThrow('entry id cannot change')
+  expect(() => raw.exec("INSERT OR REPLACE INTO entries(id, script, created_by, created_at, updated_at) VALUES (2, 'han', 'p', '2026', '2026')")).toThrow('entries cannot be replaced')
+  raw.close()
+})
