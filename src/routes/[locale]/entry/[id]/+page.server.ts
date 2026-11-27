@@ -4,7 +4,7 @@ import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
 import { addComment, cleanComment, commentsOf, setCommentHidden } from '$lib/server/comments'
 import { isDescription } from 'ids-input'
 import { cleanIds } from '$lib/ids'
-import { earliestSighting, editEntry, getEntry, radicalCounts, readEntryFields } from '$lib/server/entries'
+import { earliestSighting, editEntry, evidenceOrder, getEntry, radicalCounts, readEntryFields } from '$lib/server/entries'
 import { readNewTag } from '$lib/tags'
 import { newClaim } from '$lib/claims'
 import { filedUnder, radicalPath } from '$lib/radicals'
@@ -27,10 +27,11 @@ export const load: PageServerLoad = async (event) => {
   const path = radicalPath(found.entry.ids, found.entry.radical)
   const held = path ? await radicalCounts(env(event).DB, path[0]) : null
   const filed = path && held ? filedUnder(path, held.counts, held.stated).map(({ path, radical }) => ({ path, radical })) : []
-  const sightings = found.sightings.filter(s => !s.hidden_at)
+  const shown = found.sightings.filter(s => !s.hidden_at)
   // The archived copies of every source the evidence cites, as a work or a go-between.
-  const cited = sightings.flatMap(sighting => [sighting.source_id, ...sighting.vias.map(via => via.id)]).filter(id => id !== null)
-  const [dates, archives] = await Promise.all([readDates(env(event).DB, sightingDates(sightings)), archivesOfSources(env(event).DB, cited)])
+  const cited = shown.flatMap(sighting => [sighting.source_id, ...sighting.vias.map(via => via.id)]).filter(id => id !== null)
+  const [dates, archives] = await Promise.all([readDates(env(event).DB, sightingDates(shown)), archivesOfSources(env(event).DB, cited)])
+  const sightings = evidenceOrder(shown, dates)
   // The record's earliest attestation, and which piece of evidence holds it.
   const earliest = earliestSighting(sightings, dates)
   // A description another page proposes to add, ?ids_add=: one, and only a whole one. It is added to the form, not saved.

@@ -55,6 +55,7 @@ function makeSighting(overrides: Partial<SightingFields> = {}): SightingFields {
     types: null,
     note: null,
     quotes: null,
+    closeness: null,
     ...overrides,
   }
 }

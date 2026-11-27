@@ -7,7 +7,7 @@ import { authorKeys, nameKey, nameLabel, sourceKeys, sourceNameKey } from '../na
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
-import { CITES_MAX, CONTEXTS, isCiteKind, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
+import { CITES_MAX, closenessOf, closenessRank, CONTEXTS, datesOriginal, datingOriginal, isCiteKind, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
 import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
@@ -44,7 +44,7 @@ export type CiteTarget = { id: number; entry_id: number; title: string | null; p
 export type ResolvedCite = Cite & { source_id: number | null; target: CiteTarget | null; status: 'witness' | 'unseen' | 'removed' }
 export type InboundCite = { position: number; kind: CiteKind; sighting_id: number; entry_id: number; title: string | null; place: string; author: string | null; report_date: string | null; original_date: string | null; thumb_key: string | null; quote: string | null; note: string | null }
 export type CiteError = 'citeNote' | 'citeSelf' | 'citeMissing' | 'citeCycle'
-export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; source_kind: string | null; vias: Via[]; cites?: Cite[]; original_date: string | null; page: string | null; contexts: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
+export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; source_kind: string | null; vias: Via[]; cites?: Cite[]; original_date: string | null; page: string | null; contexts: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null; closeness: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type ViaPicture = Omit<StoredImage, 'box'>
 export type YearKind = 'report' | 'original'
@@ -66,8 +66,8 @@ const blankCitation = (citation: Citation) => CITATION_FIELDS.every(field => fie
 export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_container', 'via_source_kind', 'via_quote'] as const
 // The form sends each cited older work as one value of each of these, aligned by position.
 export const CITE_INPUTS = ['cite_kind', 'cite_sighting', 'cite_url', 'cite_title', 'cite_author', 'cite_publisher', 'cite_report_date', 'cite_container', 'cite_source_kind', 'cite_quote', 'cite_note'] as const
-export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
-export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
+export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes', 'closeness'] as const
+export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes', 'closeness'] as const
 export const IMAGE_FIELDS = ['image_key', 'image_type', 'image_w', 'image_h', 'thumb_key', 'box'] as const
 
 export const VIA_IMAGE_FIELDS = ['image_key', 'image_type', 'image_w', 'image_h', 'thumb_key'] as const
@@ -288,6 +288,7 @@ export function readSightingFields(form: FormData, viaPictures: readonly ViaPict
     types: storeChosen(SIGHTING_TYPES, chosen('types')),
     note: text(form, 'note', 5000),
     quotes: quotes.length ? JSON.stringify(quotes) : null,
+    closeness: closenessOf(text(form, 'closeness', 20)),
   }
   if (blankCitation(fields)) fields.source_kind = null
   return fields
@@ -389,24 +390,33 @@ type Year = NonNullable<ReturnType<typeof datedYear>>
 // scripts/reindex-dates.sql ranks by the same order.
 const before = (a: Year, b: Year) => a.n < b.n || (a.n === b.n && compareDays(a.end, b.end) < 0)
 
+type Dated = Pick<SightingFields, 'report_date' | 'original_date'> & { closeness?: string | null }
 // A sighting's year: the work's own date unless the report's year is the earlier. A work is no later
-// than its report, so the nearer last day of the two bounds it.
-function sightingYear(sighting: Pick<SightingFields, 'report_date' | 'original_date'>, dates: DateBook) {
-  const report = datedYear(sighting.report_date, dates), original = datedYear(sighting.original_date, dates)
+// than its report, so the nearer last day of the two bounds it. A compilation or a memory is dated by
+// its report alone, whatever older work it names.
+function sightingYear(sighting: Dated, dates: DateBook) {
+  const report = datedYear(sighting.report_date, dates), original = datesOriginal(sighting.closeness) ? datedYear(sighting.original_date, dates) : null
   const year = original && (!report || original.n <= report.n) ? { ...original, kind: 'original' as const } : report && { ...report, kind: 'report' as const }
   return year && original && report ? { ...year, end: compareDays(original.end, report.end) < 0 ? original.end : report.end } : year
 }
 
-// The earliest attestation among visible sightings, and the sighting that holds it: the first added
-// of those that share its date.
-export function earliestSighting<T extends Pick<SightingFields, 'report_date' | 'original_date'> & { id?: number; hidden_at?: string | null }>(sightings: T[], dates: DateBook = new Map()) {
+// The earliest attestation among visible sightings, and the sighting that holds it: of those that share
+// its date, the closest to the original, then the first added.
+export function earliestSighting<T extends Dated & { id?: number; hidden_at?: string | null }>(sightings: T[], dates: DateBook = new Map()) {
   let found: (Year & { kind: YearKind; sighting: T }) | null = null
   for (const sighting of sightings) {
     if (sighting.hidden_at) continue
     const year = sightingYear(sighting, dates)
-    if (year && (!found || before(year, found))) found = { ...year, sighting }
+    if (year && (!found || before(year, found) || (!before(found, year) && closenessRank(sighting.closeness) < closenessRank(found.sighting.closeness)))) found = { ...year, sighting }
   }
   return found
+}
+
+/** A record's evidence in the order its page reads: closest to the original first, then by date with the
+ * undated last, then as added. Rows keep their ids, so claims and exports that name them by id are unchanged. */
+export function evidenceOrder<T extends Dated & { id: number }>(sightings: readonly T[], dates: DateBook) {
+  const dated = sightings.map(sighting => ({ sighting, rank: closenessRank(sighting.closeness), year: sightingYear(sighting, dates) }))
+  return dated.sort((a, b) => a.rank - b.rank || (a.year && b.year ? (before(a.year, b.year) ? -1 : before(b.year, a.year) ? 1 : 0) : a.year ? -1 : b.year ? 1 : 0) || a.sighting.id - b.sighting.id).map(item => item.sighting)
 }
 
 type SightingState = SightingFields & { media?: StoredImage[]; hidden_at?: string | null }
@@ -416,7 +426,9 @@ type SightingState = SightingFields & { media?: StoredImage[]; hidden_at?: strin
 // dates the sighting, not the post.
 function summarize(sightings: SightingState[], dates: DateBook) {
   const visible = sightings.filter(sighting => !sighting.hidden_at)
-  const cover = visible.find(sighting => sighting.media?.length)
+  // The cover is from the closest sighting with a picture, the first added of equals.
+  const closest = [...visible].sort((a, b) => closenessRank(a.closeness) - closenessRank(b.closeness))
+  const cover = closest.find(sighting => sighting.media?.length)
   const types = new Set<SightingType>()
   for (const sighting of visible) for (const type of parseSightingTypes(sighting.types)) types.add(type)
   const year = earliestSighting(visible, dates)
@@ -429,7 +441,7 @@ function summarize(sightings: SightingState[], dates: DateBook) {
   return {
     visible,
     cover_key: cover?.media?.[0].thumb_key ?? null,
-    cover_place: (cover ?? visible[0])?.place ?? null,
+    cover_place: (cover ?? closest[0])?.place ?? null,
     types: chosen.length ? JSON.stringify(chosen) : null,
     first_year: year?.text ?? null,
     first_year_kind: year?.kind ?? null,
@@ -1370,7 +1382,7 @@ const MEDIA_OF_ENTRY = `SELECT x.sighting_id, ${IMAGE_FIELDS.map(field => `x.${f
 
 const CITE_ROW_COLUMNS = `sc.sighting_id, sc.position, sc.kind, sc.source_id, sc.cited_id, sc.quote, sc.note,
   ${CITATION_FIELDS.map(field => `ns.${field}`).join(', ')},
-  cs.entry_id AS t_entry_id, cs.place AS t_place, cs.original_date AS t_original_date,
+  cs.entry_id AS t_entry_id, cs.place AS t_place, ${datingOriginal('cs')} AS t_original_date,
   cs.hidden_at AS t_hidden_at, cs.source_id AS t_source_id,
   ce.hidden_at AS te_hidden_at, ce.merged_into AS te_merged_into,
   ${CITATION_FIELDS.map(field => `csrc.${field} AS t_${field}`).join(', ')},
@@ -1378,7 +1390,7 @@ const CITE_ROW_COLUMNS = `sc.sighting_id, sc.position, sc.kind, sc.source_id, sc
 const CITE_JOINS = `LEFT JOIN sources ns ON ns.id = sc.source_id LEFT JOIN sightings cs ON cs.id = sc.cited_id LEFT JOIN entries ce ON ce.id = cs.entry_id LEFT JOIN sources csrc ON csrc.id = cs.source_id`
 const CITES_OF_ENTRY = `SELECT ${CITE_ROW_COLUMNS} FROM sightings s JOIN sighting_cites sc ON sc.sighting_id = s.id ${CITE_JOINS} WHERE s.entry_id = ?1 AND s.id <= COALESCE((SELECT id FROM sightings WHERE entry_id = ?1 ORDER BY id LIMIT 1 OFFSET ${SIGHTINGS_MAX - 1}), ${Number.MAX_SAFE_INTEGER}) ORDER BY s.id`
 const CITED_BY_MAX = 60
-const CITED_BY_COLUMNS = `sc.cited_id AS target_id, sc.sighting_id, sc.position, sc.kind, sc.quote, sc.note, s.entry_id, s.place, s.original_date, c.title, c.author, c.report_date, (SELECT x.thumb_key FROM sighting_media x WHERE x.sighting_id = s.id ORDER BY x.position LIMIT 1) AS thumb_key`
+const CITED_BY_COLUMNS = `sc.cited_id AS target_id, sc.sighting_id, sc.position, sc.kind, sc.quote, sc.note, s.entry_id, s.place, ${datingOriginal('s')} AS original_date, c.title, c.author, c.report_date, (SELECT x.thumb_key FROM sighting_media x WHERE x.sighting_id = s.id ORDER BY x.position LIMIT 1) AS thumb_key`
 const CITED_BY_OF_ENTRY = `SELECT ${CITED_BY_COLUMNS} FROM sightings t JOIN sighting_cites sc INDEXED BY sighting_cites_by_cited ON sc.cited_id = t.id JOIN sightings s ON s.id = sc.sighting_id JOIN entries e ON e.id = s.entry_id LEFT JOIN sources c ON c.id = s.source_id WHERE t.entry_id = ?1 AND t.hidden_at IS NULL AND s.hidden_at IS NULL AND ${LIVE} AND t.id <= COALESCE((SELECT id FROM sightings WHERE entry_id = ?1 ORDER BY id LIMIT 1 OFFSET ${SIGHTINGS_MAX - 1}), ${Number.MAX_SAFE_INTEGER}) ORDER BY t.id LIMIT ${CITED_BY_MAX}`
 
 type CiteQueryRow = Citation & {
@@ -1474,7 +1486,7 @@ export function preserveHiddenCites(submitted: readonly Cite[], raw: readonly Ci
 }
 
 export async function sightingSiblings(db: D1Database, entryId: number, excludeId: number) {
-  const { results } = await db.prepare(`SELECT s.id, c.title, s.place, c.report_date, s.original_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.entry_id = ? AND s.hidden_at IS NULL AND s.id != ? ORDER BY s.id LIMIT ${SIGHTINGS_MAX}`)
+  const { results } = await db.prepare(`SELECT s.id, c.title, s.place, c.report_date, ${datingOriginal('s')} AS original_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.entry_id = ? AND s.hidden_at IS NULL AND s.id != ? ORDER BY s.id LIMIT ${SIGHTINGS_MAX}`)
     .bind(entryId, excludeId).all<{ id: number; title: string | null; place: string; report_date: string | null; original_date: string | null }>()
   return results
 }
@@ -1884,7 +1896,7 @@ export async function searchFound(db: D1Database, listing: Listing, limit: numbe
 // page starts at its own first row. The decades and their counts come from the counts kept with each write.
 export const CHRONICLE_PAGE = 100
 export const decadeCountsStatement = (db: D1Database) => db.prepare("SELECT tag, n FROM tag_counts WHERE tag >= 'y:' AND tag < 'y;' AND n > 0")
-const CHRONICLE_COLUMNS = `${TILE_COLUMNS}, t.year AS year, s.id AS s_id, s.place AS s_place, s.original_date AS s_original, c.title AS c_title, c.author AS c_author, c.report_date AS c_report`
+const CHRONICLE_COLUMNS = `${TILE_COLUMNS}, t.year AS year, s.id AS s_id, s.place AS s_place, ${datingOriginal('s')} AS s_original, c.title AS c_title, c.author AS c_author, c.report_date AS c_report`
 const CHRONICLE_FROM = `entry_tags t CROSS JOIN entries e ON e.id = t.entry_id LEFT JOIN sightings s ON s.id = e.first_sighting LEFT JOIN sources c ON c.id = s.source_id`
 const CHRONICLE_DATED = `t.tag = 'all' AND t.year IS NOT NULL AND ${LISTED}`
 // A page is read forwards from a place, inclusive, or backwards from just before one; both read one row
@@ -2032,7 +2044,7 @@ export async function sourcePage(db: D1Database, id: number) {
   const direct = { from: 'sightings s INDEXED BY sightings_by_source CROSS JOIN entries e ON e.id = s.entry_id', live: 's.source_id = ?', order: 's.id' }
   const via = { from: 'sighting_vias v INDEXED BY sighting_vias_by_source CROSS JOIN sightings s ON s.id = v.sighting_id CROSS JOIN entries e ON e.id = s.entry_id', live: 'v.source_id = ? AND s.source_id IS NOT v.source_id', order: 'v.sighting_id' }
   const live = (way: typeof direct) => `${way.live} AND s.hidden_at IS NULL AND ${LIVE}`
-  const namedQuery = `SELECT ${TILE_COLUMNS}, s.id AS s_id, sc.position AS sc_position, s.place AS s_place, s.original_date AS s_original_date, cs_src.title AS s_title, cs_src.author AS s_author, cs_src.report_date AS s_report_date, sc.kind AS sc_kind, sc.quote AS sc_quote, sc.note AS sc_note
+  const namedQuery = `SELECT ${TILE_COLUMNS}, s.id AS s_id, sc.position AS sc_position, s.place AS s_place, ${datingOriginal('s')} AS s_original_date, cs_src.title AS s_title, cs_src.author AS s_author, cs_src.report_date AS s_report_date, sc.kind AS sc_kind, sc.quote AS sc_quote, sc.note AS sc_note
     FROM sighting_cites sc INDEXED BY sighting_cites_by_source
     CROSS JOIN sightings s ON s.id = sc.sighting_id
     CROSS JOIN entries e ON e.id = s.entry_id

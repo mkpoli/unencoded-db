@@ -8,7 +8,7 @@ import { openTestDb } from '$lib/server/testdb'
 import { load } from './+page.server'
 
 const fields = (claims: Claim[], script = 'han'): EntryFields => ({ script, script_other: null, description: null, radical: null, strokes: null, claims })
-const seen = { place: 'A shop', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, note: null, quotes: null } as SightingFields
+const seen = { place: 'A shop', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, note: null, quotes: null } as SightingFields
 
 async function fixture() {
   const { db, raw } = openTestDb()
