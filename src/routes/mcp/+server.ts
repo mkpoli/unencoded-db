@@ -7,22 +7,62 @@
 // carries. The first write of a connection makes that anonymous person. An agent that signed in
 // (`$lib/server/agents`) sends a bearer token in its place, and writes as the person who allowed it.
 import { json } from '@sveltejs/kit'
+import { LOCALE_COOKIE, negotiate } from '$lib/i18n'
 import { resourceMetadata } from '$lib/server/agents'
 import { tagList } from '$lib/server/tags'
 import { env } from '$lib/server/guard'
 import { AGENT_SESSION, newSessionToken } from '$lib/server/people'
+import { MCP_PROTOCOL_VERSIONS, MCP_SERVER } from './_meta.server'
 import { callTool, INSTRUCTIONS, toolList } from './_tools.server'
 import type { RequestHandler } from './$types'
 
 // Newest first. A client that asks for another revision is answered with the newest.
-const VERSIONS = ['2025-11-25', '2025-06-18']
-const SERVER = { name: 'rare-character-compendium', title: '珍字集覽 Rare Character Compendium', version: '1.0.0' }
+const VERSIONS: readonly string[] = MCP_PROTOCOL_VERSIONS
+const SERVER = MCP_SERVER
 
 const PARSE_ERROR = -32700, INVALID_REQUEST = -32600, METHOD_NOT_FOUND = -32601, INVALID_PARAMS = -32602, INTERNAL_ERROR = -32603
 type Id = string | number | null
 const failure = (id: Id, code: number, message: string, status = 200) => json({ jsonrpc: '2.0', id, error: { code, message } }, { status })
 const reply = (id: Id, result: unknown, headers?: HeadersInit) => json({ jsonrpc: '2.0', id, result }, { headers })
 const plain = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+
+// True when a browser asks for HTML and not an SSE stream.
+const QVALUE = /^q=(0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/i
+function wantsHtml(accept: string | null) {
+  if (!accept) return false
+  let html = false
+  for (const part of accept.split(',')) {
+    const [rawType, ...params] = part.split(';')
+    const type = rawType.trim().toLowerCase()
+    if (type !== 'text/html' && type !== 'text/event-stream') continue
+    const qParam = params.map(param => param.trim()).find(param => /^q=/i.test(param))
+    let q = 1
+    if (qParam) {
+      const match = QVALUE.exec(qParam)
+      if (!match) continue
+      q = Number(match[1])
+    }
+    if (q <= 0) continue
+    if (type === 'text/event-stream') return false
+    html = true
+  }
+  return html
+}
+
+export const GET: RequestHandler = ({ request, cookies }) => {
+  if (wantsHtml(request.headers.get('accept'))) {
+    const locale = negotiate(cookies.get(LOCALE_COOKIE), request.headers.get('accept-language'))
+    return new Response(null, {
+      status: 302,
+      headers: {
+        location: `/${locale}/mcp`,
+        vary: 'Accept, Accept-Language, Cookie',
+        'cache-control': 'private, no-store',
+      },
+    })
+  }
+  return new Response(null, { status: 405, headers: { allow: 'POST', vary: 'Accept' } })
+}
 
 export const POST: RequestHandler = async (event) => {
   const { headers } = event.request

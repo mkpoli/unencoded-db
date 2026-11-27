@@ -1,6 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit'
 import { BATCH_ROWS_MAX } from '$lib/limits'
-import { citesEvidence, createEntry, readEntryFields, readSightingFields } from '$lib/server/entries'
+import { citesEvidence, createEntry, readEntryFields, readSightingFields, validateCiteTargets } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { archiveCited } from '$lib/server/archive'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
@@ -50,6 +50,8 @@ export const actions: Actions = {
     if (!(await chargeWrites(event, 'ADDS', rows.length - 1))) return reject(429, 'slow', values)
 
     const { DB, MEDIA } = env(event)
+    const badCite = await validateCiteTargets(DB, cited.cites)
+    if (badCite) return reject(400, badCite, values)
     const pictures = []
     for (const row of rows) {
       const own = new FormData()

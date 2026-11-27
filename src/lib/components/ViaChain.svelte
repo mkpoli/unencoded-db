@@ -12,7 +12,7 @@
 
   type Via = StoredVia & { id?: number }
   // `archives` are the copies web archives keep of each linked source, by source.
-  let { vias, label = true, dates, archives, pictures = false }: { vias: readonly Via[]; label?: boolean; dates?: Map<string, DateReading | null>; archives?: ReadonlyMap<number, readonly string[]>; pictures?: boolean } = $props()
+  let { vias, label = true, dates, archives, pictures = false, witnesses }: { vias: readonly Via[]; label?: boolean; dates?: Map<string, DateReading | null>; archives?: ReadonlyMap<number, readonly string[]>; pictures?: boolean; witnesses?: ReadonlyMap<number, number> } = $props()
   const meta = (via: Via, fields: readonly NameField[]) => sourceByline(via, fields, t, ['author', 'container', 'source_kind', 'publisher'])
   // As large as fits, so the frame is never wider than the picture; a long screenshot is shown by its top.
   // Many pictures are shown smaller, so a long message does not push the rest of the record away.
@@ -31,6 +31,7 @@
       {#each vias as via, position (position)}
         {@const name = sourceName(via, t)}
         {@const byline = meta(via, name.fields)}
+        {@const witnessId = via.id ? witnesses?.get(via.id) : undefined}
         <li class="item">
           {#if position}<span class="arrow" aria-hidden="true">←</span>{/if}
           <div class="node">
@@ -43,6 +44,7 @@
               {:else}
                 <span>{name.text}</span>
               {/if}
+              {#if witnessId}{' '}<a class="witness-pill" href="#sighting-{witnessId}">{t('cite.foundThroughSighting', { id: witnessId })}</a>{/if}
             </span>
             {#if byline || via.report_date}
               <span class="meta">
@@ -79,4 +81,6 @@
   .pictures a:hover { border-color: var(--line-strong) }
   .pictures img { display: block; max-inline-size: 100%; block-size: auto; object-fit: cover; object-position: top }
   .quote { max-width: 75ch; margin: 4px 0 0; padding: 2px 0 2px 10px; border-left: 2px solid var(--line-strong); white-space: pre-wrap; overflow-wrap: anywhere }
+  .witness-pill { display: inline-flex; align-items: center; padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-sunken); font-size: 12.5px }
+  .witness-pill:hover, .witness-pill:focus-visible { border-color: var(--accent); color: var(--accent) }
 </style>
