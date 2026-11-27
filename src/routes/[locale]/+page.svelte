@@ -12,6 +12,7 @@
   import { STATUSES, NEEDS, SCRIPTS } from '$lib/scripts'
   import { describedTable } from '$lib/encoded'
   import { cleanIds } from '$lib/ids'
+  import { idsMessages } from '$lib/ids-messages'
   import { equivalentSpellings, isParts, partSpellings } from '$lib/ids-variants'
   import { isDescription } from 'ids-input'
   import ChatLinks from '$lib/components/ChatLinks.svelte'
@@ -305,6 +306,23 @@
     query = text
     void applyFilters({ noScroll: true, keepFocus: true })
   }
+  // The tools a description is typed with open under the box. They are fetched when first opened, and what
+  // is taken from them goes where the caret is in the box.
+  let tools = $state.raw<{ Tools: typeof import('$lib/components/SearchTools.svelte').default; messages: Record<string, string> | undefined } | null>(null)
+  let tooling = $state(false)
+  async function toggleTools() {
+    tooling = !tooling
+    if (!tooling || tools) return
+    const [found, messages] = await Promise.all([import('$lib/components/SearchTools.svelte'), idsMessages(locale())])
+    tools = { Tools: found.default, messages }
+  }
+  async function put(text: string) {
+    const input = queryInput
+    const start = input?.selectionStart ?? query.length, end = input?.selectionEnd ?? start
+    query = query.slice(0, start) + text + query.slice(end)
+    await tick()
+    input?.setSelectionRange(start + text.length, start + text.length)
+  }
   function clearQuery() {
     filterTicket++
     resolvingIds = false
@@ -398,6 +416,7 @@
   <form class="filters" action={href()} method="GET" onsubmit={search}>
     <div class="search field">
       <label for="q">{t('browse.searchLabel')}</label>
+      <div class="search-row">
       <div class="search-box">
         <input
           class="input"
@@ -417,6 +436,8 @@
           aria-describedby={searchInvalid ? 'search-error search-hint' : 'search-hint'}
         />
         {#if query}<button class="clear-input" type="button" aria-label={t('sources.clear')} onclick={clearQuery}><span aria-hidden="true">×</span></button>{/if}
+      </div>
+        <button class="button tools-toggle" type="button" aria-expanded={tooling} aria-controls="search-tools" aria-label={t('field.idsBuild')} title={t('field.idsBuild')} disabled={!mounted} onclick={toggleTools}>IDS<span class="chevron" aria-hidden="true">⌄</span></button>
       </div>
     </div>
     <div class="field"><label for="script">{t('field.script')}</label><select class="input" class:active={Boolean(script)} id="script" name="script" bind:value={script} onchange={() => applyFilters({ noScroll: true, keepFocus: true })}><option value="">{t('browse.all')}</option>{#each SCRIPTS as item (item.id)}{#if count(`s:${item.id}`) || data.script === item.id}<option value={item.id}>{t(`script.${item.id}`)} ({count(`s:${item.id}`)})</option>{/if}{/each}</select></div>
@@ -449,6 +470,9 @@
       {#if hasFilters}<a class="text-link clear-filters" href={clearedFilters}>{t('sources.clear')}</a>{/if}
     </div>
   </form>
+  <div id="search-tools" hidden={!tooling}>
+    {#if tooling}{#if tools}<tools.Tools messages={tools.messages} locale={locale()} onpick={put} />{:else}<p class="muted">{t('field.idsLoading')}</p>{/if}{/if}
+  </div>
   {#if mounted && query.trim() !== data.query && !filtering}<SearchSuggestions {query} onsearch={searchFor} />{/if}
   </search>
   <div class="filter-foot">
@@ -535,7 +559,11 @@
   .filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:16px; border:1px solid var(--line); border-radius:9px; background:var(--surface) }
   .filters .field { flex:1 1 140px } .filters .search { flex:2 1 220px } .filters .radical { flex:0 1 120px } .filters .decade { flex:1 1 140px }
   .search:has([aria-invalid="true"]) > label { color:var(--wrong) }
-  .search-box { position:relative; display:flex; align-items:center }
+  .search-row { display:flex; align-items:center; gap:6px }
+  .search-box { position:relative; display:flex; align-items:center; flex:1 1 auto; min-inline-size:0 }
+  .tools-toggle { flex:none; min-block-size:max(42px,var(--target-size)); padding-inline:12px; gap:4px }
+  .tools-toggle[aria-expanded="true"] { border-color:var(--accent); color:var(--accent) }
+  .tools-toggle[aria-expanded="true"] .chevron { rotate:180deg }
   .search-box .input.has-clear { padding-inline-end:36px }
   .search-box input[type="search"]::-webkit-search-cancel-button { display:none }
   .clear-input { position:absolute; inset-inline-end:4px; display:inline-flex; align-items:center; justify-content:center; inline-size:32px; block-size:32px; border:0; border-radius:6px; background:none; color:var(--muted); font-size:18px; line-height:1; cursor:pointer }

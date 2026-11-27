@@ -69,7 +69,7 @@ declare module 'ids-input/svelte' {
   export const IdsOperators: Component<{ editor: IdsEditor; keyHints?: boolean }>
   export const IdsTree: Component<{ editor: IdsEditor; variations?: boolean; keyHints?: boolean }>
   export const IdsPartTools: Component<{ editor: IdsEditor; variations?: boolean; keyHints?: boolean; slot?: HTMLInputElement | null }, {}, 'slot'>
-  export const IdsPicker: Component<{ editor: IdsEditor; pickers?: ('find' | 'parts' | 'from' | 'templates')[]; recentKey?: string | null }>
+  export const IdsPicker: Component<{ editor: IdsEditor; pickers?: ('find' | 'parts' | 'from' | 'templates')[]; recentKey?: string | null; title?: boolean }>
   export function createUnifiable(editor: () => IdsEditor): { readonly entries: readonly { id: string }[] }
   export function grassForm(editor: IdsEditor): string | null | undefined
   export const IdsAlternatives: Component<{ editor: IdsEditor; variations?: boolean; showFamilies?: boolean; onchoose?: () => void }>
