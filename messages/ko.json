@@ -826,5 +826,15 @@
   "mcp.tool.restore_revision": "이전 판을 복원하거나 빼 둔 증거를 되돌립니다.",
   "mcp.authTitle": "로그인 및 쓰기",
   "mcp.authBody": "로그인하지 않아도 사용할 수 있으며 연결마다 새 익명 이름이 붙습니다. OAuth 2.1을 지원하는 클라이언트에서 Glyph Atlas로 인증하면 내 계정 명의로 기록됩니다.",
-  "mcp.writesBody": "쓰기 요청은 웹 양식과 같은 검사를 거치며, 증거 이미지는 공개 URL에서 가져옵니다."
+  "mcp.writesBody": "쓰기 요청은 웹 양식과 같은 검사를 거치며, 증거 이미지는 공개 URL에서 가져옵니다.",
+  "stemma.title": "출처 계통",
+  "stemma.full": "전체 계통도",
+  "stemma.pageTitle": "출처 계통도 · {id}",
+  "stemma.region": "용례 출처 계통도",
+  "stemma.legend": "계통도 범례",
+  "stemma.nodes": "용례 {count}건",
+  "stemma.edges": "연결 {count}건",
+  "stemma.unlinked": "미연결 {count}건",
+  "stemma.truncated": "최대 4단계(용례 60건)까지 표시합니다. 다른 항목의 용례를 열면 더 살펴볼 수 있습니다.",
+  "stemma.empty": "이 글자에는 아직 기록된 출처 연결이 없습니다."
 }

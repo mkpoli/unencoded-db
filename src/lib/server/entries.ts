@@ -27,6 +27,8 @@ import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
 import { formsOf } from '$lib/forms'
 import { compareDays, dateText, decadeOf, decadeStart, isDecade } from '$lib/dates'
+import { parseYear } from '$lib/cites'
+import { removedNodeId, unseenNodeId, witnessNodeId, type StemmaEdge, type StemmaGraph, type StemmaNode } from '$lib/stemma'
 import { datedYear, prepareDates, readDates, sightingDates, type DateBook } from './date-readings'
 import { hashHex } from './image'
 import { ORDER, PAGE, PAGE_SIZES, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
@@ -2439,4 +2441,177 @@ export const customScriptsStatement = (db: D1Database) => db.prepare(`WITH RECUR
 /** The names visible records give scripts outside the list. */
 export async function customScripts(db: D1Database) {
   return (await customScriptsStatement(db).all<{ name: string }>()).results.map(row => row.name)
+}
+
+export const STEMMA_HOPS_MAX = 4
+export const STEMMA_NODES_MAX = 60
+
+/**
+ * Multi-hop provenance stemma centered on `entryId`, walking up to 4 hops and 60 nodes across records
+ * with one batched pair of indexed queries per hop. Honors the same 4-state visibility rules as `/entry/[id]`.
+ */
+export async function entryStemma(db: D1Database, entryId: number): Promise<{ entry: Entry; graph: StemmaGraph; dates: DateBook } | null> {
+  const entry = await getEntryRow(db, entryId)
+  if (!entry || entry.hidden_at) return null
+  const own = await sightingRows(db, entryId)
+  const visibleOwn = own.filter(sighting => !sighting.hidden_at)
+  const nodes = new Map<string, StemmaNode>()
+  const edges: StemmaEdge[] = []
+  const edgeKeys = new Set<string>()
+  const expanded = new Set<number>()
+  let frontier: number[] = []
+  let truncated = false
+
+  const putNode = (node: StemmaNode): boolean => {
+    const existing = nodes.get(node.id)
+    if (existing) {
+      if (!existing.thumbKey && node.thumbKey) existing.thumbKey = node.thumbKey
+      if (!existing.title && node.title) existing.title = node.title
+      if (!existing.date && node.date) existing.date = node.date
+      return true
+    }
+    if (nodes.size >= STEMMA_NODES_MAX) {
+      truncated = true
+      return false
+    }
+    nodes.set(node.id, node)
+    return true
+  }
+
+  const addEdge = (edge: StemmaEdge) => {
+    if (edge.from === edge.to || !nodes.has(edge.from) || !nodes.has(edge.to)) return
+    const key = `${edge.from}\u0000${edge.to}\u0000${edge.kind}`
+    if (edgeKeys.has(key)) return
+    edgeKeys.add(key)
+    edges.push(edge)
+  }
+
+  // Seed with the focal record's visible sightings that participate in at least one cite edge.
+  const linkedOwn = new Set<number>()
+  for (const sighting of visibleOwn) {
+    if (!sighting.cites.length && !sighting.cited_by.length) continue
+    const selfId = witnessNodeId(sighting.id)
+    linkedOwn.add(sighting.id)
+    if (putNode({
+      id: selfId,
+      kind: 'witness',
+      sightingId: sighting.id,
+      entryId: sighting.entry_id,
+      sourceId: sighting.source_id,
+      title: sighting.title,
+      place: sighting.place,
+      date: sighting.original_date ?? sighting.report_date,
+      year: null,
+      thumbKey: sighting.media[0]?.thumb_key ?? null,
+    })) {
+      frontier.push(sighting.id)
+    }
+  }
+
+  for (let hop = 0; hop < STEMMA_HOPS_MAX && frontier.length; hop++) {
+    const batchIds = frontier.filter(id => !expanded.has(id))
+    if (!batchIds.length) break
+    for (const id of batchIds) expanded.add(id)
+    const placeholders = batchIds.map(() => '?').join(', ')
+    const [outRes, inRes] = await db.batch<unknown>([
+      db.prepare(`SELECT ${CITE_ROW_COLUMNS} FROM sighting_cites sc ${CITE_JOINS} WHERE sc.sighting_id IN (${placeholders}) ORDER BY sc.sighting_id, sc.position`).bind(...batchIds),
+      db.prepare(`SELECT ${CITED_BY_COLUMNS} FROM sighting_cites sc INDEXED BY sighting_cites_by_cited JOIN sightings s ON s.id = sc.sighting_id JOIN entries e ON e.id = s.entry_id LEFT JOIN sources c ON c.id = s.source_id WHERE sc.cited_id IN (${placeholders}) AND s.hidden_at IS NULL AND ${LIVE} LIMIT ${STEMMA_NODES_MAX * 2}`).bind(...batchIds),
+    ])
+    const outRows = await fillRemovedBy(db, outRes.results as CiteQueryRow[])
+    const inRows = inRes.results as CitedByRow[]
+    const nextFrontier = new Set<number>()
+
+    for (const row of outRows) {
+      const resolved = resolveCiteRow(row)
+      if (!resolved) continue
+      const toId = witnessNodeId(row.sighting_id)
+      if (resolved.status === 'witness' && resolved.target) {
+        const fromId = witnessNodeId(resolved.target.id)
+        if (resolved.target.entry_id === entryId) linkedOwn.add(resolved.target.id)
+        if (putNode({
+          id: fromId,
+          kind: 'witness',
+          sightingId: resolved.target.id,
+          entryId: resolved.target.entry_id,
+          sourceId: resolved.source_id,
+          title: resolved.target.title || resolved.title,
+          place: resolved.target.place,
+          date: resolved.target.original_date ?? resolved.target.report_date,
+          year: null,
+          thumbKey: resolved.target.thumb_key,
+        })) {
+          addEdge({ from: fromId, to: toId, kind: resolved.kind, quote: resolved.quote, note: resolved.note })
+          if (!expanded.has(resolved.target.id)) nextFrontier.add(resolved.target.id)
+        }
+      } else if (resolved.status === 'unseen') {
+        const fallback = `${resolved.title ?? ''}|${resolved.author ?? ''}|${resolved.report_date ?? ''}|${resolved.url ?? ''}`
+        const fromId = unseenNodeId(resolved.source_id, fallback)
+        if (putNode({
+          id: fromId,
+          kind: 'unseen',
+          sightingId: null,
+          entryId: null,
+          sourceId: resolved.source_id,
+          title: resolved.title || resolved.author || resolved.url,
+          place: '',
+          date: resolved.report_date,
+          year: null,
+          thumbKey: null,
+        })) {
+          addEdge({ from: fromId, to: toId, kind: resolved.kind, quote: resolved.quote, note: resolved.note })
+        }
+      } else if (resolved.status === 'removed' && resolved.target) {
+        const fromId = removedNodeId(resolved.target.id)
+        if (putNode({
+          id: fromId,
+          kind: 'removed',
+          sightingId: resolved.target.id,
+          entryId: resolved.target.entry_id,
+          sourceId: null,
+          title: resolved.title || resolved.target.title,
+          place: resolved.target.place,
+          date: resolved.target.original_date ?? resolved.target.report_date,
+          year: null,
+          thumbKey: null,
+        })) {
+          addEdge({ from: fromId, to: toId, kind: resolved.kind, quote: resolved.quote, note: resolved.note })
+        }
+      }
+    }
+
+    for (const row of inRows) {
+      const fromId = witnessNodeId(row.target_id)
+      const toId = witnessNodeId(row.sighting_id)
+      if (row.entry_id === entryId) linkedOwn.add(row.sighting_id)
+      if (putNode({
+        id: toId,
+        kind: 'witness',
+        sightingId: row.sighting_id,
+        entryId: row.entry_id,
+        sourceId: null,
+        title: row.title,
+        place: row.place,
+        date: row.original_date ?? row.report_date,
+        year: null,
+        thumbKey: row.thumb_key,
+      })) {
+        addEdge({ from: fromId, to: toId, kind: row.kind, quote: row.quote, note: row.note })
+        if (!expanded.has(row.sighting_id)) nextFrontier.add(row.sighting_id)
+      }
+    }
+
+    if (hop === STEMMA_HOPS_MAX - 1 && nextFrontier.size > 0) truncated = true
+    frontier = [...nextFrontier]
+  }
+
+  const allDates = [...nodes.values()].map(node => node.date).filter((value): value is string => Boolean(value))
+  const dates = await readDates(db, allDates)
+  const resolvedNodes = [...nodes.values()].map(node => ({ ...node, year: parseYear(node.date, dates) }))
+  const unlinkedCount = Math.max(0, visibleOwn.length - linkedOwn.size)
+
+  return {
+    entry,
+    dates,
+    graph: { entryId, nodes: resolvedNodes, edges, unlinkedCount, truncated },
+  }
 }

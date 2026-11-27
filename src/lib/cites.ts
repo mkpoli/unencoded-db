@@ -6,11 +6,13 @@ export type DateWarning =
 
 type DateLookup = ReadonlyMap<string, DateReading | null>
 
-function yearOf(text: string | null | undefined, book?: DateLookup): number | null {
+export function parseYear(text: string | null | undefined, book?: DateLookup): number | null {
   if (!text) return null
   const reading = book?.has(text) ? book.get(text) : westernDate(text)
   return reading ? yearOfDay(reading.start) : null
 }
+
+const yearOf = parseYear
 
 /**
  * Checks whether any discovery relay (`via`) predates the sighting's work or any cited older work
