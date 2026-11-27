@@ -223,7 +223,7 @@ test('a token follows its person into the account they sign in to, and stops at 
 test('a token bound to an agent row records writes under the agent while honoring the commander', async () => {
   const { db, raw, call } = fixture()
   raw.exec("INSERT INTO people(id, name, atlas_sub, role, created_at) VALUES('cmd', 'Commander', 'sub', 'moderator', '2026-01-01T00:00:00.000Z')")
-  raw.exec("INSERT INTO people(id, name, created_at, merged_into, agent) VALUES('ag1', 'Antigravity Gemini 4 Neon', '2026-01-01T00:00:00.000Z', 'cmd', 1)")
+  raw.exec("INSERT INTO people(id, name, created_at, merged_into, agent, agent_model) VALUES('ag1', 'Antigravity', '2026-01-01T00:00:00.000Z', 'cmd', 1, 'Gemini 4 Neon')")
   raw.exec("INSERT INTO agent_clients(id, name, redirect_uris, created_at) VALUES('c1', 'Antigravity', '[]', '2026-01-01T00:00:00.000Z')")
   const access = 'b'.repeat(64)
   raw.run("INSERT INTO agent_tokens(token_hash, client, person, created_at) VALUES(?, 'c1', 'ag1', ?)", [await hashHex(access), new Date().toISOString()])

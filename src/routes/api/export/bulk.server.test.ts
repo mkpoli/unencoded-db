@@ -151,23 +151,23 @@ test('the image list walks the media primary key without a scan or a sort', asyn
   expect(plans.flat().join('\n')).not.toMatch(/USE TEMP B-TREE FOR ORDER BY|SCAN m(?:\s|$)/)
 })
 
-test('exports preserve agent attribution alongside the commander name', async () => {
+test('exports preserve separated agent and model attribution alongside the commander name', async () => {
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id, name, atlas_sub, created_at) VALUES ('cmd', 'Commander', 'sub', '2026');
-    INSERT INTO people(id, name, created_at, merged_into, agent) VALUES ('ag1', 'Antigravity Gemini 4 Neon', '2026', 'cmd', 1);
+    INSERT INTO people(id, name, created_at, merged_into, agent, agent_model) VALUES ('ag1', 'Antigravity', '2026', 'cmd', 1, 'Gemini 4 Neon');
     INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES (1, 'han', '⿰亻木', 'ag1', '2026', '2026'), (2, 'han', '⿱木木', 'cmd', '2026', '2026');
     INSERT INTO claims(entry_id, position, key, kind, value) VALUES (1, 0, 'ids00001', 'ids', '⿰亻木'), (2, 0, 'ids00002', 'ids', '⿱木木');
     INSERT INTO sightings(entry_id, first_entry, place, created_by, created_at, updated_at) VALUES (1, 1, 'Book', 'ag1', '2026', '2026'), (2, 2, 'Note', 'cmd', '2026', '2026');`)
   const body = await (await GET(event(db))).json() as any
-  expect(body.entries[0]).toMatchObject({ created_by_name: 'Commander', created_by_agent: 'Antigravity Gemini 4 Neon' })
-  expect(body.entries[0].evidence[0]).toMatchObject({ by_id: 'cmd', by_name: 'Commander', by_agent: 'Antigravity Gemini 4 Neon' })
-  expect(body.entries[1]).toMatchObject({ created_by_name: 'Commander', created_by_agent: null })
-  expect(body.entries[1].evidence[0]).toMatchObject({ by_id: 'cmd', by_name: 'Commander', by_agent: null })
+  expect(body.entries[0]).toMatchObject({ created_by_name: 'Commander', created_by_agent: 'Antigravity', created_by_model: 'Gemini 4 Neon' })
+  expect(body.entries[0].evidence[0]).toMatchObject({ by_id: 'cmd', by_name: 'Commander', by_agent: 'Antigravity', by_model: 'Gemini 4 Neon' })
+  expect(body.entries[1]).toMatchObject({ created_by_name: 'Commander', created_by_agent: null, created_by_model: null })
+  expect(body.entries[1].evidence[0]).toMatchObject({ by_id: 'cmd', by_name: 'Commander', by_agent: null, by_model: null })
   const csv = await (await GET(event(db, '/api/export?format=csv'))).text()
   const [head, first, second] = csv.split('\r\n').filter(Boolean)
-  expect(head).toContain('"created_by_agent"')
-  expect(first).toContain('"Commander","Antigravity Gemini 4 Neon"')
-  expect(second).toContain('"Commander",""')
+  expect(head).toContain('"created_by_agent","created_by_model"')
+  expect(first).toContain('"Commander","Antigravity","Gemini 4 Neon"')
+  expect(second).toContain('"Commander","",""')
 })
 
 test('format=index serves a compact cached catalogue without evidence and tolerates mid-walk writes', async () => {
