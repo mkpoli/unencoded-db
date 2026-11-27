@@ -5,10 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <script>
-      // A deploy removes the previous build's script files. A page that asks for one reloads once to pick up the current build.
+      // A deploy removes the previous build's script files. A page that asks for one while it starts up reloads once to pick up
+      // the current build. Once the root layout has mounted, SvelteKit handles a missing file on navigation itself.
       {
         const stale = /dynamically imported module|Importing a module script failed/i
         const reload = () => {
+          if ('started' in document.documentElement.dataset) return false
           try {
             if (Date.now() - Number(sessionStorage.getItem('stale-build-reload')) < 30_000) return false
             sessionStorage.setItem('stale-build-reload', String(Date.now()))
