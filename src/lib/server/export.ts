@@ -4,7 +4,7 @@ import { quotations } from '$lib/quotations'
 import { CLAIM_KINDS, claimsOf, primaryLayoutOf, scopesOf, type Claim } from '$lib/claims'
 import { recordCode } from '$lib/code'
 import { parseContexts, parseSightingTypes } from '$lib/scripts'
-import { exportPage, parseMarks, SIGHTING_FIELDS, type ExportEntry, type Sighting } from './entries'
+import { exportIndexPage, exportPage, parseMarks, SIGHTING_FIELDS, type ExportEntry, type Sighting } from './entries'
 
 export const DATASET_VERSION = 2
 export const DATASET_NAME = 'Rare Character Compendium'
@@ -107,6 +107,55 @@ export async function* jsonChunks(db: D1Database, metadata: unknown, revision: n
   }
   if (open) yield ']}'
   await assertDatasetUnchanged(db, revision)
+  yield ']}\n'
+}
+
+/** Compact public index of every live record and its claims, streamed one batch at a time without
+ *  evidence rows so external browsers can load the full catalogue quickly and without aborting on
+ *  concurrent writes. */
+export async function* indexChunks(db: D1Database, origin: string, generatedAt: string, size = EXPORT_BATCH_MAX): AsyncGenerator<string> {
+  const metadata = {
+    name: DATASET_NAME,
+    version: DATASET_VERSION,
+    publisher: DATASET_PUBLISHER,
+    homepage: new URL('/', origin).href,
+    license: DATASET_LICENSE,
+    license_url: DATASET_LICENSE_URL,
+    generated_at: generatedAt,
+  }
+  yield `{"dataset":${JSON.stringify(metadata)},"entries":[`
+  let after = 0
+  let any = false
+  const step = Math.min(Math.max(size, 1), EXPORT_BATCH_MAX)
+  for (;;) {
+    const page = await exportIndexPage(db, after, step)
+    if (page.entries.length) {
+      const parts: string[] = []
+      for (const entry of page.entries) {
+        parts.push((any ? ',' : '') + JSON.stringify({
+          id: entry.id,
+          code: recordCode(entry.id),
+          script: entry.script,
+          script_other: entry.script_other,
+          ids: entry.ids,
+          layout: primaryLayoutOf(entry.claims),
+          cover_key: entry.cover_key,
+          status: entry.status,
+          description: entry.description,
+          radical: entry.radical,
+          strokes: entry.strokes,
+          first_year: entry.first_year,
+          sightings: entry.sightings,
+          claims: entry.claims.map(({ kind, value, data }) => ({ kind, value, ...(data ? { data } : {}) })),
+        }))
+        any = true
+      }
+      yield parts.join('')
+    }
+    if (page.next === null) break
+    if (page.next <= after) throw new Error('index cursor did not advance')
+    after = page.next
+  }
   yield ']}\n'
 }
 
