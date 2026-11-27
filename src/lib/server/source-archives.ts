@@ -2,6 +2,13 @@ import { ARCHIVES_MAX, archiveUrl } from '../source-archives'
 
 // Archive copies of a source, with who added or removed each. Nothing here fetches the addresses.
 export type ArchiveEdit = 'ok' | 'invalid' | 'duplicate' | 'full' | 'missing'
+// What keeps a guarded add out: for 'first', any copy the source holds or once held; for 'wayback', a
+// Wayback Machine copy in either scheme.
+export type ArchiveGuard = 'first' | 'wayback'
+const HELD: Record<ArchiveGuard, string> = {
+  first: 'EXISTS (SELECT 1 FROM source_archives WHERE source_id = ?1) OR EXISTS (SELECT 1 FROM source_archive_changes WHERE source_id = ?1)',
+  wayback: `EXISTS (SELECT 1 FROM source_archives WHERE source_id = ?1 AND (url LIKE 'https://web.archive.org/%' OR url LIKE 'http://web.archive.org/%'))`,
+}
 
 export async function sourceArchives(db: D1Database, id: number) {
   const { results } = await db.prepare('SELECT url FROM source_archives WHERE source_id = ? ORDER BY url')
@@ -17,7 +24,8 @@ export async function sourceArchiveChanges(db: D1Database, id: number, before: n
   return { changes: results.slice(0, 50), older: results.length > 50 ? results[49].id : null }
 }
 
-export async function editSourceArchive(db: D1Database, id: number, text: string, remove: boolean, actor: string): Promise<ArchiveEdit> {
+// An add with a `guard` is refused, in the same statement, when the source holds what the guard names.
+export async function editSourceArchive(db: D1Database, id: number, text: string, remove: boolean, actor: string, guard: ArchiveGuard | null = null): Promise<ArchiveEdit> {
   const url = archiveUrl(text)
   if (!url) return 'invalid'
   const live = 'EXISTS (SELECT 1 FROM sources WHERE id = ?1 AND records > 0)'
@@ -26,7 +34,7 @@ export async function editSourceArchive(db: D1Database, id: number, text: string
     ? db.prepare(`INSERT INTO source_archive_changes(source_id, url, removed, actor)
         SELECT source_id, url, 1, ?3 FROM source_archives WHERE source_id = ?1 AND url = ?2 AND ${live} RETURNING id`).bind(id, url, actor)
     : db.prepare(`INSERT INTO source_archives(source_id, url)
-        SELECT ?1, ?2 WHERE ${live} AND (SELECT count(*) FROM source_archives WHERE source_id = ?1) < ${ARCHIVES_MAX}
+        SELECT ?1, ?2 WHERE ${live} AND (SELECT count(*) FROM source_archives WHERE source_id = ?1) < ${ARCHIVES_MAX}${guard ? ` AND NOT (${HELD[guard]})` : ''}
         ON CONFLICT DO NOTHING RETURNING source_id`).bind(id, url)
   const finish = remove
     ? db.prepare('DELETE FROM source_archives WHERE source_id = ? AND url = ? AND changes() = 1').bind(id, url)
@@ -36,7 +44,7 @@ export async function editSourceArchive(db: D1Database, id: number, text: string
   if (remove) return 'missing'
   // Read why an address was refused only after the refusal.
   const held = await db.prepare(`SELECT EXISTS (SELECT 1 FROM sources WHERE id = ?1 AND records > 0) AS live,
-    EXISTS (SELECT 1 FROM source_archives WHERE source_id = ?1 AND url = ?2) AS taken,
+    EXISTS (SELECT 1 FROM source_archives WHERE source_id = ?1 AND url = ?2) ${guard ? `OR (${HELD[guard]}) ` : ''}AS taken,
     (SELECT count(*) FROM source_archives WHERE source_id = ?1) AS n`).bind(id, url).first<{ live: number; taken: number; n: number }>()
   return !held?.live ? 'missing' : held.taken ? 'duplicate' : held.n >= ARCHIVES_MAX ? 'full' : 'missing'
 }

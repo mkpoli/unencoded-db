@@ -26,7 +26,7 @@ export function writeLimitFor(event: RequestEvent): WriteLimit | null {
     case '/[locale]/entry/[id]': return ['edit', 'comment', 'hideComment', 'unhideComment'].includes(action) ? 'EDITS' : null
     case '/[locale]/entry/[id]/sighting/[sighting]/split':
     case '/[locale]/entry/[id]/sighting/new': return action === 'default' ? 'ADDS' : null
-    case '/[locale]/source/[id]': return ['addAlias', 'removeAlias', 'addArchive', 'removeArchive'].includes(action) ? 'EDITS' : null
+    case '/[locale]/source/[id]': return ['addAlias', 'removeAlias', 'addArchive', 'removeArchive', 'archiveNow'].includes(action) ? 'EDITS' : null
     case '/api/tags': return action === 'default' ? 'EDITS' : null
     case '/oauth/register':
     case '/oauth/token':

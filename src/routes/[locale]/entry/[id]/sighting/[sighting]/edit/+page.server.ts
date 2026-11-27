@@ -1,4 +1,5 @@
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
+import { archiveCited } from '$lib/server/archive'
 import { citesEvidence, editSighting, getEntryRow, getSighting, readSightingFields } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
@@ -53,6 +54,7 @@ export const actions: Actions = {
     const result = await editSighting(DB, sighting.id, rev, fields, media, { actor: person.id, ip: await ipHash(event) }, summary || null, id)
     if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code, values, summary, removeMedia, marks: null })
     notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
+    archiveCited(event, [fields])
     redirect(303, `/${event.params.locale}/entry/${id}`)
   },
 }

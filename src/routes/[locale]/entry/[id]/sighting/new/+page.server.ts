@@ -1,4 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit'
+import { archiveCited } from '$lib/server/archive'
 import { addSighting, citesEvidence, getEntry, readSightingFields, SightingLimitError, SIGHTINGS_MAX } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { notifyIndexNow } from '$lib/server/indexnow'
@@ -49,6 +50,7 @@ export const actions: Actions = {
     }
     if (!sighting) return fail(404, { error: 'missing', values })
     notifyIndexNow(event, { entries: [id] })
+    archiveCited(event, [fields])
     redirect(303, `/${event.params.locale}/entry/${id}`)
   },
 }

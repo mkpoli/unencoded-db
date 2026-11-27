@@ -434,11 +434,17 @@ const CITED_IN_SNAPSHOT = `UPDATE revisions SET snapshot = json_set(snapshot, '$
 // count only up to the last one given, so a source is keyed the same before and after a field is added. A kind
 // alone names no source.
 const CITATION_KEY_MIN = 5
-async function citationOf(db: D1Database, citation: Citation, dates: DateBook) {
-  if (blankCitation(citation)) return { hash: null, statements: [] }
+/** The hash that names a citation's source row, or null for a blank citation. */
+export async function citationHash(citation: Citation) {
+  if (blankCitation(citation)) return null
   const values = CITATION_FIELDS.map(field => citation[field])
   const keyed = Math.max(CITATION_KEY_MIN, values.findLastIndex(value => value !== null) + 1)
-  const hash = await hashHex(JSON.stringify(values.slice(0, keyed)))
+  return hashHex(JSON.stringify(values.slice(0, keyed)))
+}
+async function citationOf(db: D1Database, citation: Citation, dates: DateBook) {
+  const hash = await citationHash(citation)
+  if (hash === null) return { hash: null, statements: [] }
+  const values = CITATION_FIELDS.map(field => citation[field])
   const year = datedYear(values[CITATION_FIELDS.indexOf('report_date')], dates)?.n ?? null
   const publisher = values[CITATION_FIELDS.indexOf('publisher')]
   const key = publisher && nameKey(publisher)

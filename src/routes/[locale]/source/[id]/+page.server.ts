@@ -8,6 +8,7 @@ import { tileGlyphs } from '$lib/server/glyphs'
 import { positiveId } from '../../../_submission.server'
 import { writer } from '$lib/server/people'
 import { editSourceAlias, sourceAliasChanges, sourceAliases } from '$lib/server/source-aliases'
+import { archiveNow, offersArchiveNow } from '$lib/server/archive'
 import { editSourceArchive, sourceArchiveChanges, sourceArchives } from '$lib/server/source-archives'
 import { ARCHIVE_URL_MAX, archiveUrl } from '$lib/source-archives'
 import type { Actions, PageServerLoad } from './$types'
@@ -29,7 +30,8 @@ export const load: PageServerLoad = async (event) => {
   const db = env(event).DB
   const [aliases, history, archives, archiveHistory, copy] = await Promise.all([sourceAliases(db, id), sourceAliasChanges(db, id, before),
     sourceArchives(db, id), sourceArchiveChanges(db, id, archivesBefore), copyOfSource(db, id)])
-  return { ...found, glyphs, dates, aliases, copy, ...history, before, archives, archiveChanges: archiveHistory.changes, olderArchives: archiveHistory.older, archivesBefore }
+  return { ...found, glyphs, dates, aliases, copy, ...history, before, archives, archiveChanges: archiveHistory.changes, olderArchives: archiveHistory.older, archivesBefore,
+    archiveNow: offersArchiveNow(found.source.url, archives) }
 }
 
 async function aliasAction(event: RequestEvent, remove: boolean) {
@@ -57,9 +59,22 @@ async function archiveAction(event: RequestEvent, remove: boolean) {
   return { archiveError: null, archive: '' }
 }
 
+// Asks the Wayback Machine for a copy while the person waits, so the page shows it or says why not.
+async function archiveNowAction(event: RequestEvent) {
+  await guardWrite(event, 'EDITS')
+  const id = positiveId(event.params.id)
+  if (!id) error(404)
+  const db = env(event).DB
+  const result = await archiveNow(db, id, (await writer(event, db)).id)
+  if (!result.ok) return fail(result.error === 'failed' ? 502 : 400, { archiveError: result.error, archive: '' })
+  notifyIndexNow(event, { sources: [id] })
+  return { archiveError: null, archive: '' }
+}
+
 export const actions: Actions = {
   addAlias: event => aliasAction(event, false),
   removeAlias: event => aliasAction(event, true),
   addArchive: event => archiveAction(event, false),
   removeArchive: event => archiveAction(event, true),
+  archiveNow: archiveNowAction,
 }

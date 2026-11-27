@@ -85,6 +85,9 @@
           <button class="button">{t('source.addArchive')}</button>
         </form>
       {/if}
+      {#if data.archiveNow}
+        <form method="POST" action="?/archiveNow"><button class="button">{t('source.archiveNow')}</button></form>
+      {/if}
       {#if data.archiveChanges.length}
         <details id="archive-history" open={data.archivesBefore !== null}><summary>{t('nav.history')}</summary>
           <ul>{#each data.archiveChanges as change (change.id)}
