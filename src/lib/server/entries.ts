@@ -1771,14 +1771,20 @@ export async function history(db: D1Database, entry: number, before?: number | n
 const FEED_COLUMNS = `${REVISION_COLUMNS}, ${WHO_COLUMNS}, e.cover_key, e.ids, s.rev AS sighting_rev, s.removed_by IS NOT NULL AS removed, (e.hidden_at IS NULL AND e.merged_into IS NULL AND (r.sighting_id IS NULL OR (s.id IS NOT NULL AND (s.hidden_at IS NULL OR s.removed_by IS NOT NULL)))) AS visible`
 const FEED_JOINS = `CROSS JOIN entries e ON e.id = r.entry_id LEFT JOIN sightings s ON s.id = r.sighting_id AND s.entry_id = r.entry_id ${WHO('r.actor')}`
 
-export function globalHistoryStatement(db: D1Database, before?: number | null) {
-  // Range over at most HISTORY_PAGE + 1 revisions, even when every target is private.
-  return db.prepare(`SELECT ${FEED_COLUMNS} FROM revisions r ${FEED_JOINS} WHERE r.id < ? ORDER BY r.id DESC LIMIT ?`)
+/** Whose changes the history lists: everyone's, agents' or people's. */
+export type HistoryBy = 'agent' | 'person' | null
+export const historyBy = (value: string | null): HistoryBy | undefined => value === null ? null : value === 'agent' || value === 'person' ? value : undefined
+
+export function globalHistoryStatement(db: D1Database, before?: number | null, by: HistoryBy = null) {
+  // Range over at most HISTORY_PAGE + 1 revisions, even when every target is private. A list by kind of
+  // actor walks `revisions_by_agents` or `revisions_by_people`, whose condition is written out as theirs is.
+  const kind = by === 'agent' ? 'r.agent = 1 AND ' : by === 'person' ? 'r.agent = 0 AND ' : ''
+  return db.prepare(`SELECT ${FEED_COLUMNS} FROM revisions r ${FEED_JOINS} WHERE ${kind}r.id < ? ORDER BY r.id DESC LIMIT ?`)
     .bind(before ?? Number.MAX_SAFE_INTEGER, HISTORY_PAGE + 1)
 }
 
-export async function globalHistory(db: D1Database, before?: number | null) {
-  const { results } = await globalHistoryStatement(db, before).all<Revision & { visible: number }>()
+export async function globalHistory(db: D1Database, before?: number | null, by: HistoryBy = null) {
+  const { results } = await globalHistoryStatement(db, before, by).all<Revision & { visible: number }>()
   const rows = results.slice(0, HISTORY_PAGE).filter(row => row.visible).map(({ visible, ...row }) => row)
   return { rows, next: results.length > HISTORY_PAGE ? results[HISTORY_PAGE - 1].id : null }
 }
