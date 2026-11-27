@@ -7,6 +7,8 @@ declare module 'ids-input' {
   export function parse(ids: string | null | undefined, options?: { open?: boolean }): { tree?: IdsPart; problem?: IdsProblem }
   export function isNode(part: IdsPart | undefined): part is IdsNode
   export function rateFormsOfPart(part: IdsPart | undefined): readonly { id: string; label: string; text: string }[]
+  export type VariationFamily = { id: string; subjects: readonly string[]; evidenceOnly?: boolean; forms: readonly { id: string; text: string; outline?: { d: string; viewBox?: string } }[] }
+  export function variationFamiliesOfPart(part: IdsPart | undefined, lookup?: (text: string) => readonly VariationFamily[]): readonly VariationFamily[]
   export function write(tree: IdsPart): string
 }
 
@@ -40,7 +42,11 @@ declare module 'ids-input/svelte' {
     listen(heard: (text: string, whole: boolean) => void): () => void
   }
   /** The tables an editor looks parts up in. The sequence field alone needs none. */
-  export type IdsAdapter = { fontStyle?: import('$lib/composer').GlyphStyle; structure(char: string): Promise<unknown[]> }
+  export type IdsAdapter = {
+    fontStyle?: import('$lib/composer').GlyphStyle
+    structure(char: string): Promise<unknown[]>
+    variationFamilies?(text: string): readonly import('ids-input').VariationFamily[]
+  }
   export function createEditor(options: () => { adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; disabled?: boolean; tintMode?: 'hover' | 'on' | 'off' }): IdsEditor
   export const IdsOperators: Component<{ editor: IdsEditor; keyHints?: boolean }>
   export const IdsTree: Component<{ editor: IdsEditor; variations?: boolean; keyHints?: boolean }>
