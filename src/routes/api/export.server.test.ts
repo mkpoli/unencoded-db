@@ -54,7 +54,7 @@ test('export gives closeness in JSON and as the last CSV column', async () => {
   const body = await (await exportGet({ url: new URL('https://example.test/api/entries?limit=2&format=json'), platform: { env: { DB: db } } } as any)).json() as any
   expect(body.entries[0].evidence.map((sighting: { closeness: string | null }) => sighting.closeness)).toEqual(['secondary_cited', null])
   const [head, first, second] = (await (await exportGet({ url: new URL('https://example.test/api/entries?limit=2&format=csv'), platform: { env: { DB: db } } } as any)).text()).split('\r\n')
-  expect(head.split(',').slice(-4)).toEqual(['"vias"', '"images"', '"date_readings"', '"closeness"'])
+  expect(head.split(',').slice(-5)).toEqual(['"vias"', '"images"', '"date_readings"', '"cites"', '"closeness"'])
   expect(first.endsWith(',"secondary_cited"')).toBe(true)
   expect(second.endsWith(',""')).toBe(true)
 })
