@@ -23,6 +23,7 @@
   let zoom = $state(1)
   let pan = $state<Pan>({ x: 0, y: 0 })
   let ready = $state(false)
+  let fitted = $state({ width: 0, height: 0 })
   const maskId = $props.id()
 
   const point = (event: PointerEvent) => {
@@ -54,11 +55,11 @@
 
   // How much of the picture one screen pixel covers, so a number can go on the side with room for it.
   const measured = $derived(image && (ready || image.complete))
-  const pxX = $derived(measured ? image!.offsetWidth * zoom / width : 0)
-  const pxY = $derived(measured ? image!.offsetHeight * zoom / height : 0)
+  const pxX = $derived(measured ? fitted.width * zoom / width : 0)
+  const pxY = $derived(measured ? fitted.height * zoom / height : 0)
   const room = (box: Box) => {
-    const left = (frame?.clientWidth ?? 0) / 2 - (image?.offsetWidth ?? 0) * zoom / 2 + pan.x + box[0] * pxX
-    const top = (frame?.clientHeight ?? 0) / 2 - (image?.offsetHeight ?? 0) * zoom / 2 + pan.y + box[1] * pxY
+    const left = (frame?.clientWidth ?? 0) / 2 - fitted.width * zoom / 2 + pan.x + box[0] * pxX
+    const top = (frame?.clientHeight ?? 0) / 2 - fitted.height * zoom / 2 + pan.y + box[1] * pxY
     return {
       above: top,
       below: (frame?.clientHeight ?? 0) - (top + box[3] * pxY),
@@ -69,7 +70,7 @@
 </script>
 
 <div class="stage-wrap">
-  <ZoomablePicture {src} {width} {height} alt="" bind:image bind:frame bind:zoom bind:pan marking={marking && !disabled} {disabled}
+  <ZoomablePicture {src} {width} {height} alt="" bind:image bind:frame bind:zoom bind:pan bind:fitted marking={marking && !disabled} {disabled}
     onstart={down} onmove={move} onend={up} onload={() => ready = true}>
     {#snippet overlay()}
       {@const drawn = draft ? [...boxes, draft] : boxes}
