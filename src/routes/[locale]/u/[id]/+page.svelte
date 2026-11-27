@@ -55,10 +55,12 @@
       {#if form && 'merge' in form && form.merge}<p class="notice bad" role="alert">{t(({ missing: 'person.mergeMissing', self: 'person.mergeSelf', banned: 'person.mergeBanned', agent: 'person.mergeAgentInvalid', model: 'person.mergeModelInvalid' } as const)[form.merge])}</p>{/if}
     </form>
   {/if}
-  <HistoryList dates={data.dates} rows={data.rows} tags={data.tags} showEntry showActor={false} empty={t('person.empty')} next={data.next} />
+  <nav class="by"><a class="chip" class:on={data.flat} aria-current={data.flat ? 'true' : undefined} href={data.flat ? '?' : '?flat=1'}>{t('history.every')}</a></nav>
+  <HistoryList query={data.flat ? 'flat=1&' : ''} dates={data.dates} items={data.items} newer={data.newer} paged={data.paged} tags={data.tags} showEntry showActor={false} empty={t('person.empty')} next={data.older} />
 </div>
 
 <style>
+  .by { display: flex; justify-content: flex-end }
   .intro { gap: 4px }
   .agents { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 4px }
   .agent-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none }

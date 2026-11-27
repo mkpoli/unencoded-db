@@ -1,6 +1,7 @@
 import { quotations } from '../quotations'
 import { readDates, sightingDates } from './date-readings'
 import { STYLES, VIAS_MAX, isStoredContexts, isStoredSightingTypes, sourceKind } from '$lib/scripts'
+import { historyFeed, type FeedCursor, type FeedScope } from './entries'
 import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, VIA_IMAGE_FIELDS, tidyVias, type EntryFields, type SightingFields, type Via, type ViaPicture } from './entries'
 
 // Only entry fields are public; a snapshot can also hold sighting or internal data.
@@ -101,3 +102,29 @@ function mergeSnapshot(raw: string): { from: number } | { into: number } | null 
 
 export const revisionDates = (db: D1Database, rows: { sightingFields: SightingFields | null }[]) =>
   readDates(db, sightingDates(rows.flatMap(row => row.sightingFields ? [row.sightingFields] : [])))
+
+/** The cursor a history page's address names, or undefined when it names one badly. */
+export function feedCursor(url: URL): FeedCursor | undefined {
+  const read = (name: string) => {
+    const value = url.searchParams.get(name)
+    if (value === null) return null
+    return /^[1-9]\d{0,15}$/.test(value) ? Number(value) : undefined
+  }
+  const before = read('before'), after = read('after')
+  if (before === undefined || after === undefined || (before !== null && after !== null)) return undefined
+  const flat = url.searchParams.get('flat')
+  if (flat !== null && flat !== '1') return undefined
+  return { before, after, flat: flat === '1' }
+}
+
+/** A page of the history as a page shows it: each single change with what it holds, each run as it is. */
+export async function feedPage(db: D1Database, scope: FeedScope, cursor: FeedCursor) {
+  const feed = await historyFeed(db, scope, cursor)
+  const items = feed.items.map(item => {
+    if ('run' in item) return item
+    const { snapshot, sighting_rev, ...row } = item
+    return { ...row, sightingRev: sighting_rev ?? null, ...revisionFields({ sighting_id: row.sighting_id, kind: row.kind, snapshot, redacted_at: row.redacted_at }) }
+  })
+  const rows = items.flatMap(item => 'run' in item ? [] : [item])
+  return { items, dates: await revisionDates(db, rows), older: feed.older, newer: feed.newer, paged: cursor.before != null || cursor.after != null, flat: Boolean(cursor.flat) }
+}

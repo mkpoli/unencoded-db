@@ -1,35 +1,27 @@
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
-import { ofPerson } from '$lib/server/entries'
+import { personRecord, personScope } from '$lib/server/entries'
 import { env, guardWrite } from '$lib/server/guard'
 import { agentsOf, cleanAgentName, joinPerson, PERSON_ID } from '$lib/server/people'
 import { tagList } from '$lib/server/tags'
-import { revisionDates, revisionFields } from '$lib/server/revisions'
-import { positiveId } from '../../../_submission.server'
+import { feedCursor, feedPage } from '$lib/server/revisions'
 import type { Actions, PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async (event) => {
   const id = event.params.id
   if (!PERSON_ID.test(id)) error(404)
-  const cursor = event.url.searchParams.get('before')
-  const before = cursor === null ? null : positiveId(cursor)
-  if (cursor !== null && before === null) error(404)
+  const cursor = feedCursor(event.url)
+  if (!cursor) error(404)
   const db = env(event).DB
-  const [found, tags, agents] = await Promise.all([ofPerson(db, id, before), tagList(db), agentsOf(db, id)])
-  if (!found) error(404)
-  if (found.person.merged_into) redirect(302, `/${event.params.locale}/u/${found.person.merged_into}`)
-  const revisions = found.rows.map(({ snapshot, sighting_rev, ...row }) => ({
-    ...row,
-    sightingRev: sighting_rev ?? null,
-    ...revisionFields({ sighting_id: row.sighting_id, kind: row.kind, snapshot }),
-  }))
+  const person = await personRecord(db, id)
+  if (!person) error(404)
+  if (person.merged_into) redirect(302, `/${event.params.locale}/u/${person.merged_into}`)
+  const [page, tags, agents] = await Promise.all([feedPage(db, personScope(id), cursor), tagList(db), agentsOf(db, id)])
   return {
-    person: { id: found.person.id, name: found.person.name, created_at: found.person.created_at },
+    person: { id: person.id, name: person.name, created_at: person.created_at },
     agents,
     // Only a person who never signed in can join another.
-    mergeable: moderating(event) && !found.person.atlas_sub && !found.person.banned_at,
-    rows: revisions,
-    dates: await revisionDates(db, revisions),
-    next: found.next,
+    mergeable: moderating(event) && !person.atlas_sub && !person.banned_at,
+    ...page,
     tags: tags.map(({ name, label, type }) => ({ name, label, type })),
   }
 }

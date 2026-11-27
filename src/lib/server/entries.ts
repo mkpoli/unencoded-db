@@ -1796,12 +1796,98 @@ export function personRevisionsStatement(db: D1Database, id: string, before?: nu
     .bind(id, id, before ?? Number.MAX_SAFE_INTEGER, HISTORY_PAGE + 1)
 }
 
+export const personRecord = (db: D1Database, id: string) => db.prepare('SELECT id, name, atlas_sub, created_at, merged_into, banned_at FROM people WHERE id = ?').bind(id).first<{ id: string; name: string; atlas_sub: string | null; created_at: string; merged_into: string | null; banned_at: string | null }>()
+
 export async function ofPerson(db: D1Database, id: string, before?: number | null) {
-  const person = await db.prepare('SELECT id, name, atlas_sub, created_at, merged_into, banned_at FROM people WHERE id = ?').bind(id).first<{ id: string; name: string; atlas_sub: string | null; created_at: string; merged_into: string | null; banned_at: string | null }>()
+  const person = await personRecord(db, id)
   if (!person) return null
   const { results } = await personRevisionsStatement(db, id, before).all<Revision & { visible: number }>()
   const rows = results.slice(0, HISTORY_PAGE).filter(row => row.visible).map(({ visible, ...row }) => row)
   return { person, rows, next: results.length > HISTORY_PAGE ? results[HISTORY_PAGE - 1].id : null }
+}
+
+// The history as people read it: a run of changes one writer made in quick succession is one item, opened to
+// see its changes. A page is made from a bounded scan of light rows, and only the changes shown singly are
+// read whole.
+export const HISTORY_SCAN = 600
+/** The fewest changes shown as one run, and the longest pause inside one. */
+export const RUN_MIN = 4
+export const RUN_PAUSE = 2 * 60 * 1000
+/** The most changes a run lists when opened. */
+export const RUN_LINES = 200
+
+export type FeedLine = { id: number; entry_id: number; sighting_id: number | null; kind: string; summary: string | null; at: string; ids: string | null; removed: number }
+export type FeedRun = { run: number; count: number; from: string; to: string; by_id: string; by_name: string; by_agent: string | null; by_model: string | null; kinds: [string, number][]; summary: string | null; lines: FeedLine[] }
+type Scanned = FeedLine & { actor: string; by_id: string; by_name: string; by_agent: string | null; by_model: string | null; visible: number }
+export type FeedScope = { where: string; binds: (string | number)[] }
+export type FeedCursor = { before?: number | null; after?: number | null; flat?: boolean }
+
+const LINE_COLUMNS = `r.id, r.entry_id, r.sighting_id, r.kind, CASE WHEN r.redacted_at IS NULL THEN r.summary END AS summary, r.at, r.actor, ${WHO_COLUMNS}, e.ids, s.removed_by IS NOT NULL AS removed, (e.hidden_at IS NULL AND e.merged_into IS NULL AND (r.sighting_id IS NULL OR (s.id IS NOT NULL AND (s.hidden_at IS NULL OR s.removed_by IS NOT NULL)))) AS visible`
+
+export const globalScope = (by: HistoryBy = null): FeedScope => ({ where: by === 'agent' ? 'r.agent = 1 AND ' : by === 'person' ? 'r.agent = 0 AND ' : '', binds: [] })
+export const personScope = (id: string): FeedScope => ({ where: 'r.actor IN (SELECT id FROM people WHERE id = ? OR merged_into = ?) AND ', binds: [id, id] })
+
+/** The light rows on one side of a cursor: older than `before`, or newer than `after` and nearest it first. */
+export function feedLinesStatement(db: D1Database, scope: FeedScope, cursor: FeedCursor = {}) {
+  const range = cursor.after != null ? 'r.id > ? ORDER BY r.id ASC' : 'r.id < ? ORDER BY r.id DESC'
+  return db.prepare(`SELECT ${LINE_COLUMNS} FROM revisions r ${FEED_JOINS} WHERE ${scope.where}${range} LIMIT ?`)
+    .bind(...scope.binds, cursor.after ?? cursor.before ?? Number.MAX_SAFE_INTEGER, HISTORY_SCAN + 1)
+}
+
+export function feedRowsStatement(db: D1Database, ids: number[]) {
+  return db.prepare(`SELECT ${FEED_COLUMNS} FROM revisions r ${FEED_JOINS} WHERE r.id IN (${ids.map(() => '?').join(',')}) ORDER BY r.id DESC`).bind(...ids)
+}
+
+function runOf(lines: Scanned[]): FeedRun {
+  const [newest] = lines, oldest = lines[lines.length - 1]
+  const kinds = new Map<string, number>()
+  for (const line of lines) kinds.set(line.kind, (kinds.get(line.kind) ?? 0) + 1)
+  const summaries = new Set(lines.map(line => line.summary ?? ''))
+  return {
+    run: newest.id, count: lines.length, from: oldest.at, to: newest.at,
+    by_id: newest.by_id, by_name: newest.by_name, by_agent: newest.by_agent, by_model: newest.by_model,
+    kinds: [...kinds].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])),
+    summary: summaries.size === 1 ? newest.summary : null,
+    lines: lines.slice(0, RUN_LINES).map(({ id, entry_id, sighting_id, kind, summary, at, ids, removed }) => ({ id, entry_id, sighting_id, kind, summary, at, ids, removed })),
+  }
+}
+
+/** A page of the history, newest first, with the cursors of the pages beside it. */
+export async function historyFeed(db: D1Database, scope: FeedScope, cursor: FeedCursor = {}) {
+  const forward = cursor.after != null
+  const { results } = await feedLinesStatement(db, scope, cursor).all<Scanned>()
+  const more = results.length > HISTORY_SCAN
+  const scanned = results.slice(0, HISTORY_SCAN)
+  if (forward) scanned.reverse()
+  const clusters: Scanned[][] = []
+  for (const line of scanned) {
+    if (!line.visible) continue
+    const cluster = clusters[clusters.length - 1], last = cluster?.[cluster.length - 1]
+    if (last && last.actor === line.actor && Date.parse(last.at) - Date.parse(line.at) <= RUN_PAUSE) cluster.push(line)
+    else clusters.push([line])
+  }
+  // Asked for every change, each stands alone.
+  const least = cursor.flat ? Infinity : RUN_MIN
+  const all = clusters.flatMap(cluster => cluster.length >= least ? [cluster] : cluster.map(line => [line]))
+  const shown = forward ? all.slice(-HISTORY_PAGE) : all.slice(0, HISTORY_PAGE)
+  const cut = shown.length < all.length
+  // The cursors are the ends of what the page took from the scan: all of it, unless items were left for the
+  // next page, so that a stretch of hidden changes is passed over and not read again.
+  const taken = (end: 'newest' | 'oldest') => {
+    const whole = end === 'newest' ? scanned[0] : scanned[scanned.length - 1]
+    const item = end === 'newest' ? shown[0]?.[0] : shown[shown.length - 1]?.at(-1)
+    return (cut && (end === 'newest') === forward ? item : whole)?.id ?? null
+  }
+  const newestId = taken('newest'), oldestId = taken('oldest')
+  const singles = shown.filter(cluster => cluster.length < least).map(cluster => cluster[0].id)
+  const whole = new Map<number, Revision>()
+  if (singles.length) for (const { visible: _, ...row } of (await feedRowsStatement(db, singles).all<Revision & { visible: number }>()).results) whole.set(row.id, row)
+  const items = shown.flatMap((cluster): (Revision | FeedRun)[] => cluster.length >= least ? [runOf(cluster)] : whole.has(cluster[0].id) ? [whole.get(cluster[0].id)!] : [])
+  return {
+    items,
+    older: forward ? oldestId : cut || more ? oldestId : null,
+    newer: forward ? (cut || more ? newestId : null) : cursor.before != null ? newestId : null,
+  }
 }
 
 export const REPORT_PAGE = 100

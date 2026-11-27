@@ -17,9 +17,18 @@
     moved?: { sighting: number; to?: number; from?: number } | null
   }
 
-  let { rows, tags, dates, currentRev = null, duplicates = [], showEntry = false, showActor = true, restore = false, redact = false, thank = false, thanked = [], viewer = null, empty, next = null, query = '' }: {
-    dates: Map<string, DateReading | null>; rows: Row[]; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; duplicates?: number[]; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; thank?: boolean; thanked?: number[]; viewer?: string | null; empty: string; next?: number | null; query?: string
+  // A run of changes one writer made in quick succession, shown as one line that opens to list them.
+  type Run = {
+    run: number; count: number; from: string; to: string; by_id: string; by_name: string; by_agent?: string | null; by_model?: string | null
+    kinds: [string, number][]; summary: string | null
+    lines: { id: number; entry_id: number; sighting_id: number | null; kind: string; summary: string | null; at: string; ids: string | null; removed: number }[]
+  }
+
+  let { rows: given = [], items = null, newer = null, paged = false, tags, dates, currentRev = null, duplicates = [], showEntry = false, showActor = true, restore = false, redact = false, thank = false, thanked = [], viewer = null, empty, next = null, query = '' }: {
+    dates: Map<string, DateReading | null>; rows?: Row[]; items?: (Row | Run)[] | null; newer?: number | null; paged?: boolean; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; duplicates?: number[]; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; thank?: boolean; thanked?: number[]; viewer?: string | null; empty: string; next?: number | null; query?: string
   } = $props()
+  const list = $derived<(Row | Run)[]>(items ?? given)
+  const rows = $derived(list.filter((item): item is Row => !('run' in item)))
   const labels = $derived(tagLabels(localized(tags, locale())))
   const tagTypes = $derived(new Map(tags.map(tag => [tag.name, tag.type])))
 
@@ -88,10 +97,62 @@
   </form>
 {/snippet}
 
-{#if !rows.length && !next}<p class="muted">{empty}</p>{/if}
+{#snippet pager()}
+  {#if paged || newer || next}
+    <nav class="revision-more" aria-label={t('history.pages')}>
+      {#if paged}<a class="button" href={query ? `?${query.slice(0, -1)}` : '?'}>{t('history.newest')}</a>{/if}
+      {#if newer}<a class="button" href={`?${query}after=${newer}`}>{t('history.newer')}</a>{/if}
+      {#if next}<a class="button" href={`?${query}before=${next}`}>{t('history.older')}</a>{/if}
+    </nav>
+  {/if}
+{/snippet}
+
+{#snippet cluster(run: Run)}
+  <li class="revision">
+    <details>
+      <summary class="revision-row">
+        <time class="revision-time" datetime={run.to}>{when(run.to)}</time>
+        {#if showActor}
+          <span class="revision-actor">
+            <a class="text-link actor-name" href={href(`/u/${run.by_id}`)} onclick={stop}>{run.by_name}</a>
+            {#if run.by_agent}<AgentBadge name={run.by_agent} model={run.by_model ?? null} standalone={run.by_agent === run.by_name} />{/if}
+          </span>
+        {/if}
+        <span class="revision-change">
+          <span class="revision-main">
+            <span class="revision-kind">{t('history.changes', { count: run.count })}</span>
+            {#each run.kinds as [kind, count] (kind)}<span class="revision-number">{t(`history.kind.${kind}`)} ×{count}</span>{/each}
+            {#if !showActor && run.by_agent}<AgentBadge name={run.by_agent} model={run.by_model ?? null} standalone={run.by_agent === run.by_name} />{/if}
+          </span>
+          {#if run.summary}<span class="revision-comment">{run.summary}</span>{/if}
+        </span>
+        <span class="revision-rev"></span>
+        <span class="revision-toggle" aria-hidden="true"></span>
+      </summary>
+      <ol class="run-lines">
+        {#each run.lines as line (line.id)}
+          <li>
+            <time datetime={line.at}>{when(line.at)}</time>
+            <span class="run-change">
+              <span>{t(`history.kind.${line.kind}`)}</span>
+              <a class="text-link" href={href(`/entry/${line.entry_id}`)}>{line.ids || t('entry.record', { id: recordCode(line.entry_id) })}</a>
+              {#if line.sighting_id && !line.removed}<a class="revision-number" href={href(`/entry/${line.entry_id}#sighting-${line.sighting_id}`)}>#{line.sighting_id}</a>{/if}
+              {#if line.summary && !run.summary}<span class="revision-comment">{line.summary}</span>{/if}
+            </span>
+          </li>
+        {/each}
+        {#if run.count > run.lines.length}<li class="muted">+{run.count - run.lines.length}</li>{/if}
+      </ol>
+    </details>
+  </li>
+{/snippet}
+
+{#if !list.length && !next}<p class="muted">{empty}</p>{/if}
+{#if paged}{@render pager()}{/if}
 <ol class="revision-list">
-  {#each rows as row (row.id)}
-    {#if row.fields || row.sightingFields}
+  {#each list as row ('run' in row ? `run-${row.run}` : row.id)}
+    {#if 'run' in row}{@render cluster(row)}
+    {:else if row.fields || row.sightingFields}
       <li class="revision">
         <details>
           <summary class="revision-row">{@render line(row)}</summary>
@@ -135,7 +196,7 @@
     {/if}
   {/each}
 </ol>
-{#if next}<div class="revision-more"><a class="button" href={`?${query}before=${next}`}>{t('history.older')}</a></div>{/if}
+{@render pager()}
 
 <style>
   .revision-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line) }
@@ -174,7 +235,12 @@
   .revision-action { display: flex; justify-content: flex-end; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line) }
   .revision-action.redact { gap: 8px }
   .revision-action.redact .input { flex: 1 1 auto; width: auto; min-width: 0 }
-  .revision-more { margin-top: 18px }
+  .revision-more { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 18px }
+  .run-lines { list-style: none; margin: 0; padding: 10px 16px 14px; border-top: 1px solid var(--line); background: var(--surface-sunken); font-size: 12.5px }
+  .run-lines li { display: flex; align-items: baseline; gap: 16px; padding: 4px 0 }
+  .run-lines time { flex: 0 0 148px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap }
+  .run-change { display: flex; flex: 1 1 0; flex-wrap: wrap; align-items: baseline; gap: 2px 7px; min-width: 0 }
+  .run-change .revision-comment { flex: 1 1 100% }
   @media (max-width: 700px) {
     .revision-row { flex-wrap: wrap; gap: 2px 10px; padding: 12px 2px }
     .revision-time { flex: 0 0 auto }
@@ -187,5 +253,8 @@
     .revision-change { flex: 1 0 100%; order: 4 }
     .revision-comment { white-space: normal }
     .revision-body { padding: 16px 12px 18px }
+    .run-lines { padding-inline: 12px }
+    .run-lines li { flex-direction: column; gap: 0 }
+    .run-lines time { flex: 0 0 auto }
   }
 </style>
