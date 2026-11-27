@@ -106,6 +106,16 @@ export async function* jsonChunks(db: D1Database, metadata: unknown, revision: n
     }
   }
   if (open) yield ']}'
+  yield '],"merged":['
+  let anyMerged = false
+  for await (const batch of mergedBatches(db, size)) {
+    const parts: string[] = []
+    for (const row of batch) {
+      parts.push((anyMerged ? ',' : '') + JSON.stringify(row))
+      anyMerged = true
+    }
+    yield parts.join('')
+  }
   await assertDatasetUnchanged(db, revision)
   yield ']}\n'
 }
@@ -155,6 +165,16 @@ export async function* indexChunks(db: D1Database, origin: string, generatedAt: 
     if (page.next === null) break
     if (page.next <= after) throw new Error('index cursor did not advance')
     after = page.next
+  }
+  yield '],"merged":['
+  let anyMerged = false
+  for await (const batch of mergedBatches(db, step)) {
+    const parts: string[] = []
+    for (const row of batch) {
+      parts.push((anyMerged ? ',' : '') + JSON.stringify(row))
+      anyMerged = true
+    }
+    yield parts.join('')
   }
   yield ']}\n'
 }
@@ -303,5 +323,74 @@ export async function* mediaBatches(db: D1Database, size = 500): AsyncGenerator<
       if (last.every((part, index) => part === cursor[index])) throw new Error('media cursor did not advance')
       cursor = last
     }
+  }
+}
+
+export type MergedRow = {
+  id: number
+  code: string
+  merged_into: number
+  merged_into_code: string
+}
+
+const MERGED_COLUMNS = ['id', 'code', 'merged_into', 'merged_into_code'] as const
+export const mergedCsvHeader = () => MERGED_COLUMNS.map(csvCell).join(',') + '\r\n'
+export function mergedCsvRows(rows: readonly MergedRow[]) {
+  return rows.map(row => [row.id, row.code, row.merged_into, row.merged_into_code].map(csvCell).join(',')).join('\r\n') + (rows.length ? '\r\n' : '')
+}
+
+const MERGED_QUERY = `SELECT id, merged_into FROM entries INDEXED BY entries_merged_export
+  WHERE merged_into IS NOT NULL AND hidden_at IS NULL AND id > ? ORDER BY id LIMIT ?`
+// Follow each batch's distinct unresolved targets to their terminal live record in one recursive
+// primary-key walk. `e.merged_into < w.id` guarantees termination, and hidden hops or targets yield no row.
+const RESOLVE_TARGETS_QUERY = `WITH RECURSIVE walk(origin, id) AS (
+  SELECT value, value FROM json_each(?)
+  UNION ALL
+  SELECT w.origin, e.merged_into FROM walk w JOIN entries e ON e.id = w.id
+  WHERE e.merged_into IS NOT NULL AND e.hidden_at IS NULL AND e.merged_into < w.id
+)
+SELECT w.origin AS origin, w.id AS target
+FROM walk w JOIN entries t ON t.id = w.id
+WHERE t.merged_into IS NULL AND t.hidden_at IS NULL`
+const TARGET_CHUNK = 90
+
+/** Every retired record code whose merge chain ends at a visible canonical record, in ascending id order.
+ *  Hidden records and merges into hidden records are omitted. */
+export async function* mergedBatches(db: D1Database, size = EXPORT_BATCH_MAX): AsyncGenerator<MergedRow[]> {
+  const limit = Math.min(Math.max(size, 1), EXPORT_BATCH_MAX)
+  let after = 0
+  for (;;) {
+    const { results } = await db.prepare(MERGED_QUERY).bind(after, limit + 1).all<{ id: number; merged_into: number }>()
+    const page = results.slice(0, limit)
+    if (!page.length) return
+    // Collapse any hops already inside this batch, then resolve remaining targets fresh from D1 so
+    // concurrent unmerge/re-merge writes between batches never reuse a stale redirect.
+    const direct = new Map(page.map(row => [row.id, row.merged_into]))
+    const endpoint = (start: number) => {
+      let current = start
+      for (;;) {
+        const next = direct.get(current)
+        if (next === undefined || next >= current) return current
+        current = next
+      }
+    }
+    const endpoints = page.map(row => endpoint(row.merged_into))
+    const uniqueTargets = [...new Set(endpoints)]
+    const resolved = new Map<number, number>()
+    for (let start = 0; start < uniqueTargets.length; start += TARGET_CHUNK) {
+      const chunk = uniqueTargets.slice(start, start + TARGET_CHUNK)
+      const { results: found } = await db.prepare(RESOLVE_TARGETS_QUERY).bind(JSON.stringify(chunk)).all<{ origin: number; target: number }>()
+      for (const row of found) resolved.set(row.origin, row.target)
+    }
+    const out: MergedRow[] = []
+    for (let i = 0; i < page.length; i++) {
+      const target = resolved.get(endpoints[i])
+      if (target !== undefined) out.push({ id: page[i].id, code: recordCode(page[i].id), merged_into: target, merged_into_code: recordCode(target) })
+    }
+    if (out.length) yield out
+    if (results.length <= limit) return
+    const last = page[page.length - 1].id
+    if (last <= after) throw new Error('merged cursor did not advance')
+    after = last
   }
 }

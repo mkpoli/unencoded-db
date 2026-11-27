@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { openTestDb } from '$lib/server/testdb'
-import { exportBatches, indexChunks, mediaBatches } from '$lib/server/export'
+import { exportBatches, indexChunks, mediaBatches, mergedBatches } from '$lib/server/export'
 import { GET } from './+server'
 
 function fixture() {
@@ -121,10 +121,13 @@ test('an empty dataset gives valid JSON and header-only CSV files', async () => 
   const body = await (await GET(event(db, '/api/export?format=json'))).json() as any
   expect(body.dataset.counts).toEqual({ records: 0, evidence: 0 })
   expect(body.entries).toEqual([])
+  expect(body.merged).toEqual([])
   const csv = await (await GET(event(db, '/api/export?format=csv'))).text()
   expect(csv.split('\r\n').filter(Boolean)).toHaveLength(1)
   const media = await (await GET(event(db, '/api/export?format=media'))).text()
   expect(media.split('\r\n').filter(Boolean)).toHaveLength(1)
+  const merged = await (await GET(event(db, '/api/export?format=merged'))).text()
+  expect(merged.split('\r\n').filter(Boolean)).toEqual(['"id","code","merged_into","merged_into_code"'])
 })
 
 test('a download fails when a record changes while it is being read', async () => {
@@ -275,12 +278,123 @@ test('format=index walks entries_live_export and claims_by_entry without scans o
   expect(joined).toContain('claims_by_entry')
   expect(joined).not.toMatch(/USE TEMP B-TREE FOR ORDER BY|SCAN (?:entries|claims)(?:\s|$)/)
 
-  // Prove the guard fails if either index is removed.
-  for (const index of ['entries_live_export', 'claims_by_entry']) {
+  // Prove the guard fails if any index is removed.
+  for (const index of ['entries_live_export', 'claims_by_entry', 'entries_merged_export']) {
     const missing = fixture()
     missing.raw.exec(`DROP INDEX ${index}`)
     await expect((async () => {
       for await (const _ of indexChunks(missing.db, 'https://example.test', '2026-11-26T00:00:00.000Z', 1)) {}
     })()).rejects.toThrow()
+  }
+})
+
+test('exports resolve retired record codes to canonical live targets and omit hidden chains', async () => {
+  const { db, raw } = fixture()
+  // 1 and 3 are live, 2 is hidden.
+  // 4 -> 1 (direct), 5 -> 2 (hidden target), 6 -> 4 -> 1 (multi-hop), 7 -> 1 (hidden itself), 8 -> 7 -> 1 (hidden intermediate).
+  raw.exec(`INSERT INTO entries(id, script, merged_into, hidden_at, created_by, created_at, updated_at) VALUES
+    (4, 'han', 1, NULL, 'p', '2026', '2026'),
+    (5, 'han', 2, NULL, 'p', '2026', '2026'),
+    (6, 'han', 4, NULL, 'p', '2026', '2026'),
+    (7, 'han', 1, 'hidden', 'p', '2026', '2026'),
+    (8, 'han', 7, NULL, 'p', '2026', '2026')`)
+  const expected = [
+    { id: 4, code: 'R+0004', merged_into: 1, merged_into_code: 'R+0001' },
+    { id: 6, code: 'R+0006', merged_into: 1, merged_into_code: 'R+0001' },
+  ]
+
+  const jsonBody = await (await GET(event(db, '/api/export?format=json'))).json() as any
+  expect(jsonBody.merged).toEqual(expected)
+
+  const indexBody = await (await GET(event(db, '/api/export?format=index'))).json() as any
+  expect(indexBody.merged).toEqual(expected)
+
+  const csvRes = await GET(event(db, '/api/export?format=merged'))
+  expect(csvRes.status).toBe(200)
+  expect(csvRes.headers.get('content-disposition')).toMatch(/rare-character-compendium-\d{4}-\d{2}-\d{2}\.merged\.csv/)
+  expect((await csvRes.text()).split('\r\n').filter(Boolean)).toEqual([
+    '"id","code","merged_into","merged_into_code"',
+    '"4","R+0004","1","R+0001"',
+    '"6","R+0006","1","R+0001"',
+  ])
+
+  // Walks across single-row batches and uses entries_merged_export without scans or temp sorts.
+  const plans: string[][] = []
+  const traced = { prepare(sql: string) {
+    const stmt = db.prepare(sql)
+    return { bind(...values: unknown[]) {
+      plans.push((raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...values as never[]) as { detail: string }[]).map(row => row.detail))
+      return stmt.bind(...values)
+    } }
+  } } as D1Database
+  const walked = []
+  for await (const batch of mergedBatches(traced, 1)) walked.push(...batch)
+  expect(walked).toEqual(expected)
+  const joined = plans.flat().join('\n')
+  expect(joined).toContain('entries_merged_export')
+  expect(joined).not.toMatch(/USE TEMP B-TREE FOR ORDER BY|SCAN entries(?:\s|$)/)
+})
+
+test('mergedBatches chunks target lookups below D1 parameter limits', async () => {
+  const { db, raw } = openTestDb()
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec(`WITH RECURSIVE seq(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM seq WHERE x < 120)
+    INSERT INTO entries(id, script, created_by, created_at, updated_at) SELECT x, 'han', 'p', '2026', '2026' FROM seq`)
+  raw.exec(`WITH RECURSIVE seq(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM seq WHERE x < 120)
+    INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at) SELECT x + 120, 'han', x, 'p', '2026', '2026' FROM seq`)
+  let maxBinds = 0
+  const guarded = { prepare(sql: string) {
+    const stmt = db.prepare(sql)
+    return { bind(...values: unknown[]) {
+      maxBinds = Math.max(maxBinds, values.length)
+      if (values.length > 100) throw new Error('too many SQL variables')
+      return stmt.bind(...values)
+    } }
+  } } as D1Database
+  const rows = []
+  for await (const batch of mergedBatches(guarded, 500)) rows.push(...batch)
+  expect(rows).toHaveLength(120)
+  expect(maxBinds).toBeLessThanOrEqual(90)
+})
+
+test('mergedBatches resolves each batch fresh under concurrent unmerge and re-merge', async () => {
+  const { db, raw } = openTestDb()
+  raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026');
+    INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at) VALUES
+      (1, 'han', NULL, 'p', '2026', '2026'),
+      (2, 'han', 1, 'p', '2026', '2026'),
+      (3, 'han', 1, 'p', '2026', '2026'),
+      (4, 'han', NULL, 'p', '2026', '2026');`)
+  let pages = 0
+  const mutating = { prepare(sql: string) {
+    const stmt = db.prepare(sql)
+    return { bind(...values: unknown[]) {
+      if (sql.includes('entries_merged_export')) {
+        pages++
+        if (pages === 2) raw.exec('UPDATE entries SET merged_into = NULL WHERE id = 2; UPDATE entries SET merged_into = 2 WHERE id = 4')
+      }
+      return stmt.bind(...values)
+    } }
+  } } as D1Database
+  const rows = []
+  for await (const batch of mergedBatches(mutating, 1)) rows.push(...batch)
+  expect(rows).toEqual([
+    { id: 2, code: 'R+0002', merged_into: 1, merged_into_code: 'R+0001' },
+    { id: 3, code: 'R+0003', merged_into: 1, merged_into_code: 'R+0001' },
+    { id: 4, code: 'R+0004', merged_into: 2, merged_into_code: 'R+0002' },
+  ])
+})
+
+test('mergedBatches resolves long chains across batch boundaries without dropping records', async () => {
+  const { db, raw } = openTestDb()
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec(`WITH RECURSIVE seq(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM seq WHERE x < 502)
+    INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at)
+    SELECT x, 'han', CASE WHEN x = 1 THEN NULL ELSE x - 1 END, 'p', '2026', '2026' FROM seq`)
+  for (const size of [500, 25]) {
+    const rows = []
+    for await (const batch of mergedBatches(db, size)) rows.push(...batch)
+    expect(rows).toHaveLength(501)
+    expect(rows.at(-1)).toEqual({ id: 502, code: 'R+01F6', merged_into: 1, merged_into_code: 'R+0001' })
   }
 })
