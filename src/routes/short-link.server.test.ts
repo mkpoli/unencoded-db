@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { LOCALE_COOKIE } from '$lib/i18n'
-import { readShortRecordCode, shortRecordCode } from '$lib/short-record'
+import { readShortRecordCode, shortRecordCode, shortShareUrl } from '$lib/short-record'
 import { GET } from './[short=shortRecord]/+server'
 
 function request(short: string, preferred?: string, browser = 'en') {
@@ -28,6 +28,12 @@ test('the codec uses the shortest available length and round-trips safe record I
     expect(code).toHaveLength(length)
     expect(readShortRecordCode(code)).toBe(id)
   }
+})
+
+test('short share URLs use the uppercase hexadecimal record code on mkpo.li', () => {
+  expect(shortShareUrl(9)).toBe('https://mkpo.li/r/0009')
+  expect(shortShareUrl(0xbeef)).toBe('https://mkpo.li/r/BEEF')
+  expect(shortShareUrl(0x10000)).toBe('https://mkpo.li/r/10000')
 })
 
 test('short record links leave lowercase routes and locale prefixes available', () => {
