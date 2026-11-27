@@ -55,4 +55,7 @@ test('a JPEG 2000 image too large to draw is found before drawing', () => {
   expect(heavyJpx(pdfOf([[600, 300]], [imageObject(4000, 4000, '/DCTDecode')]))).toBeNull()
   expect(heavyJpx(pdfOf([[600, 300]], [imageObject('12 0 R', '13 0 R', '/JPXDecode')]))).toBeNull()
   expect(heavyJpx(pdfOf([[600, 300]]))).toBeNull()
+  // Keys in any order, with or without spaces, and a name that holds the word stream.
+  expect(heavyJpx(pdfOf([[600, 300]], ['<</Subtype/Image/Height 3000/Filter/JPXDecode/Width 2000/Length 0>>\nstream\n\nendstream']))).toEqual({ width: 2000, height: 3000 })
+  expect(heavyJpx(pdfOf([[600, 300]], ['<< /Subtype /Image /Filter /JPXDecode /Upstream 1 /Width 2000 /Height 3000 /Length 0 >>\nstream\n\nendstream']))).toEqual({ width: 2000, height: 3000 })
 })

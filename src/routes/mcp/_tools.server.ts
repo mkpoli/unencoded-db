@@ -289,9 +289,9 @@ async function readPicture(event: RequestEvent, { address, marks, page }: { addr
     if (!sniff(bytes) && isPdf(bytes)) {
       budget.pages ??= PDF_PAGES_MAX
       if (budget.pages < 1) throw new Refusal(`One call draws up to ${PDF_PAGES_MAX} PDF pages.`)
-      budget.pages--
       const jpx = heavyJpx(bytes)
       if (jpx) throw new Refusal(`This PDF holds a JPEG 2000 image of ${jpx.width} × ${jpx.height} pixels, more than the site can draw (${JPX_PIXELS / 1e6} megapixels). Give a JPEG or PNG of the page instead: ${address}`)
+      budget.pages--
       // The page is drawn here and kept as a picture; the PDF itself is not kept.
       const drawn = await renderPdfPage(bytes, page ?? 1)
       if (!drawn) throw new Refusal(`Page ${page ?? 1} of this PDF could not be drawn: ${address}`)
