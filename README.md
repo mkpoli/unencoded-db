@@ -64,7 +64,7 @@ The Sources page filters direct and intermediate citations by publisher. A contr
 
 ## Agents
 
-`https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. `/[locale]/mcp` carries the setup commands, install links and tool list, `/llms.txt` lists the endpoint and public sections for agents, and `/mcp/server-card` serves the experimental SEP-2127 server card. In Claude Code:
+`https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. `/[locale]/mcp` carries the setup commands, install links and tool list, `/llms.txt` lists the endpoint and public sections for agents, `/mcp/server-card` serves the experimental SEP-2127 server card, and `/.well-known/ai-catalog.json` serves the AI Catalog v0.9 discovery document pointing to it. In Claude Code:
 
 ```sh
 claude mcp add --scope user --transport http rare https://rare.glyphatlas.org/mcp
