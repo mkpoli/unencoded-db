@@ -12,6 +12,30 @@ export const PDF_QUALITY = 85
 // The header may follow a few bytes of padding.
 export const isPdf = (bytes: Uint8Array) => String.fromCharCode(...bytes.subarray(0, 1024)).includes('%PDF-')
 
+// PDFium decodes a JPEG 2000 image at four bytes a sample, so drawing one takes about 18 MB of its heap a
+// megapixel, against about 5 MB for a JPEG. A page scanned to a 9-megapixel JPEG 2000 image grew the heap
+// past 190 MB and stopped the Worker. Three megapixels keep the heap near that of the largest JPEG pages
+// drawn so far.
+export const JPX_PIXELS = 3_000_000
+
+/**
+ * The largest JPEG 2000 image in a PDF when it is over JPX_PIXELS, else null. An image's dictionary is
+ * never compressed, so it is read from the file's own bytes, before anything is drawn.
+ */
+export function heavyJpx(pdf: Uint8Array): { width: number; height: number } | null {
+  const text = new TextDecoder('latin1').decode(pdf)
+  let heaviest: { width: number; height: number } | null = null
+  for (let at = text.indexOf('/JPXDecode'); at >= 0; at = text.indexOf('/JPXDecode', at + 1)) {
+    const start = text.lastIndexOf(' obj', at)
+    const end = text.indexOf('stream', at)
+    const dictionary = text.slice(Math.max(0, start), end < 0 ? at + 4096 : end)
+    const width = Number(/\/Width\s+(\d+)\b(?!\s+\d+\s+R)/.exec(dictionary)?.[1])
+    const height = Number(/\/Height\s+(\d+)\b(?!\s+\d+\s+R)/.exec(dictionary)?.[1])
+    if (width * height > JPX_PIXELS && width * height > (heaviest ? heaviest.width * heaviest.height : 0)) heaviest = { width, height }
+  }
+  return heaviest
+}
+
 // Wrangler hands a `.wasm` import over compiled. A test runner hands over the file's path.
 async function compiled(imported: unknown) {
   if (imported instanceof WebAssembly.Module) return imported

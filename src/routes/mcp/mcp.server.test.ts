@@ -5,7 +5,7 @@ import { mergeEntry } from '$lib/server/entries'
 import { personOf } from '$lib/server/people'
 import { MEDIA_MAX } from '$lib/limits'
 import { PDF_SIDE } from '$lib/server/pdf'
-import { pdfOf } from '$lib/server/pdf.test'
+import { imageObject, pdfOf } from '$lib/server/pdf.test'
 import { FETCHES_MAX, PDF_PAGES_MAX } from './_tools.server'
 import { POST } from './+server'
 
@@ -260,6 +260,9 @@ test('a PDF address is kept as a picture of the page asked for', async () => {
   expect(await refused({ url: 'https://img.example/leaflet.pdf', pages: 'all' })).toContain('counted from 1')
   expect(await refused({ url: 'https://img.example/leaflet.pdf', pages: '1-2', page: 1 })).toContain('not both')
   expect(await refused({ url: 'https://img.example/leaflet.pdf', pages: '1-2', marks: [[100, 100, 200, 200]] })).toContain('one page')
+  // A page scanned to a large JPEG 2000 image is refused before it is drawn.
+  pictures(() => new Response(pdfOf([[600, 300]], [imageObject(3433, 2706, '/JPXDecode')]), { headers: { 'content-type': 'application/pdf' } }))
+  expect(await refused({ url: 'https://img.example/scan.pdf' })).toContain('JPEG 2000 image of 3433 × 2706 pixels')
 }, 60_000)
 
 test('a picture larger than the limit is not read to its end', async () => {

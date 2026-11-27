@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { sniff } from '$lib/server/image'
-import { pdfOf } from '$lib/server/pdf.test'
+import { imageObject, pdfOf } from '$lib/server/pdf.test'
 import { POST } from './+server'
 
 const ask = (body: Uint8Array, page: string, origin = 'https://site.example') => POST({
@@ -23,4 +23,5 @@ test('another site, a missing page and a file that is no PDF are refused', async
   expect(await status(ask(pdf, '1', 'https://other.example'))).toBe(403)
   expect(await status(ask(pdf, '2'))).toBe(422)
   expect(await status(ask(new TextEncoder().encode('plain text'), '1'))).toBe(422)
+  expect(await status(ask(pdfOf([[595, 842]], [imageObject(3433, 2706, '/JPXDecode')]), '1'))).toBe(422)
 })
