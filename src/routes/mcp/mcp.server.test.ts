@@ -245,6 +245,14 @@ test('a PDF address is kept as a picture of the page asked for', async () => {
   const many = Array.from({ length: PDF_PAGES_MAX + 1 }, (_, index) => ({ url: `https://img.example/${index}.pdf` }))
   expect((await call('add_sighting', { record: 1, pictures: many })).value).toContain(`up to ${PDF_PAGES_MAX} PDF pages`)
   expect(await refused({ url: 'https://img.example/leaflet.pdf', marks: [[0, 0, 2, 2]] })).toContain(`${PDF_SIDE} × ${PDF_SIDE / 2}`)
+  // A range of pages is one picture a page.
+  const ranged = await call('add_sighting', { record: 1, pictures: [{ url: 'https://img.example/leaflet.pdf', pages: '1-2' }] })
+  expect(ranged.failed).toBe(false)
+  expect((await call('get_record', { record: 1 })).value.sightings[2].pictures).toMatchObject([{ width: PDF_SIDE, height: PDF_SIDE / 2 }, { width: PDF_SIDE / 2, height: PDF_SIDE }])
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', pages: '2-3' })).toContain('Page 3')
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', pages: 'all' })).toContain('counted from 1')
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', pages: '1-2', page: 1 })).toContain('not both')
+  expect(await refused({ url: 'https://img.example/leaflet.pdf', pages: '1-2', marks: [[100, 100, 200, 200]] })).toContain('one page')
 }, 60_000)
 
 test('a picture larger than the limit is not read to its end', async () => {
@@ -594,4 +602,22 @@ test('a picture stands once in a chain, and a refusal spends no fetch', async ()
   expect(await call('edit_sighting', { record: 1, sighting: read.id, rev: 1, pictures: ['https://img.example/s.png'], vias: [{ ...post, pictures: [held, ...many] }] })).toMatchObject({ failed: true, value: expect.stringContaining('in all') })
   expect(asked).toHaveLength(0)
   expect(await call('edit_sighting', { record: 1, sighting: read.id, rev: 1, vias: [{ ...post, pictures: [{ url: same, marks: [[1, 1, 6, 6]] }] }] })).toMatchObject({ failed: true, value: expect.stringContaining('no marks') })
+})
+
+test('every write is an agent\'s, named by the harness and model it says', async () => {
+  const { call, connect, raw } = fixture()
+  const actor = (record: number) => raw.query('SELECT p.name, p.agent, p.agent_model, p.merged_into FROM revisions r JOIN people p ON p.id = r.actor WHERE r.entry_id = ? ORDER BY r.id DESC LIMIT 1').get(record) as { name: string; agent: number; agent_model: string; merged_into: string | null }
+  // A connection that says nothing is an unknown agent.
+  const quiet = await connect()
+  expect((await call('add_record', { ids: ['⿰山東'], sightings: [sighting] }, quiet)).failed).toBe(false)
+  expect(actor(1)).toMatchObject({ name: 'Unknown', agent: 1, agent_model: '' })
+  // What it says later names the same connection.
+  expect((await call('add_record', { ids: ['⿰山西'], sightings: [sighting], agent: { harness: 'Claude Code', model: 'Fable 5.2' } }, quiet)).failed).toBe(false)
+  expect(actor(1)).toMatchObject({ name: 'Claude Code', agent: 1, agent_model: 'Fable 5.2' })
+  expect((raw.query('SELECT count(*) AS n FROM people').get() as { n: number }).n).toBe(1)
+  // Another connection is another agent, and a harness alone is enough.
+  const other = await connect()
+  expect((await call('add_record', { ids: ['⿰山南'], sightings: [sighting], agent: { harness: 'Codex' } }, other)).failed).toBe(false)
+  expect(actor(3)).toMatchObject({ name: 'Codex', agent: 1, agent_model: '' })
+  expect((await call('add_sighting', { record: 1, ...sighting, place: 'Elsewhere', agent: { harness: 'x'.repeat(81) } }, other)).value).toContain('agent.harness')
 })

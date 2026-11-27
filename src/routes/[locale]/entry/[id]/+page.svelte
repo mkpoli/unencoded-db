@@ -295,7 +295,7 @@
     {#if entry.by_name && entry.created_at}
       <p class="hint attribution">
         <span>{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</span>
-        {#if entry.by_agent}<AgentBadge name={entry.by_agent} standalone={entry.by_agent === entry.by_name} />{/if}
+        {#if entry.by_agent}<AgentBadge name={entry.by_agent} model={entry.by_model ?? null} standalone={entry.by_agent === entry.by_name} />{/if}
       </p>
     {/if}
   </section>
@@ -354,7 +354,7 @@
         {#if sighting.by_name}
           <p class="hint attribution">
             <span>{t('sighting.by', { name: sighting.by_name })}</span>
-            {#if sighting.by_agent}<AgentBadge name={sighting.by_agent} standalone={sighting.by_agent === sighting.by_name} />{/if}
+            {#if sighting.by_agent}<AgentBadge name={sighting.by_agent} model={sighting.by_model ?? null} standalone={sighting.by_agent === sighting.by_name} />{/if}
           </p>
         {/if}
         <div class="row">

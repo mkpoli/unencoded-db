@@ -1,4 +1,5 @@
 import type { RequestEvent } from '@sveltejs/kit'
+import { AGENT_UNKNOWN } from '$lib/agent'
 import { hashHex } from './image'
 
 export type Person = { id: string; name: string; atlas: boolean; moderator: boolean; banned: boolean }
@@ -83,9 +84,33 @@ export function agentToken(request: Request) {
   const token = request.headers.get(AGENT_SESSION)
   return token && /^[0-9a-f]{64}$/.test(token) ? `mcp:${token}` : undefined
 }
-export async function agentWriter(event: RequestEvent, db: D1Database) {
-  if (event.locals.person) return event.locals.person
-  let person = await createPerson(db)
+/** What an agent says it is: the harness it runs in and the model it runs on. */
+export type AgentSaid = { harness: string | null; model: string | null }
+
+// Every write through the agent endpoint is an agent's, whether or not it says which. A signed-in agent
+// writes as an agent row of the person who allowed it, one row for each harness and model. A connection
+// that never signed in is an agent row of its own, and what it says later names the same row.
+export async function agentWriter(event: RequestEvent, db: D1Database, said: AgentSaid = { harness: null, model: null }) {
+  const name = said.harness ?? AGENT_UNKNOWN, model = said.model ?? ''
+  const signed = event.locals.person
+  if (signed) {
+    const own = await db.prepare('SELECT agent, merged_into, atlas_sub, name, agent_model FROM people WHERE id = ?').bind(signed.id)
+      .first<{ agent: number; merged_into: string | null; atlas_sub: string | null; name: string; agent_model: string }>()
+    if (!own) return signed
+    if (!own.atlas_sub && !own.merged_into) {
+      const next = { name: said.harness ?? (own.agent ? own.name : AGENT_UNKNOWN), model: said.model ?? (own.agent ? own.agent_model : '') }
+      if (!own.agent || next.name !== own.name || next.model !== own.agent_model) await db.prepare('UPDATE people SET agent = 1, name = ?, agent_model = ? WHERE id = ? AND atlas_sub IS NULL AND merged_into IS NULL').bind(next.name, next.model, signed.id).run()
+      return signed
+    }
+    // An agent row someone joined to a person keeps the labels it was given.
+    if (own.agent) return signed
+    const held = await db.prepare('SELECT id FROM people WHERE merged_into = ? AND agent = 1 AND name = ? AND agent_model = ? LIMIT 1').bind(signed.id, name, model).first<{ id: string }>()
+    if (held) return event.locals.person = { ...signed, id: held.id }
+    const id = randomHex(6)
+    await db.prepare('INSERT INTO people(id, name, created_at, merged_into, agent, agent_model) VALUES(?,?,?,?,1,?)').bind(id, name, new Date().toISOString(), signed.id, model).run()
+    return event.locals.person = { ...signed, id }
+  }
+  let person = await createPerson(db, null, name)
   const token = agentToken(event.request)
   if (token) {
     const hash = await hashHex(token), at = Date.now()
@@ -100,6 +125,7 @@ export async function agentWriter(event: RequestEvent, db: D1Database) {
       person = held
     }
   }
+  await db.prepare('UPDATE people SET agent = 1, agent_model = ? WHERE id = ? AND agent = 0 AND atlas_sub IS NULL AND merged_into IS NULL').bind(model, person.id).run()
   event.locals.person = person
   return person
 }
@@ -117,17 +143,17 @@ export function cleanAgentName(text: unknown) {
 }
 
 // What a person who joins another hands over: favourites, notices and the thanks they gave.
-function belongings(db: D1Database, from: string, into: string, agent: string | null = null) {
+function belongings(db: D1Database, from: string, into: string, agent: string | null = null, model: string | null = null) {
   // Each statement acts only once `from` has joined `into`, so they ride in the batch that joins them.
   const joined = 'EXISTS (SELECT 1 FROM people WHERE id = ?1 AND merged_into = ?2)'
   // A thank that would now be someone's thanks for their own change, or a second thanks from one person.
   const spent = `SELECT k.id FROM thanks k JOIN revisions r ON r.id = k.revision_id JOIN people p ON p.id = r.actor
     WHERE (k.person IN (?1, ?2) AND COALESCE(p.merged_into, p.id) = ?2) OR (k.person = ?1 AND k.revision_id IN (SELECT revision_id FROM thanks WHERE person = ?2))`
   // People who had joined `from` follow it, so every join stays one step from the person it names.
-  // When `from` joins as an agent, non-agent rows previously joined into it inherit the agent label,
-  // while rows already marked as agents keep their own names.
+  // When `from` joins as an agent, non-agent rows previously joined into it inherit the agent and
+  // model labels, while rows already marked as agents keep their own names and models.
   const follow = agent
-    ? db.prepare(`UPDATE people SET merged_into = ?2, name = CASE WHEN agent = 1 THEN name ELSE ?3 END, agent = 1 WHERE merged_into = ?1 AND ${joined}`).bind(from, into, agent)
+    ? db.prepare(`UPDATE people SET merged_into = ?2, name = CASE WHEN agent = 1 THEN name ELSE ?3 END, agent_model = CASE WHEN agent = 1 THEN agent_model ELSE ?4 END, agent = 1 WHERE merged_into = ?1 AND ${joined}`).bind(from, into, agent, model ?? '')
     : db.prepare(`UPDATE people SET merged_into = ?2 WHERE merged_into = ?1 AND ${joined}`).bind(from, into)
   return [
     follow,
@@ -142,15 +168,17 @@ function belongings(db: D1Database, from: string, into: string, agent: string | 
   ]
 }
 
-export type JoinRefusal = 'missing' | 'self' | 'banned' | 'agent'
+export type JoinRefusal = 'missing' | 'self' | 'banned' | 'agent' | 'model'
 
 /** A moderator joins a person who never signed in to another, as signing in would. People already joined
- * to them follow, and their browsers and agents are signed out. Naming an agent marks the merged row as
- * an agent acting for the target while keeping the agent name on its edits. */
-export async function joinPerson(db: D1Database, from: string, into: string, options?: { agent?: string | null }): Promise<JoinRefusal | null> {
+ * to them follow, and their browsers and agents are signed out. Naming an agent (and optional model)
+ * marks the merged row as an agent acting for the target while keeping those labels on its edits. */
+export async function joinPerson(db: D1Database, from: string, into: string, options?: { agent?: string | null; model?: string | null }): Promise<JoinRefusal | null> {
   if (from === into) return 'self'
   const agent = options?.agent == null ? null : cleanAgentName(options.agent)
   if (options?.agent != null && !agent) return 'agent'
+  const model = options?.model == null ? null : cleanAgentName(options.model)
+  if (options?.model != null && (!model || !agent)) return 'model'
   const { results } = await db.prepare('SELECT id, atlas_sub, merged_into, banned_at FROM people WHERE id IN (?, ?)').bind(from, into)
     .all<{ id: string; atlas_sub: string | null; merged_into: string | null; banned_at: string | null }>()
   const source = results.find(row => row.id === from), target = results.find(row => row.id === into)
@@ -158,7 +186,7 @@ export async function joinPerson(db: D1Database, from: string, into: string, opt
   if (source.banned_at || target.banned_at) return 'banned'
   const joined = 'EXISTS (SELECT 1 FROM people WHERE id = ?1 AND merged_into = ?2)'
   const merge = agent
-    ? db.prepare('UPDATE people SET merged_into = ?2, agent = 1, name = ?3 WHERE id = ?1 AND atlas_sub IS NULL AND merged_into IS NULL AND banned_at IS NULL AND EXISTS (SELECT 1 FROM people WHERE id = ?2 AND merged_into IS NULL AND banned_at IS NULL) RETURNING id').bind(from, into, agent)
+    ? db.prepare('UPDATE people SET merged_into = ?2, agent = 1, name = ?3, agent_model = ?4 WHERE id = ?1 AND atlas_sub IS NULL AND merged_into IS NULL AND banned_at IS NULL AND EXISTS (SELECT 1 FROM people WHERE id = ?2 AND merged_into IS NULL AND banned_at IS NULL) RETURNING id').bind(from, into, agent, model ?? '')
     : db.prepare('UPDATE people SET merged_into = ?2 WHERE id = ?1 AND atlas_sub IS NULL AND merged_into IS NULL AND banned_at IS NULL AND EXISTS (SELECT 1 FROM people WHERE id = ?2 AND merged_into IS NULL AND banned_at IS NULL) RETURNING id').bind(from, into)
   const [result] = await db.batch([
     merge,
@@ -167,25 +195,33 @@ export async function joinPerson(db: D1Database, from: string, into: string, opt
     db.prepare(`DELETE FROM sessions WHERE person = ?1 AND ${joined}`).bind(from, into),
     db.prepare(`DELETE FROM agent_tokens WHERE person = ?1 AND ${joined}`).bind(from, into),
     db.prepare(`DELETE FROM agent_codes WHERE person = ?1 AND ${joined}`).bind(from, into),
-    ...belongings(db, from, into, agent),
+    ...belongings(db, from, into, agent, model),
   ])
   if (!result.results.length) return 'missing'
   return null
 }
 
+export type AgentIdentity = { name: string; model: string | null }
 export const AGENTS_MAX = 50
-// Each distinct agent name is one seek in `people_agents_by_commander` for the least name after the
-// previous one, so listing a commander's agents reads at most AGENTS_MAX index entries regardless of
-// how many merged rows share a name.
-export const agentsOfStatement = (db: D1Database, id: string) => db.prepare(`WITH RECURSIVE names(name, n) AS (
-  SELECT (SELECT MIN(name) FROM people WHERE merged_into = ?1 AND agent = 1), 1
+// Each distinct (agent, model) pair is sought in `people_agents_by_commander` as the least pair
+// after the previous one, so listing a commander's agents reads at most AGENTS_MAX index entries
+// regardless of how many merged rows share a pair.
+export const agentsOfStatement = (db: D1Database, id: string) => db.prepare(`WITH RECURSIVE pairs(name, model, n) AS (
+  SELECT
+    (SELECT name FROM people WHERE merged_into = ?1 AND agent = 1 ORDER BY name, agent_model LIMIT 1),
+    (SELECT agent_model FROM people WHERE merged_into = ?1 AND agent = 1 ORDER BY name, agent_model LIMIT 1),
+    1
   UNION ALL
-  SELECT (SELECT MIN(name) FROM people WHERE merged_into = ?1 AND agent = 1 AND name > names.name), n + 1 FROM names WHERE name IS NOT NULL AND n < ?2
-) SELECT name FROM names WHERE name IS NOT NULL`).bind(id, AGENTS_MAX)
+  SELECT
+    (SELECT name FROM people WHERE merged_into = ?1 AND agent = 1 AND (name, agent_model) > (pairs.name, pairs.model) ORDER BY name, agent_model LIMIT 1),
+    (SELECT agent_model FROM people WHERE merged_into = ?1 AND agent = 1 AND (name, agent_model) > (pairs.name, pairs.model) ORDER BY name, agent_model LIMIT 1),
+    pairs.n + 1
+  FROM pairs WHERE pairs.name IS NOT NULL AND pairs.n < ?2
+) SELECT name, NULLIF(model, '') AS model FROM pairs WHERE name IS NOT NULL`).bind(id, AGENTS_MAX)
 
-/** The distinct agent names merged under this contributor, in name order. */
-export async function agentsOf(db: D1Database, id: string) {
-  return (await agentsOfStatement(db, id).all<{ name: string }>()).results.map(row => row.name)
+/** The distinct (agent, model) pairs merged under this contributor, in name and model order. */
+export async function agentsOf(db: D1Database, id: string): Promise<AgentIdentity[]> {
+  return (await agentsOfStatement(db, id).all<AgentIdentity>()).results
 }
 
 // A person signs in through Glyph Atlas: this browser's anonymous person, if any, joins the account's.

@@ -171,7 +171,7 @@ const csvCell = (value: unknown) => {
 // after its value, and one that rests on evidence names the rows by their `sighting_id`:
 // `東 (usage) [under: east | cmn:dōng] [evidence: #3 #7]`. The JSON form carries what else a claim holds.
 const ENTRY_COLUMNS = ['script', 'script_other', 'description', 'status', 'radical', 'strokes'] as const
-const BULK_ENTRY_COLUMNS = [...ENTRY_COLUMNS, 'created_by_name', 'created_by_agent'] as const
+const BULK_ENTRY_COLUMNS = [...ENTRY_COLUMNS, 'created_by_name', 'created_by_agent', 'created_by_model'] as const
 const csvColumns = (bulk: boolean) => ['entry_id', ...(bulk ? ['record_code'] as const : []), ...(bulk ? BULK_ENTRY_COLUMNS : ENTRY_COLUMNS), ...CLAIM_KINDS, 'sighting_id', ...SIGHTING_FIELDS, 'vias', 'images']
 
 const said = (claim: Claim) => claim.kind === 'encoding'
