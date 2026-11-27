@@ -837,5 +837,7 @@
   "mcp.tool.restore_revision": "이전 판을 복원하거나 빼 둔 증거를 되돌립니다.",
   "mcp.authTitle": "로그인 및 쓰기",
   "mcp.authBody": "로그인하지 않아도 사용할 수 있으며 연결마다 새 익명 이름이 붙습니다. OAuth 2.1을 지원하는 클라이언트에서 Glyph Atlas로 인증하면 내 계정 명의로 기록됩니다.",
-  "mcp.writesBody": "쓰기 요청은 웹 양식과 같은 검사를 거치며, 증거 이미지는 공개 URL에서 가져옵니다."
+  "mcp.writesBody": "쓰기 요청은 웹 양식과 같은 검사를 거치며, 증거 이미지는 공개 URL에서 가져옵니다.",
+  "search.suggestions": "검색 제안",
+  "search.written": "표기"
 }
