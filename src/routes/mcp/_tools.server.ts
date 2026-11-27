@@ -25,7 +25,7 @@ import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { MAX_WRITE_BODY } from '$lib/server/body-limit'
 import { MAX_IMAGE, prepareImage, sniff } from '$lib/server/image'
 import { pagesOf } from '$lib/pdf-pages'
-import { isPdf, PDF_SIDE, renderPdfPage } from '$lib/server/pdf'
+import { heavyJpx, isPdf, JPX_PIXELS, PDF_SIDE, renderPdfPage } from '$lib/server/pdf'
 import { AGENT_NAME_MAX, agentWriter, cleanAgentName, type AgentSaid } from '$lib/server/people'
 import { described, storeImages, type ReadImage } from '../_submission.server'
 
@@ -289,6 +289,8 @@ async function readPicture(event: RequestEvent, { address, marks, page }: { addr
     if (!sniff(bytes) && isPdf(bytes)) {
       budget.pages ??= PDF_PAGES_MAX
       if (budget.pages < 1) throw new Refusal(`One call draws up to ${PDF_PAGES_MAX} PDF pages.`)
+      const jpx = heavyJpx(bytes)
+      if (jpx) throw new Refusal(`This PDF holds a JPEG 2000 image of ${jpx.width} × ${jpx.height} pixels, more than the site can draw (${JPX_PIXELS / 1e6} megapixels). Give a JPEG or PNG of the page instead: ${address}`)
       budget.pages--
       // The page is drawn here and kept as a picture; the PDF itself is not kept.
       const drawn = await renderPdfPage(bytes, page ?? 1)

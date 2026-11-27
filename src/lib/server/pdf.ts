@@ -12,6 +12,48 @@ export const PDF_QUALITY = 85
 // The header may follow a few bytes of padding.
 export const isPdf = (bytes: Uint8Array) => String.fromCharCode(...bytes.subarray(0, 1024)).includes('%PDF-')
 
+// PDFium decodes a JPEG 2000 image at four bytes a sample, so drawing one takes about 18 MB of its heap a
+// megapixel, against about 5 MB for a JPEG. A page scanned to a 9-megapixel JPEG 2000 image grew the heap
+// past 190 MB and stopped the Worker. Three megapixels keep the heap near that of the largest JPEG pages
+// drawn so far.
+export const JPX_PIXELS = 3_000_000
+
+const JPX = new TextEncoder().encode('/JPXDecode')
+const LATIN1 = new TextDecoder('latin1')
+// How far an image's dictionary is read on either side of its filter.
+const DICTIONARY_REACH = 4096
+
+/** Where `needle` first occurs in `bytes` at or after `from`, or -1. */
+function find(bytes: Uint8Array, needle: Uint8Array, from: number) {
+  for (let at = bytes.indexOf(needle[0], from); at >= 0; at = bytes.indexOf(needle[0], at + 1)) {
+    let index = 1
+    while (index < needle.length && bytes[at + index] === needle[index]) index++
+    if (index === needle.length) return at
+  }
+  return -1
+}
+
+/**
+ * The largest JPEG 2000 image in a PDF when it is over JPX_PIXELS, else null. An image's dictionary is
+ * never compressed, so it is read from the file's own bytes, before anything is drawn.
+ */
+export function heavyJpx(pdf: Uint8Array): { width: number; height: number } | null {
+  let heaviest: { width: number; height: number } | null = null
+  for (let at = find(pdf, JPX, 0); at >= 0; at = find(pdf, JPX, at + 1)) {
+    // Only the bytes around each mention are read as text, so the file is never copied whole.
+    const from = Math.max(0, at - DICTIONARY_REACH)
+    const near = LATIN1.decode(pdf.subarray(from, at + DICTIONARY_REACH))
+    const here = at - from
+    const start = near.lastIndexOf(' obj', here)
+    const end = near.slice(here).search(/>>\s*stream\b/)
+    const dictionary = near.slice(Math.max(0, start), end < 0 ? undefined : here + end)
+    const width = Number(/\/Width\s+(\d+)\b(?!\s+\d+\s+R)/.exec(dictionary)?.[1])
+    const height = Number(/\/Height\s+(\d+)\b(?!\s+\d+\s+R)/.exec(dictionary)?.[1])
+    if (width * height > JPX_PIXELS && width * height > (heaviest ? heaviest.width * heaviest.height : 0)) heaviest = { width, height }
+  }
+  return heaviest
+}
+
 // Wrangler hands a `.wasm` import over compiled. A test runner hands over the file's path.
 async function compiled(imported: unknown) {
   if (imported instanceof WebAssembly.Module) return imported
