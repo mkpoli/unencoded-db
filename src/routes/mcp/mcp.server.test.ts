@@ -61,7 +61,7 @@ test('a connection is opened with the revision asked for and a token of its own'
   const { send, count } = fixture()
   const open = (protocolVersion: string) => send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion, capabilities: {}, clientInfo: { name: 'test', version: '1' } } })
   const first = await open('2025-06-18'), second = await open('2099-01-01')
-  expect((await first.json() as any).result).toMatchObject({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'rare-character-compendium' } })
+  expect((await first.json() as any).result).toMatchObject({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'org.glyphatlas/rare-character-compendium' } })
   expect((await second.json() as any).result.protocolVersion).toBe('2025-11-25')
   expect(first.headers.get('mcp-session-id')).toMatch(/^[0-9a-f]{64}$/)
   expect(second.headers.get('mcp-session-id')).not.toBe(first.headers.get('mcp-session-id'))

@@ -11,12 +11,13 @@ import { resourceMetadata } from '$lib/server/agents'
 import { tagList } from '$lib/server/tags'
 import { env } from '$lib/server/guard'
 import { AGENT_SESSION, newSessionToken } from '$lib/server/people'
+import { MCP_PROTOCOL_VERSIONS, MCP_SERVER } from './_meta.server'
 import { callTool, INSTRUCTIONS, toolList } from './_tools.server'
 import type { RequestHandler } from './$types'
 
 // Newest first. A client that asks for another revision is answered with the newest.
-const VERSIONS = ['2025-11-25', '2025-06-18']
-const SERVER = { name: 'rare-character-compendium', title: '珍字集覽 Rare Character Compendium', version: '1.0.0' }
+const VERSIONS: readonly string[] = MCP_PROTOCOL_VERSIONS
+const SERVER = MCP_SERVER
 
 const PARSE_ERROR = -32700, INVALID_REQUEST = -32600, METHOD_NOT_FOUND = -32601, INVALID_PARAMS = -32602, INTERNAL_ERROR = -32603
 type Id = string | number | null
