@@ -1,8 +1,8 @@
 import { quotations } from '../quotations'
 import { readDates, sightingDates } from './date-readings'
-import { STYLES, VIAS_MAX, isStoredContexts, isStoredSightingTypes, sourceKind } from '$lib/scripts'
+import { CITES_MAX, isCiteKind, STYLES, VIAS_MAX, isStoredContexts, isStoredSightingTypes, sourceKind } from '$lib/scripts'
 import { historyFeed, type FeedCursor, type FeedScope } from './entries'
-import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, VIA_IMAGE_FIELDS, tidyVias, type EntryFields, type SightingFields, type Via, type ViaPicture } from './entries'
+import { CITATION_FIELDS, entryFieldsOf, SIGHTING_FIELDS, VIA_INPUTS, VIA_IMAGE_FIELDS, tidyCites, tidyVias, type Cite, type EntryFields, type SightingFields, type Via, type ViaPicture } from './entries'
 
 // Only entry fields are public; a snapshot can also hold sighting or internal data.
 export const entrySnapshot = (raw: string): EntryFields | null => entryFieldsOf(raw)
@@ -28,6 +28,32 @@ function parseVias(raw: unknown): Via[] | null {
   return tidyVias(vias)
 }
 
+function parseCites(raw: unknown): Cite[] | null {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw) || raw.length > CITES_MAX) return null
+  const cites: Cite[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+    if (!isCiteKind(item.kind)) return null
+    if (item.sighting !== null && item.sighting !== undefined && (!Number.isSafeInteger(item.sighting) || item.sighting < 1)) return null
+    if (item.container === undefined) item.container = null
+    if (item.source_kind === undefined) item.source_kind = null
+    if (item.source_kind !== sourceKind(item.source_kind)) return null
+    for (const field of CITATION_FIELDS) if (typeof item[field] !== 'string' && item[field] !== null) return null
+    if (typeof item.quote !== 'string' && item.quote !== null && item.quote !== undefined) return null
+    if (typeof item.note !== 'string' && item.note !== null && item.note !== undefined) return null
+    if (item.url !== null && !/^https?:\/\//i.test(item.url)) return null
+    cites.push({
+      kind: item.kind,
+      sighting: typeof item.sighting === 'number' ? item.sighting : null,
+      ...Object.fromEntries(CITATION_FIELDS.map(field => [field, item[field]])),
+      quote: typeof item.quote === 'string' ? item.quote : null,
+      note: typeof item.note === 'string' ? item.note : null,
+    } as Cite)
+  }
+  return tidyCites(cites)
+}
+
 // The text of a past version. A restore brings back the text and leaves the pictures as they are, those of the
 // sighting and those of its chain.
 export function sightingSnapshot(raw: string): SightingFields | null {
@@ -49,7 +75,9 @@ export function sightingSnapshot(raw: string): SightingFields | null {
     if (VIA_INPUTS.some(field => field in value)) return null
     const vias = parseVias(value.vias)
     if (!vias) return null
-    return { ...Object.fromEntries(SIGHTING_FIELDS.map(field => [field, value[field]])), vias } as SightingFields
+    const cites = parseCites(value.cites)
+    if (!cites) return null
+    return { ...Object.fromEntries(SIGHTING_FIELDS.map(field => [field, value[field]])), vias, ...(cites.length ? { cites } : {}) } as SightingFields
   } catch { return null }
 }
 

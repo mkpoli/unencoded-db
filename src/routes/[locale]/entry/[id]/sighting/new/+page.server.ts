@@ -1,6 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import { archiveCited } from '$lib/server/archive'
-import { addSighting, citesEvidence, getEntry, readSightingFields, SightingLimitError, SIGHTINGS_MAX } from '$lib/server/entries'
+import { addSighting, citesEvidence, CiteValidationError, getEntry, readSightingFields, SightingLimitError, SIGHTINGS_MAX, validateCiteTargets } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
@@ -17,7 +17,8 @@ export const load: PageServerLoad = async (event) => {
   if (!found || found.entry.hidden_at || found.entry.merged_into) error(404)
   const loaded = await loadSightingSeed(DB, event.url.searchParams.get('sighting'))
   const seed = loaded && loaded.entry !== id ? loaded : null
-  return { id, ids: found.entry.ids, seed }
+  const siblings = found.sightings.filter(s => !s.hidden_at).map(({ id, title, place, report_date, original_date }) => ({ id, title, place, report_date, original_date }))
+  return { id, ids: found.entry.ids, seed, siblings }
 }
 
 export const actions: Actions = {
@@ -36,6 +37,8 @@ export const actions: Actions = {
     if (found.sightings.length >= SIGHTINGS_MAX) return fail(400, { error: 'sightingLimit', values })
     if (shots.error) return fail(400, { error: shots.error, values })
     const fields = readSightingFields(form, shots.all)
+    const badCite = await validateCiteTargets(DB, fields.cites)
+    if (badCite) return fail(400, { error: badCite, values })
     const media = await uploadedImages(form, MEDIA)
     if (media === 'invalid') return fail(400, { error: 'image', values })
     if (!media.length && !citesEvidence(fields)) return fail(400, { error: 'evidence', values })
@@ -46,6 +49,7 @@ export const actions: Actions = {
       sighting = await addSighting(DB, id, fields, media, { actor: person.id, ip: await ipHash(event) })
     } catch (cause) {
       if (cause instanceof SightingLimitError) return fail(400, { error: 'sightingLimit', values })
+      if (cause instanceof CiteValidationError) return fail(400, { error: cause.code, values })
       throw cause
     }
     if (!sighting) return fail(404, { error: 'missing', values })

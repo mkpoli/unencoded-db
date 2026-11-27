@@ -18,6 +18,7 @@
     type TagType,
   } from '$lib/tags'
   import type { TagChange } from '$lib/server/tags'
+  import AgentBadge from './AgentBadge.svelte'
   import { LOCALES, LOCALE_NAMES } from '$lib/i18n'
   import { href, locale, t, when } from '$lib/t'
 
@@ -599,6 +600,7 @@
             {#if detail}<span class="detail">{detail}</span>{/if}
             <span class="meta">
               {#if change.by_id}<a href={href(`/u/${change.by_id}`)}>{change.by_name ?? change.by_id}</a>{/if}
+              {#if change.by_agent}<AgentBadge name={change.by_agent} model={change.by_model ?? null} standalone={change.by_agent === change.by_name} />{/if}
               · {when(change.at)}
             </span>
             {#if undoable.has(change.id)}

@@ -31,6 +31,7 @@
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { COMMENTS_SHOWN } from '$lib/comments'
   import Discussion from '$lib/components/Discussion.svelte'
+  import CitePills from '$lib/components/CitePills.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
   import ArchiveLinks from '$lib/components/ArchiveLinks.svelte'
   import type { Fill } from '$lib/encoded'
@@ -53,6 +54,8 @@
   let { data, form } = $props()
   const entry = $derived(data.entry)
   const claims = $derived(data.claims)
+  const derivedCount = $derived(data.sightings.filter(s => s.cites.some(c => c.status === 'witness')).length)
+  const witnessBySource = $derived(new Map(data.sightings.filter(s => s.source_id !== null).map(s => [s.source_id!, s.id])))
   const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
   const commenting = $derived(Boolean(form?.error && page.url.searchParams.has('/comment')))
   const shownComments = $derived.by(() => { const shown = data.comments.filter(comment => !comment.hidden_at).length; return shown && (data.comments.length >= COMMENTS_SHOWN ? `${shown}+` : String(shown)) })
@@ -333,12 +336,14 @@
     <a class="text-link small" href="https://www.unicode.org/irg/pp/" target="_blank" rel="noopener">{t('ready.rules')} ↗</a>
   </section>
   {/if}
-  <section class="stack"><h2>{t('entry.sightings')}</h2>
+  <section class="stack">
+    <div class="row"><h2>{t('entry.sightings')}</h2>{#if derivedCount > 0}<span class="badge">{t('entry.derivedCount', { derived: derivedCount, total: data.sightings.length })}</span>{/if}</div>
     {#each data.sightings as sighting (sighting.id)}
       {@const types = parseSightingTypes(sighting.types)}
       {@const contexts = parseContexts(sighting.contexts)}
       {@const web = sighting.url && /^https?:\/\//i.test(sighting.url) ? sighting.url : null}
       {@const copies = (sighting.source_id && data.archives.get(sighting.source_id)) || []}
+      {@const otherWitnesses = new Map([...witnessBySource].filter(([, sid]) => sid !== sighting.id))}
       <article class="panel stack" id="sighting-{sighting.id}">
         <EvidencePictures pictures={sighting.media} alt={position => pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} preparing={position => Boolean(preparing[`${sighting.id}:${position}`])} ondownload={(picture, position) => download(sighting, picture, position)} />
         {#if sighting.place}<h3>{sighting.place}</h3>{/if}
@@ -349,7 +354,8 @@
             <ArchiveLinks archives={copies} />
           </div>
         {/if}
-        {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} archives={data.archives} pictures />{/if}
+        {#if sighting.cites.length || sighting.cited_by.length}<CitePills entryId={entry.id} cites={sighting.cites} citedBy={sighting.cited_by} dates={data.dates} />{/if}
+        {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} archives={data.archives} witnesses={otherWitnesses} pictures />{/if}
         <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else if field.key === 'source_kind'}{kindName(sighting.source_kind)}{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
           {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}

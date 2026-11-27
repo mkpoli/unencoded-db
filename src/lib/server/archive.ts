@@ -1,6 +1,6 @@
 import type { RequestEvent } from '@sveltejs/kit'
 import { ARCHIVES_MAX, archiveUrl } from '$lib/source-archives'
-import { citationHash, tidyVias, type Citation, type SightingFields } from './entries'
+import { citationHash, tidyCites, tidyVias, type Citation, type SightingFields } from './entries'
 import { notifyIndexNow } from './indexnow'
 import { editSourceArchive, sourceArchives } from './source-archives'
 
@@ -236,7 +236,7 @@ export function archiveCited(event: Pick<RequestEvent, 'platform'>, sightings: r
   const platform = event.platform
   const db = platform?.env?.DB
   if (!platform?.ctx || !db) return
-  const cited: Citation[] = sightings.flatMap(sighting => [sighting, ...tidyVias(sighting.vias)]).filter(citation => archivable(citation.url))
+  const cited: Citation[] = sightings.flatMap(sighting => [sighting, ...tidyVias(sighting.vias), ...tidyCites(sighting.cites)]).filter(citation => archivable(citation.url))
   if (!cited.length) return
   platform.ctx.waitUntil(archiveSources(event, db, cited, fetchImpl))
 }

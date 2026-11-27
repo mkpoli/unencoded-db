@@ -34,8 +34,9 @@ Claims may disagree; none of them removes a record.
 ## Trace to the original
 
 Prefer the earliest attestation in its original source, with author, title, publisher, date and
-page. A sighting cites the original work and, separately, where the contributor found it, so a post
-that relayed the evidence keeps its credit without standing in for the source.
+page. Each work that writes the character anew is a sighting of its own, and names the older works
+its text quotes. A sighting cites the original work and, separately, where the contributor found it,
+so a post that relayed the evidence keeps its credit without standing in for the source.
 
 ## Credit every source
 

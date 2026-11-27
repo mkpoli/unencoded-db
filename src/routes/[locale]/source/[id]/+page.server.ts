@@ -18,8 +18,8 @@ export const load: PageServerLoad = async (event) => {
   if (!id) error(404)
   const found = await sourcePage(env(event).DB, id)
   if (!found) error(404)
-  const glyphs = await tileGlyphs(event.platform, event.url.origin, found.sightings.map(sighting => sighting.tile), event.locals.glyphStyle)
-  const dates = await readDates(env(event).DB, [found.source.report_date, ...found.sightings.flatMap(s => [s.original_date, ...s.vias.map(via => via.report_date)])])
+  const glyphs = await tileGlyphs(event.platform, event.url.origin, [...found.sightings.map(sighting => sighting.tile), ...found.namedIn.map(item => item.tile)], event.locals.glyphStyle)
+  const dates = await readDates(env(event).DB, [found.source.report_date, ...found.sightings.flatMap(s => [s.original_date, ...s.vias.map(via => via.report_date)]), ...found.namedIn.flatMap(item => [item.original_date, item.report_date])])
   const cursor = (name: string) => {
     const param = event.url.searchParams.get(name)
     const value = param === null ? null : positiveId(param)
