@@ -19,6 +19,7 @@ declare module 'ids-input/svelte' {
   export const IdsSequence: Component<{ editor: IdsEditor; label?: boolean; placeholder?: string; onenter?: () => void }>
   /** What a host needs of the editor behind a sequence field. */
   export type IdsEditor = {
+    readonly adapter: IdsAdapter
     /** The text in the field, `⬚` for each empty slot. */
     readonly draft: string
     /** What is wrong with the text, in the editor's language, or '' when nothing is. */
@@ -39,7 +40,7 @@ declare module 'ids-input/svelte' {
     listen(heard: (text: string, whole: boolean) => void): () => void
   }
   /** The tables an editor looks parts up in. The sequence field alone needs none. */
-  export type IdsAdapter = { structure(char: string): Promise<unknown[]> }
+  export type IdsAdapter = { fontStyle?: import('$lib/composer').GlyphStyle; structure(char: string): Promise<unknown[]> }
   export function createEditor(options: () => { adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; disabled?: boolean; tintMode?: 'hover' | 'on' | 'off' }): IdsEditor
   export const IdsOperators: Component<{ editor: IdsEditor; keyHints?: boolean }>
   export const IdsTree: Component<{ editor: IdsEditor; variations?: boolean; keyHints?: boolean }>

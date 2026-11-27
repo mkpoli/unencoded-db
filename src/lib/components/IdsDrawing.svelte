@@ -51,18 +51,15 @@
   import { cleanIds } from '$lib/ids'
   import { carryLayout, cleanLayout, layoutForStyle, layoutText, placeOf, withStyleLayout, type Layout } from '$lib/layout'
   import { glyphAddress } from '$lib/glyph-address'
-  import { page } from '$app/state'
-  import { GLYPH_STYLES, glyphStyleOf } from '$lib/composer'
+  import { GLYPH_STYLES } from '$lib/composer'
   import { locale, t } from '$lib/t'
   import GlyphFace from './GlyphFace.svelte'
   import IdsGlyph from './IdsGlyph.svelte'
 
-  let { ids, layout = null, chosen = null, adjusting = $bindable(false) }: { ids: string; layout?: Layout | null; chosen?: number[] | null; adjusting?: boolean } = $props()
+  let { ids, layout = null, chosen = null, adjusting = $bindable(false), style = $bindable() }: { ids: string; style: GlyphStyle; layout?: Layout | null; chosen?: number[] | null; adjusting?: boolean } = $props()
 
   const at = locale()
   const uid = $props.id()
-  let selectedStyle = $state<GlyphStyle | null>(null)
-  const style = $derived(selectedStyle ?? glyphStyleOf(page.data.glyphStyle))
   const sequence = $derived(cleanIds(ids))
   // Empty places are parts of a description that is being built; an empty field is no description.
   const tree = $derived(sequence ? parse(sequence, { open: true }).tree : undefined)
@@ -197,7 +194,7 @@
   async function pick(face: GlyphStyle) {
     if (face === style) return
     places = others.map(other => other === face ? style : other)
-    selectedStyle = face
+    style = face
     await tick()
     faces?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]')?.focus()
   }

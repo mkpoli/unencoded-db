@@ -62,7 +62,7 @@
     <IdsAlternatives {editor} variations onchoose={close} />
   {/if}
 {/snippet}
-<IdsCharacterInfo root={scope ?? root} {adapter} {messages} {locale} onpick={(part, path) => editor.take(part, path)}
+<IdsCharacterInfo root={scope ?? root} adapter={editor.adapter} {messages} {locale} onpick={(part, path) => editor.take(part, path)}
   extra={grassForm(editor) || rateFormsOfPart(editor.picked).length || unifiable.entries.length ? formChoices : undefined} />
 
 <style>

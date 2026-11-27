@@ -19,12 +19,13 @@
   import { recordCode } from '$lib/code'
   import { LOOSE_MIN, MADE_OF } from '$lib/similar'
   import { browser } from '$app/environment'
+  import type { GlyphStyle } from '$lib/composer'
   import type { IdsAdapter, IdsEditor } from 'ids-input/svelte'
   import IdsGlyph from './IdsGlyph.svelte'
   import IdsLine from './IdsLine.svelte'
 
-  let { values = [], primary = $bindable(''), chosen = $bindable(null), exclude = null, placed, seed = null, anchor, onfill }: {
-    values?: string[]; primary?: string; chosen?: number[] | null; exclude?: number | null; placed?: (id: number) => string; seed?: { id: number; entry: number } | null; anchor?: string; onfill?: (fill: Fill) => void
+  let { values = [], primary = $bindable(''), chosen = $bindable(null), fontStyle, exclude = null, placed, seed = null, anchor, onfill }: {
+    fontStyle: GlyphStyle; values?: string[]; primary?: string; chosen?: number[] | null; exclude?: number | null; placed?: (id: number) => string; seed?: { id: number; entry: number } | null; anchor?: string; onfill?: (fill: Fill) => void
   } = $props()
 
   // `placed` answers where the evidence at hand moves to a record that describes it already;
@@ -93,6 +94,7 @@
   // editor the tables it looks parts up in.
   let editor = $state.raw<IdsEditor | null>(null)
   let tools = $state.raw<{ Builder: typeof import('./IdsBuilder.svelte').default; adapter: IdsAdapter; messages: Record<string, string> | undefined } | null>(null)
+  const adapter = $derived(tools ? { ...tools.adapter, fontStyle } : undefined)
   let building = $state(false)
   let root = $state<HTMLElement | null>(null)
   async function build() {
@@ -173,7 +175,7 @@
 
 <div class="descriptions" id={anchor} bind:this={root}>
   <div class="main">
-    <IdsLine bind:this={main} bind:value={first} label={t('field.ids')} titled adapter={tools?.adapter} oneditor={found => editor = found} />
+    <IdsLine bind:this={main} bind:value={first} label={t('field.ids')} titled {adapter} oneditor={found => editor = found} />
     <button type="button" class="button build" aria-expanded={building} aria-controls="{uid}-tools" disabled={!hydrated} onclick={build}>{t('field.idsBuild')}<span class="chevron" aria-hidden="true">⌄</span></button>
   </div>
   <div class="tools" id="{uid}-tools" hidden={!building}>
