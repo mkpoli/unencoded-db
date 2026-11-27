@@ -24,6 +24,7 @@ import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { MAX_WRITE_BODY } from '$lib/server/body-limit'
 import { MAX_IMAGE, prepareImage, sniff } from '$lib/server/image'
+import { pagesOf } from '$lib/pdf-pages'
 import { isPdf, PDF_SIDE, renderPdfPage } from '$lib/server/pdf'
 import { agentWriter } from '$lib/server/people'
 import { described, storeImages, type ReadImage } from '../_submission.server'
@@ -85,6 +86,8 @@ export const FETCHES_MAX = 10
 export const PDF_PAGES_MAX = 4
 
 // What one call may still take in: bytes held in memory, and fetches from other sites.
+/** The last page a range may name; whether the file has the page is known once it is opened. */
+const PDF_PAGE_LAST = 99_999
 type Budget = { bytes: number; fetches: number; pages?: number; seen?: Map<string, ReadImage['image']> }
 
 // The bytes behind a picture's address, within what the call has left. A picture this site already shows
@@ -236,14 +239,21 @@ async function readViaPictures(event: RequestEvent, planned: PlannedVia, budget:
 }
 
 function pictureItems(value: unknown) {
-  const pictures = items(value).map(item => typeof item === 'string' ? { url: item } : record(item))
-  if (pictures.length > MEDIA_MAX) throw new Refusal(`A sighting holds up to ${MEDIA_MAX} pictures.`)
-  return pictures.map(({ url, marks, page }) => {
+  const asked = items(value).map(item => typeof item === 'string' ? { url: item } : record(item))
+  // A picture that names several pages of a PDF stands for one picture a page.
+  const pictures = asked.flatMap(({ url, marks, page, pages }) => {
     const address = text(url).trim()
     if (!address) throw new Refusal('Each picture needs a url.')
     if (page !== undefined && !(Number.isInteger(page) && (page as number) >= 1)) throw new Refusal('page is a whole number counted from 1.')
-    return { address, marks, page: page as number | undefined }
+    if (pages === undefined) return [{ address, marks, page: page as number | undefined }]
+    if (page !== undefined) throw new Refusal('Give page or pages, not both.')
+    const named = pagesOf(text(pages), PDF_PAGE_LAST)
+    if (!named) throw new Refusal('pages names pages counted from 1, such as "3", "2-4" or "1, 5-6".')
+    if (named.length > 1 && items(marks).length) throw new Refusal('marks belong to one page: give each marked page as a picture of its own.')
+    return named.map(each => ({ address, marks, page: each as number | undefined }))
   })
+  if (pictures.length > MEDIA_MAX) throw new Refusal(`A sighting holds up to ${MEDIA_MAX} pictures.`)
+  return pictures
 }
 
 // The marks of one picture, or null for none.
@@ -648,12 +658,13 @@ const SIGHTING = {
   note: { type: 'string', description: 'A note on this source.' },
   vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' }, pictures: { type: 'array', maxItems: MEDIA_MAX, description: `Pictures of this source, such as a screenshot of the post, from their addresses, without marks. A picture belongs to one source, the chain holds ${MEDIA_MAX} in all, and the source needs a citation.`, items: { oneOf: [{ type: 'string' }, { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string' } } }], description: 'Address of the image file itself.' } } } } },
   pictures: {
-    type: 'array', maxItems: MEDIA_MAX, description: `Evidence pictures, fetched from their addresses and kept by the site. JPEG, PNG or WebP, or one page of a PDF, up to ${FETCHES_MAX} from other sites and ${PDF_PAGES_MAX} PDF pages in one call.`,
+    type: 'array', maxItems: MEDIA_MAX, description: `Evidence pictures, fetched from their addresses and kept by the site. JPEG, PNG or WebP, or pages of a PDF, up to ${FETCHES_MAX} from other sites and ${PDF_PAGES_MAX} PDF pages in one call.`,
     items: {
       type: 'object', required: ['url'],
       properties: {
         url: { type: 'string', description: 'Address of the image file itself, or of a PDF.' },
         page: { type: 'integer', minimum: 1, description: `For a PDF: the page to draw, counted from 1; the first when left out. The page is kept as a picture whose longer side is ${PDF_SIDE} pixels, fewer for a page nearer to square than a sheet of paper, and marks are in pixels of that picture.` },
+        pages: { type: 'string', description: 'For a PDF, in place of page: several pages as one picture each, such as "2-4" or "1, 5-6". Marks go with a single page.' },
         marks: { type: 'array', maxItems: BOXES_MAX, description: 'Boxes around the character, each [x, y, width, height] in pixels of the picture.', items: { type: 'array', items: { type: 'number' }, minItems: 4, maxItems: 4 } },
       },
     },
