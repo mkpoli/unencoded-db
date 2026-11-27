@@ -428,6 +428,7 @@
   "me.signOut": "ログアウト",
   "agent.title": "エージェントを接続",
   "agent.client": "エージェント",
+  "agent.unknown": "不明",
   "agent.by": "エージェント：{agent}",
   "agent.byModel": "エージェント：{agent}・モデル：{model}",
   "agent.newName": "新しい匿名の名前",

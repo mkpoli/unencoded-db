@@ -428,6 +428,7 @@
   "me.signOut": "登出",
   "agent.title": "連結代理程式",
   "agent.client": "代理程式",
+  "agent.unknown": "未知",
   "agent.by": "代理程式：{agent}",
   "agent.byModel": "代理程式：{agent}・模型：{model}",
   "agent.newName": "新的匿名名稱",

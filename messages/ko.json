@@ -428,6 +428,7 @@
   "me.signOut": "로그아웃",
   "agent.title": "에이전트 연결",
   "agent.client": "에이전트",
+  "agent.unknown": "알 수 없음",
   "agent.by": "에이전트: {agent}",
   "agent.byModel": "에이전트: {agent} · 모델: {model}",
   "agent.newName": "새 익명 이름",

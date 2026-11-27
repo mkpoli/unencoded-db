@@ -595,3 +595,21 @@ test('a picture stands once in a chain, and a refusal spends no fetch', async ()
   expect(asked).toHaveLength(0)
   expect(await call('edit_sighting', { record: 1, sighting: read.id, rev: 1, vias: [{ ...post, pictures: [{ url: same, marks: [[1, 1, 6, 6]] }] }] })).toMatchObject({ failed: true, value: expect.stringContaining('no marks') })
 })
+
+test('every write is an agent\'s, named by the harness and model it says', async () => {
+  const { call, connect, raw } = fixture()
+  const actor = (record: number) => raw.query('SELECT p.name, p.agent, p.agent_model, p.merged_into FROM revisions r JOIN people p ON p.id = r.actor WHERE r.entry_id = ? ORDER BY r.id DESC LIMIT 1').get(record) as { name: string; agent: number; agent_model: string; merged_into: string | null }
+  // A connection that says nothing is an unknown agent.
+  const quiet = await connect()
+  expect((await call('add_record', { ids: ['⿰山東'], sightings: [sighting] }, quiet)).failed).toBe(false)
+  expect(actor(1)).toMatchObject({ name: 'Unknown', agent: 1, agent_model: '' })
+  // What it says later names the same connection.
+  expect((await call('add_record', { ids: ['⿰山西'], sightings: [sighting], agent: { harness: 'Claude Code', model: 'Fable 5.2' } }, quiet)).failed).toBe(false)
+  expect(actor(1)).toMatchObject({ name: 'Claude Code', agent: 1, agent_model: 'Fable 5.2' })
+  expect((raw.query('SELECT count(*) AS n FROM people').get() as { n: number }).n).toBe(1)
+  // Another connection is another agent, and a harness alone is enough.
+  const other = await connect()
+  expect((await call('add_record', { ids: ['⿰山南'], sightings: [sighting], agent: { harness: 'Codex' } }, other)).failed).toBe(false)
+  expect(actor(3)).toMatchObject({ name: 'Codex', agent: 1, agent_model: '' })
+  expect((await call('add_sighting', { record: 1, ...sighting, place: 'Elsewhere', agent: { harness: 'x'.repeat(81) } }, other)).value).toContain('agent.harness')
+})

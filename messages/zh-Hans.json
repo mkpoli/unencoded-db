@@ -428,6 +428,7 @@
   "me.signOut": "退出登录",
   "agent.title": "连接智能体",
   "agent.client": "智能体",
+  "agent.unknown": "未知",
   "agent.by": "智能体：{agent}",
   "agent.byModel": "智能体：{agent}・模型：{model}",
   "agent.newName": "新的匿名名称",
