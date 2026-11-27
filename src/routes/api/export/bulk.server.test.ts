@@ -384,3 +384,17 @@ test('mergedBatches resolves each batch fresh under concurrent unmerge and re-me
     { id: 4, code: 'R+0004', merged_into: 2, merged_into_code: 'R+0002' },
   ])
 })
+
+test('mergedBatches resolves long chains across batch boundaries without dropping records', async () => {
+  const { db, raw } = openTestDb()
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec(`WITH RECURSIVE seq(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM seq WHERE x < 502)
+    INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at)
+    SELECT x, 'han', CASE WHEN x = 1 THEN NULL ELSE x - 1 END, 'p', '2026', '2026' FROM seq`)
+  for (const size of [500, 25]) {
+    const rows = []
+    for await (const batch of mergedBatches(db, size)) rows.push(...batch)
+    expect(rows).toHaveLength(501)
+    expect(rows.at(-1)).toEqual({ id: 502, code: 'R+01F6', merged_into: 1, merged_into_code: 'R+0001' })
+  }
+})
