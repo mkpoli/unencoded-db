@@ -30,10 +30,16 @@ function breadcrumbs(trail: { name: string; url: string }[]): Json {
   }
 }
 
-function citation(locale: string, source: SourceFacts): Json {
+// The web addresses among a source's archived copies, or null when there are none.
+const archivedAt = (archives: readonly string[] = []) => {
+  const copies = archives.map(web).filter(url => url !== null)
+  return copies.length ? copies : null
+}
+
+function citation(locale: string, source: SourceFacts, archives?: readonly string[]): Json {
   return present({
     '@type': 'CreativeWork', name: source.title, creator: source.author, publisher: source.publisher,
-    datePublished: machineDate(source.report_date), isPartOf: containerOf(source), url: sourceUrl(locale, source.id),
+    datePublished: machineDate(source.report_date), isPartOf: containerOf(source), url: sourceUrl(locale, source.id), archivedAt: archivedAt(archives),
   })
 }
 
@@ -42,6 +48,7 @@ export type RecordFacts = {
   image?: string | null  // a path or URL of the cover picture
   sources: SourceFacts[]  // the works cited
   vias?: SourceFacts[]  // what the evidence was found through
+  archives?: ReadonlyMap<number, readonly string[]>  // copies web archives keep of the sources, by source
 }
 
 // schema.org has no property for a go-between: `isBasedOn` says the record is derived from a work, which
@@ -58,7 +65,7 @@ export function recordData(facts: RecordFacts): Json[] {
       // The picture is its own object with no licence of its own here: the record's licence does not reach it.
       image: facts.image ? { '@type': 'ImageObject', contentUrl: new URL(facts.image, SITE_ORIGIN).href } : null, inLanguage: facts.locale, license: RECORD_LICENSE,
       isPartOf: SITE,
-      citation: sources.length ? sources.map(source => citation(facts.locale, source)) : null,
+      citation: sources.length ? sources.map(source => citation(facts.locale, source, facts.archives?.get(source.id))) : null,
     }),
     breadcrumbs([{ name: facts.siteName, url: `${SITE_ORIGIN}/${facts.locale}` }, { name: facts.name, url }]),
   ]
@@ -68,12 +75,11 @@ export function recordData(facts: RecordFacts): Json[] {
 export type SourcePageFacts = { locale: string; source: SourceFacts; archives?: string[]; name: string; siteName: string; sourcesName: string }
 
 export function sourceData({ locale, source, archives = [], name, siteName, sourcesName }: SourcePageFacts): Json[] {
-  const copies = archives.map(web).filter(url => url !== null)
   const url = sourceUrl(locale, source.id), container = containerOf(source)
   return [
     present({
       '@context': CONTEXT, '@type': 'CreativeWork', '@id': url, url, name, creator: source.author, publisher: source.publisher,
-      datePublished: machineDate(source.report_date), sameAs: web(source.url), archivedAt: copies.length ? copies : null, inLanguage: locale,
+      datePublished: machineDate(source.report_date), sameAs: web(source.url), archivedAt: archivedAt(archives), inLanguage: locale,
       isPartOf: container ? [SITE, container] : SITE,
     }),
     breadcrumbs([{ name: siteName, url: `${SITE_ORIGIN}/${locale}` }, { name: sourcesName, url: `${SITE_ORIGIN}/${locale}/sources` }, { name, url }]),
