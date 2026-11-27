@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit'
-import { globalHistory } from '$lib/server/entries'
+import { globalHistory, historyBy } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
 import { tagList } from '$lib/server/tags'
 import { revisionDates, revisionFields } from '$lib/server/revisions'
@@ -10,7 +10,9 @@ export const load: PageServerLoad = async (event) => {
   const cursor = event.url.searchParams.get('before')
   const before = cursor === null ? null : positiveId(cursor)
   if (cursor !== null && before === null) error(404)
-  const [{ rows, next }, tags] = await Promise.all([globalHistory(env(event).DB, before), tagList(env(event).DB)])
+  const by = historyBy(event.url.searchParams.get('by'))
+  if (by === undefined) error(404)
+  const [{ rows, next }, tags] = await Promise.all([globalHistory(env(event).DB, before, by), tagList(env(event).DB)])
   const revisions = rows.map(({ snapshot, sighting_rev, ...row }) => ({
     ...row,
     sightingRev: sighting_rev ?? null,
@@ -20,6 +22,7 @@ export const load: PageServerLoad = async (event) => {
     rows: revisions,
     dates: await revisionDates(env(event).DB, revisions),
     next,
+    by,
     tags: tags.map(({ name, label, type }) => ({ name, label, type })),
   }
 }

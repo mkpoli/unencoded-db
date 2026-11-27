@@ -17,8 +17,8 @@
     moved?: { sighting: number; to?: number; from?: number } | null
   }
 
-  let { rows, tags, dates, currentRev = null, duplicates = [], showEntry = false, showActor = true, restore = false, redact = false, thank = false, thanked = [], viewer = null, empty, next = null }: {
-    dates: Map<string, DateReading | null>; rows: Row[]; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; duplicates?: number[]; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; thank?: boolean; thanked?: number[]; viewer?: string | null; empty: string; next?: number | null
+  let { rows, tags, dates, currentRev = null, duplicates = [], showEntry = false, showActor = true, restore = false, redact = false, thank = false, thanked = [], viewer = null, empty, next = null, query = '' }: {
+    dates: Map<string, DateReading | null>; rows: Row[]; tags: Pick<Tag, 'name' | 'label' | 'type'>[]; currentRev?: number | null; duplicates?: number[]; showEntry?: boolean; showActor?: boolean; restore?: boolean; redact?: boolean; thank?: boolean; thanked?: number[]; viewer?: string | null; empty: string; next?: number | null; query?: string
   } = $props()
   const labels = $derived(tagLabels(localized(tags, locale())))
   const tagTypes = $derived(new Map(tags.map(tag => [tag.name, tag.type])))
@@ -135,7 +135,7 @@
     {/if}
   {/each}
 </ol>
-{#if next}<div class="revision-more"><a class="button" href={`?before=${next}`}>{t('history.older')}</a></div>{/if}
+{#if next}<div class="revision-more"><a class="button" href={`?${query}before=${next}`}>{t('history.older')}</a></div>{/if}
 
 <style>
   .revision-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line) }
