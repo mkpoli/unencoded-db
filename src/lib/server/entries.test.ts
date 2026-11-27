@@ -10,7 +10,7 @@ import { isDescription, rateFormsOfPart } from 'ids-input'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TAG_IMPLY_DEPTH_MAX, TAG_TYPES, arrangeTags, canImply, cleanTag, implicationClosure, localized, tagLabels } from '$lib/tags'
-import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement, mergeTag, aliasTag, unaliasTag, aliasesStatement, nameTier } from './tags'
+import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, tagChanges, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement, mergeTag, aliasTag, unaliasTag, aliasesStatement, nameTier } from './tags'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
@@ -1425,6 +1425,18 @@ describe('records a search finds', () => {
   })
 })
 
+test('a tag change by an agent shows the person it works for, with the agent and model', async () => {
+  const person = await createPerson(db)
+  const agent = await createPerson(db)
+  raw.query("UPDATE people SET name = 'Owner' WHERE id = ?").run(person.id)
+  raw.query("UPDATE people SET name = 'Claude Code', agent = 1, agent_model = 'Opus 5.5', merged_into = ? WHERE id = ?").run(person.id, agent.id)
+  expect(await createTag(db, await tagList(db), { name: '族名', type: 'domain', implies: [] }, { actor: agent.id, ip: null })).toMatchObject({ ok: true })
+  await createTag(db, await tagList(db), { name: '物理', type: 'domain', implies: [] }, who)
+  const changes = await tagChanges(db)
+  expect(changes.find(change => change.name === '族名')).toMatchObject({ by_id: person.id, by_name: 'Owner', by_agent: 'Claude Code', by_model: 'Opus 5.5' })
+  expect(changes.find(change => change.name === '物理')).toMatchObject({ by_id: who.actor, by_agent: null, by_model: null })
+})
+
 describe('typed tags and implications', () => {
   const listed = () => tagList(db)
   const made = async (name: string, type: 'general' | 'region' | 'language' | 'form' | 'domain' | 'meta' = 'general', implies: string[] = []) => {
@@ -1603,7 +1615,7 @@ describe('typed tags and implications', () => {
       ['move size', plan(moveSizeStatement(db, '甲')), /SEARCH tag_counts USING PRIMARY KEY \(tag=\?\)/],
       ['recent moves', plan(recentMovesStatement(db, who.actor, '2026')), /SEARCH tag_changes USING (COVERING )?INDEX tag_changes_by_actor \(actor=\?/],
       ['latest change', plan(latestChangeStatement(db, '甲')), /SEARCH tag_changes USING COVERING INDEX tag_changes_by_name \(subject=\? AND name=\?\)/],
-      ['changes', plan(changesStatement(db)), /SCAN c[\s\S]*SEARCH p USING INDEX sqlite_autoindex_people_1 \(id=\?\)/],
+      ['changes', plan(changesStatement(db)), /SCAN c[\s\S]*SEARCH p USING INDEX sqlite_autoindex_people_1 \(id=\?\)[\s\S]*SEARCH m USING INDEX sqlite_autoindex_people_1 \(id=\?\)/],
       ...refileStatements(db, '甲').map((statement, index): [string, string, RegExp] => [
         `refile ${index}`,
         plan(statement),
@@ -1616,7 +1628,7 @@ describe('typed tags and implications', () => {
     for (const [name, details, wanted] of reads) {
       expect(`${name}: ${details}`).not.toMatch(/claims_by_value \(kind=\?\)/)
       expect(`${name}: ${details}`).toMatch(wanted)
-      expect(`${name}: ${details}`).not.toMatch(/AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (tags|tag_counts|claims|entries|entry_tags|people|cl|e|t)\b/)
+      expect(`${name}: ${details}`).not.toMatch(/AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (tags|tag_counts|claims|entries|entry_tags|people|cl|e|t|m)\b/)
       if (name !== 'implications') expect(`${name}: ${details}`).not.toMatch(/SCAN tag_implications\b/)
       if (name !== 'refile 3') expect(details).not.toMatch(/TEMP B-TREE/)
     }

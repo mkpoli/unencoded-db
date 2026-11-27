@@ -16,6 +16,7 @@ import { creatorKey, encodingsOf, joinClaims, mapSightings, moveClaims, newClaim
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { FILE_ROWS, ensureTags, filedUnder } from './tags'
+import { WHO, WHO_COLUMNS } from './people'
 import type { Tag } from '$lib/tags'
 import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
 import { groupMates } from '$lib/similar'
@@ -1327,8 +1328,6 @@ export async function resolveReport(db: D1Database, id: number, by: string) {
 // ---------- Reads ----------
 
 export const SIGHTINGS_MAX = 200
-const WHO = (column: string) => `LEFT JOIN people p ON p.id = ${column} LEFT JOIN people m ON m.id = p.merged_into`
-const WHO_COLUMNS = "COALESCE(m.id, p.id) AS by_id, COALESCE(m.name, p.name) AS by_name, CASE WHEN p.agent = 1 THEN p.name END AS by_agent, CASE WHEN p.agent = 1 THEN NULLIF(p.agent_model, '') END AS by_model"
 const CITATION_COLUMNS = CITATION_FIELDS.map(field => `c.${field}`).join(', ')
 const CITATION = 'LEFT JOIN sources c ON c.id = s.source_id'
 
