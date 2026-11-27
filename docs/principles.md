@@ -41,7 +41,7 @@ so a post that relayed the evidence keeps its credit without standing in for the
 A sighting takes an original date only when its picture reproduces the older work directly: a
 photo, scan, facsimile, rubbing, tracing or line drawing of it in the cited publication. A typeset
 transcription (隸定) or a later dictionary citing an older text has no original date; its report
-date dates it, and the older text can be named in a quote's locator or the note.
+date dates it, and the older text goes among the older works it cites.
 
 ## Credit every source
 
