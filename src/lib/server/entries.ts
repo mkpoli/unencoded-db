@@ -314,13 +314,13 @@ export function readBoxes(raw: unknown, width: number, height: number) {
 
 // ---------- The tags a record holds ----------
 
-const WORD = /[\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Hangul}\p{N}]+|[^\s\p{P}\p{S}\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Hangul}\p{N}]|[⿰-⿿]/gu
+const WORD = /[\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Hangul}\p{N}]+|[^\s\p{P}\p{S}\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Hangul}\p{N}]|[⿰-⿿]|[\u31C0-\u31E5]/gu
 const WORDS_MAX = 400
 export const SEARCH_TERMS_MAX = 5
 export const SEARCH_LENGTH_MAX = 200
 
 // Letters are words and every other character is a term of its own, which finds a part inside a description
-// sequence and needs no word breaking for CJK text.
+// sequence and needs no word breaking for CJK text. A stroke (㇇) is a symbol to Unicode and a part here.
 export function terms(value: string) {
   // A radical code point is a symbol to Unicode and a part here: it is read as the ideograph it stands for.
   return ([...value.normalize('NFKC').toLowerCase()].map(radicalEquivalent).join('').match(WORD) ?? []).filter(term => !/^[⿰-⿿]$/.test(term))
