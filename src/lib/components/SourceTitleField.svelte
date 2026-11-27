@@ -124,7 +124,7 @@
             {#if source.report_date}<span>{t('field.reportDate')} · <EvidenceDate text={source.report_date} reading={westernDate(source.report_date)} /></span>{/if}
             {#if source.url && source.title}<span>{source.url}</span>{/if}
             {#if evidence}
-              <span class="evidence">{evidence.via ? t('source.foundVia') : t('entry.record', { id: recordCode(evidence.entry) })}{#if evidence.via} · {recordCode(evidence.entry)}{/if}{#if evidence.ids} · {evidence.ids}{/if}{#if !evidence.via && evidence.page} · {t('field.page')} {evidence.page}{/if}{#if !evidence.via && evidence.place && evidence.place !== option.label} · {evidence.place}{/if}</span>
+              <span class="evidence">{evidence.via ? t('source.foundVia') : t('entry.record', { id: recordCode(evidence.entry) })}{#if evidence.via}{' · '}{recordCode(evidence.entry)}{/if}{#if evidence.ids}{' · '}{evidence.ids}{/if}{#if !evidence.via && evidence.page}{' · '}{t('field.page')} {evidence.page}{/if}{#if !evidence.via && evidence.place && evidence.place !== option.label}{' · '}{evidence.place}{/if}</span>
             {/if}
             <span>{t(source.records === 1 ? 'source.record' : 'source.records', { n: source.records })} · #{source.id}</span>
           </span>

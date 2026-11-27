@@ -48,7 +48,7 @@
     <dl class="facts">{#each facts as fact}{#if source[fact.key]}<div><dt>{t(fact.label)}</dt><dd>{#if fact.key === 'report_date'}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} />{:else if fact.key === 'source_kind'}{kindName(source.source_kind)}{:else}{source[fact.key]}{/if}</dd></div>{/if}{/each}</dl>
     {#if data.copy}<a class="text-link" href={href(`/sources/copy/${data.copy.slug}`)}>{t('sources.digitizedCopy')} · {data.copy.title} · {data.copy.collection}</a>{/if}
     <details class="edits" open={form?.aliasError !== undefined || data.aliases.length > 0 || data.before !== null}>
-      <summary>{t('source.aliases')}{#if data.aliases.length} ({data.aliases.length}){/if}</summary>
+      <summary>{t('source.aliases')}{#if data.aliases.length}{` (${data.aliases.length})`}{/if}</summary>
       {#each data.aliases as alias}
         <form class="row" method="POST" action="?/removeAlias">
           <span>{alias}</span><input type="hidden" name="alias" value={alias} />

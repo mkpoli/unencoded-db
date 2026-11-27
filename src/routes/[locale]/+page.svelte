@@ -426,7 +426,7 @@
     {#if makers.length}
       <div class="field"><label for="creator">{t('field.creator')}</label><select class="input" class:active={Boolean(creator)} id="creator" name="creator" bind:value={creator} onchange={() => applyFilters({ noScroll: true, keepFocus: true })}>
         <option value="">{t('browse.all')}</option>
-        {#each makers as item (item.name)}<option value={item.name}>{item.name}{#if item.n !== null} ({item.n}){/if}</option>{/each}
+        {#each makers as item (item.name)}<option value={item.name}>{item.name}{#if item.n !== null}{` (${item.n})`}{/if}</option>{/each}
       </select></div>
     {/if}
     <div class="field decade"><label for="decade">{t('browse.decadeLabel')}</label><select class="input" class:active={Boolean(decade)} id="decade" name="decade" bind:value={decade} onchange={() => applyFilters({ noScroll: true, keepFocus: true })}>
