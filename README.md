@@ -64,7 +64,7 @@ The Sources page filters direct and intermediate citations by publisher. A contr
 
 ## Agents
 
-`https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. `/[locale]/mcp` carries the setup commands, install links and tool list, `/mcp/server-card` serves the experimental SEP-2127 server card, and `/.well-known/ai-catalog.json` serves the AI Catalog v0.9 discovery document pointing to it. In Claude Code:
+`https://rare.glyphatlas.org/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io/) endpoint over Streamable HTTP, open without sign-in. `/[locale]/mcp` carries the setup commands, install links and tool list, `/llms.txt` lists the endpoint and public sections for agents, `/mcp/server-card` serves the experimental SEP-2127 server card, and `/.well-known/ai-catalog.json` serves the AI Catalog v0.9 discovery document pointing to it. In Claude Code:
 
 ```sh
 claude mcp add --scope user --transport http rare https://rare.glyphatlas.org/mcp
@@ -79,12 +79,15 @@ claude mcp add --scope user --transport http rare https://rare.glyphatlas.org/mc
 | `add_sighting` | Adds evidence to a record |
 | `edit_record` | Changes a record's fields |
 | `edit_sighting` | Changes one piece of evidence on a record |
+| `link_sightings` | Links a sighting to an older work or earlier witness (`quotes`, `edition`, or `derived`) |
 
 A write passes the same checks and rate limits as the forms, and an edit is made against the revision `get_record` answered. A picture is given by its address and fetched by the site, up to ten from other sites in one call, and stands as its own thumbnail. The writes of one connection carry one anonymous name, kept by the `Mcp-Session-Id` the endpoint hands out; that id is no browser session and cannot be signed in. The tools are defined in `src/routes/mcp/_tools.server.ts`.
 
 An agent can sign in, and then writes under a person's name. The site is the OAuth 2.1 authorization server for its own endpoint: a client finds it at `/.well-known/oauth-protected-resource`, registers itself at `/oauth/register`, and opens `/oauth/authorize` in the person's browser, where they sign in through Glyph Atlas and allow it. The token it then gets from `/oauth/token` lasts a year and can be handed back at `/oauth/revoke`. In Claude Code, `/mcp` → `rare` → Authenticate starts it. The flow is in `src/lib/server/agents.ts`.
 
-An agent with no browser, such as a chat bot, gets its token from the maintainer: `bun scripts/issue-agent-token.ts --remote --name <name> --out <file>` makes a person of that name and writes a year's token to the file, readable only by its owner. The token is never printed, and its client cannot sign in through a browser.
+An agent with no browser, such as a chat bot, gets its token from the maintainer: `bun scripts/issue-agent-token.ts --remote --name <name> --out <file>` makes a person of that name and writes a year's token to the file, readable only by its owner. Pass `--person <id>` instead of `--name <name>` to issue a token for an existing person, and add `--moderator` to grant or promote to moderator role. The token is never printed, and its client cannot sign in through a browser.
+
+`server.json` holds the [MCP Registry](https://registry.modelcontextprotocol.io/) manifest under the `org.glyphatlas` DNS namespace. Publishing is manual: verify `glyphatlas.org` ownership with `mcp-publisher login dns`, bump `version` for each release (published versions are immutable), and run `mcp-publisher publish`.
 
 ## Data model
 
@@ -95,6 +98,7 @@ An agent with no browser, such as a chat bot, gets its token from the maintainer
 | `sightings` | One place the character was seen: where, page, date, contexts, style, source types |
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
 | `sighting_via_media` | The pictures of a go-between itself, by its place in the chain |
+| `sighting_cites` | Directed provenance links from a sighting to an older work it quotes, re-sets as a later edition, or derives from |
 | `source_aliases`, `source_alias_changes`, `source_search_names` | Alternate names for individual citations, their contributor history, and the lookup index for visible sources |
 | `source_archives`, `source_archive_changes` | Archived copies of a citation's link and their contributor history |
 | `source_keys` | The authors, containers, links and account numbers the Sources page finds a source by, marked where the author gives them for the author field |

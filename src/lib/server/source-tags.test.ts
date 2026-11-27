@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { newClaim, type Claim } from '$lib/claims'
 import { addSighting, createEntry, mergeEntry, setHidden, type EntryFields, type SightingFields } from './entries'
 import { createPerson } from './people'
-import { SOURCE_TAG_LIMIT, SOURCE_TAG_READ, sourceTagHints, sourceTagStatement } from './source-tags'
+import { SOURCE_TAG_LIMIT, SOURCE_TAG_MIN, SOURCE_TAG_READ, sourceTagHints, sourceTagStatement } from './source-tags'
 import { openTestDb } from './testdb'
 import { GET as sourceTagsEndpoint } from '../../routes/api/sources/tags/+server'
 
@@ -47,31 +47,38 @@ const sourceIdOf = (entryId: number) =>
 describe('source tag hints', () => {
   test('returns tags on at least half of other visible records citing a source, capped at five', async () => {
     const book = { title: '彙音字典' }
-    const e1 = await createEntry(db, fields(['minnan', 'dialect', '臺灣', 'music', 'medicine', 'chemistry']), seen(book), [], who)
-    const e2 = await createEntry(db, fields(['minnan', 'dialect', '臺灣', 'music', 'medicine', 'chemistry']), seen(book), [], who)
-    const e3 = await createEntry(db, fields(['minnan', 'hakka']), seen(book), [], who)
-    const e4 = await createEntry(db, fields([]), seen(book), [], who) // untagged record still counts toward denominator
+    const full = ['minnan', 'dialect', '臺灣', 'music', 'medicine', 'chemistry']
+    const e1 = await createEntry(db, fields(full), seen(book), [], who)
+    await createEntry(db, fields(full), seen(book), [], who)
+    await createEntry(db, fields(full), seen(book), [], who)
+    await createEntry(db, fields(['minnan', 'hakka']), seen(book), [], who)
+    await createEntry(db, fields(['hakka']), seen(book), [], who)
+    const e6 = await createEntry(db, fields([]), seen(book), [], who) // untagged record still counts toward denominator
     const sourceId = sourceIdOf(e1)
 
-    // For a new record (no exclusion): total = 4.
-    // minnan: 3/4, dialect: 2/4, 臺灣: 2/4, music: 2/4, medicine: 2/4, chemistry: 2/4, hakka: 1/4 (< half).
-    // Capped at 5: minnan first, then 4 tied at 2/4 sorted by tag name.
+    // For a new record: total = 6. minnan 4/6, the other five of `full` 3/6, hakka 2/6.
     const forNew = await sourceTagHints(db, sourceId)
     expect(forNew).toHaveLength(SOURCE_TAG_LIMIT)
     expect(forNew[0]).toBe('minnan')
     expect(forNew).not.toContain('hakka')
 
-    // Editing e4 (excluding e4): remaining records are e1, e2, e3 (total = 3).
-    // Tags with >= 2/3 are minnan (3), dialect (2), 臺灣 (2), music (2), medicine (2), chemistry (2).
-    const forE4 = await sourceTagHints(db, sourceId, e4)
-    expect(forE4).toHaveLength(SOURCE_TAG_LIMIT)
-    expect(forE4[0]).toBe('minnan')
+    // Editing e6: total = 5, minnan 4, the other five of `full` 3 each.
+    const forE6 = await sourceTagHints(db, sourceId, e6)
+    expect(forE6).toHaveLength(SOURCE_TAG_LIMIT)
+    expect(forE6[0]).toBe('minnan')
 
-    // Editing e1 (excluding e1): remaining are e2, e3, e4 (total = 3).
-    // minnan: 2/3 (>= half), dialect: 1/3 (< half), 臺灣: 1/3 (< half), hakka: 1/3.
+    // Editing e1: total = 5, minnan 3; the rest of `full` fall to 2, under SOURCE_TAG_MIN.
     expect(await sourceTagHints(db, sourceId, e1)).toEqual(['minnan'])
-    expect(e2).toBeGreaterThan(0)
-    expect(e3).toBeGreaterThan(0)
+  })
+
+  test('a tag on fewer than SOURCE_TAG_MIN records is not suggested, however common', async () => {
+    const book = { title: '小冊' }
+    const records: number[] = []
+    for (let i = 0; i < SOURCE_TAG_MIN - 1; i++) records.push(await createEntry(db, fields(['nom']), seen(book), [], who))
+    const sourceId = sourceIdOf(records[0])
+    expect(await sourceTagHints(db, sourceId)).toEqual([])
+    await createEntry(db, fields(['nom']), seen(book), [], who)
+    expect(await sourceTagHints(db, sourceId)).toEqual(['nom'])
   })
 
   test('counts distinct records rather than repeated sightings, and ignores hidden, merged and via-only records', async () => {
@@ -103,13 +110,14 @@ describe('source tag hints', () => {
     const sole = await createEntry(db, fields(['nom']), seen({ title: 'Sole Book' }), [], who)
     const soleSource = sourceIdOf(sole)
     expect(await sourceTagHints(db, soleSource, sole)).toEqual([])
-    expect(await sourceTagHints(db, soleSource)).toEqual(['nom'])
+    expect(await sourceTagHints(db, soleSource)).toEqual([])
 
-    const a1 = await createEntry(db, fields(['kokuji', '日本']), seen({ title: 'Book A' }), [], who)
-    const b1 = await createEntry(db, fields(['buddhism']), seen({ title: 'Book B' }), [], who)
-    const b2 = await createEntry(db, fields(['buddhism']), seen({ title: 'Book B' }), [], who)
-    expect(await sourceTagHints(db, [sourceIdOf(a1), sourceIdOf(b1)], sole)).toEqual(['buddhism', 'kokuji', '日本'])
-    expect(b2).toBeGreaterThan(0)
+    const a: number[] = [], b: number[] = []
+    for (let i = 0; i < 3; i++) {
+      a.push(await createEntry(db, fields(['kokuji', '日本']), seen({ title: 'Book A' }), [], who))
+      b.push(await createEntry(db, fields(['buddhism']), seen({ title: 'Book B' }), [], who))
+    }
+    expect(await sourceTagHints(db, [sourceIdOf(a[0]), sourceIdOf(b[0])], sole)).toEqual(['buddhism', 'kokuji', '日本'])
   })
 
   test('reads at most SOURCE_TAG_READ sightings and uses indexed lookups with no table scan or temp B-tree', async () => {
@@ -157,6 +165,8 @@ describe('source tag hints', () => {
 
   test('API endpoint validates parameters and returns suggested tags', async () => {
     const e1 = await createEntry(db, fields(['nom', '越南']), seen({ title: 'Annam Book' }), [], who)
+    await createEntry(db, fields(['nom', '越南']), seen({ title: 'Annam Book' }), [], who)
+    await createEntry(db, fields(['nom', '越南']), seen({ title: 'Annam Book' }), [], who)
     const sourceId = sourceIdOf(e1)
     const call = (query: string) => sourceTagsEndpoint({ url: new URL(`https://example.test/api/sources/tags${query}`), platform: { env: { DB: db } } } as never)
 
@@ -164,13 +174,14 @@ describe('source tag hints', () => {
     expect((await call('?source=abc')).status).toBe(400)
     expect((await call('?source=1&exclude=nope')).status).toBe(400)
     expect(await (await call(`?source=${sourceId}`)).json()).toEqual({ tags: ['nom', '越南'] })
-    expect(await (await call(`?source=${sourceId}&exclude=${e1}`)).json()).toEqual({ tags: [] })
+    expect(await (await call(`?source=${sourceId}&exclude=${e1}`)).json()).toEqual({ tags: [] }) // two left, under SOURCE_TAG_MIN
   })
 })
 
 test('a merged tag counts as the tag it was merged into', async () => {
   const book = { title: '方言志' }
   const e1 = await createEntry(db, fields(['minnan']), seen(book), [], who)
+  await createEntry(db, fields(['hakka']), seen(book), [], who)
   await createEntry(db, fields(['hakka']), seen(book), [], who)
   await createEntry(db, fields(['wu']), seen(book), [], who)
   raw.exec(`INSERT INTO tag_aliases(alias, tag) VALUES ('hakka', 'minnan')`)
