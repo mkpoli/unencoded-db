@@ -12,11 +12,15 @@ declare global {
         MEDIA: R2Bucket
         ASSETS: Fetcher
         REPORT?: Fetcher
+        ATLAS?: Fetcher
         ADDS?: RateLimit
         EDITS?: RateLimit
         ATLAS_ISSUER?: string
         ATLAS_CLIENT_ID?: string
         ATLAS_CLIENT_SECRET?: string
+        ATLAS_ORIGIN?: string
+        ATLAS_RATE_LIMIT_PASS?: string
+        ATLAS_SYNC_TOKEN?: string
         IP_SALT?: string
         WRITES_PAUSED?: string
         INDEXNOW_KEY?: string

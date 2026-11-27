@@ -2,6 +2,7 @@ import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
 import { isDescription } from 'ids-input'
 import { getEntry, readEntryFields, splitSighting, standsAlone } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
+import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
 import { taxonomy } from '$lib/server/tags'
@@ -43,6 +44,7 @@ export const actions: Actions = {
     if (typeof result === 'string') return reject(result === 'missing' || result === 'merged' ? 404 : 409, result)
     if ('described' in result) return fail(409, { error: result.described === id ? 'same' : 'described', described: result.described, values: fields, summary })
     notifyIndexNow(event, { entries: [id, result.id], sources: citedBy(sighting) })
+    scheduleAtlasSync(event, [result.id])
     redirect(303, `/${event.params.locale}/entry/${result.id}#sighting-${sighting.id}`)
   },
 }

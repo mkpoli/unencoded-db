@@ -10,8 +10,10 @@
   // when nothing in it fits. It is a plain input until scripts run. The pattern is the ARIA editable combobox
   // with list autocomplete: arrow keys move through the list, Enter takes an option, Escape folds the list.
   // `onchange` hears the value once it is settled: an option taken, or the field left.
-  let { id, name, value = $bindable(''), options, labelledby, maxlength, placeholder, filter = true, onopen, onquery, onchange, onselect, onmore, optionContent }: {
-    optionContent?: Snippet<[ComboOption]>; id: string; name: string; value?: string; options: readonly ComboOption[]; labelledby?: string; maxlength?: number; placeholder?: string; filter?: boolean; onopen?: () => void; onquery?: (text: string) => void; onchange?: (value: string) => void; onselect?: (option: ComboOption) => void; onmore?: () => void
+  // `takeFirst` lets Enter take the first option when the list is open and none is chosen, for a list that
+  // answers a search rather than offering values to type. `empty` is shown in the open list when it has no options.
+  let { id, name, value = $bindable(''), options, labelledby, maxlength, placeholder, required = false, takeFirst = false, empty, filter = true, onopen, onquery, onchange, onselect, onmore, optionContent }: {
+    optionContent?: Snippet<[ComboOption]>; id: string; name: string; value?: string; options: readonly ComboOption[]; labelledby?: string; maxlength?: number; placeholder?: string; required?: boolean; takeFirst?: boolean; empty?: string; filter?: boolean; onopen?: () => void; onquery?: (text: string) => void; onchange?: (value: string) => void; onselect?: (option: ComboOption) => void; onmore?: () => void
   } = $props()
 
   let open = $state(false)
@@ -27,6 +29,7 @@
   // Remote suggestions can reorder while an arrow-key selection is active.
   const active = $derived(activeKey === null ? -1 : shown.findIndex(option => (option.key ?? option.label) === activeKey))
   const expanded = $derived(open && shown.length > 0)
+  const listed = $derived(expanded || (open && !!empty))
   const optionId = (index: number) => `${id}-option-${index}`
 
   function show() {
@@ -57,20 +60,20 @@
     if (event.isComposing) return
     if (event.key === 'ArrowDown') { event.preventDefault(); if (event.altKey) show(); else move(1) }
     else if (event.key === 'ArrowUp') { event.preventDefault(); if (event.altKey) { open = false; activeKey = null } else move(-1) }
-    else if (event.key === 'Enter' && expanded && active >= 0 && shown[active]) { event.preventDefault(); take(shown[active]) }
+    else if (event.key === 'Enter' && expanded && (active >= 0 || takeFirst)) { const option = shown[Math.max(active, 0)]; if (option) { event.preventDefault(); take(option) } }
     else if (event.key === 'Escape' && open) { event.preventDefault(); open = false; activeKey = null }
   }
 </script>
 
 <div class="combo">
   <input
-    {id} {name} {maxlength} {placeholder} class="input" type="text" role="combobox" autocomplete="off" spellcheck="false"
-    aria-autocomplete="list" aria-expanded={expanded} aria-controls="{id}-list" aria-labelledby={labelledby}
+    {id} {name} {maxlength} {placeholder} {required} class="input" type="text" role="combobox" autocomplete="off" spellcheck="false"
+    aria-autocomplete="list" aria-expanded={listed} aria-controls="{id}-list" aria-labelledby={labelledby}
     aria-activedescendant={expanded && shown[active] ? optionId(active) : undefined}
     bind:value onclick={show} onkeydown={keydown} oninput={event => { show(); activeKey = null; onquery?.(event.currentTarget.value) }} onblur={() => { open = false; activeKey = null; onchange?.(value) }}
   />
   <span class="chevron" aria-hidden="true">⌄</span>
-  <ul bind:this={list} id="{id}-list" role="listbox" aria-labelledby={labelledby} hidden={!expanded}>
+  <ul bind:this={list} id="{id}-list" role="listbox" aria-labelledby={labelledby} hidden={!listed}>
     {#each shown as option, index (index)}
       <!-- The input takes the keys for the list and names the active option, as the combobox pattern has it. -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -82,6 +85,8 @@
         {#if optionContent && !option.more}{@render optionContent(option)}
         {:else}<span>{option.label}</span>{#if option.hint}<span class="hint">{option.hint}</span>{/if}{/if}
       </li>
+    {:else}
+      <li class="empty" role="option" aria-selected="false" aria-disabled="true">{empty}</li>
     {/each}
   </ul>
 </div>
@@ -97,5 +102,7 @@
   li.chosen { color: var(--accent); font-weight: 500 }
   li.break { margin-top: 5px; position: relative }
   li.break::before { content: ''; position: absolute; inset-inline: 6px; top: -3px; border-top: 1px solid var(--line) }
+  li.empty { color: var(--muted); cursor: default }
+  li.empty:hover { background: none }
   .hint { color: var(--muted); font-size: 12.5px; font-weight: 400 }
 </style>

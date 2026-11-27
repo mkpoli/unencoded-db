@@ -27,6 +27,25 @@ test('a record is a licensed work with its cited sources and a trail', () => {
   expect(trail.itemListElement.map((item: any) => item.item)).toEqual(['https://rare.glyphatlas.org/ja', 'https://rare.glyphatlas.org/ja/entry/12'])
 })
 
+test('the vias are cited once after the works, with their container, and a via that is also a cited work stays one entry', () => {
+  const post = { id: 9, title: '乙帖', author: '乙', container: '丙羣', url: 'https://example.org/post' }
+  const [work] = recordData({ locale: 'en', id: 1, name: 'n', description: 'd', siteName: 's', sources: [source], vias: [post, post, source] }) as any[]
+  expect(work.citation.map((entry: any) => entry.url)).toEqual(['https://rare.glyphatlas.org/en/source/7', 'https://rare.glyphatlas.org/en/source/9'])
+  expect(work.citation[1]).toMatchObject({ name: '乙帖', creator: '乙', isPartOf: { '@type': 'CreativeWork', name: '丙羣' } })
+  const [onlyVia] = recordData({ locale: 'en', id: 1, name: 'n', description: 'd', siteName: 's', sources: [], vias: [post] }) as any[]
+  expect(onlyVia.citation).toHaveLength(1)
+})
+
+test('each citation of a record lists the archived copies of its source as archivedAt', () => {
+  const post = { id: 9, title: '乙帖', url: 'https://example.org/post' }
+  const copy = 'https://web.archive.org/web/2024/https://example.org/kx', postCopy = 'https://archive.ph/AbCd'
+  const archives = new Map([[7, [copy, 'javascript:alert(1)']], [9, [postCopy]], [11, ['https://archive.ph/other']]])
+  const [work] = recordData({ locale: 'en', id: 1, name: 'n', description: 'd', siteName: 's', sources: [source], vias: [post], archives }) as any[]
+  expect(work.citation.map((entry: any) => entry.archivedAt)).toEqual([[copy], [postCopy]])
+  const [bare] = recordData({ locale: 'en', id: 1, name: 'n', description: 'd', siteName: 's', sources: [source], vias: [post], archives: new Map([[7, ['ftp://example.org/a']]]) }) as any[]
+  expect(bare.citation.some((entry: any) => 'archivedAt' in entry)).toBe(false)
+})
+
 test('a record without a picture or sources leaves those fields out', () => {
   const [work] = recordData({ locale: 'en', id: 1, name: 'n', description: 'd', siteName: 's', sources: [] }) as any[]
   expect('image' in work).toBe(false)
@@ -40,6 +59,14 @@ test('a source keeps free-text dates out of datePublished', () => {
   expect('datePublished' in free).toBe(false)
   expect('sameAs' in free).toBe(false)
   expect(trail.itemListElement.map((item: any) => item.item).at(1)).toBe('https://rare.glyphatlas.org/en/sources')
+})
+
+test('a source lists its archived copies as archivedAt', () => {
+  const build = (archives?: string[]) => (sourceData({ locale: 'en', source, archives, name: 'n', siteName: 's', sourcesName: 'Sources' }) as any[])[0]
+  const copy = 'https://web.archive.org/web/2024/https://example.org/kx'
+  expect(build([copy, 'javascript:alert(1)'])).toMatchObject({ sameAs: 'https://example.org/kx', archivedAt: [copy] })
+  expect('archivedAt' in build([])).toBe(false)
+  expect('archivedAt' in build()).toBe(false)
 })
 
 test('a source names what it appeared in', () => {

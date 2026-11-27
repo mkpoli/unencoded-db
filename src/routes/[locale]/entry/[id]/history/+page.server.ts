@@ -1,5 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit'
-import { editEntry, hasLink, ENTRY_HISTORY_PAGE, getEntry, getEntryRow, history, mergedInto, putBackSighting, redactRevision, restoreSighting, unmergeEntry } from '$lib/server/entries'
+import { editEntry, citesEvidence, ENTRY_HISTORY_PAGE, getEntry, getEntryRow, history, mergedInto, putBackSighting, redactRevision, restoreSighting, unmergeEntry } from '$lib/server/entries'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { citedBy, notifyIndexNow } from '$lib/server/indexnow'
 import { thank, thankable, thankedOf } from '$lib/server/notifications'
@@ -27,8 +27,8 @@ export const load: PageServerLoad = async (event) => {
   const next = page.length > ENTRY_HISTORY_PAGE ? page[ENTRY_HISTORY_PAGE - 1].id : null
   const rows = page.slice(0, ENTRY_HISTORY_PAGE)
     .filter(row => !row.sighting_id || visibleSightings.has(row.sighting_id) || removedRevs.has(row.sighting_id))
-    .map(({ id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, snapshot, redacted_at }) => ({
-      id, entry_id, sighting_id, rev, summary, at, by_id, by_name, redacted: Boolean(redacted_at),
+    .map(({ id, entry_id, sighting_id, kind, rev, summary, at, by_id, by_name, by_agent, by_model, snapshot, redacted_at }) => ({
+      id, entry_id, sighting_id, rev, summary, at, by_id, by_name, by_agent, by_model, redacted: Boolean(redacted_at),
       ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
       sightingRev: sighting_id ? visibleSightings.get(sighting_id) ?? removedRevs.get(sighting_id) : null,
       removed: sighting_id !== null && removedRevs.has(sighting_id),
@@ -59,7 +59,7 @@ export const actions: Actions = {
       const fields = old && sightingSnapshot(old.snapshot)
       if (!old || !fields) error(404)
       // A restore keeps the pictures, so a version without a place or a link needs one to stay.
-      if (!sighting.media.length && !hasLink(fields) && !fields.place) return fail(400, { error: 'evidence' })
+      if (!sighting.media.length && !sighting.vias.some(via => via.pictures?.length) && !citesEvidence(fields) && !fields.place) return fail(400, { error: 'evidence' })
       const person = await writer(event, db)
       const result = await restoreSighting(db, id, sighting.id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, old.rev, revisionId)
       if (!result.ok) return fail(result.code === 'conflict' ? 409 : 404, { error: result.code })

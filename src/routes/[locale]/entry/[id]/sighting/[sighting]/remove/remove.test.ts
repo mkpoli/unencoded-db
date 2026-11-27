@@ -68,10 +68,11 @@ test('a record keeps its last evidence, and a removal of an edited or a missing 
   expect(await visible()).toEqual([left])
   // A merged record takes no removal.
   const duplicate = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, seen('Dup 1'), [], who)
+  const dupFirst = (await getEntry(db, duplicate))!.sightings[0].id
   const dupSecond = (await addSighting(db, duplicate, seen('Dup 2'), [], who))!
   expect(await removeSighting(db, duplicate, dupSecond, 1, who, null)).toBe('done')
   raw.exec(`UPDATE entries SET merged_into = ${id} WHERE id = ${duplicate}`)
-  await expect(load(event({}, dupSecond, duplicate))).rejects.toMatchObject({ status: 404 })
+  await expect(load(event({}, dupFirst, duplicate))).rejects.toMatchObject({ status: 404 })
   expect(await putBackSighting(db, duplicate, dupSecond, who)).toBe('merged')
 })
 

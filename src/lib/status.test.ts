@@ -20,6 +20,11 @@ test('unifiable needs no encoded value', () => {
   expect(statusOf([relation('⿰乂也', 'unifiable')])).toBe('unifiable')
 })
 
+test('a relation to another record decides nothing', () => {
+  for (const relationship of ['unifiable', 'homograph', 'variant', 'erroneous']) expect(statusOf([relation('R+087A', relationship)])).toBeNull()
+  expect(statusOf([relation('R+087A', 'unifiable'), relation('衛', 'variant')])).toBe('variant')
+})
+
 test('a homograph, variant or erroneous form of an encoded character takes that status', () => {
   expect(statusOf([relation('哦', 'homograph')])).toBe('homograph')
   expect(statusOf([relation('哦', 'variant')])).toBe('variant')

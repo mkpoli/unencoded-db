@@ -1,6 +1,6 @@
 <script lang="ts">
   // The new pictures of a sighting, up to `max`. A pasted picture, or one held from another page, goes to
-  // the first empty picker. A source link's photos fill the empty pickers in order, each of which can be
+  // the first empty picker, and so do the pages of a PDF. A source link's photos fill the empty pickers in order, each of which can be
   // removed, and replace the photos an earlier link put there; pictures someone chose stay.
   // Where a form holds several sightings, each inside an element marked `data-sighting`, a pasted picture
   // goes to the sighting that has the focus, or to the first when none has.
@@ -33,7 +33,7 @@
   /** Puts a picture in the first empty picker, adding one when all are taken. */
   export const add = (file: Blob) => place(file)
 
-  async function place(file: Blob, post = false) {
+  async function place(file: Blob, post = false, page?: number) {
     let picker = free()
     if (!picker && visible.length < max) {
       const slot = next++
@@ -41,11 +41,13 @@
       await tick()
       picker = pickers[slot]
     }
-    await picker?.take(file, post)
+    await picker?.take(file, post, page)
   }
 
   const pasted = (event: ClipboardEvent) => {
-    const file = [...(event.clipboardData?.files ?? [])].find(item => item.type.startsWith('image/'))
+    // A go-between took it.
+    if (event.defaultPrevented) return
+    const file = [...(event.clipboardData?.files ?? [])].find(item => item.type.startsWith('image/') || item.type === 'application/pdf')
     if (!file) return
     const lists = [...document.querySelectorAll('[data-pictures]')]
     const focused = document.activeElement?.closest('[data-sighting]')
@@ -53,6 +55,9 @@
     event.preventDefault()
     void place(file)
   }
+
+  // The further pages of a range someone asked of a PDF, each in a picker of its own while there is room.
+  async function spread(file: Blob, pages: number[]) { for (const page of pages) await place(file, false, page) }
 
   onMount(() => { const held = takePicture(); if (held) void place(held) })
 </script>
@@ -62,7 +67,7 @@
 <div class="field" bind:this={root} data-pictures>
   <span class="label" class:required>{t('field.image')}</span>
   {#each visible as slot, index (slot)}
-    <PicturePicker bind:this={pickers[slot]} label="{t('field.imageChoose')} {index + 1}" onready={ready} onremove={visible.length > 1 ? () => slots = slots.filter(item => item !== slot) : undefined} />
+    <PicturePicker bind:this={pickers[slot]} label="{t('field.imageChoose')} {index + 1}" onready={ready} onpages={spread} onremove={visible.length > 1 ? () => slots = slots.filter(item => item !== slot) : undefined} />
   {/each}
   {#if visible.length < max}<div><button type="button" class="text-button" onclick={() => slots.push(next++)}>+ {t('field.imageAdd')}</button></div>{/if}
 </div>

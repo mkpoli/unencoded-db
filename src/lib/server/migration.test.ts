@@ -184,7 +184,7 @@ test('0005 gives every claim a key, a list of sightings and a scope, in claims a
   expect(journal.filter(row => !versions.some(version => version.id === row.id)).map(row => row.snapshot)).toEqual([sighting, '{}', '{"revision":4}', '{}', '{"from":3}'])
 
   // An old version is restored through the store, with its keys and the sighting it rested on.
-  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0019_via_chain.sql', '0016_tag_year.sql', '0018_first_sighting.sql', '0023_categories.sql', '0024_category_rows.sql', '0026_typed_tags.sql', '0027_date_readings.sql', '0028_publishers.sql', '0029_via_quote.sql', '0031_sighting_quotations.sql', '0041_source_container.sql', '0048_source_kind.sql', '0045_tag_aliases.sql', '0056_forms.sql']) raw.exec(migration(name))
+  for (const name of ['0006_registry_tags.sql', '0007_entry_marks.sql', '0010_entry_layout.sql', '0011_no_default_status.sql', '0012_tag_sightings.sql', '0013_tag_shuffle.sql', '0014_source_order.sql', '0019_via_chain.sql', '0016_tag_year.sql', '0018_first_sighting.sql', '0023_categories.sql', '0024_category_rows.sql', '0026_typed_tags.sql', '0027_date_readings.sql', '0028_publishers.sql', '0029_via_quote.sql', '0031_sighting_quotations.sql', '0041_source_container.sql', '0048_source_kind.sql', '0045_tag_aliases.sql', '0056_forms.sql', '0055_via_pictures.sql', '0058_agent_attribution.sql', '0060_agent_model.sql']) raw.exec(migration(name))
   const db = d1Over(raw)
   expect(await revertEntry(db, 1, 1, { actor: 'p', ip: null })).toEqual({ ok: true, rev: 5 })
   expect((await getEntry(db, 1))!.claims).toEqual(first)
@@ -617,4 +617,27 @@ test('0047 turns each context into a list of one, in the rows and in past versio
   expect(rows.slice(0, 2).map(row => sightingSnapshot(row))).toMatchObject([{ contexts: '["heading"]', style: 'regular', types: '["mention"]' }, { contexts: null }])
   expect(JSON.parse(rows[0])).not.toHaveProperty('context')
   expect(rows.slice(2)).toEqual(['{}', '{"script":"han"}'])
+})
+
+test('0062 aborts when a legacy upward merge or non-positive id exists and otherwise hardens rekey and replace guards', () => {
+  const raw = new Database(':memory:')
+  raw.exec('PRAGMA foreign_keys = ON')
+  const all = readdirSync(join(import.meta.dir, '../../../migrations')).sort()
+  for (const name of all.filter(name => name < '0053')) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec("INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at) VALUES (-1, 'han', NULL, 'p', '2026', '2026'), (1, 'han', NULL, 'p', '2026', '2026'), (2, 'han', NULL, 'p', '2026', '2026')")
+  raw.exec('UPDATE entries SET merged_into = 2 WHERE id = 1')
+  for (const name of all.filter(name => name >= '0053' && name < '0062')) raw.exec(migration(name))
+  // Trim trailing whitespace because bun:sqlite `exec` clears an earlier statement's error on an empty tail.
+  const apply = () => raw.transaction(() => raw.exec(migration('0062_harden_record_code_stability.sql').trimEnd()))()
+  expect(apply).toThrow('entry id must be positive')
+  raw.exec('DELETE FROM atlas_sync_state WHERE entry_id = -1; DROP TRIGGER entries_no_delete; DELETE FROM entries WHERE id = -1;')
+  raw.exec("CREATE TRIGGER entries_no_delete BEFORE DELETE ON entries BEGIN SELECT RAISE(ABORT, 'entries cannot be deleted'); END;")
+  expect(apply).toThrow('a record can only merge into an earlier record')
+  raw.exec('UPDATE entries SET merged_into = NULL WHERE id = 1; UPDATE entries SET merged_into = 1 WHERE id = 2')
+  expect(apply).not.toThrow()
+  expect(() => raw.exec('UPDATE entries SET rowid = 9 WHERE id = 2')).toThrow('entry id cannot change')
+  expect(() => raw.exec("INSERT OR REPLACE INTO entries(id, script, created_by, created_at, updated_at) VALUES (2, 'han', 'p', '2026', '2026')")).toThrow('entries cannot be replaced')
+  expect(() => raw.exec("INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES (-1, 'han', 'p', '2026', '2026')")).toThrow('entry id must be positive')
+  raw.close()
 })
