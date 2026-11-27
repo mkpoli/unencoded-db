@@ -419,7 +419,7 @@
   "person.mergeAgentInvalid": "エージェント名は80文字以内で入力してください。",
   "person.mergeModel": "モデル（任意）",
   "person.mergeModelPlaceholder": "例：Opus 5.5",
-  "person.mergeModelInvalid": "モデル名はエージェント名とあわせて80文字以内で入力してください。",
+  "person.mergeModelInvalid": "モデル名は80文字以内で入力し、エージェント名も指定してください。",
   "person.merge": "統合",
   "person.mergeConfirm": "{name}に統合",
   "person.mergeMissing": "該当する投稿者が見つかりません。",

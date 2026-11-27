@@ -250,9 +250,21 @@ test('a moderator merges an agent into its commander, keeping agent and model se
   expect(feed.rows[1]).toMatchObject({ by_id: commander.id, by_name: 'Commander', by_agent: 'Claude Code', by_model: null })
   expect(feed.rows[2]).toMatchObject({ by_id: commander.id, by_name: 'Commander', by_agent: 'Claude Code', by_model: 'Opus 5.5' })
 
-  // Reading a commander's agents uses index seeks over the partial covering index, never scanning duplicate rows.
+  // Reading a commander's agents seeks both name and model in the partial covering index, never scanning duplicate rows.
   const stmt = agentsOfStatement(db, commander.id) as unknown as { sql: string; values: unknown[] }
   const plan = (raw.query(`EXPLAIN QUERY PLAN ${stmt.sql}`).all(...(stmt.values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')
-  expect(plan).toContain('USING COVERING INDEX people_agents_by_commander')
+  expect(plan).toContain('USING COVERING INDEX people_agents_by_commander (merged_into=? AND name=? AND agent_model>?)')
+  expect(plan).toContain('USING COVERING INDEX people_agents_by_commander (merged_into=? AND name>?)')
   expect(plan).not.toContain('TEMP B-TREE')
+
+  // Duplicate rows under the same agent/model pair do not multiply rows read or alter results.
+  const insertDup = raw.prepare("INSERT INTO people(id, name, agent_model, created_at, merged_into, agent) VALUES (?, 'Claude Code', '', '2026', ?, 1)")
+  raw.transaction(() => {
+    for (let i = 0; i < 2000; i++) insertDup.run(`dup${String(i).padStart(9, '0')}`, commander.id)
+  })()
+  expect(await agentsOf(db, commander.id)).toEqual([
+    { name: 'Claude Code', model: null },
+    { name: 'Claude Code', model: 'Opus 5.5' },
+    { name: 'DSH', model: 'DeepSeek Flash' },
+  ])
 })
