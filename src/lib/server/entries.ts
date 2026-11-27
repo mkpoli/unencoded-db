@@ -1844,6 +1844,45 @@ export async function exportPage(db: D1Database, after: number, limit: number, s
   return { entries: page, next: rows.length > limit ? page.at(-1)!.id : null, next_sighting: rows.length > limit ? lastSighting : null }
 }
 
+export type IndexEntry = {
+  id: number
+  script: string
+  script_other: string | null
+  ids: string | null
+  cover_key: string | null
+  status: string | null
+  description: string | null
+  radical: string | null
+  strokes: number | null
+  first_year: string | null
+  sightings: number
+  claims: Claim[]
+}
+
+/** One page of live entries and their claims without evidence rows, for lightweight index consumers. */
+export async function exportIndexPage(db: D1Database, after: number, limit: number) {
+  const { results: entries } = await db.prepare(
+    `SELECT id, script, script_other, ids, cover_key, status, description, radical, strokes, first_year, sightings
+     FROM entries INDEXED BY entries_live_export
+     WHERE id > ? AND merged_into IS NULL AND hidden_at IS NULL
+     ORDER BY id LIMIT ?`,
+  ).bind(after, limit + 1).all<Omit<IndexEntry, 'claims'>>()
+  const page: IndexEntry[] = entries.slice(0, limit).map(entry => ({ ...entry, claims: [] }))
+  if (page.length) {
+    // Leave per-entry claim ordering to JS so the IN-list lookup walks `claims_by_entry` without a temp B-tree.
+    const { results } = await db.prepare(
+      `SELECT entry_id, position, ${CLAIM_COLUMNS.join(', ')}
+       FROM claims INDEXED BY claims_by_entry
+       WHERE entry_id IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(page.map(entry => entry.id))).all<ClaimRow & { entry_id: number; position: number }>()
+    const found = new Map(page.map(entry => [entry.id, entry.claims]))
+    for (const row of [...results].sort((a, b) => a.entry_id - b.entry_id || a.position - b.position)) {
+      found.get(row.entry_id)?.push(toClaim(row))
+    }
+  }
+  return { entries: page, next: entries.length > limit ? page.at(-1)!.id : null }
+}
+
 export const CUSTOM_SCRIPTS_MAX = 100
 // Each name is one seek in `entries_custom_scripts` for the least name after the one before, so the list
 // reads at most CUSTOM_SCRIPTS_MAX index entries however many records share a name.
