@@ -128,9 +128,11 @@ The CSV export has one column for each kind of claim, and a claim names its link
 
 | File | Holds |
 |---|---|
-| `/api/export?format=json` | One JSON object: the licence, counts and generation time in `dataset`, then every record in `entries` |
+| `/api/export?format=json` | One JSON object: the licence, counts and generation time in `dataset`, every live record in `entries`, and retired-to-canonical redirects in `merged` |
+| `/api/export?format=index` | Compact edge-cached JSON of every live record, its claims, and `merged` redirects without evidence rows |
 | `/api/export?format=csv` | One row for each piece of evidence, and one for a record without any |
 | `/api/export?format=media` | One row for each visible picture, with its record, source and direct address |
+| `/api/export?format=merged` | One row for each retired record code and the canonical record it redirects to |
 
 Exports contain the transcribed citation fields. Alternate names and their edit history are available on the source page.
 

@@ -106,6 +106,16 @@ export async function* jsonChunks(db: D1Database, metadata: unknown, revision: n
     }
   }
   if (open) yield ']}'
+  yield '],"merged":['
+  let anyMerged = false
+  for await (const batch of mergedBatches(db, size)) {
+    const parts: string[] = []
+    for (const row of batch) {
+      parts.push((anyMerged ? ',' : '') + JSON.stringify(row))
+      anyMerged = true
+    }
+    yield parts.join('')
+  }
   await assertDatasetUnchanged(db, revision)
   yield ']}\n'
 }
@@ -155,6 +165,16 @@ export async function* indexChunks(db: D1Database, origin: string, generatedAt: 
     if (page.next === null) break
     if (page.next <= after) throw new Error('index cursor did not advance')
     after = page.next
+  }
+  yield '],"merged":['
+  let anyMerged = false
+  for await (const batch of mergedBatches(db, step)) {
+    const parts: string[] = []
+    for (const row of batch) {
+      parts.push((anyMerged ? ',' : '') + JSON.stringify(row))
+      anyMerged = true
+    }
+    yield parts.join('')
   }
   yield ']}\n'
 }
@@ -303,5 +323,99 @@ export async function* mediaBatches(db: D1Database, size = 500): AsyncGenerator<
       if (last.every((part, index) => part === cursor[index])) throw new Error('media cursor did not advance')
       cursor = last
     }
+  }
+}
+
+export type MergedRow = {
+  id: number
+  code: string
+  merged_into: number
+  merged_into_code: string
+}
+
+const MERGED_COLUMNS = ['id', 'code', 'merged_into', 'merged_into_code'] as const
+export const mergedCsvHeader = () => MERGED_COLUMNS.map(csvCell).join(',') + '\r\n'
+export function mergedCsvRows(rows: readonly MergedRow[]) {
+  return rows.map(row => [row.id, row.code, row.merged_into, row.merged_into_code].map(csvCell).join(',')).join('\r\n') + (rows.length ? '\r\n' : '')
+}
+
+const MERGED_QUERY = `SELECT id, merged_into FROM entries INDEXED BY entries_merged_export
+  WHERE merged_into IS NOT NULL AND hidden_at IS NULL AND id > ? ORDER BY id LIMIT ?`
+// D1 caps bound parameters at 100 per statement; keep primary-key target lookups within budget.
+const TARGET_CHUNK = 90
+const MERGE_HOPS_MAX = 16
+
+/** Every retired record code whose merge chain ends at a visible canonical record, in ascending id order.
+ *  Hidden records and merges into hidden records are omitted. */
+export async function* mergedBatches(db: D1Database, size = EXPORT_BATCH_MAX): AsyncGenerator<MergedRow[]> {
+  const limit = Math.min(Math.max(size, 1), EXPORT_BATCH_MAX)
+  // Because `merged_into < id` is enforced on every row, walking in ascending id order resolves
+  // earlier merged hops before later ones. `null` marks a hidden or missing terminal target.
+  const resolved = new Map<number, number | null>()
+  let after = 0
+  for (;;) {
+    const { results } = await db.prepare(MERGED_QUERY).bind(after, limit + 1).all<{ id: number; merged_into: number }>()
+    const page = results.slice(0, limit)
+    if (!page.length) return
+    const direct = new Map(page.map(row => [row.id, row.merged_into]))
+    const endpoint = (start: number): number | null => {
+      let current = start
+      for (let hop = 0; hop < MERGE_HOPS_MAX; hop++) {
+        if (resolved.has(current)) return resolved.get(current)!
+        const next = direct.get(current)
+        if (next !== undefined && next < current) { current = next; continue }
+        return current
+      }
+      return null
+    }
+    // Look up terminal targets not already resolved (live canonical rows, hidden rows, or concurrent hops).
+    const pending = new Set<number>()
+    for (const row of page) {
+      const target = endpoint(row.merged_into)
+      if (target !== null && !resolved.has(target)) pending.add(target)
+    }
+    let frontier = [...pending]
+    const extraHops = new Map<number, number>()
+    for (let round = 0; round < MERGE_HOPS_MAX && frontier.length; round++) {
+      const nextFrontier = new Set<number>()
+      for (let start = 0; start < frontier.length; start += TARGET_CHUNK) {
+        const chunk = frontier.slice(start, start + TARGET_CHUNK)
+        const marks = chunk.map(() => '?').join(', ')
+        const { results: found } = await db.prepare(`SELECT id, merged_into, hidden_at FROM entries WHERE id IN (${marks})`).bind(...chunk).all<{ id: number; merged_into: number | null; hidden_at: string | null }>()
+        const seen = new Set<number>()
+        for (const row of found) {
+          seen.add(row.id)
+          if (row.hidden_at !== null) resolved.set(row.id, null)
+          else if (row.merged_into === null) resolved.set(row.id, row.id)
+          else if (row.merged_into < row.id) {
+            extraHops.set(row.id, row.merged_into)
+            if (!resolved.has(row.merged_into) && !extraHops.has(row.merged_into)) nextFrontier.add(row.merged_into)
+          } else resolved.set(row.id, null)
+        }
+        for (const id of chunk) if (!seen.has(id)) resolved.set(id, null)
+      }
+      frontier = [...nextFrontier]
+    }
+    const resolveAny = (start: number): number | null => {
+      let current = start
+      for (let hop = 0; hop < MERGE_HOPS_MAX; hop++) {
+        if (resolved.has(current)) return resolved.get(current)!
+        const next = direct.get(current) ?? extraHops.get(current)
+        if (next !== undefined && next < current) { current = next; continue }
+        return null
+      }
+      return null
+    }
+    const out: MergedRow[] = []
+    for (const row of page) {
+      const target = resolveAny(row.merged_into)
+      resolved.set(row.id, target)
+      if (target !== null) out.push({ id: row.id, code: recordCode(row.id), merged_into: target, merged_into_code: recordCode(target) })
+    }
+    if (out.length) yield out
+    if (results.length <= limit) return
+    const last = page[page.length - 1].id
+    if (last <= after) throw new Error('merged cursor did not advance')
+    after = last
   }
 }

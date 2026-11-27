@@ -1,9 +1,9 @@
 import { error } from '@sveltejs/kit'
-import { assertDatasetUnchanged, csvHeader, csvRows, datasetCounts, datasetMetadata, datasetRevision, exportBatches, indexChunks, jsonChunks, mediaBatches, mediaCsvHeader, mediaCsvRows } from '$lib/server/export'
+import { assertDatasetUnchanged, csvHeader, csvRows, datasetCounts, datasetMetadata, datasetRevision, exportBatches, indexChunks, jsonChunks, mediaBatches, mediaCsvHeader, mediaCsvRows, mergedBatches, mergedCsvHeader, mergedCsvRows } from '$lib/server/export'
 import { env } from '$lib/server/guard'
 import type { RequestHandler } from './$types'
 
-const FORMATS = ['json', 'index', 'csv', 'media'] as const
+const FORMATS = ['json', 'index', 'csv', 'media', 'merged'] as const
 type Format = (typeof FORMATS)[number]
 const INDEX_CACHE_CONTROL = 'public, max-age=60, s-maxage=60'
 
@@ -64,7 +64,7 @@ export const GET: RequestHandler = async (event) => {
     'access-control-allow-origin': '*',
     // A cached download can outlive a hide or a merge. A fresh read is the only one that matches the site.
     'cache-control': 'no-store',
-    'content-disposition': `attachment; filename="rare-character-compendium-${generatedAt.slice(0, 10)}.${format === 'media' ? 'media.csv' : format}"`,
+    'content-disposition': `attachment; filename="rare-character-compendium-${generatedAt.slice(0, 10)}.${format === 'media' || format === 'merged' ? `${format}.csv` : format}"`,
     'x-content-type-options': 'nosniff',
   })
 
@@ -84,6 +84,14 @@ export const GET: RequestHandler = async (event) => {
       // A page of the cursor is a page of rows; a record with more evidence than one page repeats its
       // metadata on the next page, as the paged CSV does.
       for await (const batch of exportBatches(db)) yield encoder.encode(csvRows(batch))
+      await assertDatasetUnchanged(db, revision)
+    })()), { headers })
+  }
+
+  if (format === 'merged') {
+    return new Response(stream((async function* () {
+      yield encoder.encode(mergedCsvHeader())
+      for await (const batch of mergedBatches(db)) yield encoder.encode(mergedCsvRows(batch))
       await assertDatasetUnchanged(db, revision)
     })()), { headers })
   }
