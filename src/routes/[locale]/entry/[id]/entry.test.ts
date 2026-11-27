@@ -1,4 +1,8 @@
 import { expect, test } from 'bun:test'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { parse } from 'svelte/compiler'
 import { createEntry, type EntryFields, type SightingFields } from '$lib/server/entries'
 import { createPerson } from '$lib/server/people'
 import { openTestDb } from '$lib/server/testdb'
@@ -44,4 +48,44 @@ test('a comment is saved under its writer and may name only the record\'s own ev
   }
   await expect(hide(reader)).rejects.toMatchObject({ status: 403 })
   await expect(hide({ ...reader, moderator: true })).rejects.toMatchObject({ status: 303 })
+})
+
+test('picture loops and lightbox keys never rely on image_key alone', () => {
+  const srcRoot = fileURLToPath(new URL('../../../..', import.meta.url))
+  const svelteFiles = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) return svelteFiles(full)
+    return entry.name.endsWith('.svelte') ? [full] : []
+  })
+  const visit = (node: unknown, onNode: (record: Record<string, unknown>) => void) => {
+    if (!node || typeof node !== 'object') return
+    if (Array.isArray(node)) { for (const item of node) visit(item, onNode); return }
+    const record = node as Record<string, unknown>
+    onNode(record)
+    for (const value of Object.values(record)) visit(value, onNode)
+  }
+  const bareImageKey = /^[\w$]+\.image_key$/
+  let checkedEach = 0
+  let checkedKey = 0
+  for (const file of svelteFiles(srcRoot)) {
+    const source = readFileSync(file, 'utf8')
+    if (!source.includes('image_key')) continue
+    const ast = parse(source, { modern: true })
+    visit(ast.fragment, record => {
+      if (record.type === 'EachBlock' && record.key) {
+        const keyNode = record.key as { start: number; end: number }
+        const key = source.slice(keyNode.start, keyNode.end).trim()
+        expect(bareImageKey.test(key), `${file}: each key ${key}`).toBe(false)
+        if (key.includes('image_key')) checkedEach++
+      }
+      if (record.type === 'KeyBlock' && record.expression) {
+        const exprNode = record.expression as { start: number; end: number }
+        const expr = source.slice(exprNode.start, exprNode.end).trim()
+        expect(bareImageKey.test(expr), `${file}: key block ${expr}`).toBe(false)
+        if (expr.includes('image_key')) checkedKey++
+      }
+    })
+  }
+  expect(checkedEach).toBeGreaterThanOrEqual(3)
+  expect(checkedKey).toBeGreaterThanOrEqual(1)
 })

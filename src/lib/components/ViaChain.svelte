@@ -50,7 +50,7 @@
             {#if via.quote}<blockquote class="quote">{via.quote}</blockquote>{/if}
             {#if pictures && via.pictures?.length}
               <div class="pictures">
-                {#each via.pictures as picture, index (picture.image_key)}
+                {#each via.pictures as picture, index (`${index}:${picture.image_key}`)}
                   <a href={media(picture.image_key)} target="_blank" rel="noopener"><img src={media(picture.thumb_key)} {...shown(picture, via.pictures.length)} alt={pictureAlt([name.text, via.author], index, via.pictures.length)} loading="lazy" decoding="async" /></a>
                 {/each}
               </div>

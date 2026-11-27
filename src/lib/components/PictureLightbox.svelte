@@ -11,12 +11,12 @@
   let {
     pictures,
     alt,
-    preparing = null,
+    preparing,
     ondownload,
   }: {
     pictures: readonly StoredImage[]
     alt: (position: number) => string
-    preparing?: string | null
+    preparing?: (position: number) => boolean
     ondownload?: (picture: StoredImage, position: number) => void
   } = $props()
 
@@ -154,7 +154,7 @@
         </a>
 
         {#if ondownload}
-          <button type="button" class="tool" title={t('sighting.evidenceHint')} disabled={preparing === current.image_key} onclick={() => ondownload(current, active!)}>
+          <button type="button" class="tool" title={t('sighting.evidenceHint')} disabled={Boolean(preparing?.(active!))} onclick={() => ondownload(current, active!)}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
             <span class="label">{t('sighting.evidence')}</span>
           </button>
@@ -170,7 +170,7 @@
     </header>
 
     <div class="stage">
-      {#key current.image_key}
+      {#key `${active}:${current.image_key}`}
         <ZoomablePicture
           bind:this={viewer}
           {src}

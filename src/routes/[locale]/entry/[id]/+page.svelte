@@ -185,11 +185,13 @@
   ] as const
   const at = locale()
 
-  let preparing = $state<string | null>(null)
+  let preparing = $state<Record<string, boolean>>({})
   let favError = $state('')
   $effect(() => { void entry.id; favError = '' })
   async function download(sighting: Sighting, picture: StoredImage, position: number) {
-    preparing = picture.image_key
+    const key = `${sighting.id}:${position}`
+    if (preparing[key]) return
+    preparing[key] = true
     try {
       const file = await evidenceFile(media(picture.image_key), boxesOf(picture.box), `${recordCode(entry.id)}-${sighting.id}-${position + 1}`)
       const link = document.createElement('a')
@@ -197,7 +199,7 @@
       link.download = file.name
       link.click()
       setTimeout(() => URL.revokeObjectURL(link.href), 1000)
-    } finally { preparing = null }
+    } finally { delete preparing[key] }
   }
   const backHref = $derived(browseReturnHref(href()))
   function returnToBrowse(event: MouseEvent) {
@@ -335,7 +337,7 @@
       {@const types = parseSightingTypes(sighting.types)}
       {@const contexts = parseContexts(sighting.contexts)}
       <article class="panel stack" id="sighting-{sighting.id}">
-        <EvidencePictures pictures={sighting.media} alt={position => pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} {preparing} ondownload={(picture, position) => download(sighting, picture, position)} />
+        <EvidencePictures pictures={sighting.media} alt={position => pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} preparing={position => Boolean(preparing[`${sighting.id}:${position}`])} ondownload={(picture, position) => download(sighting, picture, position)} />
         {#if sighting.place}<h3>{sighting.place}</h3>{/if}
         {#if types.length || data.earliest?.sighting === sighting.id}<div class="row badges">{#if data.earliest?.sighting === sighting.id}<span class="badge earliest">{t('entry.earliest')}</span>{/if}{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
         {#if sighting.url && /^https?:\/\//i.test(sighting.url)}<a class="text-link url" href={sighting.url} target="_blank" rel="noopener noreferrer">{sighting.url} ↗</a>{/if}

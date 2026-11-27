@@ -12,7 +12,7 @@
 
   const uid = $props.id()
   type Added = { key: number; file: File; thumb: File; url: string }
-  let kept = $state(untrack(() => [...stored]))
+  let kept = $state(untrack(() => stored.map((picture, key) => ({ key, picture }))))
   let added = $state<Added[]>([])
   let working = $state(0)
   let bad = $state(false), most = $state(false), over = $state(false)
@@ -71,10 +71,10 @@
 <div class="field">
   <span class="label" id="{uid}-label">{t('field.viaPictures')}</span>
   <div class="pictures" role="group" aria-labelledby="{uid}-label">
-    {#each kept as item, index (item.image_key)}
-      <input type="hidden" name="via_keep" value={item.image_key} />
-      <noscript><label class="hint"><input type="checkbox" name="via_drop" value={item.image_key} /> {t('field.imageRemove')} {index + 1}</label></noscript>
-      {@render picture(media(item.thumb_key), index, () => kept = kept.filter(other => other.image_key !== item.image_key))}
+    {#each kept as item, index (item.key)}
+      <input type="hidden" name="via_keep" value={item.picture.image_key} />
+      <noscript><label class="hint"><input type="checkbox" name="via_drop" value={item.picture.image_key} /> {t('field.imageRemove')} {index + 1}</label></noscript>
+      {@render picture(media(item.picture.thumb_key), index, () => kept = kept.filter(other => other.key !== item.key))}
     {/each}
     {#each added as item, index (item.key)}
       {@render picture(item.url, kept.length + index, () => remove(item))}
