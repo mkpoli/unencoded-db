@@ -161,7 +161,8 @@
     entry.status && t(`status.${entry.status}`),
     entry.description || entry.cover_place,
   ].filter(Boolean).join(' · '))
-  const cover = $derived(data.sightings.find(sighting => sighting.media.length)?.media[0])
+  // The picture the record's cover is drawn from, which need not be the first the page shows.
+  const cover = $derived(data.sightings.flatMap(sighting => sighting.media).find(picture => picture.thumb_key === entry.cover_key) ?? data.sightings.find(sighting => sighting.media.length)?.media[0])
   const sources = $derived(data.sightings.filter(sighting => sighting.source_id !== null).map(sighting => ({ ...sighting, id: sighting.source_id! })))
   const vias = $derived(data.sightings.flatMap(sighting => sighting.vias))
   const structured = $derived(recordData({ locale: locale(), id: entry.id, name: seoTitle, description: seoDescription, siteName: t('app.name'), image: cover && media(cover.image_key), sources, vias, archives: data.archives }))
