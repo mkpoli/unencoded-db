@@ -16,7 +16,7 @@ import { ADD_SIGHTINGS_MAX, BOXES_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib
 import { REGISTRIES } from '$lib/registries'
 import { RELATION_KINDS } from '$lib/related'
 import { dateOrderWarnings } from '$lib/cites'
-import { CITE_KINDS, CITES_MAX, CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX, type CiteKind } from '$lib/scripts'
+import { CITE_KINDS, CITES_MAX, CLOSENESS, CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX, type CiteKind } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
 import { addComment, cleanComment, commentsOf, setCommentHidden } from '$lib/server/comments'
 import { tagList, taxonomy } from '$lib/server/tags'
@@ -339,6 +339,7 @@ function sightingForm(input: Json) {
   for (const name of ['place', 'title', 'author', 'publisher', 'report_date', 'container', 'original_date', 'page', 'note']) put(name, text(input[name]))
   put('source_kind', choice(input.source_kind, SOURCE_KINDS, 'source_kind'))
   put('style', choice(input.style, STYLES, 'style'))
+  put('closeness', choice(input.closeness, CLOSENESS, 'closeness'))
   for (const context of items(input.contexts)) form.append('contexts', choice(context, CONTEXTS, 'contexts'))
   for (const type of items(input.types)) form.append('types', choice(type, SIGHTING_TYPES, 'types'))
   const quotes = items(input.quotes)
@@ -609,7 +610,7 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   const rawCites = await rawCitesOfSighting(DB, sighting.id)
   const now: Json = {
     place: sighting.place, ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
-    original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, types: parseSightingTypes(sighting.types), note: sighting.note,
+    original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, types: parseSightingTypes(sighting.types), note: sighting.note, closeness: sighting.closeness,
     quotes: quotations(sighting.quotes), vias: sighting.vias.map(({ id: _, ...via }) => via),
     cites: rawCites,
   }
@@ -965,7 +966,7 @@ async function getRecord(event: RequestEvent, input: Json) {
       ...(sighting.hidden_at ? { hidden: true, removed: Boolean(sighting.removed_by) } : {}),
       place: sighting.place,
       ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
-      original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note,
+      original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note, closeness: sighting.closeness,
       vias: sighting.vias.map(({ id: source_id, pictures, ...via }) => ({ source_id, ...via, pictures: (pictures ?? []).map(picture => shownPicture(event, picture)) })),
       cites: sighting.cites.map(cite => ({
         kind: cite.kind,
@@ -1082,6 +1083,7 @@ const SIGHTING = {
   contexts: { type: 'array', items: { type: 'string', enum: CONTEXTS }, description: 'How the character appears, in every way the source shows it.' },
   style: { type: 'string', enum: STYLES, description: 'The writing style.' },
   types: { type: 'array', items: { type: 'string', enum: SIGHTING_TYPES }, description: 'What the source provides: mention (discusses the character), attestation (uses it in a text), description (says how it is written), definition (gives a meaning), reading (gives a pronunciation), relation (names a variant or the same character).' },
+  closeness: { type: 'string', enum: CLOSENESS, description: 'How close this sighting is to the original: primary (the work itself, or a photo, scan, rubbing, tracing or line drawing of it), secondary_cited (a compilation, dictionary or typeset transcription that names its own source for this form), secondary_uncited (one that names none), memory (given from memory, with no written witness). Leave it out when unsure.' },
   quotes: { type: 'array', maxItems: QUOTATIONS_MAX, items: { type: 'object', required: ['text'], properties: { text: { type: 'string' }, locator: { type: 'string' } } }, description: 'Quoted passages, each with an optional attribution or location in the source.' },
   note: { type: 'string', description: 'A note on this source.' },
   vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' }, pictures: { type: 'array', maxItems: MEDIA_MAX, description: `Pictures of this source, such as a screenshot of the post, from their addresses, without marks. A picture belongs to one source, the chain holds ${MEDIA_MAX} in all, and the source needs a citation.`, items: { oneOf: [{ type: 'string' }, { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string' } } }], description: 'Address of the image file itself.' } } } } },

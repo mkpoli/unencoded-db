@@ -449,6 +449,21 @@ test('a sighting is edited field by field, keeping or replacing its pictures', a
   expect(await call('edit_sighting', { record: 1, sighting: 999, rev: 1 })).toMatchObject({ failed: true, value: expect.stringContaining(`Its sightings: ${read.id}`) })
 })
 
+test('a sighting says how close it is to the original, and an edit keeps it until it is cleared', async () => {
+  const { call, raw } = fixture()
+  expect((await call('add_record', { ids: ['⿰舟覽'], sightings: [{ ...sighting, closeness: 'primary' }, { place: 'A dictionary', url: 'https://example.test/dict', closeness: 'secondary_uncited' }] })).failed).toBe(false)
+  expect(raw.query('SELECT closeness FROM sightings ORDER BY id').all()).toEqual([{ closeness: 'primary' }, { closeness: 'secondary_uncited' }])
+  expect((await call('add_sighting', { record: 1, url: 'https://example.test/chat', closeness: 'memory' })).failed).toBe(false)
+  const read = (await call('get_record', { record: 1 })).value.sightings
+  expect(read.map((item: { closeness: string | null }) => item.closeness)).toEqual(['primary', 'secondary_uncited', 'memory'])
+  expect((await call('edit_sighting', { record: 1, sighting: read[1].id, rev: 1, note: 'Checked.' })).failed).toBe(false)
+  expect((await call('get_record', { record: 1 })).value.sightings[1].closeness).toBe('secondary_uncited')
+  expect((await call('edit_sighting', { record: 1, sighting: read[1].id, rev: 2, closeness: 'secondary_cited' })).failed).toBe(false)
+  expect((await call('edit_sighting', { record: 1, sighting: read[0].id, rev: 1, closeness: '' })).failed).toBe(false)
+  expect(raw.query('SELECT closeness FROM sightings ORDER BY id').all()).toEqual([{ closeness: null }, { closeness: 'secondary_cited' }, { closeness: 'memory' }])
+  expect(await call('add_sighting', { record: 1, url: 'https://example.test/other', closeness: 'tertiary' })).toMatchObject({ failed: true, value: expect.stringContaining('closeness is one of: primary, secondary_cited, secondary_uncited, memory') })
+})
+
 test('an agent\'s edit keeps the pictures of the chain, which it cannot send', async () => {
   const { call, raw } = fixture()
   pictures()

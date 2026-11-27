@@ -8,7 +8,7 @@ import { openTestDb } from '$lib/server/testdb'
 import { load as loadHistory } from '../../../history/+page.server'
 import { actions, load } from './+page.server'
 
-const seen = (place: string, original_date: string | null = null) => ({ place, url: null, title: null, container: null, source_kind: null, author: null, publisher: null, report_date: null, vias: [], original_date, page: null, contexts: null, style: null, types: null, quotes: null, note: null }) as SightingFields
+const seen = (place: string, original_date: string | null = null) => ({ place, url: null, title: null, container: null, source_kind: null, author: null, publisher: null, report_date: null, vias: [], closeness: null, original_date, page: null, contexts: null, style: null, types: null, quotes: null, note: null }) as SightingFields
 const fields = (claims: Claim[] = []) => ({ script: 'han' as const, script_other: null, radical: null, strokes: null, claims, description: null })
 
 async function fixture() {
