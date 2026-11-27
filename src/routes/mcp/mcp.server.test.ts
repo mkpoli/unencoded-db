@@ -76,7 +76,11 @@ test('the protocol answers its own methods and refuses the rest', async () => {
   expect((await send({ jsonrpc: '2.0', method: 'notifications/initialized' })).status).toBe(202)
   expect(await (await send({ jsonrpc: '2.0', id: 'a', method: 'ping' })).json()).toEqual({ jsonrpc: '2.0', id: 'a', result: {} })
   const { result } = await (await send({ jsonrpc: '2.0', id: 2, method: 'tools/list' })).json() as any
-  expect(result.tools.map((tool: { name: string }) => tool.name)).toEqual(['find_similar_records', 'search_records', 'get_record', 'add_record', 'add_sighting', 'edit_record', 'edit_sighting', 'link_sightings'])
+  expect(result.tools.map((tool: { name: string }) => tool.name)).toEqual([
+    'find_similar_records', 'search_records', 'get_record', 'list_tags', 'get_history',
+    'add_record', 'add_sighting', 'edit_record', 'edit_sighting', 'link_sightings',
+    'remove_sighting', 'merge_records', 'unmerge_record', 'add_comment', 'edit_source_alias', 'restore_revision',
+  ])
   expect(result.tools.every((tool: Record<string, unknown>) => !('run' in tool) && (tool.inputSchema as any).type === 'object')).toBe(true)
   expect((await (await send({ jsonrpc: '2.0', id: 3, method: 'resources/list' })).json() as any).error.code).toBe(-32601)
   expect((await (await send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'drop_everything' } })).json() as any).error.code).toBe(-32602)
@@ -728,4 +732,91 @@ test('GET /mcp redirects browsers to the localized setup page and answers 405 to
     expect(response.headers.get('allow')).toBe('POST')
     expect(response.headers.get('vary')).toBe('Accept')
   }
+})
+
+test('list_tags, add_comment, and edit_source_alias work via MCP', async () => {
+  const { call, raw } = fixture()
+  const tags = await call('list_tags', {})
+  expect(tags.failed).toBe(false)
+  expect(tags.value.tags.some((tag: { name: string }) => tag.name === 'kokuji')).toBe(true)
+
+  await call('add_record', { ids: ['⿰山東'], sightings: [{ place: 'p. 1', title: 'Kangxi Dictionary', url: 'https://example.test/1' }] })
+  const initial = (await call('get_record', { record: 1 })).value
+  expect(initial.sightings[0].source_id).toBeGreaterThan(0)
+  expect(initial.comments).toEqual([])
+
+  const commented = await call('add_comment', { record: 1, sighting: initial.sightings[0].id, body: 'Matches block print.', agent: { harness: 'Test' } })
+  expect(commented.failed).toBe(false)
+  expect(commented.value.comment).toBeGreaterThan(0)
+  expect(await call('add_comment', { record: 1, sighting: 999, body: 'bad', agent: { harness: 'Test' } })).toMatchObject({ failed: true })
+  expect(await call('add_comment', { record: 1, body: '   ', agent: { harness: 'Test' } })).toMatchObject({ failed: true })
+
+  const afterComment = (await call('get_record', { record: 1 })).value
+  expect(afterComment.comments).toHaveLength(1)
+  expect(afterComment.comments[0]).toMatchObject({ sighting: initial.sightings[0].id, body: 'Matches block print.' })
+
+  const sourceId = initial.sightings[0].source_id
+  expect(await call('edit_source_alias', { source: sourceId, alias: 'KXZD', action: 'add', agent: { harness: 'Test' } })).toEqual({
+    failed: false,
+    value: { source: sourceId, alias: 'KXZD', action: 'add' },
+  })
+  expect(raw.query('SELECT spelling FROM source_aliases WHERE source_id = ?').all(sourceId)).toEqual([{ spelling: 'KXZD' }])
+  expect((await call('edit_source_alias', { source: sourceId, alias: 'KXZD', action: 'remove', agent: { harness: 'Test' } })).failed).toBe(false)
+  expect(raw.query('SELECT spelling FROM source_aliases WHERE source_id = ?').all(sourceId)).toEqual([])
+})
+
+test('remove_sighting, merge_records, unmerge_record, get_history, and restore_revision work via MCP', async () => {
+  const { call } = fixture()
+  await call('add_record', { ids: ['⿰山東'], description: 'First', sightings: [{ place: 'p. 1', url: 'https://example.test/1' }] })
+  const added = await call('add_sighting', { record: 1, place: 'p. 2', url: 'https://example.test/2' })
+  const secondId = added.value.sighting as number
+
+  // Remove the second sighting, refuse removing the last remaining one, then put it back.
+  expect(await call('remove_sighting', { record: 1, sighting: secondId, rev: 1, summary: 'Duplicate scan', agent: { harness: 'Test' } })).toMatchObject({
+    failed: false,
+    value: { sighting: secondId, removed: true },
+  })
+  const firstId = (await call('get_record', { record: 1 })).value.sightings[0].id as number
+  expect(await call('remove_sighting', { record: 1, sighting: firstId, rev: 1, agent: { harness: 'Test' } })).toMatchObject({
+    failed: true,
+    value: expect.stringContaining('only remaining'),
+  })
+
+  const hist = (await call('get_history', { record: 1 })).value
+  expect(hist.removed).toHaveLength(1)
+  expect(hist.removed[0].id).toBe(secondId)
+  expect(await call('restore_revision', { record: 1, sighting: secondId, put_back: true, agent: { harness: 'Test' } })).toMatchObject({
+    failed: false,
+    value: { sighting: secondId, restored: true },
+  })
+  expect((await call('get_record', { record: 1 })).value.sightings).toHaveLength(2)
+
+  // Edit record + sighting, then restore both from history.
+  await call('edit_record', { record: 1, rev: 1, description: 'Second', agent: { harness: 'Test' } })
+  await call('edit_sighting', { record: 1, sighting: firstId, rev: 1, place: 'p. 1 corrected', agent: { harness: 'Test' } })
+  const histAfter = (await call('get_history', { record: 1 })).value
+  const createRow = histAfter.rows.find((row: { sighting: number | null; rev: number }) => row.sighting === null && row.rev === 1)
+  const sightingRow = histAfter.rows.find((row: { sighting: number | null; rev: number }) => row.sighting === firstId && row.rev === 1)
+  expect(createRow.fields?.description).toBe('First')
+  expect(sightingRow.sighting_fields?.place).toBe('p. 1')
+
+  expect(await call('restore_revision', { record: 1, revision: String(createRow.id), rev: 2, agent: { harness: 'Test' } })).toMatchObject({ failed: false, value: { rev: 3 } })
+  expect((await call('get_record', { record: 1 })).value.description).toBe('First')
+  expect(await call('restore_revision', { record: 1, sighting: firstId, revision: sightingRow.id, rev: 2, agent: { harness: 'Test' } })).toMatchObject({ failed: false, value: { sighting: firstId, rev: 3 } })
+  expect((await call('get_record', { record: 1 })).value.sightings.find((s: { id: number }) => s.id === firstId).place).toBe('p. 1')
+
+  // Merge two records (always higher into lower) and undo the merge.
+  await call('add_record', { ids: ['⿰山東'], sightings: [{ place: 'p. 3', url: 'https://example.test/3' }] })
+  expect(await call('merge_records', { record: 1, duplicate_of: 2, summary: 'Same glyph', agent: { harness: 'Test' } })).toMatchObject({
+    failed: false,
+    value: { merged: { id: 2 }, into: { id: 1 } },
+  })
+  expect((await call('get_record', { record: 2 })).value.merged_into.id).toBe(1)
+  expect((await call('get_history', { record: 1 })).value.duplicates).toHaveLength(1)
+  expect(await call('unmerge_record', { record: 2, agent: { harness: 'Test' } })).toMatchObject({
+    failed: false,
+    value: { record: { id: 2 }, from: { id: 1 }, unmerged: true },
+  })
+  expect((await call('get_record', { record: 2 })).value.merged_into).toBeUndefined()
+  expect(await call('unmerge_record', { record: 2, agent: { harness: 'Test' } })).toMatchObject({ failed: true })
 })
