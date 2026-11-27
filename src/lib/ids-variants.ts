@@ -115,20 +115,18 @@ function drawnFrom(part: string, table: Table): string[][] {
  * The runs of parts that may spell what a run of parts does, the typed one first: 艹時 is also 艹日寺 and 蒔.
  * Radical code points count as the ideographs they stand for, and a run with the same parts in another order is the same run.
  * A part typed twice is folded as two (木木 into 林) and written once, since a record is found by each part it holds.
- * A part typed that is drawn from strokes is also the run of those (水 is ㇇𰛅), which finds a description that writes it out.
+ * A character typed alone that is drawn from strokes is also the run of those (水 is ㇇𰛅), which finds a description that writes it out.
  */
 export function partSpellings(text: string, table: Table, limit = PART_SPELLINGS_MAX): string[] {
   const start = [...plain(text)].map(radicalEquivalent)
   const key = (run: readonly string[]) => [...new Set(run)].sort().join('')
   const found = [start], seen = new Set([key(start)])
-  start.forEach((part, at) => {
-    for (const drawn of drawnFrom(part, table)) {
-      const run = [...start.slice(0, at), ...drawn, ...start.slice(at + 1)]
-      if (found.length === limit || new Set(run).size > PART_RUN_MAX || seen.has(key(run))) continue
-      seen.add(key(run))
-      found.push(run)
-    }
-  })
+  // Only a character typed alone: among other parts its strokes would find every record that holds a 一 or a 丨.
+  if (start.length === 1) for (const run of drawnFrom(start[0], table)) {
+    if (found.length === limit || seen.has(key(run))) continue
+    seen.add(key(run))
+    found.push(run)
+  }
   for (let at = 0; at < found.length && found.length < limit; at++) {
     for (const stepped of partSteps(found[at], table)) {
       if (new Set(stepped).size > PART_RUN_MAX || stepped.length > PART_RUN_MAX * 2 || seen.has(key(stepped))) continue
