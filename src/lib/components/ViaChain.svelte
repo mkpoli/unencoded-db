@@ -1,7 +1,8 @@
 <script lang="ts">
   // A sighting's chain of go-betweens, nearest the cited work first. Each link carries the whole
-  // citation: the title, the author, what it appeared in, the publisher, the date, and a web address where
-  // there is one. Its name is not said twice.
+  // citation: the title, the author, what it appeared in, the publisher, the date, and a web address and
+  // archived copies where there are some. Its name is not said twice.
+  import ArchiveLinks from './ArchiveLinks.svelte'
   import EvidenceDate from './EvidenceDate.svelte'
   import type { DateReading } from '$lib/dates'
   import { href, media, t } from '$lib/t'
@@ -10,7 +11,8 @@
   import type { Via as StoredVia, ViaPicture } from '$lib/server/entries'
 
   type Via = StoredVia & { id?: number }
-  let { vias, label = true, dates, pictures = false }: { vias: readonly Via[]; label?: boolean; dates?: Map<string, DateReading | null>; pictures?: boolean } = $props()
+  // `archives` are the copies web archives keep of each linked source, by source.
+  let { vias, label = true, dates, archives, pictures = false }: { vias: readonly Via[]; label?: boolean; dates?: Map<string, DateReading | null>; archives?: ReadonlyMap<number, readonly string[]>; pictures?: boolean } = $props()
   const meta = (via: Via, fields: readonly NameField[]) => sourceByline(via, fields, t, ['author', 'container', 'source_kind', 'publisher'])
   // As large as fits, so the frame is never wider than the picture; a long screenshot is shown by its top.
   // Many pictures are shown smaller, so a long message does not push the rest of the record away.
@@ -47,6 +49,7 @@
                 {byline}{#if via.report_date}{#if byline}{' · '}{/if}<EvidenceDate text={via.report_date} reading={dates?.get(via.report_date)} />{/if}
               </span>
             {/if}
+            {#if via.id && archives?.get(via.id)}<ArchiveLinks archives={archives.get(via.id)!} compact />{/if}
             {#if via.quote}<blockquote class="quote">{via.quote}</blockquote>{/if}
             {#if pictures && via.pictures?.length}
               <div class="pictures">

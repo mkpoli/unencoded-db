@@ -13,6 +13,7 @@ import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
 import { relatedRecords } from '$lib/server/related-records'
+import { archivesOfSources } from '$lib/server/source-archives'
 import { positiveId } from '../../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
@@ -27,8 +28,10 @@ export const load: PageServerLoad = async (event) => {
   const held = path ? await radicalCounts(env(event).DB, path[0]) : null
   const filed = path && held ? filedUnder(path, held.counts, held.stated).map(({ path, radical }) => ({ path, radical })) : []
   const sightings = found.sightings.filter(s => !s.hidden_at)
+  // The archived copies of every source the evidence cites, as a work or a go-between.
+  const cited = sightings.flatMap(sighting => [sighting.source_id, ...sighting.vias.map(via => via.id)]).filter(id => id !== null)
+  const [dates, archives] = await Promise.all([readDates(env(event).DB, sightingDates(sightings)), archivesOfSources(env(event).DB, cited)])
   // The record's earliest attestation, and which piece of evidence holds it.
-  const dates = await readDates(env(event).DB, sightingDates(sightings))
   const earliest = earliestSighting(sightings, dates)
   // A description another page proposes to add, ?ids_add=: one, and only a whole one. It is added to the form, not saved.
   const proposed = cleanIds(event.url.searchParams.get('ids_add') ?? '')
@@ -38,7 +41,7 @@ export const load: PageServerLoad = async (event) => {
   const about = asked && sightings.some(sighting => sighting.id === asked) ? asked : null
   const comments = await commentsOf(env(event).DB, id, Boolean(event.locals.person?.moderator))
   const related = await relatedRecords(env(event).DB, id, found.claims)
-  return { dates, idsAdd, related, about, comments, entry: found.entry, claims: found.claims, sightings, filed, ...(await taxonomy(env(event).DB)), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
+  return { dates, archives, idsAdd, related, about, comments, entry: found.entry, claims: found.claims, sightings, filed, ...(await taxonomy(env(event).DB)), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
 }
 
 async function commentVisibility(event: RequestEvent, hidden: boolean) {
