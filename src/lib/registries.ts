@@ -7,6 +7,7 @@
 import { isDescription } from 'ids-input'
 import { encodedCharacter } from './ids'
 import { isIdeograph } from './ideographs'
+import { parseWorkingSetCode, workingSetPage } from './irg-ws'
 import { UNICODE_AGES } from './unicode-age'
 
 export type Encoding = { charset: string; code: string }
@@ -52,6 +53,11 @@ export const REGISTRIES: readonly Registry[] = [
   {
     id: 'mj', label: '文字情報基盤 MJ', mark: 'MJ', example: 'MJ059588',
     page: code => /^MJ\d{6}$/.test(code) ? `https://moji.or.jp/mojikibansearch/info?${encodeURIComponent('MJ文字図形名')}=${code}` : null,
+  },
+  {
+    id: 'irg-ws', label: 'IRG Working Set', example: 'WS2024-00001',
+    names: code => Boolean(parseWorkingSetCode(code)),
+    page: workingSetPage,
   },
   { id: 'cns11643', label: 'CNS 11643' },
   { id: 'big5', label: 'Big5' },

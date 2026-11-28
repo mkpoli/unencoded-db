@@ -1,9 +1,9 @@
 // Where other sites say more: Glyph Atlas shows a character's forms in old books, Han Input finds it by
-// reading, parts or input code, IDS Workshop edits and draws a description, and zi.tools searches by
-// description. The addresses follow Han Input's and IDS Workshop's. The dictionaries a character is
-// registered in are in `registries.ts`.
+// reading, parts or input code, IDS Workshop edits and draws a description, and zi.tools and IRG WS2024
+// search by description. The addresses follow Han Input's, IDS Workshop's and hc.jsecs.org's. The
+// dictionaries and working sets a character is registered in are in `registries.ts`.
 import { cleanIds, workshopUrl } from './ids'
-import { irgLinks } from './irg-ws'
+import { ACTIVE_WORKING_SET_LABEL, irgLinks, ortIdsUrl } from './irg-ws'
 
 export type SiteLink = { name: string; href: string; title?: string }
 
@@ -24,8 +24,12 @@ export function characterLinks(char: string, locale: string, sources?: readonly 
 /** The pages for a description sequence. */
 export function descriptionLinks(ids: string, locale: string): SiteLink[] {
   const sequence = cleanIds(ids)
-  return sequence ? [
-    atlas(sequence, locale), { name: 'IDS Workshop', href: workshopUrl(sequence) },
+  if (!sequence) return []
+  const wsHref = ortIdsUrl(sequence)
+  return [
+    atlas(sequence, locale),
+    { name: 'IDS Workshop', href: workshopUrl(sequence) },
     { name: '字統網 zi.tools', href: `https://zi.tools/?secondary=ids&seq=${encodeURIComponent(sequence)}` },
-  ] : []
+    ...(wsHref ? [{ name: ACTIVE_WORKING_SET_LABEL, href: wsHref }] : []),
+  ]
 }
