@@ -55,15 +55,19 @@ const NAMED_ENTITIES: Record<string, string> = {
   nbsp: ' ',
 }
 
+function validScalar(cp: number): boolean {
+  return Number.isInteger(cp) && cp >= 1 && cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF)
+}
+
 function decodeHtmlEntities(text: string): string {
   return text.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (whole, body: string) => {
     if (body.startsWith('#x') || body.startsWith('#X')) {
       const cp = parseInt(body.slice(2), 16)
-      return Number.isFinite(cp) && cp >= 0 && cp <= 0x10FFFF ? String.fromCodePoint(cp) : whole
+      return validScalar(cp) ? String.fromCodePoint(cp) : ''
     }
     if (body.startsWith('#')) {
       const cp = parseInt(body.slice(1), 10)
-      return Number.isFinite(cp) && cp >= 0 && cp <= 0x10FFFF ? String.fromCodePoint(cp) : whole
+      return validScalar(cp) ? String.fromCodePoint(cp) : ''
     }
     return NAMED_ENTITIES[body] ?? whole
   })
@@ -93,11 +97,6 @@ function stripUrls(text: string): string {
   return text.replace(/https?:\/\/\S+/gi, ' ').replace(/\s+/gu, ' ').trim()
 }
 
-function extractYear(text: string): string | null {
-  const paren = /\((1\d{3}|20\d{2})\)/.exec(text)
-  return paren ? paren[1] : null
-}
-
 /**
  * Splits a freeform ORT bibliographic citation into `{ title, reportDate, page }` when structured
  * delimiters (CJK book-title brackets `《…》`, `, vol.`, `page`, `p.`) are present.
@@ -105,23 +104,32 @@ function extractYear(text: string): string | null {
 export function parseCitationText(raw: string): { title: string | null; reportDate: string | null; page: string | null } {
   const text = stripUrls(raw).replace(/^\{[^}]+\}\s*/, '').trim()
   if (!text) return { title: null, reportDate: null, page: null }
-  const reportDate = extractYear(text)
 
   const book = /《([^》]+)》/.exec(text)
   if (book) {
     const title = cleanText(`《${book[1]}》`, 300)
-    const after = text.slice(book.index + book[0].length).replace(/^\s*\(\d{4}\)\s*/, '').replace(/^[,，;；:：\s]+/, '').trim()
+    const tail = text.slice(book.index + book[0].length)
+    const yearMatch = /^\s*\((1\d{3}|20\d{2})\)/.exec(tail)
+    const reportDate = yearMatch ? yearMatch[1] : null
+    const after = (yearMatch ? tail.slice(yearMatch[0].length) : tail).replace(/^[,，;；:：\s]+/, '').trim()
     return { title, reportDate, page: cleanText(after, 120) }
   }
 
-  const locator = /\b(vol\.?\s*\d[\w.,\s/-]*|p{1,2}\.?\s*\d[\w.,\s/-]*|page\s*\d[\w.,\s/-]*|fol\.?\s*\d[\w.,\s/-]*)/i.exec(text)
+  const locator = /\b(vol\.?\s*\d[\w.,\s/-]*|pp?\.\s*\d[\w.,\s/-]*|page\s+\d[\w.,\s/-]*|fol\.?\s*\d[\w.,\s/-]*)/i.exec(text)
   if (locator && locator.index > 0) {
-    const title = cleanText(text.slice(0, locator.index).replace(/[,，;；:：\s]+$/, ''), 300)
+    const head = text.slice(0, locator.index).replace(/[,，;；:：\s]+$/, '')
+    const yearMatch = /\((1\d{3}|20\d{2})\)\s*$/.exec(head)
+    const title = cleanText(yearMatch ? head.slice(0, yearMatch.index).trim() : head, 300)
     const page = cleanText(text.slice(locator.index), 120)
-    return { title, reportDate, page }
+    return { title, reportDate: yearMatch ? yearMatch[1] : null, page }
   }
 
-  return { title: cleanText(text, 300), reportDate, page: null }
+  const trailingYear = /\((1\d{3}|20\d{2})\)\s*$/.exec(text)
+  return {
+    title: cleanText(trailingYear ? text.slice(0, trailingYear.index).trim() : text, 300),
+    reportDate: trailingYear ? trailingYear[1] : null,
+    page: null,
+  }
 }
 
 function resolveOrtDataUrl(ws: OrtWorkingSet, rawPath: unknown): string | null {
@@ -130,17 +138,17 @@ function resolveOrtDataUrl(ws: OrtWorkingSet, rawPath: unknown): string | null {
   if (!trimmed) return null
   if (/^https?:\/\//i.test(trimmed)) return cleanSourceUrl(trimmed)
   const normalized = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
-  if (normalized.includes('..')) return null
+  if (normalized.includes('..') || /%2e%2e/i.test(normalized)) return null
   return `https://hc.jsecs.org/irg/${ws}/data${encodeURI(normalized)}`
 }
 
 function extractSerial(html: string): string | null {
-  const dataId = /data-id="(\d{1,5})"/i.exec(html)
-  if (dataId && Number(dataId[1]) >= 1) return dataId[1].padStart(5, '0')
   const title = /<title>\s*(\d{5})\s*\|/i.exec(html)
   if (title && Number(title[1]) >= 1) return title[1]
-  const tableSeq = /<td>0\s*-\s*Seq(?:uence)?\.?\s*No\.?(?:umber)?<\/td>\s*<td>\s*(\d{1,5})\s*<\/td>/i.exec(html)
+  const tableSeq = /<td[^>]*>\s*0\s*-\s*Seq(?:uence)?\.?\s*(?:No\.?|Number)\s*<\/td>\s*<td[^>]*>\s*(\d{1,5})\s*<\/td>/i.exec(html)
   if (tableSeq && Number(tableSeq[1]) >= 1) return tableSeq[1].padStart(5, '0')
+  const dataId = /data-id="(\d{1,5})"/i.exec(html)
+  if (dataId && Number(dataId[1]) >= 1) return dataId[1].padStart(5, '0')
   return null
 }
 
@@ -148,7 +156,7 @@ function extractDiscussions(html: string): OrtDiscussion[] {
   const out: OrtDiscussion[] = []
   const table = /<table\s+class=["']?dicussion_record["']?[^>]*>([\s\S]*?)<\/table>/i.exec(html)
   if (table) {
-    const rowRe = /<tr>\s*<td>([\s\S]*?)<\/td>\s*<td>([\s\S]*?)<\/td>\s*<\/tr>/gi
+    const rowRe = /<tr[^>]*>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi
     let match: RegExpExecArray | null
     while ((match = rowRe.exec(table[1])) !== null) {
       const left = stripTags(match[1])
@@ -160,7 +168,7 @@ function extractDiscussions(html: string): OrtDiscussion[] {
     }
   }
   if (!out.length) {
-    const legacy = /<td>1\s*-\s*Diss?cussion\s+Record<\/td>\s*<td>([\s\S]*?)<\/td>/i.exec(html)
+    const legacy = /<td[^>]*>\s*1\s*-\s*Diss?cussion\s+Record\s*<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>/i.exec(html)
     const text = legacy ? stripTags(legacy[1]) : ''
     if (text) out.push({ meeting: null, text: text.slice(0, 400) })
   }
@@ -200,8 +208,7 @@ function parseModernEvidences(ws: OrtWorkingSet, rawAttr: string): OrtEvidenceSo
 
     const evidenceList = Array.isArray(entry.evidence) ? entry.evidence : []
     const evidenceUrls: string[] = []
-    const evidenceDescriptions: string[] = []
-    let directUrl: string | null = null
+    const evidenceItems: Array<{ raw: string; text: string; url: string | null }> = []
     for (const item of evidenceList) {
       if (!item || typeof item !== 'object') continue
       const row = item as Record<string, unknown>
@@ -209,8 +216,7 @@ function parseModernEvidences(ws: OrtWorkingSet, rawAttr: string): OrtEvidenceSo
       if (url && !evidenceUrls.includes(url)) evidenceUrls.push(url)
       const desc = cleanText(row.description, 500)
       if (desc) {
-        if (!directUrl) directUrl = firstUrl(desc)
-        evidenceDescriptions.push(stripUrls(desc))
+        evidenceItems.push({ raw: desc, text: stripUrls(desc), url: firstUrl(desc) })
       }
     }
 
@@ -221,40 +227,51 @@ function parseModernEvidences(ws: OrtWorkingSet, rawAttr: string): OrtEvidenceSo
     const note = dataField(data, /\bnotes?\b/i)
     const group = dataField(data, /^group$/i)
 
-    // Choose the richest bibliographic description available (explicit title+year, evidence item
-    // description, or `Ref. to Evidence doc`, avoiding bare numeric document codes like "064" or
-    // bare image filenames like "SAT-05947-01.jpg").
+    // Choose the richest bibliographic description available, avoiding bare numeric codes ("064")
+    // or bare image filenames ("SAT-05947-01.jpg").
     const meaningfulRef = refDoc && !/^\d{1,4}$/.test(refDoc) && !/\.(?:jpe?g|png|pdf|bmp|webp)(?:;|$)/i.test(refDoc)
       ? refDoc
       : null
-    const rawCitation = [
-      titleAndYear,
-      explicitPage,
-      !titleAndYear ? (evidenceDescriptions[0] || meaningfulRef) : null,
-    ].filter((part): part is string => Boolean(part)).join(', ')
-
-    const citation = cleanText(rawCitation, 500) ?? `${WS_SHORT[ws]} ${sourceRef}`
-    if (!directUrl) directUrl = firstUrl(rawCitation)
 
     let title: string | null = null
     let reportDate: string | null = null
     let page: string | null = null
+    let directUrl: string | null = null
+    let primaryCitation: string | null = null
+    let extraEvidenceStart = 0
+
     if (titleAndYear) {
       const parsedTitle = parseCitationText(titleAndYear)
       title = parsedTitle.title
       reportDate = parsedTitle.reportDate
       page = explicitPage ?? parsedTitle.page
-    } else if (evidenceDescriptions[0] || meaningfulRef) {
-      const parsedCit = parseCitationText(evidenceDescriptions[0] || meaningfulRef!)
+      directUrl = firstUrl(titleAndYear)
+      primaryCitation = [titleAndYear, explicitPage].filter(Boolean).join(', ')
+    } else if (evidenceItems.length) {
+      const first = evidenceItems[0]
+      const parsedCit = parseCitationText(first.text)
       title = parsedCit.title
       reportDate = parsedCit.reportDate
       page = explicitPage ?? parsedCit.page
+      directUrl = first.url
+      primaryCitation = first.text
+      extraEvidenceStart = 1
+    } else if (meaningfulRef) {
+      const parsedCit = parseCitationText(meaningfulRef)
+      title = parsedCit.title
+      reportDate = parsedCit.reportDate
+      page = explicitPage ?? parsedCit.page
+      directUrl = firstUrl(meaningfulRef)
+      primaryCitation = [meaningfulRef, explicitPage].filter(Boolean).join(', ')
     }
+
+    const citation = cleanText(primaryCitation, 500) ?? `${WS_SHORT[ws]} ${sourceRef}`
 
     const notes: string[] = []
     if (group && group !== region) notes.push(`Source group: ${group}`)
-    if (evidenceDescriptions.length > 1) {
-      for (const extra of evidenceDescriptions.slice(1, 4)) notes.push(`Additional evidence: ${extra}`)
+    for (const extra of evidenceItems.slice(extraEvidenceStart, extraEvidenceStart + 3)) {
+      const suffix = extra.url ? ` (${extra.url})` : ''
+      if (extra.text || suffix) notes.push(`Additional evidence: ${extra.text}${suffix}`.trim())
     }
     if (reading) notes.push(reading)
     if (note) notes.push(`Note: ${note}`)
@@ -276,7 +293,7 @@ function parseModernEvidences(ws: OrtWorkingSet, rawAttr: string): OrtEvidenceSo
 
 function parseWs2015Table(html: string): OrtEvidenceSource[] {
   const cells = new Map<string, string>()
-  const cellRe = /<tr>\s*<td>([^<]+)<\/td>\s*<td>([\s\S]*?)<\/td>\s*<\/tr>/gi
+  const cellRe = /<tr[^>]*>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi
   let match: RegExpExecArray | null
   while ((match = cellRe.exec(html)) !== null) {
     const label = stripTags(match[1])
@@ -296,13 +313,14 @@ function parseWs2015Table(html: string): OrtEvidenceSource[] {
     if (url && !evidenceUrls.includes(url)) evidenceUrls.push(url)
   }
 
+  // Anchored field patterns prevent "K Source" from matching "UK Source" and "T Source" from matching "SAT Source".
   const candidates: Array<{ ref: string | null; region: string; citation: string | null; page: string | null }> = [
-    { ref: get(/UK Source/i), region: 'UK', citation: get(/UK Ref\.\s*to Evidence doc/i), page: null },
-    { ref: get(/UTC Source/i), region: 'UTC', citation: get(/UTC Evidence \(Title\)/i), page: get(/UTC Evidence \(Location\)/i) },
-    { ref: get(/G Source/i), region: 'G', citation: get(/G Ref\.\s*to Evidence doc/i), page: get(/G Page No\./i) },
-    { ref: get(/T Source/i), region: 'T', citation: get(/T References to evidence documents A/i), page: get(/T References to evidence documents B/i) },
-    { ref: get(/K Source/i), region: 'K', citation: get(/K Ref\.\s*to Evidence doc/i), page: null },
-    { ref: get(/SAT Source/i), region: 'SAT', citation: get(/SAT Evidence/i), page: null },
+    { ref: get(/^(?:\d+\s*-\s*)?UK Source$/i), region: 'UK', citation: get(/^(?:\d+\s*-\s*)?UK Ref\.\s*to Evidence doc$/i), page: null },
+    { ref: get(/^(?:\d+\s*-\s*)?UTC Source$/i), region: 'UTC', citation: get(/^(?:\d+\s*-\s*)?UTC Evidence \(Title\)$/i), page: get(/^(?:\d+\s*-\s*)?UTC Evidence \(Location\)$/i) },
+    { ref: get(/^(?:\d+\s*-\s*)?G Source$/i), region: 'G', citation: get(/^(?:\d+\s*-\s*)?G Ref\.\s*to Evidence doc$/i), page: get(/^(?:\d+\s*-\s*)?G Page No\./i) },
+    { ref: get(/^(?:\d+\s*-\s*)?T Source$/i), region: 'T', citation: get(/^(?:\d+\s*-\s*)?T References to evidence documents A$/i), page: get(/^(?:\d+\s*-\s*)?T References to evidence documents B$/i) },
+    { ref: get(/^(?:\d+\s*-\s*)?K Source$/i), region: 'K', citation: get(/^(?:\d+\s*-\s*)?K Ref\.\s*to Evidence doc$/i), page: null },
+    { ref: get(/^(?:\d+\s*-\s*)?SAT Source$/i), region: 'SAT', citation: get(/^(?:\d+\s*-\s*)?SAT Evidence$/i), page: null },
   ]
 
   const sources: OrtEvidenceSource[] = []
@@ -367,7 +385,7 @@ export function mapOrtSourceToSighting(record: OrtRecord, source: OrtEvidenceSou
   const placeParts = [source.title, source.page].filter((part): part is string => Boolean(part))
   const place = (placeParts.join(', ') || source.citation || viaTitle).slice(0, 500)
 
-  const noteLines: string[] = [`IRG source: ${source.sourceRef}`]
+  const noteLines: string[] = [`IRG source: ${record.ws} ${source.sourceRef}`]
   for (const extra of source.notes) noteLines.push(extra)
   if (record.discussions.length) {
     const summary = record.discussions

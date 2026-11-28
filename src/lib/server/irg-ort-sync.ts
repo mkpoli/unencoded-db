@@ -32,13 +32,6 @@ export type OrtSyncResult = {
   refs: string[]
 }
 
-export type OrtBatchResult = {
-  processed: number
-  added: number
-  results: OrtSyncResult[]
-  errors: { entryId: number; message: string }[]
-}
-
 export async function ensureIrgOrtActor(db: D1Database, now = () => Date.now()): Promise<string> {
   await db.prepare('INSERT OR IGNORE INTO people(id, name, created_at) VALUES (?, ?, ?)')
     .bind(IRG_ORT_ACTOR_ID, IRG_ORT_ACTOR_NAME, new Date(now()).toISOString()).run()
@@ -96,35 +89,68 @@ export function ortTargetsForClaims(claims: readonly Claim[], unihanSources: Rec
   return targets
 }
 
-/** Collects ORT keys and IRG source refs already present in an entry's sightings (including hidden/removed). */
-export function existingOrtKeys(sightings: readonly Pick<Sighting, 'url' | 'note' | 'vias'>[]): Set<string> {
-  const keys = new Set<string>()
-  const inspectUrl = (raw: string | null | undefined) => {
-    if (!raw) return
-    const parsed = parseOrtUrl(raw)
-    if (parsed) keys.add(parsed.queryKey)
-  }
+/**
+ * Collects per-(working set, source ref) keys and manual ORT page keys already present in an entry's
+ * sightings (including hidden/removed sightings so removed evidence is never re-imported).
+ */
+export function existingOrtKeys(sightings: readonly Pick<Sighting, 'url' | 'note' | 'vias'>[]): {
+  refs: Set<string>
+  manualPages: Set<string>
+} {
+  const refs = new Set<string>()
+  const manualPages = new Set<string>()
   for (const sighting of sightings) {
-    inspectUrl(sighting.url)
-    for (const via of sighting.vias) inspectUrl(via.url)
+    let hasStructuredRef = false
     if (sighting.note) {
-      const ref = /^IRG source:\s*(\S+)/im.exec(sighting.note)
-      if (ref) keys.add(`ref:${ref[1].toUpperCase()}`)
+      // Matches both scoped (`IRG source: ws2021 GZ-0381601`) and legacy (`IRG source: GZ-0381601`) notes.
+      const scoped = /^IRG source:\s*(ws(?:2015|2017|2021|2024))\s+(\S+)/im.exec(sighting.note)
+      if (scoped) {
+        refs.add(`${scoped[1].toLowerCase()}:ref:${scoped[2].toUpperCase()}`)
+        hasStructuredRef = true
+      } else {
+        const bare = /^IRG source:\s*(\S+)/im.exec(sighting.note)
+        if (bare) {
+          refs.add(`*:ref:${bare[1].toUpperCase()}`)
+          hasStructuredRef = true
+        }
+      }
+    }
+    // Only treat a sighting's ORT URL as a whole-page manual citation when it did not come from a
+    // per-source automated import, so a partially capped multi-source page can still import its
+    // remaining sources on a later run.
+    if (!hasStructuredRef) {
+      const inspectUrl = (raw: string | null | undefined) => {
+        if (!raw) return
+        const parsed = parseOrtUrl(raw)
+        if (parsed) manualPages.add(parsed.queryKey)
+      }
+      inspectUrl(sighting.url)
+      for (const via of sighting.vias) inspectUrl(via.url)
     }
   }
-  return keys
+  return { refs, manualPages }
 }
 
 async function fetchOrtHtml(url: string, fetcher: OrtFetch): Promise<string | null> {
   const parsed = parseOrtUrl(url)
   if (!parsed) return null
-  const response = await fetcher(parsed.url, {
-    headers: { accept: 'text/html', 'user-agent': USER_AGENT },
-    redirect: 'manual',
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  })
+  let response: Response
+  try {
+    response = await fetcher(parsed.url, {
+      headers: { accept: 'text/html', 'user-agent': USER_AGENT },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+  } catch {
+    return null
+  }
   if (!response.ok || !response.body) {
     await response.body?.cancel().catch(() => {})
+    return null
+  }
+  const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
+  if (contentType && !contentType.includes('text/html')) {
+    await response.body.cancel().catch(() => {})
     return null
   }
   const length = Number(response.headers.get('content-length'))
@@ -132,8 +158,12 @@ async function fetchOrtHtml(url: string, fetcher: OrtFetch): Promise<string | nu
     await response.body.cancel().catch(() => {})
     return null
   }
-  const body = await boundedBody(response.body, MAX_ORT_HTML)
-  return body ? await body.text() : null
+  try {
+    const body = await boundedBody(response.body, MAX_ORT_HTML)
+    return body ? await body.text() : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -170,19 +200,23 @@ export async function syncOrtEntry(
 
   for (const target of targets) {
     if (added >= cap) break
-    if (existing.has(target.key)) { skipped++; continue }
+    if (existing.manualPages.has(target.key)) { skipped++; continue }
     const html = await fetchOrtHtml(target.url, fetcher)
     if (!html) { skipped++; continue }
     const record = parseOrtPage(html, target.ws, target.url)
     if (!record) { skipped++; continue }
 
     const serialKey = record.serial ? `${record.ws}:id:${record.serial}` : null
-    if (serialKey && existing.has(serialKey)) { skipped++; continue }
+    if (serialKey && existing.manualPages.has(serialKey)) { skipped++; continue }
 
     for (const source of record.sources) {
       if (added >= cap) break
-      const refKey = `ref:${source.sourceRef.toUpperCase()}`
-      if (existing.has(refKey)) { skipped++; continue }
+      const upperRef = source.sourceRef.toUpperCase()
+      const scopedRefKey = `${record.ws}:ref:${upperRef}`
+      if (existing.refs.has(scopedRefKey) || existing.refs.has(`*:ref:${upperRef}`)) {
+        skipped++
+        continue
+      }
 
       if (!options.dryRun) {
         actor ??= await ensureIrgOrtActor(db, options.now)
@@ -190,13 +224,13 @@ export async function syncOrtEntry(
         try {
           await addSighting(db, entryId, fields, [], { actor, ip: null })
         } catch (err) {
-          if (err instanceof SightingLimitError) break
+          if (err instanceof SightingLimitError) {
+            return { entryId, targets: targets.length, added, skipped, refs }
+          }
           throw err
         }
       }
-      existing.add(refKey)
-      if (serialKey) existing.add(serialKey)
-      existing.add(target.key)
+      existing.refs.add(scopedRefKey)
       added++
       refs.push(source.sourceRef)
     }

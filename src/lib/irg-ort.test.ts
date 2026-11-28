@@ -3,7 +3,7 @@ import { mapOrtSourceToSighting, parseCitationText, parseOrtPage } from './irg-o
 
 const enc = (obj: unknown) => JSON.stringify(obj).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-test('parseCitationText extracts CJK book titles, years and locators', () => {
+test('parseCitationText extracts CJK book titles, years and locators without false positives', () => {
   expect(parseCitationText('《古壮字字典》 page 038 col 1 entry 6')).toEqual({
     title: '《古壮字字典》',
     reportDate: null,
@@ -24,9 +24,15 @@ test('parseCitationText extracts CJK book titles, years and locators', () => {
     reportDate: null,
     page: 'vol1, fol2',
   })
+  // Bare "p2" in a title does not split as a page locator.
+  expect(parseCitationText('Catalog p2 edition (2021)')).toEqual({
+    title: 'Catalog p2 edition',
+    reportDate: '2021',
+    page: null,
+  })
 })
 
-test('parseOrtPage and mapOrtSourceToSighting handle WS2021 GZ and UTC JSON payloads', () => {
+test('parseOrtPage and mapOrtSourceToSighting handle WS2021 GZ payloads and strip invalid entities', () => {
   const payload = {
     'GZ-0381601': {
       evidence: [{ source_reference: 'GZ-0381601', region: 'G', evidence_no: '0', path: '/gz-evidence/GZ-0381601.jpg', description: null }],
@@ -66,11 +72,11 @@ test('parseOrtPage and mapOrtSourceToSighting handle WS2021 GZ and UTC JSON payl
     source_kind: null,
     quote: null,
   }])
-  expect(sighting.note).toContain('IRG source: GZ-0381601')
+  expect(sighting.note).toContain('IRG source: ws2021 GZ-0381601')
   expect(sighting.note).toContain('ORT evidence: https://hc.jsecs.org/irg/ws2021/data/gz-evidence/GZ-0381601.jpg')
 })
 
-test('parseOrtPage extracts WS2024 multi-evidence descriptions, direct URLs and discussion records', () => {
+test('parseOrtPage keeps evidence 2 URL in notes instead of attaching it to evidence 1 title', () => {
   const payload = {
     'SAT-05947': {
       evidence: [
@@ -80,7 +86,7 @@ test('parseOrtPage extracts WS2024 multi-evidence descriptions, direct URLs and 
       info: { source_reference: 'SAT-05947', region: 'SAT', data: { 'Character Reference': 'SAT-05947' } },
     },
   }
-  const html = `<!doctype html><title>00001 | ㇀ | WS2024v5.0</title><ws-evidences data-evidence="${enc(payload)}"></ws-evidences><table class=dicussion_record data-id="00001"><tr><td><b>IRG #65</b><br>2025-10-14</td><td>no change.</td></tr><tr><td><b>IRG #63</b><br>2024-10-22</td><td>no unification.</td></tr></table>`
+  const html = `<!doctype html><title>00001 | ㇀ | WS2024v5.0</title><ws-evidences data-evidence="${enc(payload)}"></ws-evidences><table class=dicussion_record data-id="00001"><tr><td><b>IRG #65</b><br>2025-10-14</td><td>no change&#0;&#xD800;.</td></tr><tr><td><b>IRG #63</b><br>2024-10-22</td><td>no unification.</td></tr></table>`
   const parsed = parseOrtPage(html, 'ws2024', 'https://hc.jsecs.org/irg/ws2024/app/index.php?id=00001')!
   expect(parsed.discussions).toEqual([
     { meeting: 'IRG #65', text: 'no change.' },
@@ -89,12 +95,24 @@ test('parseOrtPage extracts WS2024 multi-evidence descriptions, direct URLs and 
   const sighting = mapOrtSourceToSighting(parsed, parsed.sources[0])
   expect(sighting.title).toBe('大正新脩大藏經')
   expect(sighting.page).toBe('vol. 54, p. 0710')
-  expect(sighting.url).toBe('https://www2.dhii.jp/ongi/1240704/1240704_0384.jpg')
+  expect(sighting.url).toBeNull()
+  expect(sighting.note).toContain('Additional evidence: 一切経音義高麗版（国立国会図書館蔵）, vol. 1240704, p. 0384 (https://www2.dhii.jp/ongi/1240704/1240704_0384.jpg)')
   expect(sighting.note).toContain('IRG discussion: IRG #65: no change. | IRG #63: no unification.')
-  expect(sighting.note).toContain('Additional evidence: 一切経音義高麗版（国立国会図書館蔵）, vol. 1240704, p. 0384')
 })
 
-test('parseOrtPage handles WS2017 UK/V payloads and WS2015 HTML tables', () => {
+test('parseOrtPage handles WS2015 multi-region tables without UK/K or SAT/T collisions and Sequence Number fallback', () => {
+  // Real WS2015 layout: <title> carries the source ref instead of the serial, and rows include UTC, UK, T, K, SAT.
+  const ws2015Html = `<title>\nUK-02764 | WS2015v5.0</title><div class=ws2015_evidence><img src="https://raw.githubusercontent.com/hfhchan/irg-ws2015/5d22fba4/data/uk-evidence/IRGN2107_evidence-1513.png"></div><table><tr><td>0 - Sequence Number</td><td>00001</td></tr><tr><td>1 - Disscussion Record</td><td></td></tr><tr><td>2 - UTC Source</td><td></td></tr><tr><td>4 - UK Source</td><td>UK-02764</td></tr><tr><td>5 - T Source</td><td></td></tr><tr><td>7 - K Source</td><td></td></tr><tr><td>9 - SAT Source</td><td>USAT05803</td></tr><tr><td>42 - SAT Evidence</td><td>Taisho vol. 12 p. 34</td></tr><tr><td>44 - UK Ref. to Evidence doc</td><td>{29} Hanyu Fangyan Da Cidian p. 108</td></tr></table>`
+  const r2015 = parseOrtPage(ws2015Html, 'ws2015', 'https://hc.jsecs.org/irg/ws2015/app/index.php?find=UK-02764')!
+  expect(r2015.serial).toBe('00001')
+  // Exactly UK and SAT — no phantom K from "UK Source" and no phantom T from "SAT Source".
+  expect(r2015.sources.map(s => [s.region, s.sourceRef])).toEqual([
+    ['UK', 'UK-02764'],
+    ['SAT', 'USAT05803'],
+  ])
+  expect(r2015.sources[0]).toMatchObject({ title: 'Hanyu Fangyan Da Cidian', page: 'p. 108' })
+  expect(r2015.sources[1]).toMatchObject({ title: 'Taisho', page: 'vol. 12 p. 34' })
+
   const ws2017Payload = {
     'UK-10703': {
       source_identifier: 'UK-10703',
@@ -105,22 +123,7 @@ test('parseOrtPage handles WS2017 UK/V payloads and WS2015 HTML tables', () => {
   const ws2017Html = `<title>UK-10703 | WS2017v6.1</title><ws-evidences data-evidence="${enc(ws2017Payload)}"></ws-evidences><tr><td>0 - Seq. No.</td><td>00002</td></tr>`
   const r2017 = parseOrtPage(ws2017Html, 'ws2017', 'https://hc.jsecs.org/irg/ws2017/app/index.php?find=UK-10703')!
   expect(r2017.serial).toBe('00002')
-  expect(r2017.sources[0]).toMatchObject({
-    sourceRef: 'UK-10703',
-    title: '《19世纪香港新界的客家方言》',
-    reportDate: '2014',
-    page: 'page 54',
-  })
-
-  const ws2015Html = `<title>00001 | ⿱一𠄌 | WS2015v5.0</title><div class=ws2015_evidence><img src="https://raw.githubusercontent.com/hfhchan/irg-ws2015/5d22fba4/data/uk-evidence/IRGN2107_evidence-1513.png"></div><table><tr><td>0 - Sequence Number</td><td>00001</td></tr><tr><td>4 - UK Source</td><td>UK-02764</td></tr><tr><td>44 - UK Ref. to Evidence doc</td><td>{29} Hanyu Fangyan Da Cidian p. 108</td></tr></table>`
-  const r2015 = parseOrtPage(ws2015Html, 'ws2015', 'https://hc.jsecs.org/irg/ws2015/app/index.php?id=00001')!
-  expect(r2015.serial).toBe('00001')
-  expect(r2015.sources[0]).toMatchObject({
-    sourceRef: 'UK-02764',
-    title: 'Hanyu Fangyan Da Cidian',
-    page: 'p. 108',
-    evidenceUrls: ['https://raw.githubusercontent.com/hfhchan/irg-ws2015/5d22fba4/data/uk-evidence/IRGN2107_evidence-1513.png'],
-  })
+  expect(r2017.sources[0]).toMatchObject({ title: '《19世纪香港新界的客家方言》', reportDate: '2014', page: 'page 54' })
 
   expect(parseOrtPage('<html><body>missing</body></html>', 'ws2024', 'https://hc.jsecs.org/irg/ws2024/app/index.php?id=99999')).toBeNull()
 })
