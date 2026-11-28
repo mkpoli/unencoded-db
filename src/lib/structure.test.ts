@@ -23,10 +23,12 @@ test('a structure typed to search with is read into the keys a record must hold'
   expect(structurePattern('⿰⬚木')).toEqual(['⿰？木'])
   expect(structurePattern('⿰氵⿱⬚木')).toEqual(['⿰氵？', '⿱？木'])
   expect(structurePattern('⿰ ⺡ 五')).toEqual(['⿰氵五'])
-  // Operators are named in capitals; a word in small letters stays a word.
+  // Operators are named in capitals before parts; a word in Latin letters alone stays a word.
   expect(structurePattern('LR氵五')).toEqual(['⿰氵五'])
-  expect(structurePattern('UD')).toEqual(['⿱'])
-  expect(structurePattern('or')).toBeNull()
+  expect(structurePattern('UD艹')).toEqual(['⿱艹？'])
+  for (const word of ['UD', 'or', 'OUP', 'XXI', 'MIT', 'LD50', 'LUXOR', 'Luxor']) expect(structurePattern(word)).toBeNull()
+  // Parts are read as a description is filed: a letter in a variant name, or ㄍ, is kept as typed.
+  for (const ids of ['⿰ㄍ五', '⿰令UD刂', '⿰亅{24}']) expect(structureKeys(ids)).toEqual(expect.arrayContaining(structurePattern(ids)!))
   expect(structurePattern('水')).toBeNull()
   expect(structurePattern('⿰氵五木')).toBeNull()
   expect(structurePattern('⿰？'.repeat(PATTERN_KEYS_MAX) + '⿰？一一')).toBeNull()
