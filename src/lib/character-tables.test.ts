@@ -10,7 +10,9 @@ const unihan = new Map(['56', '5d', '7e', '200'].flatMap(block => [...parseUniha
 test('an encoded character gives its description, code, radical and strokes', () => {
   expect(factsOf('噐', descriptions, unihan)).toEqual({
     char: '噐', code: 'U+5650', ids: '⿳吅工吅', radical: '口', strokes: 15, meaning: 'receptacle, vessel; instrument',
-    readings: [{ doculect: 'cmn', value: 'qì' }, { doculect: 'yue', value: 'hei3' }, { doculect: 'ja', value: 'キ うつわ' }], variants: [{ character: '器', field: 'kSemanticVariant' }],
+    readings: [{ doculect: 'cmn', value: 'qì' }, { doculect: 'yue', value: 'hei3' }, { doculect: 'ja', value: 'キ うつわ' }],
+    variants: [{ character: '器', field: 'kSemanticVariant' }],
+    sources: ['G5-3948', 'H-9AA2', 'T3-4B40', 'J0-535A', 'K2-2867', 'KP1-3AA2'],
   })
   expect(factsOf('崠', descriptions, unihan)).toMatchObject({ char: '崠', code: 'U+5D20', ids: '⿰山東', radical: '山', strokes: 11 })
   expect(factsOf('红', descriptions, unihan)).toMatchObject({ radical: '糸', variants: [{ character: '紅', field: 'kTraditionalVariant' }] })
@@ -63,5 +65,5 @@ test('the total is the sum of the parts, and unknown when one part is', () => {
 test('a different character of the same form takes the form alone', () => {
   const facts = factsOf('噐', descriptions, unihan)!
   expect(fillOf(facts, false)).toEqual({ ...facts, homograph: false })
-  expect(fillOf(facts, true)).toEqual({ char: '噐', code: '', ids: '⿳吅工吅', radical: '口', strokes: 15, meaning: null, readings: [], variants: [], homograph: true })
+  expect(fillOf(facts, true)).toEqual({ char: '噐', code: '', ids: '⿳吅工吅', radical: '口', strokes: 15, meaning: null, readings: [], variants: [], sources: [], homograph: true })
 })

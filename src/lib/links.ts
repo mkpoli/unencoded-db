@@ -3,16 +3,22 @@
 // description. The addresses follow Han Input's and IDS Workshop's. The dictionaries a character is
 // registered in are in `registries.ts`.
 import { cleanIds, workshopUrl } from './ids'
+import { irgLinks } from './irg-ws'
 
-export type SiteLink = { name: string; href: string }
+export type SiteLink = { name: string; href: string; title?: string }
 
 const codes = (text: string) => [...text].map(char => 'U+' + char.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')).join('-')
 const atlas = (text: string, locale: string): SiteLink => ({ name: 'Glyph Atlas', href: `https://glyphatlas.org/${locale}/character/${codes(text)}` })
 
-/** The pages for one encoded character. */
-export function characterLinks(char: string, locale: string): SiteLink[] {
+/** The pages for one encoded character, plus IRG Working Set and UAX #45 links when Unihan IRG sources are known. */
+export function characterLinks(char: string, locale: string, sources?: readonly string[]): SiteLink[] {
   const hex = char.codePointAt(0)!.toString(16).toUpperCase()
-  return [atlas(char, locale), { name: 'Han Input', href: `https://han.mkpo.li/?c=${hex}` }, { name: 'IDS Workshop', href: workshopUrl(char) }]
+  return [
+    atlas(char, locale),
+    { name: 'Han Input', href: `https://han.mkpo.li/?c=${hex}` },
+    { name: 'IDS Workshop', href: workshopUrl(char) },
+    ...irgLinks(char, sources),
+  ]
 }
 
 /** The pages for a description sequence. */

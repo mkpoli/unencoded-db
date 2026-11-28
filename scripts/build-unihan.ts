@@ -7,7 +7,7 @@
 // (sha256 4c93ea9c1f636451729a840978f1667a53886af37ba854fdcce109721c63d43e). The columns are in COLUMNS;
 // a variant is written `field:character`. It needs `unzip`.
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { UNIHAN_COLUMNS, UNIHAN_VARIANTS } from '../src/lib/character-tables'
+import { UNIHAN_COLUMNS, UNIHAN_IRG_SOURCES, UNIHAN_VARIANTS } from '../src/lib/character-tables'
 
 const [zip] = process.argv.slice(2)
 if (!zip) throw new Error('usage: bun scripts/build-unihan.ts <Unihan.zip>')
@@ -17,7 +17,9 @@ const FIELDS: Record<string, (typeof UNIHAN_COLUMNS)[number]> = {
   kRSUnicode: 'radical', kTotalStrokes: 'strokes', kDefinition: 'definition', kMandarin: 'cmn', kCantonese: 'yue',
   kJapanese: 'ja', kHangul: 'ko', kVietnamese: 'vi',
 }
+const IRG_ORDER = new Map<string, number>(UNIHAN_IRG_SOURCES.map((field, index) => [field, index]))
 const rows = new Map<number, Record<string, string>>()
+const irgSources = new Map<number, (string | undefined)[]>()
 const row = (code: string) => {
   const point = parseInt(code.slice(2), 16)
   let found = rows.get(point)
@@ -26,11 +28,25 @@ const row = (code: string) => {
 }
 for (const line of [read('Unihan_IRGSources.txt'), read('Unihan_Readings.txt')].join('\n').split('\n')) {
   const [code, field, value] = line.split('\t')
-  const column = FIELDS[field]
-  if (!column || !value) continue
+  if (!code || !field || !value) continue
   const text = value.trim()
+  const sourceIndex = IRG_ORDER.get(field)
+  if (sourceIndex !== undefined) {
+    const point = parseInt(code.slice(2), 16)
+    row(code)
+    let list = irgSources.get(point)
+    if (!list) irgSources.set(point, list = [])
+    list[sourceIndex] = text
+    continue
+  }
+  const column = FIELDS[field]
+  if (!column) continue
   row(code)[column] = column === 'radical' ? /^\d+/.exec(text)?.[0] ?? '' : column === 'strokes' ? text.split(' ')[0]
     : column === 'ko' ? text.split(' ').map(item => item.split(':')[0]).join(' ') : text
+}
+for (const [point, list] of irgSources) {
+  const found = rows.get(point)
+  if (found) found.sources = list.filter((value): value is string => Boolean(value)).join(' ')
 }
 for (const line of read('Unihan_Variants.txt').split('\n')) {
   const [code, field, value] = line.split('\t')

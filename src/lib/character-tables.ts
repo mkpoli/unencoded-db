@@ -1,5 +1,5 @@
 // The tables behind what is known of an encoded character: BabelStone's IDS table as ids-input carries it,
-// and Unihan 18.0.0's radical, stroke count, definition, readings and variants (scripts/build-unihan.ts).
+// and Unihan 18.0.0's radical, stroke count, definition, readings, variants and IRG sources (scripts/build-unihan.ts).
 import { codePoints } from './ids'
 
 /** `all` holds every description of a character, in the table's order, leaving out one that is the character itself. */
@@ -12,13 +12,15 @@ export type CharacterFacts = {
   readings: { doculect: string; value: string }[]
   /** The characters Unihan names as variants, each with the field that names it. */
   variants: { character: string; field: string }[]
+  /** The character's IRG source references (`kIRG_*Source`), in Unihan field order. */
+  sources: string[]
 }
 
 /** What a form takes from an encoded character. For a different character of the same form (`homograph`)
  * that is only what belongs to the form: its description, radical and strokes. */
 export type Fill = CharacterFacts & { homograph: boolean }
 export const fillOf = (facts: CharacterFacts, homograph: boolean): Fill =>
-  homograph ? { ...facts, code: '', meaning: null, readings: [], variants: [], homograph } : { ...facts, homograph }
+  homograph ? { ...facts, code: '', meaning: null, readings: [], variants: [], sources: [], homograph } : { ...facts, homograph }
 
 /** Each description to the first character it describes, each character to its first description, and to all of them. */
 export function parseDescriptions(text: string): Descriptions {
@@ -41,9 +43,14 @@ export function parseDescriptions(text: string): Descriptions {
 }
 
 /** The columns of a Unihan file after the character, in order. */
-export const UNIHAN_COLUMNS = ['radical', 'strokes', 'definition', 'cmn', 'yue', 'ja', 'ko', 'vi', 'variants'] as const
+export const UNIHAN_COLUMNS = ['radical', 'strokes', 'definition', 'cmn', 'yue', 'ja', 'ko', 'vi', 'variants', 'sources'] as const
 /** The Unihan fields that name a variant of the same character. */
 export const UNIHAN_VARIANTS = ['kSemanticVariant', 'kSpecializedSemanticVariant', 'kSimplifiedVariant', 'kTraditionalVariant', 'kZVariant', 'kJapaneseOldVariant'] as const
+/** The Unihan IRG source fields kept for each ideograph, in deterministic order. */
+export const UNIHAN_IRG_SOURCES = [
+  'kIRG_GSource', 'kIRG_HSource', 'kIRG_TSource', 'kIRG_JSource', 'kIRG_KSource',
+  'kIRG_KPSource', 'kIRG_MSource', 'kIRG_VSource', 'kIRG_USource', 'kIRG_UKSource', 'kIRG_SSource',
+] as const
 export const READING_LANGUAGES = ['cmn', 'yue', 'ja', 'ko', 'vi'] as const
 export type UnihanRow = Record<(typeof UNIHAN_COLUMNS)[number], string>
 
@@ -81,6 +88,7 @@ export function factsOf(char: string, descriptions: Descriptions, unihan: Map<st
     meaning: row?.definition || null,
     readings: READING_LANGUAGES.filter(language => row?.[language]).map(language => ({ doculect: language, value: row![language] })),
     variants: [...variants].map(([character, field]) => ({ character, field })),
+    sources: row?.sources ? row.sources.split(' ').filter(Boolean) : [],
   }
 }
 
