@@ -12,11 +12,11 @@ test('an encoded character appends IRG Working Set and UAX #45 links from Unihan
   const extG = characterLinks('\u{30002}', 'en', ['UTC-00969'])
   expect(extG.slice(3)).toEqual([
     { name: 'IRG WS2015', href: 'https://hc.jsecs.org/irg/ws2015/app/index.php?find=UTC-00969', title: 'UTC-00969' },
-    { name: 'UAX #45', href: 'https://www.unicode.org/Public/UCD/latest/ucd/USourceData.txt#:~:text=UTC-00969%3B', title: 'UTC-00969' },
+    { name: 'UAX #45', href: 'https://www.unicode.org/Public/UCD/latest/ucd/USourceData.txt#:~:text=UTC%2D00969%3B', title: 'UTC-00969' },
   ])
   const extE = characterLinks('\u{2B88A}', 'en', ['UTC-00001'])
   expect(extE.slice(3)).toEqual([
-    { name: 'UAX #45', href: 'https://www.unicode.org/Public/UCD/latest/ucd/USourceData.txt#:~:text=UTC-00001%3B', title: 'UTC-00001' },
+    { name: 'UAX #45', href: 'https://www.unicode.org/Public/UCD/latest/ucd/USourceData.txt#:~:text=UTC%2D00001%3B', title: 'UTC-00001' },
   ])
 })
 

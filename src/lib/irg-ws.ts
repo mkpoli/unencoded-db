@@ -2,14 +2,16 @@
 // Online Review Tool (ORT) entry on hc.jsecs.org and, for U-source ideographs, to UAX #45.
 //
 // Each CJK extension block maps to the IRG working set that produced it:
-//   - Extension G (U+30000..U+3134F) -> WS2015
-//   - Extension H (U+31350..U+323AF) -> WS2017
-//   - Extension J (U+323B0..U+3347F) -> WS2021
+//   - Extension G (U+30000..U+3134F) -> WS2015 (https://hc.jsecs.org/irg/ws2015/app/)
+//   - Extension H (U+31350..U+323AF) -> WS2017 (https://hc.jsecs.org/irg/ws2017/app/)
+//   - Extension J (U+323B0..U+3347F) -> WS2021 (https://hc.jsecs.org/irg/ws2021/app/)
 //
-// Horizontal extensions added to those blocks in later Unicode releases are not present in the
-// original working set's ORT database, and WS2015/WS2017 used slightly different source-reference
-// punctuation for a few prefixes (e.g. GHZR-, GZ-, GPGLG-, SAT-, VN-). Only original working-set
-// references are linked so every generated link resolves to a live review record.
+// Prefix allowlists and `?find=` punctuation rewrites (GHZR, G_Z, G_PGLG, USAT, V-, and WS2017's
+// GDM-00001..00220 cap) are derived from Unihan 18.0.0 Unihan_IRGSources.txt and verified against
+// live hc.jsecs.org ORT endpoints. Horizontal extensions added in later Unicode versions are
+// excluded; when a character carries both a G-source and another working-set source, the non-G
+// source is preferred because later horizontal extensions (e.g. GZ-, GDM-) share prefixes with
+// original working-set submissions.
 
 export type WorkingSetId = 'ws2015' | 'ws2017' | 'ws2021'
 export type IrgLink = { name: string; href: string; title: string }
@@ -83,28 +85,31 @@ export function ortUrl(ws: WorkingSetId, findRef: string): string {
   return `https://hc.jsecs.org/irg/${ws}/app/index.php?find=${encodeURIComponent(findRef)}`
 }
 
-/** Direct URL to a U-source ideograph's row in Unicode's UAX #45 `USourceData.txt`. */
+/**
+ * Direct URL to a U-source ideograph's row in Unicode's UAX #45 `USourceData.txt`.
+ * Escapes `-` as `%2D` per the Scroll-to-Text Fragment grammar, where bare `-` delimits prefixes/suffixes.
+ */
 export function uax45Url(utcSource: string): string | null {
-  return UTC_SOURCE.test(utcSource)
-    ? `https://www.unicode.org/Public/UCD/latest/ucd/USourceData.txt#:~:text=${encodeURIComponent(`${utcSource};`)}`
-    : null
+  if (!UTC_SOURCE.test(utcSource)) return null
+  const fragment = encodeURIComponent(`${utcSource};`).replace(/-/g, '%2D')
+  return `https://www.unicode.org/Public/UCD/latest/ucd/USourceData.txt#:~:text=${fragment}`
 }
 
-// Pick the best source reference for a working set. In WS2017, GDM-00001..00220 overlaps with
-// withdrawn/reassigned numbers on a handful of multi-source entries, so prefer any other
-// WS2017-native source when one is present.
+// Pick the highest-confidence original working-set source. Unihan lists G-sources first, but many
+// multi-source characters gained GZ-/GDM-/GKJ-/GXM- horizontal extensions after the working set
+// closed, so prefer any non-G working-set source when both are present.
 function pickWorkingSetSource(ws: WorkingSetId, sources: readonly string[]): { source: string; findRef: string } | null {
-  let fallback: { source: string; findRef: string } | null = null
+  let gFallback: { source: string; findRef: string } | null = null
   for (const source of sources) {
     const findRef = ortFindRef(ws, source)
     if (!findRef) continue
-    if (ws === 'ws2017' && source.startsWith('GDM-')) {
-      fallback ??= { source, findRef }
+    if (source.startsWith('G')) {
+      gFallback ??= { source, findRef }
       continue
     }
     return { source, findRef }
   }
-  return fallback
+  return gFallback
 }
 
 /** IRG Working Set ORT and UAX #45 links for an encoded character from its Unihan IRG sources. */

@@ -42,17 +42,19 @@ export const load: PageServerLoad = async (event) => {
   // The evidence a comment is to be about, ?about=: one of the record's own.
   const asked = positiveId(event.url.searchParams.get('about') ?? '')
   const about = asked && sightings.some(sighting => sighting.id === asked) ? asked : null
-  const comments = await commentsOf(env(event).DB, id, Boolean(event.locals.person?.moderator))
-  const related = await relatedRecords(env(event).DB, id, found.claims)
   const unicodeChars = encodingsOf(found.claims)
     .filter(encoding => encoding.charset === 'unicode')
     .map(encoding => encodedCharacter(encoding.code))
     .filter(Boolean)
-  const irgSources = await irgSourcesFor(unicodeChars, {
-    assets: event.platform?.env?.ASSETS,
-    fetch: event.fetch,
-    origin: event.url.origin,
-  })
+  const [comments, related, irgSources] = await Promise.all([
+    commentsOf(env(event).DB, id, Boolean(event.locals.person?.moderator)),
+    relatedRecords(env(event).DB, id, found.claims),
+    irgSourcesFor(unicodeChars, {
+      assets: event.platform?.env?.ASSETS,
+      fetch: event.fetch,
+      origin: event.url.origin,
+    }),
+  ])
   return { dates, archives, idsAdd, related, about, comments, irgSources, entry: found.entry, claims: found.claims, sightings, filed, ...(await taxonomy(env(event).DB)), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
 }
 
