@@ -43,6 +43,46 @@ export async function createPerson(db: D1Database, atlasSub: string | null = nul
   return shape(row)
 }
 
+/**
+ * Resolves (or creates) an `agent = 1` person row merged under `commander` for automated scripts
+ * and agents. Throws if `commander` is missing, merged, or itself an agent, or if `agent` is blank.
+ */
+export async function resolveAgentActor(
+  db: D1Database,
+  options: { agent: string; model?: string; commander: string },
+): Promise<{ actor: string; ip: null }> {
+  const agent = options.agent.normalize('NFC').replace(/\s+/gu, ' ').trim()
+  const model = (options.model ?? '').normalize('NFC').replace(/\s+/gu, ' ').trim()
+  if (agent.length < 1 || agent.length > 40) throw new Error('Agent name must be 1..40 characters')
+  if (model.length > 80) throw new Error('Agent model must be at most 80 characters')
+  const commander = await db
+    .prepare('SELECT id, agent, merged_into FROM people WHERE id = ?')
+    .bind(options.commander)
+    .first<{ id: string; agent: number; merged_into: string | null }>()
+  if (!commander || commander.agent !== 0 || commander.merged_into !== null) {
+    throw new Error(`Invalid commander person: ${options.commander}`)
+  }
+  const existing = await db
+    .prepare('SELECT id FROM people WHERE merged_into = ? AND agent = 1 AND name = ? AND agent_model = ? ORDER BY created_at DESC LIMIT 1')
+    .bind(commander.id, agent, model)
+    .first<{ id: string }>()
+  if (existing) return { actor: existing.id, ip: null }
+  const id = randomHex(6)
+  await db
+    .prepare('INSERT INTO people(id, name, agent, agent_model, merged_into, created_at) VALUES(?,?,1,?,?,?)')
+    .bind(id, agent, model, commander.id, new Date().toISOString())
+    .run()
+  return { actor: id, ip: null }
+}
+
+/** Refuses any actor that is not an explicit `agent = 1` person row, so automation cannot write as a human. */
+export async function assertAgentActor(db: D1Database, actor: string): Promise<void> {
+  const row = await db.prepare('SELECT agent FROM people WHERE id = ?').bind(actor).first<{ agent: number }>()
+  if (!row || row.agent !== 1) {
+    throw new Error(`Refusing automated write as non-agent actor "${actor}"; use resolveAgentActor()`)
+  }
+}
+
 export async function startSession(db: D1Database, personId: string) {
   const token = randomHex(32)
   const now = Date.now()
