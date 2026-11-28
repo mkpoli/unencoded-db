@@ -231,7 +231,7 @@
   {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
   {#if entry.merged_into}<p class="notice quiet"><a class="text-link" href={href(`/${recordCode(entry.merged_into)}`)}>{t('entry.mergedInto', { id: recordCode(entry.merged_into) })}</a></p>{/if}
   <section class="panel stack">
-    <div class="head"><h2>{t('entry.structure')}</h2><a class="button small" href="#edit-ids" data-edit="ids">{t('entry.edit')}<span class="sr-only"> {t('entry.structure')}</span></a></div>
+    <div class="head"><h2>{t('entry.structure')}</h2><a class="button small" href="#edit-ids" data-edit="ids" aria-label={t('entry.editField', { field: t('entry.structure') })}>{t('entry.edit')}</a></div>
     {#if sequences.length}
       <div class="identity">
         <ul class="forms">{#each groups as group, position (group.ids)}<li class="form" bind:this={formsShown[position]}><ul class="styles">{#each GLYPH_STYLES as style (style)}<li><GlyphFace {style}><IdsGlyph ids={group.ids} layout={group.layout} {style} /></GlyphFace></li>{/each}</ul><p class="sequence">{#each group.spellings as spelling, index (spelling)}<span class="ids" class:secondary={index > 0}>{spelling}</span><CopyButton text={spelling} />{/each}</p><SpellingReport record={entry.id} sequence={group.ids} layout={group.layout} drawing={style => formsShown[position]?.querySelector(`.styles > li:nth-child(${GLYPH_STYLES.indexOf(style) + 1}) svg`) ?? null} /></li>{/each}</ul>
@@ -274,7 +274,7 @@
     </dl>
   </section>
   <section class="panel stack">
-    <div class="head"><h2>{t('entry.explanation')}</h2><a class="button small" href="#edit-senses" data-edit="senses">{t('entry.edit')}<span class="sr-only"> {t('entry.explanation')}</span></a></div>
+    <div class="head"><h2>{t('entry.explanation')}</h2><a class="button small" href="#edit-senses" data-edit="senses" aria-label={t('entry.editField', { field: t('entry.explanation') })}>{t('entry.edit')}</a></div>
     <div class="senses">
       <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} records={data.related} />
       {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation' || claim.kind === 'creator')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
@@ -310,13 +310,13 @@
     {:else}
       <p><EditLink field="filing" name={t('entry.addCategory')} add /></p>
     {/if}
-    {#if entry.by_name && entry.created_at}
-      <p class="hint attribution">
-        <span>{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</span>
-        {#if entry.by_agent}<AgentBadge name={entry.by_agent} model={entry.by_model ?? null} standalone={entry.by_agent === entry.by_name} />{/if}
-      </p>
-    {/if}
   </section>
+  {#if entry.by_name && entry.created_at}
+    <p class="hint attribution">
+      <span>{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</span>
+      {#if entry.by_agent}<AgentBadge name={entry.by_agent} model={entry.by_model ?? null} standalone={entry.by_agent === entry.by_name} />{/if}
+    </p>
+  {/if}
   <details class="panel" id="edit" bind:open={editOpen}>
     <summary>{t('entry.edit')}</summary>
     <form class="stack form" method="POST" action="?/edit">
