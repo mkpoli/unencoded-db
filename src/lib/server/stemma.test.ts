@@ -5,7 +5,7 @@ import { buildEntryStemma, layoutStemma, removedNodeId, witnessNodeId } from '..
 import { newClaim } from '../claims'
 
 const who = { actor: 'u1', ip: null }
-const makeEntry = (ids = '⿰山東'): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', ids)] })
+const makeEntry = (ids = '⿰山東'): EntryFields => ({ description: null, radical: null, strokes: null, claims: [newClaim('ids', ids)] })
 
 function makeSighting(overrides: Partial<SightingFields> = {}): SightingFields {
   return {
