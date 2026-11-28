@@ -17,7 +17,7 @@ import { standing } from '$lib/radicals'
 import { decadeOf } from '$lib/dates'
 import { recordCode } from '$lib/code'
 import { readDates, sightingDates } from './date-readings'
-import { type Via, evidenceOrder, addSighting, moveSighting, getSighting, claimedBy, counts, countsStatement, creatorCounts, creatorCountsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, searchFound, foundStatement, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { type Via, evidenceOrder, addSighting, moveSighting, getSighting, claimedBy, counts, countsStatement, creatorCounts, creatorCountsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, searchProblem, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, searchFound, foundStatement, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { PAGE, PAGE_SIZES, pageSizeOf } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
@@ -278,13 +278,23 @@ describe('adding a record', () => {
 })
 
 describe('search', () => {
-  test('complete IDS searches the exact normalized sequence, not components or prose', async () => {
+  test('a complete IDS finds the descriptions that hold it, not components or prose', async () => {
     const exact = await createEntry(db, described('⿰木木'), seen(), [], who)
-    await createEntry(db, described('⿱木木'), seen(), [], who)
-    await createEntry(db, described('⿰木水'), seen(), [], who)
+    const stacked = await createEntry(db, described('⿱木木'), seen(), [], who)
+    const water = await createEntry(db, described('⿰木水'), seen(), [], who)
     await createEntry(db, fields({ description: '⿰木木' }), seen(), [], who)
     expect((await list(db, { query: '⿰ 木 木' }))!.tiles.map(tile => tile.id)).toEqual([exact])
-    expect((await list(db, { query: '⿰木' }))!.tiles).toHaveLength(4)
+    // A structure left open finds every description that fills it.
+    expect((await list(db, { query: '⿰木', order: 'old' }))!.tiles.map(tile => tile.id)).toEqual([exact, water])
+    expect((await list(db, { query: '⿰？水' }))!.tiles.map(tile => tile.id)).toEqual([water])
+    expect((await list(db, { query: '⿱', order: 'old' }))!.tiles.map(tile => tile.id)).toEqual([stacked])
+    const inside = await createEntry(db, described('⿱艹⿰木木'), seen(), [], who)
+    expect((await list(db, { query: '⿰木木', order: 'old' }))!.tiles.map(tile => tile.id)).toEqual([exact, inside])
+    expect((await list(db, { query: '⿱艹⿰？木' }))!.tiles.map(tile => tile.id)).toEqual([inside])
+    expect((await list(db, { query: 'UD艹' }))!.tiles.map(tile => tile.id)).toEqual([inside])
+    expect((await list(db, { query: 'OUP' }))!.tiles).toEqual([])
+    await editEntry(db, inside, 1, described('⿱艹木'), who, null)
+    expect((await list(db, { query: '⿰木木' }))!.tiles.map(tile => tile.id)).toEqual([exact])
     const variant = await createEntry(db, described('⿰𠀀󠄀木'), seen(), [], who)
     await createEntry(db, described('⿰𠀀木'), seen(), [], who)
     expect((await list(db, { query: '⿰𠀀󠄀木' }))!.tiles.map(tile => tile.id)).toEqual([variant])
@@ -310,13 +320,14 @@ describe('search', () => {
     expect(await list(db, { query: '木', also: ['⿺𡕤面'] })).toEqual(await list(db, { query: '木' }))
   })
 
-  test('exact IDS search pages through bounded candidates without skipping', async () => {
+  test('a description search pages through bounded candidates without skipping', async () => {
     const n = SEARCH_WINDOW * 2 + 10
     raw.prepare(`WITH RECURSIVE seq(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM seq WHERE x < ?)
       INSERT INTO entries(id, script, ids, created_by, created_at, updated_at)
       SELECT x, 'han', CASE WHEN x IN (1, 2, 300, 520) THEN '⿰木木' ELSE '⿱木木' END, ?, '2026', '2026' FROM seq`).run(n, who.actor)
     raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) SELECT id, 0, printf('ids%05d', id), 'ids', ids FROM entries")
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'all', id FROM entries")
+    raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'p:' || ids, id FROM entries")
     let after: string | null = null
     const found: number[] = []
     let pages = 0
@@ -382,7 +393,7 @@ describe('search', () => {
   test('rejects excess distinct terms and queries without searchable terms', async () => {
     await createEntry(db, fields({ description: 'one two three four five' }), seen(), [], who)
     expect(await list(db, { query: 'one two three four five six' })).toBeNull()
-    expect(await list(db, { query: '... ⿰' })).toBeNull()
+    expect(await list(db, { query: '... 、' })).toBeNull()
     expect(await list(db, { query: 'a'.repeat(201) })).toBeNull()
     expect((await list(db, { query: 'one one two three four five' }))!.tiles).toHaveLength(1)
   })
@@ -1294,16 +1305,17 @@ describe('query cost', () => {
     expect(listStatement(db, { order: 'new' }, undefined, 1)).toBeNull()
   })
 
-  test('an exact description search reads the claims index by value', () => {
+  test('a description search reads the row of its structure by key', () => {
     const statement = listStatement(db, { query: '⿰木木' }) as unknown as { sql: string; values: unknown[] }
-    expect(plan(statement.sql, statement.values).join('\n')).toMatch(/SEARCH k USING COVERING INDEX claims_by_value \(kind=\? AND value=\? AND entry_id=\?\)/)
+    expect(statement.values[0]).toBe('p:⿰木木')
+    expect(plan(statement.sql, statement.values).join('\n')).toMatch(/SEARCH w USING (COVERING INDEX|PRIMARY KEY)[^\n]*\((tag=\? AND entry_id=\?|entry_id=\? AND tag=\?)\)/)
   })
 
-  test('an exact description search with other spellings reads the claims index by value for each', () => {
+  test('a description search with other spellings reads the row of each by key', () => {
     const statement = listStatement(db, { query: '⿰木木', also: ['⿱木木', '⿰木水'] }) as unknown as { sql: string; values: unknown[] }
-    expect(statement.values.slice(0, 3)).toEqual(['⿰木木', '⿱木木', '⿰木水'])
+    expect(statement.values.slice(0, 3)).toEqual(['p:⿰木木', 'p:⿱木木', 'p:⿰木水'])
     const details = plan(statement.sql, statement.values).join('\n')
-    expect(details).toMatch(/SEARCH k USING COVERING INDEX claims_by_value \(kind=\? AND value=\? AND entry_id=\?\)/)
+    expect(details).toMatch(/SEARCH w USING (COVERING INDEX|PRIMARY KEY)[^\n]*\((tag=\? AND entry_id=\?|entry_id=\? AND tag=\?)\)/)
     expect(details).not.toMatch(/TEMP B-TREE FOR ORDER BY/)
   })
 
@@ -1479,7 +1491,7 @@ describe('records a search finds', () => {
     await setHidden(db, { entry: ids[4] }, true, who, null)
     expect(await searchFound(db, { query: '艹時', also: ['艹日寺', '蒔'] }, 5)).toEqual([ids[2], ids[1], ids[0]])
     expect(await searchFound(db, { query: '⿱艹時', also: ['⿱艹⿰日寺'] }, 5)).toEqual([ids[2], ids[0]])
-    const ranges = [{ words: ['w:口', 'p:口'] }, { exact: ['⿱艹時', '⿱艹⿰日寺'] }, { tag: 'w:口' }, { exact: ['⿰木口'] }] as const
+    const ranges = [{ words: ['w:口', 'p:口'] }, { words: ['p:⿱艹時', 'p:⿱艹⿰日寺'] }, { tag: 'w:口' }, { words: ['p:⿰木口'] }] as const
     for (const from of ranges) {
       const statement = foundStatement(db, { query: '口' }, from as never, 5) as unknown as { sql: string; values: unknown[] }
       const details = (raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.values as never[])) as { detail: string }[]).map(row => row.detail)
@@ -2347,6 +2359,8 @@ test('parts typed with no structure find the records that spell them another way
   expect(await searchTotal(db, { query: '艹時', also: ['艹日寺', '蒔'] })).toMatchObject({ n: 5, floor: false })
   expect(searchParts('艹時')).toEqual(['艹', '時'])
   expect(searchParts('⿱艹時')).toBeNull()
+  expect(searchParts('⿱ 艹')).toBeNull()
+  expect([searchProblem(''), searchProblem('⿲'), searchProblem('、'), searchProblem('一 二 三 四 五 六'), searchProblem('⿰一⿱二⿰三⿱四？ ⿰五⿱六⿰七⿱八？ ⿰九？')]).toEqual([null, null, 'noSearchTerms', 'tooManyTerms', 'tooManyTerms'])
   expect(searchParts('艹 word')).toBeNull()
   // Another spelling is parts alone, is not the query in another order, and is one of a few.
   expect(alsoSearchParts('艹時', ['時艹', '艹日寺', '艹 日 寺', '⿱艹時', 'word', '日寺艹', '蒔', '一二三四五六'])).toEqual(['艹日寺', '蒔'])
@@ -2400,10 +2414,10 @@ describe('search total', () => {
       totalStatement(db, { script: 'han', query: 'word 木' }, { words: ['w:word'] }),
       totalStatement(db, { script: 'han', query: '艹時', also: ['艹日寺', '蒔'] }, { words: ['w:時', 'p:時', 'p:寺', 'p:蒔'] }),
       totalStatement(db, { script: 'han', filter: 'variant', within: ['unicode'], query: '亻' }, { tag: 'r:unicode' }),
-      totalStatement(db, { script: 'han', query: '⿰木木' }, { exact: ['⿰木木'] }),
-      totalStatement(db, { script: 'han', query: '⿰木木', also: ['⿱木木', '⿰木水'] }, { exact: ['⿰木木', '⿱木木', '⿰木水'] }),
+      totalStatement(db, { script: 'han', query: '⿰木木' }, { words: ['p:⿰木木'] }),
+      totalStatement(db, { script: 'han', query: '⿰木木', also: ['⿱木木', '⿰木水'] }, { words: ['p:⿰木木', 'p:⿱木木', 'p:⿰木水'] }),
     ].map(statement => statement as unknown as { sql: string; values: unknown[] })
-    for (const { sql, values } of [...statements, { sql: wordSize(1), values: ['w:word'] }, { sql: wordSize(3), values: ['w:艹', 'p:艹', 'p:艸'] }, { sql: exactSize(1), values: ['⿰木木'] }, { sql: exactSize(3), values: ['⿰木木', '⿱木木', '⿰木水'] }]) {
+    for (const { sql, values } of [...statements, { sql: wordSize(1), values: ['w:word'] }, { sql: wordSize(3), values: ['w:艹', 'p:艹', 'p:艸'] }]) {
       const details = plan(sql, values)
       // Counting records once uses a temporary tree, over the capped range alone; nothing is sorted or grouped.
       expect(details.join('\n')).not.toMatch(/TEMP B-TREE FOR (ORDER BY|GROUP BY)/)

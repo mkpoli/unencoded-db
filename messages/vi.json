@@ -54,7 +54,7 @@
   "browse.search": "Tìm theo thành phần, địa điểm, sách, cách đọc…",
   "browse.searchLabel": "Tìm trong danh mục",
   "browse.tooManyTerms": "Có thể tìm tối đa năm từ hoặc thành phần khác nhau.",
-  "browse.idsHint": "IDS hoàn chỉnh được tìm theo dạng khớp chính xác.",
+  "browse.idsHint": "Nhập IDS sẽ tìm mọi mô tả có chứa cấu trúc đó: ⿰氵五, ⿰氵？ hoặc chỉ riêng ⿲.",
   "browse.noSearchTerms": "Nhập từ hoặc ký tự cần tìm.",
   "browse.queryTooLong": "Nội dung tìm kiếm không được quá 200 ký tự.",
   "browse.all": "Tất cả",

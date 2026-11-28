@@ -54,7 +54,7 @@
   "browse.search": "Search by part, place, book, reading…",
   "browse.searchLabel": "Search the records",
   "browse.tooManyTerms": "A word or component search supports up to five distinct terms.",
-  "browse.idsHint": "A complete IDS matches exactly.",
+  "browse.idsHint": "An IDS finds every description that holds it: ⿰氵五, ⿰氵？, or ⿲ alone.",
   "browse.noSearchTerms": "Enter a word or character to search.",
   "browse.queryTooLong": "Search terms must be 200 characters or fewer.",
   "browse.all": "All",
