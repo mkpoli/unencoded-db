@@ -347,7 +347,7 @@
       {#if editing}<p class="notice bad" role="alert">{t(`error.${form?.error}`)}</p>{/if}
       <input type="hidden" name="rev" value={entry.rev} />
       {#key `${entry.id}:${entry.rev}:${editing}`}
-        <CharacterFields bind:this={fields} anchor="edit-ids" exclude={entry.id} values={editIds} layout={primaryLayoutOf(editValues.claims)} bind:primary onfill={facts => filled = facts}>
+        <CharacterFields bind:this={fields} anchor="edit-ids" exclude={entry.id} encoded={editValues.claims.some(c => c.kind === 'encoding' || (c.kind === 'relation' && c.data?.relationship === 'homograph'))} values={editIds} layout={primaryLayoutOf(editValues.claims)} bind:primary onfill={facts => filled = facts}>
           <div class="sheet">
             <CompositionField anchor="edit-composition" ids={primary} value={editComposition} />
             <IdentityFields anchor="edit-identity" claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} fill={filled} ids={primary} />

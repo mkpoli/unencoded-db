@@ -24,12 +24,13 @@
   import IdsGlyph from './IdsGlyph.svelte'
   import IdsLine from './IdsLine.svelte'
 
-  let { values = [], primary = $bindable(''), chosen = $bindable(null), fontStyle, exclude = null, placed, seed = null, anchor, onfill }: {
-    fontStyle: GlyphStyle; values?: string[]; primary?: string; chosen?: number[] | null; exclude?: number | null; placed?: (id: number) => string; seed?: { id: number; entry: number } | null; anchor?: string; onfill?: (fill: Fill) => void
+  let { values = [], primary = $bindable(''), chosen = $bindable(null), fontStyle, exclude = null, encoded = false, placed, seed = null, anchor, onfill }: {
+    fontStyle: GlyphStyle; values?: string[]; primary?: string; chosen?: number[] | null; exclude?: number | null; encoded?: boolean; placed?: (id: number) => string; seed?: { id: number; entry: number } | null; anchor?: string; onfill?: (fill: Fill) => void
   } = $props()
 
   // `placed` answers where the evidence at hand moves to a record that describes it already;
   // `seed` carries a seeded sighting to another existing record's add-evidence form.
+  const editing = $derived(exclude !== null && !placed)
   const evidenceHref = (id: number) => placed?.(id) ?? href(`/${recordCode(id)}/sighting/new${seed && seed.entry !== id ? `?sighting=${seed.id}` : ''}`)
   const evidenceTab = $derived(placed ? undefined : '_blank')
 
@@ -130,6 +131,7 @@
   // A lone encoded character waiting for its choice, with the records that already carry its code.
   let lone = $state.raw<{ facts: CharacterFacts; records: { id: number }[] } | null>(null)
   function take(facts: CharacterFacts, homograph: boolean) {
+    lone = null
     if (facts.ids) first = facts.ids
     onfill?.(fillOf(facts, homograph))
   }
@@ -139,9 +141,10 @@
     recordHits = []; encodedHits = []; lone = null
     if (!browser || !ids) return
     let live = true
-    // A lone character is an encoded one to describe, unless it is the first part put down with the tools.
+    // A lone character is an encoded one to describe, unless it is the first part put down with the tools
+    // or the record already opened with an encoding or homograph claim for it.
     if ([...ids].length === 1) {
-      if (building || ids === opened) return
+      if (building || (encoded && ids === opened)) return
       const controller = new AbortController()
       const timer = setTimeout(async () => {
         const facts = await characterFacts(ids).catch(() => null)
@@ -199,9 +202,10 @@
           <span class="choices">
             {#each lone.records as record (record.id)}
               <a class="button" href={!placed && seed?.entry === record.id ? href(`/${recordCode(record.id)}`) : evidenceHref(record.id)} target={evidenceTab}>{t(placed ? 'sighting.moveThere' : 'field.encodedSame')} · {recordCode(record.id)}</a>
-            {:else}
-              <button type="button" class="button" onclick={() => take(lone!.facts, false)}>{t('field.encodedSame')}</button>
             {/each}
+            {#if editing || !lone.records.length}
+              <button type="button" class="button" onclick={() => take(lone!.facts, false)}>{t(editing ? 'field.idsFill' : 'field.encodedSame')}</button>
+            {/if}
             <button type="button" class="button" onclick={() => take(lone!.facts, true)}>{t('field.encodedHomograph')}</button>
           </span>
         </div>
