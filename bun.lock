@@ -320,7 +320,7 @@
 
     "fsevents": ["fsevents@2.3.3", "", { "os": "darwin" }, "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw=="],
 
-    "han-compose": ["han-compose@github:mkpoli/han-compose#ea26ffa", { "dependencies": { "clipper-lib": "6.4.2", "d3-contour": "4.0.2" } }, "mkpoli-han-compose-ea26ffa", "sha512-Lh1D+54rIaT74n6rEnDDRbARjKpav6Oyw/1EbkEJcWx/7/Eq3gMkfC0n/2JAzvUB9RlkRwK6l6WmTXvop8OZog=="],
+    "han-compose": ["han-compose@github:mkpoli/han-compose#7145acf", { "dependencies": { "clipper-lib": "6.4.2", "d3-contour": "4.0.2" } }, "mkpoli-han-compose-7145acf", "sha512-eDPHhKp0A7Y7TFiAZ6eMLq2hhoWWL/s/TlVQblv5RWu4Isb/sT+5qgrdM6e2jO5bOiOI+C3Ij6no0RnrnrICLA=="],
 
     "ids-input": ["ids-input@github:mkpoli/ids-input#5b06e31", { "dependencies": { "@cf-wasm/resvg": "^0.4.0", "@han-compose/composer": "https://codeload.github.com/mkpoli/han-compose/legacy.tar.gz/62bc6c88cdb9efd832cfb968d8591cbc014744a8" }, "peerDependencies": { "svelte": "^5.20.0" }, "optionalPeers": ["svelte"] }, "mkpoli-ids-input-5b06e31", "sha512-Y+9RYCxyUbc45HMwv8xTmXtcGhYHZX/pWezW+b7FoOO7zQf5MfYblFmL/g91ZGRWkumMJxlFu/jNLyJPAzTRWg=="],
 
