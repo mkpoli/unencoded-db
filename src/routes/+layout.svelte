@@ -3,8 +3,10 @@
   import { afterNavigate } from '$app/navigation'
   import { page } from '$app/state'
   import { onMount, tick } from 'svelte'
+  import { parseRecordUrlCode } from '$lib/code'
   import { LOCALES, LOCALE_NAMES, LOCALE_COOKIE } from '$lib/i18n'
   import { href, locale, t } from '$lib/t'
+  import { cleanBrowseSearch } from '$lib/browse-params'
   import { clearDirectBrowseBack, hydrateBrowseReturn, trackBrowseNavigation } from '$lib/browse-return.svelte'
   import { syncFavourites } from '$lib/favourites.svelte'
   import { UNREAD_SHOWN } from '$lib/notifications'
@@ -12,7 +14,9 @@
   let { data, children } = $props()
 
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
-  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path === '/u' || path.startsWith('/u/') ? 'people' : path.startsWith('/duplicates') ? 'duplicates' : path.startsWith('/mcp') ? 'mcp' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
+  const localeSearch = $derived(path === '' ? cleanBrowseSearch(page.url.search) : page.url.search)
+  const isRecord = $derived(parseRecordUrlCode(path.split('/')[1] ?? '') !== null)
+  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path === '/u' || path.startsWith('/u/') ? 'people' : path.startsWith('/duplicates') ? 'duplicates' : path.startsWith('/mcp') ? 'mcp' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || isRecord ? 'browse' : '')
   $effect(() => { syncFavourites(data.person?.id ?? null, data.favourites) })
   type NavMode = 'full' | 'priority' | 'compact'
   let navMode = $state<NavMode>()
@@ -70,6 +74,8 @@
   })
 
   onMount(() => {
+    // Read by the stale-build reload in `app.html`, which acts only while the page starts up.
+    document.documentElement.dataset.started = ''
     hydrateBrowseReturn()
   })
 
@@ -155,7 +161,7 @@
         </div>
         <div class="menu-group">
           <span class="menu-label">{t('nav.language')}</span>
-          {#each LOCALES as tag}<a href="/{tag}{path}{page.url.search}" class:on={tag === locale()} lang={tag} data-sveltekit-reload onclick={() => remember(tag)}>{LOCALE_NAMES[tag]}</a>{/each}
+          {#each LOCALES as tag}<a href="/{tag}{path}{localeSearch}" class:on={tag === locale()} lang={tag} data-sveltekit-reload onclick={() => remember(tag)}>{LOCALE_NAMES[tag]}</a>{/each}
         </div>
         <div class="menu-group">
           <span class="menu-label">{t('nav.theme')}</span>

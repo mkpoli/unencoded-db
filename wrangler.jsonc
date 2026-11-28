@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "unencoded-db",
-  "main": ".svelte-kit/cloudflare/_worker.js",
+  "main": "worker.js",
   "compatibility_date": "2026-10-30",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
@@ -10,10 +10,15 @@
   "observability": { "enabled": true },
   // An origin of its own, so a visitor's upload never shares one with Glyph Atlas's session cookie.
   "routes": [{ "pattern": "rare.glyphatlas.org", "custom_domain": true }],
+  // Periodically sync reviewed Glyph Atlas crops onto matching records in bounded batches.
+  "triggers": { "crons": ["23 */2 * * *"] },
   // ATLAS_ISSUER, ATLAS_CLIENT_ID and ATLAS_CLIENT_SECRET are secrets: the issuer and the row for this site in
   // Glyph Atlas's `oauthClient` table. Until all are set, the site offers no sign-in and everyone writes under an anonymous name.
+  // ATLAS_RATE_LIMIT_PASS (optional secret) lets sync calls pass Glyph Atlas's request rate limit.
+  // ATLAS_SYNC_TOKEN (optional secret) authorizes manual backfill calls to POST /api/sync/atlas.
   // IP_SALT is the key of the address hash kept with each write for moderation.
   // WRITES_PAUSED, while "1", makes every write answer 503 and leaves reads alone.
+  "vars": { "ATLAS_ORIGIN": "https://glyphatlas.org" },
   "d1_databases": [
     {
       "binding": "DB",
@@ -23,8 +28,11 @@
     }
   ],
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "unencoded-db" }],
-  // Composition reports are forwarded to the intake Worker, which files them on mkpoli/han-compose.
-  "services": [{ "binding": "REPORT", "service": "ids-reports" }],
+  // Composition reports go to `ids-reports`, and Glyph Atlas evidence reads go directly to `glyph-atlas`.
+  "services": [
+    { "binding": "REPORT", "service": "ids-reports" },
+    { "binding": "ATLAS", "service": "glyph-atlas" }
+  ],
   // An open upload needs a ceiling: each address gets this many writes a minute.
   "ratelimits": [
     { "name": "ADDS", "namespace_id": "5101", "simple": { "limit": 10, "period": 60 } },

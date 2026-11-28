@@ -24,7 +24,7 @@ export async function exportFonts(progress: (done: number, total: number) => voi
     files['licences/' + path.split('node_modules/')[1]] = strToU8(notice)
   }
   const mapping = records.map(row => ({ record: recordCode(row.id), unicode: 'U+' + privateCode(row.id).toString(16).toUpperCase(),
-    evidence: row.marked_sighting ? new URL('/en/entry/' + row.id + '#sighting-' + row.marked_sighting, location.origin).href : undefined,
+    evidence: row.marked_sighting ? new URL(`/en/${recordCode(row.id)}#sighting-${row.marked_sighting}`, location.origin).href : undefined,
     character: String.fromCodePoint(privateCode(row.id)), sources: {} as Record<string, string> }))
   const covers = new Map<string, Promise<Path | null>>()
   // The CFF charset includes standard strings and a custom string for each glyph name.

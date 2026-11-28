@@ -48,6 +48,17 @@ test('export gives source types and contexts as lists in JSON and readable cells
   expect(csv).toContain('"running_text, heading"')
 })
 
+test('export gives closeness in JSON and as the last CSV column', async () => {
+  const { db, raw } = fixture()
+  raw.exec("UPDATE sightings SET closeness = 'secondary_cited' WHERE entry_id = 1 AND place = 'source 0'")
+  const body = await (await exportGet({ url: new URL('https://example.test/api/entries?limit=2&format=json'), platform: { env: { DB: db } } } as any)).json() as any
+  expect(body.entries[0].evidence.map((sighting: { closeness: string | null }) => sighting.closeness)).toEqual(['secondary_cited', null])
+  const [head, first, second] = (await (await exportGet({ url: new URL('https://example.test/api/entries?limit=2&format=csv'), platform: { env: { DB: db } } } as any)).text()).split('\r\n')
+  expect(head.split(',').slice(-5)).toEqual(['"vias"', '"images"', '"date_readings"', '"cites"', '"closeness"'])
+  expect(first.endsWith(',"secondary_cited"')).toBe(true)
+  expect(second.endsWith(',""')).toBe(true)
+})
+
 test('export carries the via chain in JSON and CSV', async () => {
   const { db, raw } = fixture()
   raw.exec("INSERT INTO sources(hash, title) VALUES ('a', 'Book'), ('b', 'A post'), ('c', 'A thread')")

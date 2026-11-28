@@ -2,18 +2,18 @@
   import { onDestroy, tick } from 'svelte'
   import Seo from '$lib/components/Seo.svelte'
   import {
+    ANTIGRAVITY_AUTH_PATH,
     CHATGPT_MCP_DOCS,
     CLAUDE_CODE_AUTH_PATH,
     CLAUDE_CONNECTOR_DOCS,
     CODEX_LOGIN_COMMAND,
-    GEMINI_AUTH_COMMAND,
     MCP_CLIENT_IDS,
     type McpClientId,
+    antigravityCommand,
     claudeCodeCommand,
     codexCommand,
     cursorConfig,
     cursorInstallUrl,
-    geminiCommand,
     genericConfig,
     vscodeConfig,
     vscodeInstallUrl,
@@ -61,7 +61,7 @@
     switch (id) {
       case 'claude-code': return 'Claude Code'
       case 'codex': return 'Codex'
-      case 'gemini': return 'Gemini CLI'
+      case 'antigravity': return 'Antigravity CLI'
       case 'cursor': return 'Cursor'
       case 'vscode': return 'VS Code'
       case 'claude': return 'Claude'
@@ -87,7 +87,7 @@
   const commandText = $derived(
     client === 'claude-code' ? claudeCodeCommand(endpoint)
       : client === 'codex' ? codexCommand(endpoint)
-      : client === 'gemini' ? geminiCommand(endpoint)
+      : client === 'antigravity' ? antigravityCommand(endpoint)
       : '',
   )
   const configText = $derived(
@@ -167,7 +167,7 @@
     </div>
 
     <div id="mcp-panel" class="panel stack" role="tabpanel" aria-labelledby="mcp-tab-{client}" tabindex="0">
-      {#if client === 'claude-code' || client === 'codex' || client === 'gemini'}
+      {#if client === 'claude-code' || client === 'codex' || client === 'antigravity'}
         <div class="code-line">
           <pre><code class="mono" bind:this={commandEl}>{commandText}</code></pre>
           <button
@@ -180,19 +180,18 @@
             <span>{copiedKey === cmdKey ? t('entry.copied') : t('entry.copy')}</span>
           </button>
         </div>
-        {#if client === 'claude-code'}
-          <p class="hint">{t('mcp.authHint', { command: CLAUDE_CODE_AUTH_PATH })}</p>
-        {:else if client === 'codex' || client === 'gemini'}
-          {@const authCommand = client === 'codex' ? CODEX_LOGIN_COMMAND : GEMINI_AUTH_COMMAND}
+        {#if client === 'claude-code' || client === 'antigravity'}
+          <p class="hint">{t('mcp.authHint', { command: client === 'claude-code' ? CLAUDE_CODE_AUTH_PATH : ANTIGRAVITY_AUTH_PATH })}</p>
+        {:else if client === 'codex'}
           <div class="sub-step">
             <span class="hint">{t('mcp.authStep')}</span>
             <div class="code-line">
-              <pre><code class="mono" bind:this={authCommandEl}>{authCommand}</code></pre>
+              <pre><code class="mono" bind:this={authCommandEl}>{CODEX_LOGIN_COMMAND}</code></pre>
               <button
                 type="button"
                 class="button copy-btn"
                 class:copied={copiedKey === authKey}
-                onclick={() => copy(authKey, authCommand, authCommandEl)}
+                onclick={() => copy(authKey, CODEX_LOGIN_COMMAND, authCommandEl)}
               >
                 {@render copyIcon(copiedKey === authKey)}
                 <span>{copiedKey === authKey ? t('entry.copied') : t('entry.copy')}</span>

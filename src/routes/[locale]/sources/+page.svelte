@@ -55,14 +55,14 @@
           </a>
           <div class="body">
             <h2 class="name"><a href={href(`/source/${source.id}`)}>{name}</a></h2>
-            {#if byline || source.report_date}<span class="byline">{byline}{#if byline && source.report_date} · {/if}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} /></span>{/if}
+            {#if byline || source.report_date}<span class="byline">{byline}{#if byline && source.report_date}{' · '}{/if}<EvidenceDate text={source.report_date} reading={data.dates.get(source.report_date ?? '')} /></span>{/if}
             {#if host(source.url) && name !== host(source.url)}<span class="byline">{host(source.url)}</span>{/if}
             <span class="count">{count(source.records)}</span>
           </div>
           <div class="records">
             {#each source.tiles as tile (tile.id)}
               {@const label = [tile.ids, recordCode(tile.id)].filter(Boolean).join(' ')}
-              <a class="record" href={href(`/entry/${tile.id}`)} title={label}>
+              <a class="record" href={href(`/${recordCode(tile.id)}`)} title={label}>
                 {#if tile.ids}<IdsGlyph ids={tile.ids} layout={tile.layout} path={data.glyphs?.[tile.id]} /><span class="sr-only">{label}</span>
                 {:else if tile.cover_key}<img src={media(tile.cover_key)} alt={t('entry.record', { id: recordCode(tile.id) })} loading="lazy" decoding="async" />
                 {:else}<span class="code">{recordCode(tile.id)}</span>{/if}

@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test'
+import { recordCode } from '$lib/code'
 import { openTestDb } from '$lib/server/testdb'
 import { SEARCH_WINDOW, SIGHTINGS_MAX } from '$lib/server/entries'
 import { actions as createActions } from './[locale]/new/+page.server'
-import { actions as detailActions, load as detailLoad } from './[locale]/entry/[id]/+page.server'
-import { actions as addSightingActions } from './[locale]/entry/[id]/sighting/new/+page.server'
+import { actions as detailActions, load as detailLoad } from './[locale]/[code=recordCode]/+page.server'
+import { actions as addSightingActions } from './[locale]/[code=recordCode]/sighting/new/+page.server'
 import { load as browseLoad } from './[locale]/+page.server'
 import { load as sourcesLoad } from './[locale]/sources/+page.server'
 import { load as categoriesLoad } from './[locale]/categories/+page.server'
@@ -20,14 +21,14 @@ test('create, browse, view, edit and add a sighting', async () => {
   const objects = new Map<string, Uint8Array>()
   const event = (form = new FormData(), id = '1') => ({
     request: { formData: async () => form }, url: new URL('https://example.test/en'),
-    params: { locale: 'en', id }, locals: { person: null, theme: 'system' },
+    params: { locale: 'en', code: recordCode(Number(id)) }, locals: { person: null, theme: 'system' },
     platform: { env: { DB: db, MEDIA: { put: async (key: string, bytes: Uint8Array) => objects.set(key, bytes) } } },
     cookies: { set() {} }, getClientAddress: () => '127.0.0.1',
   }) as any
   const form = new FormData()
   form.set('place', 'A book')
   form.set('image', new File([png], 'page.png', { type: 'image/png' }))
-  await expect(createActions.default(event(form))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+  await expect(createActions.default(event(form))).rejects.toMatchObject({ status: 303, location: '/en/R+0001' })
   const browse = await browseLoad(event()) as any
   expect(browse.tiles.map((tile: { id: number }) => tile.id)).toEqual([1])
   let detail = await detailLoad(event()) as any
@@ -42,9 +43,10 @@ test('create, browse, view, edit and add a sighting', async () => {
   const seen = new FormData(); seen.set('url', 'https://example.test/source'); seen.set('original_date', '1935')
   await expect(addSightingActions.default(event(seen))).rejects.toMatchObject({ status: 303 })
   detail = await detailLoad(event()) as any
-  expect(detail.earliest).toEqual({ year: '1935', kind: 'original', sighting: detail.sightings[1].id })
+  expect(detail.earliest).toEqual({ year: '1935', kind: 'original', sighting: 2 })
   expect(detail.entry.description).toBe('Updated')
-  expect(detail.sightings).toHaveLength(2)
+  // The dated evidence is listed before the undated.
+  expect(detail.sightings.map((sighting: { id: number }) => sighting.id)).toEqual([2, 1])
 })
 
 function sightingFixture(count: number, put: (key: string, bytes: Uint8Array) => Promise<unknown>) {
@@ -55,7 +57,7 @@ function sightingFixture(count: number, put: (key: string, bytes: Uint8Array) =>
   const form = new FormData()
   form.set('place', 'Book')
   form.set('image', new File([png], 'page.png', { type: 'image/png' }))
-  const event = () => ({ request: { formData: async () => form }, url: new URL('https://example.test/en'), params: { locale: 'en', id: '1' }, locals: { person: { id: 'p' } }, platform: { env: { DB: db, MEDIA: { put } } }, cookies: { set() {} }, getClientAddress: () => '127.0.0.1' }) as any
+  const event = () => ({ request: { formData: async () => form }, url: new URL('https://example.test/en'), params: { locale: 'en', code: 'R+0001' }, locals: { person: { id: 'p' } }, platform: { env: { DB: db, MEDIA: { put } } }, cookies: { set() {} }, getClientAddress: () => '127.0.0.1' }) as any
   return { raw, form, event }
 }
 
@@ -170,7 +172,7 @@ test('a source link can serve as evidence without an upload', async () => {
   const form = new FormData()
   form.set('url', 'https://example.test/source')
   const event = { request: { formData: async () => form }, url: new URL('https://example.test/en'), params: { locale: 'en' }, locals: {}, platform: { env: { DB: db, MEDIA: {} } }, cookies: { set() {} }, getClientAddress: () => '127.0.0.1' } as any
-  await expect(createActions.default(event)).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+  await expect(createActions.default(event)).rejects.toMatchObject({ status: 303, location: '/en/R+0001' })
 })
 
 test('browse narrows by tag (including implied tags and legacy ?genre=), collection or label, and rejects malformed ones', async () => {
@@ -303,8 +305,8 @@ test('the radicals page lists the radicals in use, browse narrows by one and the
   expect(await browseLoad(event(`radical=${encodeURIComponent('口')}`))).toMatchObject({ tiles: [{ id: 2 }] })
   expect(await browseLoad(event(`radical=${encodeURIComponent('ㄏ')}`))).toMatchObject({ tiles: [{ id: 3 }] })
   await expect(browseLoad(event(`radical=${encodeURIComponent('克')}`))).rejects.toMatchObject({ status: 404 })
-  expect(await detailLoad({ params: { id: '3', locale: 'en' }, url: new URL('https://example.test/en/entry/3'), locals: { person: null }, platform } as any)).toMatchObject({ filed: [{ path: 'ㄏ', radical: 'ㄏ' }] })
-  expect(await detailLoad({ params: { id: '1', locale: 'en' }, url: new URL('https://example.test/en/entry/1'), locals: { person: null }, platform } as any)).toMatchObject({ filed: [{ path: '儿', radical: '儿' }] })
+  expect(await detailLoad({ params: { code: 'R+0003', locale: 'en' }, url: new URL('https://example.test/en/R+0003'), locals: { person: null }, platform } as any)).toMatchObject({ filed: [{ path: 'ㄏ', radical: 'ㄏ' }] })
+  expect(await detailLoad({ params: { code: 'R+0001', locale: 'en' }, url: new URL('https://example.test/en/R+0001'), locals: { person: null }, platform } as any)).toMatchObject({ filed: [{ path: '儿', radical: '儿' }] })
 })
 
 test('a record code typed into search opens its record', async () => {
@@ -312,11 +314,11 @@ test('a record code typed into search opens its record', async () => {
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, script, created_by, created_at, updated_at, hidden_at, merged_into) VALUES (34, 'han', 'p', '2026', '2026', NULL, NULL), (35, 'han', 'p', '2026', '2026', 'hidden', NULL), (36, 'han', 'p', '2026', '2026', NULL, 34), (37, 'han', 'p', '2026', '2026', NULL, 35)")
   const at = (search: string) => ({ url: new URL(`https://example.test/ja?${search}`), params: { locale: 'ja' }, locals: { person: null, glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
   const event = (q: string) => at(`q=${encodeURIComponent(q)}`)
-  for (const q of ['R+0022', 'r+0022', '天天玄玄']) await expect(browseLoad(event(q))).rejects.toMatchObject({ status: 303, location: '/ja/entry/34' })
+  for (const q of ['R+0022', 'r+0022', '天天玄玄']) await expect(browseLoad(event(q))).rejects.toMatchObject({ status: 303, location: '/ja/R+0022' })
   // A plus sign left bare in the address arrives as a space.
-  await expect(browseLoad(at('q=R+0022'))).rejects.toMatchObject({ status: 303, location: '/ja/entry/34' })
+  await expect(browseLoad(at('q=R+0022'))).rejects.toMatchObject({ status: 303, location: '/ja/R+0022' })
   // A merged record opens the record it was merged into.
-  await expect(browseLoad(event('R+0024'))).rejects.toMatchObject({ status: 303, location: '/ja/entry/34' })
+  await expect(browseLoad(event('R+0024'))).rejects.toMatchObject({ status: 303, location: '/ja/R+0022' })
   // A code of a hidden record, of one merged into a hidden record, or of none, is searched as text.
   for (const q of ['R+0023', '天天玄黃', 'R+0025', 'R+0999']) expect(await browseLoad(event(q))).toMatchObject({ tiles: [] })
   // A later page of results is never left for a record.

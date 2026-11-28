@@ -3,8 +3,20 @@ import { convertDate } from './hutime'
 import reindexSql from '../../../scripts/reindex-dates.sql?raw'
 
 export type DateBook = Map<string, DateReading | null>
-type Dated = { report_date: string | null; original_date: string | null; vias: readonly { report_date: string | null }[] }
-export const sightingDates = (rows: readonly Dated[]) => rows.flatMap(row => [row.original_date, row.report_date, ...row.vias.map(via => via.report_date)])
+type Dated = {
+  report_date: string | null
+  original_date: string | null
+  vias: readonly { report_date: string | null }[]
+  cites?: readonly { report_date: string | null; target?: { report_date: string | null; original_date: string | null } | null }[]
+  cited_by?: readonly { report_date: string | null; original_date: string | null }[]
+}
+export const sightingDates = (rows: readonly Dated[]) => rows.flatMap(row => [
+  row.original_date,
+  row.report_date,
+  ...row.vias.map(via => via.report_date),
+  ...(row.cites ?? []).flatMap(cite => [cite.report_date, cite.target?.report_date ?? null, cite.target?.original_date ?? null]),
+  ...(row.cited_by ?? []).flatMap(cite => [cite.report_date, cite.original_date]),
+])
 
 async function storedDates(db: D1Database, dates: string[]): Promise<DateBook> {
   const keys = dates.filter(date => date.length <= MAX_READING_LENGTH)

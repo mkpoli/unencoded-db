@@ -1,10 +1,12 @@
-import { parseRecordCode } from '$lib/code'
-import { readBoxes, SIGHTING_FIELDS, VIA_INPUTS, type StoredImage } from '$lib/server/entries'
+import { parseRecordCode, parseRecordUrlCode } from '$lib/code'
+import { isLocale } from '$lib/i18n'
+import { readShortRecordCode } from '$lib/short-record'
+import { CITATION_FIELDS, CITE_INPUTS, getEntryRow, getSighting, namedVias, readBoxes, SIGHTING_FIELDS, VIA_INPUTS, type SightingFields, type StoredImage, type Via, type ViaPicture } from '$lib/server/entries'
 import { MAX_IMAGE, MAX_THUMB, prepareImage, storeImage } from '$lib/server/image'
 import { MEDIA_MAX } from '$lib/limits'
 import { SIGHTING_START } from '$lib/scripts'
 
-const SIGHTING_NAMES = new Set<string>([...SIGHTING_FIELDS, ...VIA_INPUTS, 'quote_text', 'quote_locator', 'image', 'thumb', 'box'])
+const SIGHTING_NAMES = new Set<string>([...SIGHTING_FIELDS, ...VIA_INPUTS, ...CITE_INPUTS, 'cites_present', 'quote_text', 'quote_locator', 'image', 'thumb', 'box', 'via_keep', 'via_drop', 'via_image', 'via_thumb'])
 
 // The sightings of a form, in the order of the page: one form of its own for each, with the fields and
 // pictures between its opening field and the next. Fields of the record itself are left out, wherever
@@ -50,12 +52,54 @@ export async function readImages(form: FormData): Promise<ReadImage[] | 'invalid
   return prepared
 }
 
+export const described = ({ image, thumb }: ReadImage): ViaPicture => ({ image_key: image.key, image_type: image.type, image_w: image.width, image_h: image.height, thumb_key: thumb.key })
+
+// The pictures of the go-betweens a form sends. A row of the chain opens with `via_url`, and the fields up to the
+// next one are its own, so a row dragged elsewhere takes its pictures along: `via_keep` names one the
+// sighting already holds, `via_drop` takes it away without scripts, `via_image` is a new one and `via_thumb` its
+// thumbnail. `kept` is each row's stored pictures, which a refused form shows again, and `all` those and the
+// new ones; `files` are the new ones, which are not stored here.
+type ViaPictures = { kept: ViaPicture[][]; all: ViaPicture[][]; files: ReadImage[]; error: 'viaImage' | 'viaSource' | null }
+export async function readViaPictures(form: FormData, stored: readonly Via[] = []): Promise<ViaPictures> {
+  const held = new Map(stored.flatMap(via => via.pictures ?? []).map(picture => [picture.image_key, picture]))
+  const dropped = new Set(form.getAll('via_drop').map(String))
+  const rows: { kept: ViaPicture[]; images: File[]; thumbs: File[] }[] = []
+  for (const [name, value] of form.entries()) {
+    if (name === 'via_url') rows.push({ kept: [], images: [], thumbs: [] })
+    const row = rows.at(-1), file = value as unknown
+    if (!row) continue
+    if (file instanceof File) {
+      if (file.size && name === 'via_image') row.images.push(file)
+      else if (file.size && name === 'via_thumb') row.thumbs.push(file)
+      continue
+    }
+    const picture = name === 'via_keep' && !dropped.has(value) && held.get(value)
+    if (picture && !row.kept.includes(picture)) row.kept.push(picture)
+  }
+  const kept = rows.map(row => row.kept), named = namedVias(form)
+  const refused = (error: 'viaImage' | 'viaSource'): ViaPictures => ({ kept, all: kept, files: [], error })
+  if (rows.some((row, index) => !named[index] && (row.kept.length || row.images.length))) return refused('viaSource')
+  // The chain shares one allowance, so one long message can take most of it.
+  if (rows.reduce((sum, row) => sum + row.kept.length + row.images.length, 0) > MEDIA_MAX) return refused('viaImage')
+  const all: ViaPicture[][] = [], files: ReadImage[] = []
+  for (const row of rows) {
+    const own = new FormData()
+    for (const image of row.images) own.append('image', image)
+    for (const thumb of row.thumbs) own.append('thumb', thumb)
+    const read = await readImages(own)
+    if (read === 'invalid') return refused('viaImage')
+    all.push([...row.kept, ...read.map(described)])
+    files.push(...read)
+  }
+  return { kept, all, files, error: null }
+}
+
 export async function storeImages(media: R2Bucket, images: ReadImage[]): Promise<StoredImage[]> {
   for (const { image, thumb } of images) {
     await storeImage(media, image)
     if (thumb.key !== image.key) await storeImage(media, thumb)
   }
-  return images.map(({ image, thumb, box }) => ({ image_key: image.key, image_type: image.type, image_w: image.width, image_h: image.height, thumb_key: thumb.key, box }))
+  return images.map(read => ({ ...described(read), box: read.box }))
 }
 
 // Nothing is stored until every picture is known to be one.
@@ -109,5 +153,46 @@ export function positiveId(value: string | null | undefined): number | null {
   return Number.isSafeInteger(id) ? id : null
 }
 
+export const recordIdParam = (value: string | null | undefined) => value ? parseRecordUrlCode(value) : null
+
+function recordFromUrl(text: string): number | null {
+  let url: URL
+  try { url = new URL(text.trim()) } catch { return null }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+  const parts = url.pathname.split('/').filter(Boolean)
+  if (!parts.length) return null
+  if (url.hostname === 'mkpo.li' && parts[0] === 'r' && parts.length === 2 && /^[0-9a-f]{1,8}$/i.test(parts[1])) {
+    const id = parseInt(parts[1], 16)
+    return id > 0 && Number.isSafeInteger(id) ? id : null
+  }
+  const rest = isLocale(parts[0]) ? parts.slice(1) : parts
+  if (rest[0] === 'entry') return positiveId(rest[1])
+  if (rest[0]) {
+    try {
+      const coded = parseRecordUrlCode(decodeURIComponent(rest[0]))
+      if (coded) return coded
+    } catch { /* ignore malformed percent-encoding */ }
+  }
+  if (url.hostname === 'rare.glyphatlas.org' && parts.length === 1) return readShortRecordCode(parts[0])
+  return null
+}
+
 /** A record as a reader names it: its number, its code in either spelling, or the address of its page. */
-export const recordNamed = (text: string) => positiveId(text.trim()) ?? parseRecordCode(text) ?? positiveId(/\/entry\/(\d+)/.exec(text)?.[1])
+export const recordNamed = (text: string) => positiveId(text.trim()) ?? parseRecordCode(text) ?? recordFromUrl(text)
+
+export type SightingSeed = { id: number; entry: number; values: Partial<SightingFields>; pictures: string[] }
+
+// A visible sighting's citation, where it was found and its pictures, to pre-fill another form from it.
+export async function loadSightingSeed(db: D1Database, raw: string | null): Promise<SightingSeed | null> {
+  const id = positiveId(raw)
+  if (!id) return null
+  const sighting = await getSighting(db, id)
+  const entry = sighting && !sighting.hidden_at ? await getEntryRow(db, sighting.entry_id) : null
+  if (!sighting || !entry || entry.hidden_at || entry.merged_into) return null
+  const values: Partial<SightingFields> = {
+    ...Object.fromEntries((['place', 'original_date', 'page', ...CITATION_FIELDS] as const).map(field => [field, sighting[field]])),
+    // The pictures of its chain come along; the form that is sent names them by `seed`.
+    vias: sighting.vias.map(({ id: _, ...via }) => via),
+  }
+  return { id, entry: sighting.entry_id, values, pictures: sighting.media.map(picture => picture.image_key) }
+}

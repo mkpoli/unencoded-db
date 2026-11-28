@@ -44,7 +44,7 @@ test('the form starts from a visible sighting', async () => {
   await expect(actions.default(event(form))).rejects.toMatchObject({ status: 303 })
   const tags = await tagList(db)
   expect(tags).toHaveLength(35)
-  expect(await load(event(undefined, '?sighting=1'))).toEqual({ seed: { values: { url: 'https://example.test/book', title: 'Book', author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], place: 'A dictionary', original_date: '1617', page: '12' }, pictures: [] }, tags, groups: [] })
+  expect(await load(event(undefined, '?sighting=1'))).toEqual({ seed: { id: 1, entry: 1, values: { url: 'https://example.test/book', title: 'Book', author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], place: 'A dictionary', original_date: '1617', page: '12' }, pictures: [] }, tags, groups: [] })
   expect(await load(event())).toEqual({ seed: null, tags, groups: [] })
   expect(await load(event(undefined, '?sighting=9'))).toEqual({ seed: null, tags, groups: [] })
   const moderator = (raw.query('SELECT id FROM people LIMIT 1').get() as { id: string }).id
@@ -66,7 +66,7 @@ test('a via link satisfies the picture or link rule, must be a web link, and is 
 test('each description is a value of its own, in the order given', async () => {
   const { event, raw } = fixture()
   const form = page([{ place: 'A shop sign', url: 'https://example.test/sign' }], { ids: ['⿰山東', '⿱山東', ' ', '⿰山東', '⿰山⿻日木'] })
-  await expect(actions.default(event(form))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+  await expect(actions.default(event(form))).rejects.toMatchObject({ status: 303, location: '/en/R+0001' })
   expect(raw.query("SELECT value FROM claims WHERE kind = 'ids' ORDER BY position").all()).toEqual([{ value: '⿰山東' }, { value: '⿱山東' }, { value: '⿰山⿻日木' }])
   expect(raw.query('SELECT ids FROM entries').get()).toEqual({ ids: '⿰山東' })
 })
@@ -88,7 +88,7 @@ test('a record is saved with every sighting of the form', async () => {
     { place: 'Page 40', ...book, note: 'a second form', pictures: [picture(13)] },
     { place: 'A post', url: 'https://example.test/post' },
   ], { ids: '⿰山東', description: 'Seen three times' })
-  await expect(actions.default(event(form))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+  await expect(actions.default(event(form))).rejects.toMatchObject({ status: 303, location: '/en/R+0001' })
   expect(count('entries')).toBe(1)
   expect(raw.query('SELECT entry_id, first_entry, place, note, types FROM sightings ORDER BY id').all()).toEqual([
     { entry_id: 1, first_entry: 1, place: 'Page 12', note: null, types: '["definition","reading"]' },
@@ -119,7 +119,7 @@ test('a claim names the evidence of the form by its place, and is saved with the
   await expect(actions.default(event(page([{ place: 'Elsewhere', url: 'https://example.test/0' }])))).rejects.toMatchObject({ status: 303 })
   const form = page([{}, { place: 'Page 12', url: 'https://example.test/12' }, { place: 'Page 40', url: 'https://example.test/40' }],
     { ...linked, 'sightings.mean0001': ['2', '3'], 'sightings.read0001': ['1', '3', '9'], 'sightings.rela0001': '2' })
-  await expect(actions.default(event(form))).rejects.toMatchObject({ status: 303, location: '/en/entry/2' })
+  await expect(actions.default(event(form))).rejects.toMatchObject({ status: 303, location: '/en/R+0002' })
   expect(raw.query('SELECT id, place FROM sightings WHERE entry_id = 2 ORDER BY id').all()).toEqual([{ id: 2, place: 'Page 12' }, { id: 3, place: 'Page 40' }])
   // The first section was left empty and the ninth does not exist, so neither is evidence of anything.
   const stored = [

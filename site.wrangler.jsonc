@@ -1,0 +1,6 @@
+// Read by `@sveltejs/adapter-cloudflare` (`svelte.config.js`): where to write the built SvelteKit Worker
+// and static assets. The deployed Worker is `wrangler.jsonc`'s `main` (`worker.js`), which wraps this build.
+{
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "assets": { "directory": ".svelte-kit/cloudflare", "binding": "ASSETS" }
+}

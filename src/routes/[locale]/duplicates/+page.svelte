@@ -21,16 +21,16 @@
           <div class="records">
             {#each group.records as record (record.id)}
               <article class="record">
-                <a class="plates" href={href(`/entry/${record.id}`)} aria-label={t('entry.record', { id: recordCode(record.id) })}>
+                <a class="plates" href={href(`/${recordCode(record.id)}`)} aria-label={t('entry.record', { id: recordCode(record.id) })}>
                   <span class="plate">{#if record.ids}<IdsGlyph ids={record.ids} layout={record.layout} path={data.glyphs?.[record.id]} />{/if}</span>
                   <span class="plate">{#if record.cover_key}<img src={media(record.cover_key)} alt="" loading="lazy" decoding="async" />{:else}<span class="blank">{t('browse.noImage')}</span>{/if}</span>
                 </a>
-                <div class="about"><a class="code" href={href(`/entry/${record.id}`)}>{recordCode(record.id)}</a><span class="badge">{scriptName(locale(), record.script, record.script_other)}</span><span class="count">{t(record.sightings === 1 ? 'browse.sighting' : 'browse.sightings', { n: record.sightings })}</span></div>
+                <div class="about"><a class="code" href={href(`/${recordCode(record.id)}`)}>{recordCode(record.id)}</a><span class="badge">{scriptName(locale(), record.script, record.script_other)}</span><span class="count">{t(record.sightings === 1 ? 'browse.sighting' : 'browse.sightings', { n: record.sightings })}</span></div>
               </article>
             {/each}
           </div>
           <div class="compare">
-            {#each group.pairs as [earlier, later] (`${earlier}.${later}`)}<a class="button" href={href(`/entry/${later}/duplicate?of=${earlier}`)}>{t('duplicate.compare')} <span class="code">{recordCode(earlier)} · {recordCode(later)}</span></a>{/each}
+            {#each group.pairs as [earlier, later] (`${earlier}.${later}`)}<a class="button" href={href(`/${recordCode(later)}/duplicate?of=${earlier}`)}>{t('duplicate.compare')} <span class="code">{recordCode(earlier)} · {recordCode(later)}</span></a>{/each}
           </div>
         </section>
       {/each}

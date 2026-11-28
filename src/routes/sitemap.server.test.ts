@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { recordCode } from '$lib/code'
 import { LOCALES } from '$lib/i18n'
 import { SITE_ORIGIN } from '$lib/seo'
 import { ENTRIES_PER_SITEMAP } from '$lib/server/sitemap'
@@ -26,7 +27,7 @@ test('entry sitemaps list all locales for live records and skip shards with only
 
   const shard = (part: string) => child({ platform, params: { part } } as Parameters<typeof child>[0])
   for (const [part, id] of [['1', 1], ['2', firstOfSecond]] as const) {
-    expect(locations(await (await shard(part)).text())).toEqual(LOCALES.map(locale => `${SITE_ORIGIN}/${locale}/entry/${id}`))
+    expect(locations(await (await shard(part)).text())).toEqual(LOCALES.map(locale => `${SITE_ORIGIN}/${locale}/${recordCode(id)}`))
   }
   await expect(shard('3')).rejects.toMatchObject({ status: 404 })
 })
@@ -50,8 +51,8 @@ test('record sitemaps say when each record last changed', async () => {
     INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES
       (1, 'han', 'p', '2026', '2026-11-16T14:13:22.122Z'), (2, 'han', 'p', '2026', 'not a time')`)
   const xml = await (await child({ platform: { env: { DB: db } }, params: { part: '1' } } as Parameters<typeof child>[0])).text()
-  expect(xml).toContain(`<url><loc>${SITE_ORIGIN}/en/entry/1</loc><lastmod>2026-11-16T14:13:22.122Z</lastmod><xhtml:link`)
-  expect(xml).toContain(`<url><loc>${SITE_ORIGIN}/en/entry/2</loc><xhtml:link`)
+  expect(xml).toContain(`<url><loc>${SITE_ORIGIN}/en/R+0001</loc><lastmod>2026-11-16T14:13:22.122Z</lastmod><xhtml:link`)
+  expect(xml).toContain(`<url><loc>${SITE_ORIGIN}/en/R+0002</loc><xhtml:link`)
 })
 
 test('record sitemaps list the pictures of visible sightings, through the export index', async () => {
@@ -84,9 +85,9 @@ test('page sitemaps name every language and the English default for each page', 
   const { db, raw } = openTestDb()
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES (1, 'han', 'p', '2026', '2026')")
   const entry = await (await child({ platform: { env: { DB: db } }, params: { part: '1' } } as Parameters<typeof child>[0])).text()
-  const ja = entry.split('<url>').find(block => block.includes(`<loc>${SITE_ORIGIN}/ja/entry/1</loc>`))!
+  const ja = entry.split('<url>').find(block => block.includes(`<loc>${SITE_ORIGIN}/ja/R+0001</loc>`))!
   expect([...ja.matchAll(/<xhtml:link rel="alternate" hreflang="([^"]+)" href="([^"]+)"\/>/g)].map(match => [match[1], match[2]])).toEqual([
-    ...LOCALES.map(locale => [locale, `${SITE_ORIGIN}/${locale}/entry/1`]), ['x-default', `${SITE_ORIGIN}/en/entry/1`],
+    ...LOCALES.map(locale => [locale, `${SITE_ORIGIN}/${locale}/R+0001`]), ['x-default', `${SITE_ORIGIN}/en/R+0001`],
   ])
   expect(entry).toContain('xmlns:xhtml="http://www.w3.org/1999/xhtml"')
   const site = await (await child({ platform: { env: { DB: db } }, params: { part: 'site' } } as Parameters<typeof child>[0])).text()

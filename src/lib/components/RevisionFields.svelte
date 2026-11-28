@@ -18,6 +18,7 @@
   import type { EntryFields, SightingFields } from '$lib/server/entries'
   import { locale, t } from '$lib/t'
   import { kindName } from '$lib/source-kind'
+  import { sourceName } from '$lib/source-name'
   let { fields, dates, sighting = false, labels = new Map(), tagTypes = new Map() }: { dates?: Map<string, DateReading | null>; fields: EntryFields | SightingFields; sighting?: boolean; labels?: ReadonlyMap<string, string>; tagTypes?: ReadonlyMap<string, TagType> } = $props()
   const sourceFields = [
     { key: 'title', label: 'field.title' },
@@ -31,7 +32,7 @@
   ] as const
   const KIND_LABELS: Record<ClaimKind, `${string}.${string}`> = {
     ids: 'field.ids', composition: 'field.formation', reading: 'field.reading', meaning: 'field.meaning', encoding: 'field.encodings',
-    document: 'field.documents', relation: 'field.relatedCharacters', ivd: 'field.ivd', collection: 'field.collection', tag: 'field.tags',
+    document: 'field.documents', relation: 'field.relatedCharacters', ivd: 'field.ivd', collection: 'field.collection', tag: 'field.tags', creator: 'field.creator',
   }
   const WIDE: ClaimKind[] = ['reading', 'meaning', 'relation', 'composition']
   const at = locale()
@@ -73,7 +74,22 @@
       {#each sourceFields as field}{#if source[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={source[field.key]} reading={dates?.get(source[field.key] ?? '')} />{:else if field.key === 'source_kind'}{kindName(source.source_kind)}{:else}{source[field.key]}{/if}</dd></div>{/if}{/each}
       {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
       {#if source.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${source.style}`)}</dd></div>{/if}
+      {#if source.closeness}<div><dt>{t('field.closeness')}</dt><dd>{t(`closeness.${source.closeness}`)}</dd></div>{/if}
       {#if types.length}<div><dt>{t('field.sourceTypes')}</dt><dd>{types.map(type => t(`evidence.type.${type}`)).join(' · ')}</dd></div>{/if}
+      {#if source.cites?.length}
+        <div class="wide"><dt>{t('field.cites')}</dt><dd>
+          <ul class="claims">
+            {#each source.cites as cite, index (index)}
+              {@const named = cite.title || cite.url || cite.author || cite.publisher || cite.report_date || cite.container ? sourceName(cite, t).text : null}
+              <li>
+                <span class="scope"><span class="kind">{t(`cite.kind.${cite.kind}`)}</span><span class="text">{cite.sighting ? `#${cite.sighting}` : ''}{#if cite.sighting && named}{' · '}{/if}{named ?? ''}</span></span>
+                {#if cite.quote}<span class="cite-detail">{cite.quote}</span>{/if}
+                {#if cite.note}<span class="cite-detail">{cite.note}</span>{/if}
+              </li>
+            {/each}
+          </ul>
+        </dd></div>
+      {/if}
       {#if source.vias.length}<div class="wide"><dt>{t('field.via')}</dt><dd><ViaChain vias={source.vias} dates={dates} label={false} /></dd></div>{/if}
     </dl>
     <SourceQuotations quotes={source.quotes} url={source.url} />
@@ -136,5 +152,6 @@
   .scope .kind { flex: none; color: var(--muted); font-size: 11.5px }
   .scope .text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .basis { color: var(--muted); font-size: 11.5px; white-space: nowrap }
+  .cite-detail { color: var(--muted); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere }
   .url { font-size: 12.5px; overflow-wrap: anywhere }
 </style>

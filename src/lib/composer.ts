@@ -1,5 +1,5 @@
 // The composer exports, one per style of glyph; each folder is versioned, so a new export gets a new name.
-import packageJson from '../../package.json'
+import { gitHead } from 'han-compose/package.json'
 
 export const GLYPH_STYLES = ['sans', 'serif', 'fangsong', 'regular', 'pen-writing'] as const
 export type GlyphStyle = (typeof GLYPH_STYLES)[number]
@@ -15,10 +15,9 @@ const VERSIONS: Record<GlyphStyle, string> = {
   'pen-writing': 'b53713c2da0e-kaisho-compose-layout-v4-kaisho-f7+kin',
 }
 export const composerVersion = (style: GlyphStyle) => VERSIONS[style]
-// The code draws the glyph too, so a new pin gives its drawings a new address even when the export
-// stays the same.
-const pin = packageJson.dependencies['han-compose']
-export const composerRevision = pin.includes('#') ? pin.slice(pin.lastIndexOf('#') + 1).slice(0, 12) : 'head'
+// The code draws the glyph too, so an engine of another han-compose commit gives its drawings a new
+// address even when the export stays the same.
+export const composerRevision = gitHead.slice(0, 12)
 export const composerDrawing = (style: GlyphStyle, adjusted = false) => `${VERSIONS[style]}-${composerRevision}${style === 'sans' && adjusted ? '-width1' : ''}`
 export const composerUrl = (style: GlyphStyle) => `https://ids-input-composer.mkpoli.workers.dev/${VERSIONS[style]}`
 export const glyphStyleOf = (value: string | null | undefined): GlyphStyle => (GLYPH_STYLES as readonly string[]).includes(value ?? '') ? value as GlyphStyle : GLYPH_STYLE

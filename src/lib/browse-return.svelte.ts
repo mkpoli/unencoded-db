@@ -1,6 +1,7 @@
 import type { AfterNavigate } from '@sveltejs/kit'
 import { browser } from '$app/environment'
 import { browseSearchFromReferrer } from './browse-params'
+import { parseRecordUrlCode } from './code'
 import { BrowseReturnTracker } from './browse-return-tracker'
 
 const STORAGE_KEY = 'ug.browse'
@@ -46,12 +47,15 @@ export function hydrateBrowseReturn() {
 
 /** Updates remembered browse query and whether history.back() returns directly to it. */
 export function trackBrowseNavigation(navigation: AfterNavigate) {
+  const fromCode = navigation.from?.params?.code
+  const fromEntryId = fromCode ? parseRecordUrlCode(fromCode) : null
   const toPersist = tracker.track({
     type: navigation.type,
     delta: navigation.delta,
     fromRoute: navigation.from?.route.id ?? null,
     fromLocale: navigation.from?.params?.locale ?? null,
     fromSearch: navigation.from?.url.search ?? '',
+    fromEntryId,
     toRoute: navigation.to?.route.id ?? null,
     toLocale: navigation.to?.params?.locale ?? null,
     toSearch: navigation.to?.url.search ?? '',
@@ -64,6 +68,16 @@ export function trackBrowseNavigation(navigation: AfterNavigate) {
 export function clearDirectBrowseBack() {
   tracker.clearDirect()
   syncState()
+}
+
+/** Marks the record the user is returning from so the browse grid can highlight (and scroll to) it. */
+export function markReturningFrom(id: number, scroll: boolean) {
+  tracker.markReturning(id, scroll)
+}
+
+/** Consumes the record id being returned from, if any. */
+export function consumeReturningEntry() {
+  return tracker.consumeReturning()
 }
 
 /** Returns the browse link target for the current locale, preserving the last search params. */

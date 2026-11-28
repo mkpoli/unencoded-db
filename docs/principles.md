@@ -34,17 +34,23 @@ Claims may disagree; none of them removes a record.
 ## Trace to the original
 
 Prefer the earliest attestation in its original source, with author, title, publisher, date and
-page. A sighting cites the original work and, separately, where the contributor found it, so a post
-that relayed the evidence keeps its credit without standing in for the source.
+page. Each work that writes the character anew is a sighting of its own, and names the older works
+its text quotes. A sighting cites the original work and, separately, where the contributor found it,
+so a post that relayed the evidence keeps its credit without standing in for the source.
+
+A sighting takes an original date only when its picture reproduces the older work directly: a
+photo, scan, facsimile, rubbing, tracing or line drawing of it in the cited publication. A typeset
+transcription (隸定) or a later dictionary citing an older text has no original date; its report
+date dates it, and the older text goes among the older works it cites.
 
 ## Credit every source
 
 Posts on social media, blogs, chat messages and personal communications are cited like books: the
 author as they sign, the date and a link. A message in a group chat is one source: its own author
-and date, the words quoted, the group it was sent in and the service the group is on. A private
-message, a letter or a conversation is cited the same way without a group, and marked a personal
-communication. A partner's material is added once the partner agrees, and
-shown with the name they ask for.
+and date, the words quoted, the group it was sent in and the service the group is on. A screenshot
+of it is kept with it, cropped to the message. A private message, a letter or a conversation is cited
+the same way without a group, and marked a personal communication. A partner's material is added once
+the partner agrees, and shown with the name they ask for.
 
 ## Permanent record codes
 

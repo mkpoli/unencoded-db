@@ -7,14 +7,14 @@
   import { MARKED } from '$lib/registries'
 
   // `to` is where the tile leads when that is not the record's page.
-  let { tile, glyph = null, to = null }: { tile: Tile; glyph?: string | null; to?: string | null } = $props()
+  let { tile, glyph = null, to = null, highlighted = false }: { tile: Tile; glyph?: string | null; to?: string | null; highlighted?: boolean } = $props()
   const label = (type: SightingType) => t(`evidence.type.${type}`)
   const shown = $derived(tile.types.slice(0, 1))
   const hidden = $derived(tile.types.length - shown.length)
   const works = $derived(MARKED.filter(registry => tile.marks.includes(registry.id)))
 </script>
 
-<a class="tile" href={to ?? href(`/entry/${tile.id}`)}>
+<a class="tile" class:returned={highlighted} data-entry={tile.id} href={to ?? href(`/${recordCode(tile.id)}`)}>
   <span class="plate">
     {#if tile.ids}<IdsGlyph ids={tile.ids} layout={tile.layout} path={glyph} />
     {:else if tile.cover_key}<img src={media(tile.cover_key)} alt={t('entry.record', { id: recordCode(tile.id) })} loading="lazy" decoding="async" />
@@ -39,8 +39,10 @@
 
 <style>
   .tile { position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 0 }
-  .plate { display: grid; place-items: center; aspect-ratio: 1; overflow: hidden; border-radius: 6px; background: var(--surface-tile); color: var(--ink); margin-bottom: 4px }
+  .plate { display: grid; place-items: center; aspect-ratio: 1; overflow: hidden; border-radius: 6px; background: var(--surface-tile); color: var(--ink); margin-bottom: 4px; transition: outline-color 240ms ease }
   .tile:hover .plate { outline: 2px solid var(--line-strong); outline-offset: 1px }
+  .tile.returned .plate { outline: 2px solid var(--accent); outline-offset: 2px }
+  @media (prefers-reduced-motion: reduce) { .plate { transition: none } }
   img { width: 100%; height: 100%; object-fit: contain; display: block }
   .blank { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px; color: var(--muted); text-align: center }
   .ids-line { min-height: 17px; font-size: 12px; line-height: 1.35; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
