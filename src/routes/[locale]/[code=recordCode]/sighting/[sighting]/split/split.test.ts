@@ -10,7 +10,7 @@ import { load as loadHistory } from '../../../history/+page.server'
 import { actions, load } from './+page.server'
 
 const seen = (place: string, original_date: string | null = null) => ({ place, url: null, title: null, container: null, source_kind: null, author: null, publisher: null, report_date: null, vias: [], closeness: null, original_date, page: null, contexts: null, style: null, types: null, quotes: null, note: null }) as SightingFields
-const fields = (claims: Claim[] = []) => ({ script: 'han' as const, script_other: null, radical: null, strokes: null, claims, description: null })
+const fields = (claims: Claim[] = []) => ({ radical: null, strokes: null, claims, description: null })
 
 async function fixture() {
   const { db, raw } = openTestDb()
@@ -41,12 +41,12 @@ async function fixture() {
 
 test('splitting makes a record of the evidence with the number that follows, and both histories say so', async () => {
   const { db, a, s, first, event, rows, agree, count } = await fixture()
-  expect(await load(event())).toMatchObject({ id: a, only: false, script: 'han', sighting: { id: s, place: 'A two' } })
+  expect(await load(event())).toMatchObject({ id: a, only: false, sighting: { id: s, place: 'A two' } })
   // A form that a record states already goes there, the first record's own too, and one left undescribed is ticked.
-  expect(await actions.default(event({ rev: '1', ids: '⿰木木', script: 'han' }))).toMatchObject({ status: 409, data: { error: 'same', described: a } })
-  expect(await actions.default(event({ rev: '1', script: 'han' }))).toMatchObject({ status: 400, data: { error: 'undescribed' } })
-  expect(await actions.default(event({ rev: '1', ids: '⿱木', script: 'han' }))).toMatchObject({ status: 400, data: { error: 'undescribed' } })
-  await expect(actions.default(event({ rev: '1', ids: '⿱木木', script: 'han', summary: ' another form ' }))).rejects.toMatchObject({ status: 303, location: `/en/${recordCode(a + 1)}#sighting-${s}` })
+  expect(await actions.default(event({ rev: '1', ids: '⿰木木' }))).toMatchObject({ status: 409, data: { error: 'same', described: a } })
+  expect(await actions.default(event({ rev: '1' }))).toMatchObject({ status: 400, data: { error: 'undescribed' } })
+  expect(await actions.default(event({ rev: '1', ids: '⿱木' }))).toMatchObject({ status: 400, data: { error: 'undescribed' } })
+  await expect(actions.default(event({ rev: '1', ids: '⿱木木', summary: ' another form ' }))).rejects.toMatchObject({ status: 303, location: `/en/${recordCode(a + 1)}#sighting-${s}` })
   const made = (await getEntry(db, a + 1))!
   expect(made.entry).toMatchObject({ rev: 1, ids: '⿱木木', sightings: 1, first_year: '1500', first_sighting: s })
   expect(made.sightings.map(x => [x.id, x.first_entry])).toEqual([[s, a + 1]])
@@ -67,7 +67,7 @@ test('splitting makes a record of the evidence with the number that follows, and
   expect(count('entries')).toBe(3)
   // Now ⿱木木 has a record, and a second split of that form is sent there.
   const again = (await addSighting(db, a, seen('A three'), [], { actor: (await createPerson(db)).id, ip: null }))!
-  expect(await actions.default(event({ rev: '1', ids: '⿱木木', script: 'han' }, again))).toMatchObject({ status: 409, data: { error: 'described', described: a + 1 } })
+  expect(await actions.default(event({ rev: '1', ids: '⿱木木' }, again))).toMatchObject({ status: 409, data: { error: 'described', described: a + 1 } })
   expect(await splitSighting(db, a, again, 1, fields([newClaim('encoding', 'U+6797', { charset: 'unicode' })]), { actor: (await createPerson(db)).id, ip: null }, null)).toMatchObject({ id: a + 3 })
   expect(await splitSighting(db, a + 3, again, 1, fields([newClaim('encoding', 'u+6797 林', { charset: 'unicode' })]), { actor: (await createPerson(db)).id, ip: null }, null)).toEqual({ described: a + 3 })
   expect(count('entries')).toBe(4)
@@ -91,8 +91,6 @@ test('a split that cannot be made makes no record', async () => {
   expect(await actions.default(event({ ids: '⿱木木' }))).toMatchObject({ status: 409 })
   expect(await actions.default(event({ rev: '1', ids: 'x'.repeat(3000) }))).toMatchObject({ status: 400 })
   for (const bad of [event({ rev: '1', undescribed: '1' }, 99), event({ rev: '1', undescribed: '1' }, 'x'), event({ rev: '1', undescribed: '1' }, s, 99)]) await expect(actions.default(bad)).rejects.toMatchObject({ status: 404 })
-  // A script typed and emptied stays empty in the form that comes back.
-  expect(await actions.default(event({ rev: '9', script: 'other', script_other: '', undescribed: '1' }))).toMatchObject({ status: 409, data: { values: { script_other: null } } })
   // Nothing is made for a split that is refused, not even a tag.
   expect(await splitSighting(db, a, s, 9, fields([newClaim('tag', 'ghost')]), who, null)).toBe('conflict')
   expect(raw.query("SELECT count(*) AS n FROM tags WHERE name = 'ghost'").get()).toEqual({ n: 0 })

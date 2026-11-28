@@ -1,9 +1,11 @@
 // Typed tags with DAG implications, in three tiers: a type (which determines its color), an optional
 // group within the type, and the tag. A tag may automatically carry other tags via `implies`, and a
 // record carrying a tag is also listed under every tag it transitively implies.
-export const TAG_TYPES = ['region', 'language', 'form', 'domain', 'meta', 'general'] as const
+export const TAG_TYPES = ['script', 'region', 'language', 'form', 'domain', 'meta', 'general'] as const
 export type TagType = (typeof TAG_TYPES)[number]
 export const isTagType = (value: unknown): value is TagType => TAG_TYPES.includes(value as TagType)
+// The script tag a new record starts with.
+export const DEFAULT_SCRIPT_TAG = 'han'
 
 export type Tag = {
   name: string

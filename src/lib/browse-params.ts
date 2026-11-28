@@ -5,7 +5,6 @@ import { NEEDS } from './scripts'
 export interface BrowseState {
   query?: string | null
   also?: readonly string[]
-  script?: string | null
   filter?: string | null
   collection?: string | null
   tag?: string | null
@@ -45,8 +44,6 @@ export function browseSearchParams(state: BrowseState): URLSearchParams {
     params.set('q', query)
     for (const spelling of uniqueNonEmpty(state.also)) params.append('also', spelling)
   }
-  const script = state.script?.trim() ?? ''
-  if (script) params.set('script', script)
   const filter = state.filter?.trim() ?? ''
   if (filter) params.set('filter', filter)
   const collection = state.collection?.trim() ?? ''
@@ -89,19 +86,20 @@ export function browseHref(base: string, state: BrowseState): string {
 
 /**
  * Canonicalizes a browse query string or URLSearchParams, stripping empty/default/unknown params
- * and normalizing legacy `genre` to `tag`.
+ * and normalizing legacy `genre` and `script` to `tag`.
  */
 export function cleanBrowseSearch(search: string | URLSearchParams): string {
   const input = typeof search === 'string' ? new URLSearchParams(search) : search
   const pageRaw = input.get('page')?.trim() ?? ''
   const page = /^[1-9]\d*$/.test(pageRaw) ? Number(pageRaw) : null
+  const legacyScript = input.get('script')?.trim() ?? ''
+  const rawTag = input.get('tag') ?? input.get('genre') ?? (legacyScript && legacyScript !== 'other' ? legacyScript : null)
   const params = browseSearchParams({
     query: input.get('q'),
     also: input.getAll('also'),
-    script: input.get('script'),
     filter: input.get('filter'),
     collection: input.get('collection'),
-    tag: (input.get('tag') ?? input.get('genre'))?.normalize('NFC') ?? null,
+    tag: rawTag?.normalize('NFC') ?? null,
     creator: input.get('creator')?.normalize('NFC') ?? null,
     radical: input.get('radical')?.normalize('NFC') ?? null,
     decade: input.get('decade'),

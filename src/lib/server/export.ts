@@ -146,8 +146,6 @@ export async function* indexChunks(db: D1Database, origin: string, generatedAt: 
         parts.push((any ? ',' : '') + JSON.stringify({
           id: entry.id,
           code: recordCode(entry.id),
-          script: entry.script,
-          script_other: entry.script_other,
           ids: entry.ids,
           layout: primaryLayoutOf(entry.claims),
           cover_key: entry.cover_key,
@@ -191,7 +189,7 @@ const csvCell = (value: unknown) => {
 // One column for each kind of claim, its values in order. A claim that holds under others names them
 // after its value, and one that rests on evidence names the rows by their `sighting_id`:
 // `東 (usage) [under: east | cmn:dōng] [evidence: #3 #7]`. The JSON form carries what else a claim holds.
-const ENTRY_COLUMNS = ['script', 'script_other', 'description', 'status', 'radical', 'strokes'] as const
+const ENTRY_COLUMNS = ['description', 'status', 'radical', 'strokes'] as const
 const BULK_ENTRY_COLUMNS = [...ENTRY_COLUMNS, 'created_by_name', 'created_by_agent', 'created_by_model'] as const
 // A column added later goes last, so a reader that counts columns keeps reading the ones it knew.
 export const CSV_SIGHTING_FIELDS = SIGHTING_FIELDS.filter(field => field !== 'closeness')

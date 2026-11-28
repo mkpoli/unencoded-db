@@ -13,9 +13,9 @@ const event = (db: D1Database, before?: string) => ({
 test('global history hides private and merged targets and advances through bounded empty pages', async () => {
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id,name,created_at) VALUES ('p','Person','2026');
-    INSERT INTO entries(id,script,ids,created_by,created_at,updated_at) VALUES
-      (1,'han','public','p','2026','2026'), (2,'han','hidden','p','2026','2026'),
-      (3,'han','merged','p','2026','2026');
+    INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES
+      (1,'public','p','2026','2026'), (2,'hidden','p','2026','2026'),
+      (3,'merged','p','2026','2026');
     UPDATE entries SET hidden_at='2026' WHERE id=2;
     UPDATE entries SET merged_into=1 WHERE id=3;
     INSERT INTO sightings(id,entry_id,first_entry,place,hidden_at,created_by,created_at,updated_at) VALUES
@@ -49,7 +49,7 @@ test('global history hides private and merged targets and advances through bound
 test('global history carries the old version of every readable revision', async () => {
   const { db } = openTestDb()
   const person = await createPerson(db)
-  const fields: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [newClaim('ids', '⿰木木')] }
+  const fields: EntryFields = { description: null, radical: null, strokes: null, claims: [newClaim('ids', '⿰木木')] }
   const sighting: SightingFields = { place: 'Source', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null }
   const id = await createEntry(db, fields, sighting, [], { actor: person.id, ip: null })
   await editEntry(db, id, 1, { ...fields, description: 'Later' }, { actor: person.id, ip: null }, 'Corrected')
@@ -77,7 +77,7 @@ test('history lists the changes of agents or of people, and follows an actor tha
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id,name,created_at) VALUES ('p','Person','2026'), ('q','Other','2026');
     INSERT INTO people(id,name,created_at,merged_into,agent) VALUES ('a','Harness','2026','p',1);
-    INSERT INTO entries(id,script,ids,created_by,created_at,updated_at) VALUES (1,'han','public','p','2026','2026');`)
+    INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES (1,'public','p','2026','2026');`)
   const insert = raw.prepare("INSERT INTO revisions(entry_id,kind,rev,snapshot,summary,actor,at) VALUES (1,'edit',1,'{}',?,?,'2026')")
   insert.run('by person', 'p')
   insert.run('by agent', 'a')
@@ -96,7 +96,7 @@ test('history lists the changes of agents or of people, and follows an actor tha
 test('a run of quick changes by one writer is one item, and the pages beside a page are reachable', async () => {
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id,name,created_at) VALUES ('p','Person','2026'), ('q','Other','2026');
-    INSERT INTO entries(id,script,ids,created_by,created_at,updated_at) VALUES (1,'han','public','p','2026','2026');`)
+    INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES (1,'public','p','2026','2026');`)
   const insert = raw.prepare("INSERT INTO revisions(entry_id,kind,rev,snapshot,summary,actor,at) VALUES (1,?,1,'{}',?,?,?)")
   const at = (seconds: number) => new Date(Date.UTC(2026, 10, 1) + seconds * 1000).toISOString()
   insert.run('edit', 'alone', 'q', at(0))

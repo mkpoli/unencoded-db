@@ -89,7 +89,7 @@ const baseSighting: SightingFields = {
 }
 
 const entryOf = (claims: EntryFields['claims']): EntryFields => ({
-  script: 'han', script_other: null, description: null, radical: null, strokes: null, claims,
+  description: null, radical: null, strokes: null, claims,
 })
 
 test('lookupKeysOf extracts unique IDS and Unicode code point slugs in order', () => {

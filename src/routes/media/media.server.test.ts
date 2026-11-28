@@ -9,7 +9,7 @@ const orphan = `${'c'.repeat(64)}.jpg`
 
 function seed(raw: Database) {
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
-  raw.exec("INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES (1, 'han', 'p', '2026', '2026'), (2, 'han', 'p', '2026', '2026')")
+  raw.exec("INSERT INTO entries(id, created_by, created_at, updated_at) VALUES (1, 'p', '2026', '2026'), (2, 'p', '2026', '2026')")
   raw.exec("INSERT INTO sightings(id, entry_id, first_entry, place, created_by, created_at, updated_at) VALUES (1, 1, 1, 'book', 'p', '2026', '2026')")
   pictured(raw, 1, image, thumb)
 }

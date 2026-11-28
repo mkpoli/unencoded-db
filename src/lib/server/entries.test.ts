@@ -17,12 +17,12 @@ import { standing } from '$lib/radicals'
 import { decadeOf } from '$lib/dates'
 import { recordCode } from '$lib/code'
 import { readDates, sightingDates } from './date-readings'
-import { type Via, evidenceOrder, addSighting, moveSighting, getSighting, claimedBy, counts, countsStatement, creatorCounts, creatorCountsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, searchProblem, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, searchFound, foundStatement, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { type Via, evidenceOrder, addSighting, moveSighting, getSighting, claimedBy, counts, countsStatement, creatorCounts, creatorCountsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, entryScriptTags, entryScriptTagsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, searchProblem, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, searchFound, foundStatement, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { PAGE, PAGE_SIZES, pageSizeOf } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
 
-const fields = (over: Partial<EntryFields> = {}): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [], ...over })
+const fields = (over: Partial<EntryFields> = {}): EntryFields => ({ description: null, radical: null, strokes: null, claims: [], ...over })
 const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null, links: Partial<Pick<Claim, 'sightings' | 'under'>> = {}): Claim => newClaim(kind, value, data, links)
 const described = (...sequences: string[]) => fields({ claims: sequences.map(sequence => claim('ids', sequence)) })
 const relation = (character: string, relationship: string, difference = '', evidence = ''): Claim => claim('relation', character, { relationship, ...(difference ? { difference } : {}), ...(evidence ? { evidence } : {}) })
@@ -149,7 +149,7 @@ describe('marked works', () => {
     expect(await ids({ within: ['zitools'] })).toEqual([filed, encoded])
     expect(await ids({ without: ['zitools'] })).toEqual([bare])
     expect(await ids({ within: ['zitools'], without: ['unicode'] })).toEqual([filed])
-    expect(await ids({ script: 'han', without: ['zitools', 'yedict', 'glyphwiki', 'mj'] })).toEqual([bare])
+    expect(await ids({ without: ['zitools', 'yedict', 'glyphwiki', 'mj'] })).toEqual([bare])
     expect(await ids({ within: ['zitools'], without: ['zitools'] })).toEqual([])
     expect(await counts(db)).toMatchObject({ 'r:unicode': 1, 'x:unicode': 2, 'r:zitools': 2, 'x:zitools': 1, 'r:glyphwiki': 1, 'x:glyphwiki': 2, 'r:mj': 1, 'x:mj': 2 })
 
@@ -165,8 +165,8 @@ describe('marked works', () => {
   test('a short list is read by its own key, however long the others are', async () => {
     const rare = await createEntry(db, fields({ claims: [newClaim('relation', '哦', { relationship: 'homograph' })] }), seen(), [], who)
     for (let i = 0; i < SEARCH_WINDOW + 10; i++) await createEntry(db, fields(), seen(), [], who)
-    expect(await list(db, { script: 'han', filter: 'homograph', without: ['mj'] })).toEqual({ tiles: [expect.objectContaining({ id: rare })], next: null, partial: false, read: 1 })
-    expect(await list(db, { script: 'han', filter: 'homograph', within: ['mj'] })).toEqual({ tiles: [], next: null, partial: false, read: 0 })
+    expect(await list(db, { filter: 'homograph', without: ['mj'] })).toEqual({ tiles: [expect.objectContaining({ id: rare })], next: null, partial: false, read: 1 })
+    expect(await list(db, { filter: 'homograph', within: ['mj'] })).toEqual({ tiles: [], next: null, partial: false, read: 0 })
   })
 
   test('a work that is not marked names no list', async () => {
@@ -203,7 +203,7 @@ describe('adding a record', () => {
     const ids = await Promise.all(Array.from({ length: 10 }, () => createEntry(db, fields(), seen(), [], who)))
     expect(new Set(ids).size).toBe(10)
     expect((await list(db, {}))!.tiles).toHaveLength(10)
-    expect(await counts(db)).toMatchObject({ all: 10, 's:han': 10 })
+    expect(await counts(db)).toMatchObject({ all: 10 })
     for (const id of ids) expect((await history(db, id))).toHaveLength(2)
   })
 
@@ -254,18 +254,17 @@ describe('adding a record', () => {
       expect(raw.query(`SELECT count(*) AS n FROM ${table}`).get()).toEqual({ n: 0 })
   })
 
-  test('a record lands in the lists of its script, its status and what it lacks', async () => {
-    const id = await createEntry(db, fields({ script: 'nom' }), seen(), [], who)
-    for (const [script, filter] of [[null, null], ['nom', null], [null, 'image'], [null, 'ids'], ['nom', 'source']] as const)
-      expect((await list(db, { script, filter }))!.tiles.map(tile => tile.id)).toEqual([id])
-    expect((await list(db, { script: 'han' }))!.tiles).toEqual([])
-    expect(await counts(db)).toMatchObject({ all: 1, 's:nom': 1, 'n:image': 1 })
+  test('a record lands in the lists of its script tag, its status and what it lacks', async () => {
+    const id = await createEntry(db, fields({ claims: [claim('tag', 'nom')] }), seen(), [], who)
+    for (const [facet, filter] of [[null, null], ['t:nom', null], [null, 'image'], [null, 'ids'], ['t:nom', 'source']] as const)
+      expect((await list(db, { facet, filter }))!.tiles.map(tile => tile.id)).toEqual([id])
+    expect((await list(db, { facet: 't:han' }))!.tiles).toEqual([])
+    expect(await counts(db)).toMatchObject({ all: 1, 'n:image': 1 })
     expect(await counts(db)).not.toHaveProperty('f:unchecked')
   })
 
   test('a filter that does not exist lists nothing', async () => {
     expect(await list(db, { filter: 'nope' })).toBeNull()
-    expect(await list(db, { script: 'nope' })).toBeNull()
   })
 
   test('a tile summarizes its source types and the earliest report year among its sightings', async () => {
@@ -323,8 +322,8 @@ describe('search', () => {
   test('a description search pages through bounded candidates without skipping', async () => {
     const n = SEARCH_WINDOW * 2 + 10
     raw.prepare(`WITH RECURSIVE seq(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM seq WHERE x < ?)
-      INSERT INTO entries(id, script, ids, created_by, created_at, updated_at)
-      SELECT x, 'han', CASE WHEN x IN (1, 2, 300, 520) THEN '⿰木木' ELSE '⿱木木' END, ?, '2026', '2026' FROM seq`).run(n, who.actor)
+      INSERT INTO entries(id, ids, created_by, created_at, updated_at)
+      SELECT x, CASE WHEN x IN (1, 2, 300, 520) THEN '⿰木木' ELSE '⿱木木' END, ?, '2026', '2026' FROM seq`).run(n, who.actor)
     raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) SELECT id, 0, printf('ids%05d', id), 'ids', ids FROM entries")
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'all', id FROM entries")
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'p:' || ids, id FROM entries")
@@ -353,7 +352,7 @@ describe('search', () => {
   test('rare and absent terms scan bounded candidate ranges and continue without skipping', async () => {
     const n = SEARCH_WINDOW * 3 + 20
     raw.prepare(`WITH RECURSIVE seq(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM seq WHERE x < ?)
-      INSERT INTO entries(id, script, created_by, created_at, updated_at) SELECT x, 'han', ?, '2026', '2026' FROM seq`).run(n, who.actor)
+      INSERT INTO entries(id, created_by, created_at, updated_at) SELECT x, ?, '2026', '2026' FROM seq`).run(n, who.actor)
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'all', id FROM entries")
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'w:rare', id FROM entries WHERE id IN (2, 100, 300, 520, 700)")
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'w:other', id FROM entries WHERE id IN (2, 300, 700)")
@@ -434,7 +433,7 @@ describe('the wiki', () => {
     const id = await createEntry(db, fields(), seen(), [], who)
     await editEntry(db, id, 1, fields({ claims: [claim('encoding', 'U+5650', { charset: 'unicode' })] }), who, null)
     expect(raw.query('SELECT status FROM entries WHERE id = ?').get(id)).toEqual({ status: 'encoded' })
-    expect(raw.query("SELECT tag FROM entry_tags WHERE entry_id = ? AND tag LIKE '%f:%' ORDER BY tag").all(id)).toEqual([{ tag: 'f:encoded' }, { tag: 's:han|f:encoded' }])
+    expect(raw.query("SELECT tag FROM entry_tags WHERE entry_id = ? AND tag LIKE '%f:%' ORDER BY tag").all(id)).toEqual([{ tag: 'f:encoded' }])
     expect(await list(db, { filter: 'unchecked' })).toBeNull()
     expect((await list(db, { filter: 'encoded' }))!.tiles).toHaveLength(1)
     expect(await counts(db)).toMatchObject({ 'f:encoded': 1 })
@@ -710,18 +709,18 @@ describe('the wiki', () => {
     }
     raw.exec('PRAGMA recursive_triggers = OFF')
     for (const column of ['id', 'rowid']) {
-      expect(() => raw.run(`INSERT OR REPLACE INTO entries(${column}, script, created_by, created_at, updated_at) VALUES (?, 'han', ?, '2026', '2026')`, [b, who.actor])).toThrow('entries cannot be replaced')
+      expect(() => raw.run(`INSERT OR REPLACE INTO entries(${column}, created_by, created_at, updated_at) VALUES (?, ?, '2026', '2026')`, [b, who.actor])).toThrow('entries cannot be replaced')
     }
     for (const badId of [0, -1]) {
-      expect(() => raw.run("INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES (?, 'han', ?, '2026', '2026')", [badId, who.actor])).toThrow('entry id must be positive')
+      expect(() => raw.run("INSERT INTO entries(id, created_by, created_at, updated_at) VALUES (?, ?, '2026', '2026')", [badId, who.actor])).toThrow('entry id must be positive')
     }
     expect(() => raw.run('UPDATE entries SET merged_into = ? WHERE id = ?', [a, a])).toThrow('a record can only merge into an earlier record')
     expect(() => raw.run('UPDATE entries SET merged_into = ? WHERE id = ?', [b, a])).toThrow('a record can only merge into an earlier record')
-    expect(() => raw.run("INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at) VALUES (10, 'han', 10, ?, '2026', '2026')", [who.actor])).toThrow('a record can only merge into an earlier record')
-    expect(() => raw.run("INSERT INTO entries(script, merged_into, created_by, created_at, updated_at) VALUES ('han', 999, ?, '2026', '2026')", [who.actor])).toThrow('a record can only merge into an earlier record')
+    expect(() => raw.run("INSERT INTO entries(id, merged_into, created_by, created_at, updated_at) VALUES (10, 10, ?, '2026', '2026')", [who.actor])).toThrow('a record can only merge into an earlier record')
+    expect(() => raw.run("INSERT INTO entries(merged_into, created_by, created_at, updated_at) VALUES (999, ?, '2026', '2026')", [who.actor])).toThrow('a record can only merge into an earlier record')
     // Valid inserts with an auto-assigned or unused explicit id and merges into an earlier record succeed.
-    expect(() => raw.run("INSERT INTO entries(script, merged_into, created_by, created_at, updated_at) VALUES ('han', ?, ?, '2026', '2026')", [a, who.actor])).not.toThrow()
-    expect(() => raw.run("INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at) VALUES (20, 'han', ?, ?, '2026', '2026')", [a, who.actor])).not.toThrow()
+    expect(() => raw.run("INSERT INTO entries(merged_into, created_by, created_at, updated_at) VALUES (?, ?, '2026', '2026')", [a, who.actor])).not.toThrow()
+    expect(() => raw.run("INSERT INTO entries(id, merged_into, created_by, created_at, updated_at) VALUES (20, ?, ?, '2026', '2026')", [a, who.actor])).not.toThrow()
     expect((await getEntry(db, a))!.entry.id).toBe(a)
     expect((await getEntry(db, b))!.entry.id).toBe(b)
   })
@@ -1133,7 +1132,7 @@ describe('order', () => {
   const counts = [0, 2, 1, 2, 0, 1, 2]
   const years = ['1935', '980', null, '1935', '2017', null, '1618']
   beforeEach(() => {
-    counts.forEach((n, i) => raw.prepare("INSERT INTO entries(id, script, sightings, first_year, created_by, created_at, updated_at) VALUES(?, 'han', ?, ?, ?, '2026', '2026')").run(i + 1, n, years[i], who.actor))
+    counts.forEach((n, i) => raw.prepare("INSERT INTO entries(id, sightings, first_year, created_by, created_at, updated_at) VALUES(?, ?, ?, ?, '2026', '2026')").run(i + 1, n, years[i], who.actor))
     raw.exec("INSERT INTO entry_tags(tag, entry_id, sightings, year) SELECT 'all', id, sightings, CAST(first_year AS INTEGER) FROM entries")
   })
   const walk = async (order: Order, seed?: number) => {
@@ -1208,7 +1207,7 @@ describe('order', () => {
     expect(counted()).toEqual([{ tag: 'm:薛德炯', n: 1 }, { tag: 'm:陸貫一', n: 2 }])
     expect(await creatorCounts(db)).toEqual([{ name: '陸貫一', n: 2 }, { name: '薛德炯', n: 1 }])
     expect((await list(db, { creator: '陸貫一' }))!.tiles.map(tile => tile.id).sort()).toEqual([id, other])
-    expect((await list(db, { creator: '薛德炯', script: 'han' }))!.tiles.map(tile => tile.id)).toEqual([other])
+    expect((await list(db, { creator: '薛德炯' }))!.tiles.map(tile => tile.id)).toEqual([other])
     expect((await list(db, { creator: '無名氏' }))!.tiles).toEqual([])
     expect(await list(db, { creator: '陸|貫一' })).toBeNull()
     expect((raw.query((countsStatement(db) as unknown as { sql: string }).sql).all() as { tag: string }[]).filter(row => row.tag.startsWith('m:'))).toEqual([])
@@ -1251,7 +1250,7 @@ describe('order', () => {
 // with no scan of a table and no sort.
 describe('query cost', () => {
   const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
-  const shapes: Parameters<typeof listStatement>[1][] = [{}, { script: 'han' }, { filter: 'encoded' }, { filter: 'ids' }, { script: 'han', filter: 'variant' }, { script: 'han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { script: 'han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { query: '艹時', also: ['艹日寺', '蒔'] }, { script: 'han', filter: 'ids', order: 'new', query: '艹時', also: ['艹日寺'] }, { script: 'han', filter: 'ids', query: '亻 word' }, { facet: 't:hakka' }, { facet: 't:IRG' }, { radical: '口' }, { decade: '1930' }, { decade: '1930', order: 'earliest', after: '1935.4' }, { decade: '1930', script: 'han', query: '亻' }, { radical: '儿兄克', script: 'han', filter: 'variant', facet: 't:hakka', query: '亻' }, { radical: '儿兄克', order: 'most' }, { script: 'han', filter: 'variant', facet: 'c:ids-db' }, { facet: 't:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { script: 'han', within: ['unicode'], without: ['zitools', 'mj'] }, { script: 'han', filter: 'variant', facet: 't:hakka', without: ['zitools'], query: '亻' }, ...(['new', 'old', 'fewest', 'earliest', 'latest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'new' || order === 'old' ? '5' : '1.5' }, { order, script: 'han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, script: 'han', within: ['unicode'], query: '亻' }]
+  const shapes: Parameters<typeof listStatement>[1][] = [{}, { facet: 't:han' }, { filter: 'encoded' }, { filter: 'ids' }, { facet: 't:han', filter: 'variant' }, { facet: 't:han', filter: 'source' }, { query: '亻' }, { query: '⿰木木' }, { facet: 't:han', filter: 'ids', query: '⿰木木' }, { query: '亻 木 水 火 土' }, { query: '艹時', also: ['艹日寺', '蒔'] }, { facet: 't:han', filter: 'ids', order: 'new', query: '艹時', also: ['艹日寺'] }, { facet: 't:han', filter: 'ids', query: '亻 word' }, { facet: 't:hakka' }, { facet: 't:IRG' }, { radical: '口' }, { decade: '1930' }, { decade: '1930', order: 'earliest', after: '1935.4' }, { decade: '1930', facet: 't:han', query: '亻' }, { radical: '儿兄克', filter: 'variant', facet: 't:hakka', query: '亻' }, { radical: '儿兄克', order: 'most' }, { filter: 'variant', facet: 'c:ids-db' }, { facet: 't:hakka', query: '亻' }, { facet: 'c:ids-db', query: '⿰木木' }, { without: ['zitools'] }, { facet: 't:han', within: ['unicode'], without: ['zitools', 'mj'] }, { filter: 'variant', facet: 't:hakka', without: ['zitools'], query: '亻' }, ...(['new', 'old', 'fewest', 'earliest', 'latest'] as const).flatMap(order => [{ order }, { order, filter: 'variant', after: order === 'new' || order === 'old' ? '5' : '1.5' }, { order, facet: 't:han', within: ['unicode'], query: '亻' }]), { order: 'random', seed: 7 }, { order: 'random', seed: 7, filter: 'variant', after: '3' }, { order: 'random', seed: 7, facet: 't:han', within: ['unicode'], query: '亻' }]
   for (const shape of shapes) test(`list ${JSON.stringify(shape)}`, () => {
     const statement = listStatement(db, shape) as unknown as { sql: string; values: unknown[] }
     const details = plan(statement.sql, statement.values)
@@ -1436,9 +1435,9 @@ describe('status', () => {
     expect(readEntryFields(form([...unicode, ['status', 'variant']]), []).fields).not.toHaveProperty('status')
   })
 
-  test('an old snapshot that holds a status still reads', () => {
+  test('an old snapshot that holds a status or script still reads', () => {
     const raw = JSON.stringify({ script: 'han', script_other: null, description: null, status: 'doubtful', radical: null, strokes: null, claims: [] })
-    expect(entryFieldsOf(raw)).toEqual({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] })
+    expect(entryFieldsOf(raw)).toEqual({ description: null, radical: null, strokes: null, claims: [] })
   })
 })
 
@@ -1456,31 +1455,16 @@ test('a record repeats the layout of its first description for its tile, through
   expect((await getEntry(db, id))!.claims[0].data).toEqual({ layout })
 })
 
-describe('scripts outside the list', () => {
-  const named = (script: string) => { const form = new FormData(); form.set('script', script); return readEntryFields(form, []).fields }
-
-  test('the form names a script, and only `other` keeps a name', () => {
-    expect(named('漢字')).toMatchObject({ script: 'han', script_other: null })
-    expect(named('方音符號')).toMatchObject({ script: 'other', script_other: '方音符號' })
-    expect(readEntryFields(new FormData(), [], fields({ script: 'other', script_other: '方音符號' })).fields).toMatchObject({ script: 'other', script_other: '方音符號' })
-  })
-
-  test('a revision keeps a name only for `other`', () => {
-    const snapshot = (script: string) => JSON.stringify({ ...fields({ script, script_other: '方音符號' }) })
-    expect(entryFieldsOf(snapshot('han'))).toMatchObject({ script: 'han', script_other: null })
-    expect(entryFieldsOf(snapshot('other'))).toMatchObject({ script: 'other', script_other: '方音符號' })
-  })
-
-  test('the names of visible records are offered once each, in name order, one index seek each', async () => {
-    const ids = []
-    for (const name of ['乙', '甲', '乙', '丙']) ids.push(await createEntry(db, fields({ script: 'other', script_other: name }), seen(), [], who))
-    await createEntry(db, fields(), seen(), [], who)
-    await setHidden(db, { entry: ids[3] }, true, who, null)
-    expect(await customScripts(db)).toEqual(['乙', '甲'].sort())
-    const statement = customScriptsStatement(db) as unknown as { sql: string; values: unknown[] }
+describe('script tags', () => {
+  test('entryScriptTags resolves direct and aliased script tags using claims_by_entry without scans or temp sorts', async () => {
+    const id = await createEntry(db, fields({ claims: [claim('tag', 'hakka'), claim('tag', 'han'), claim('tag', 'bai')] }), seen(), [], who)
+    const scripts = await entryScriptTags(db, id)
+    expect(scripts.map(tag => tag.label)).toEqual(['漢字', '白文'])
+    expect(scripts.map(tag => tag.names.en)).toEqual(['Han', 'Bai'])
+    const statement = entryScriptTagsStatement(db, id) as unknown as { sql: string; values: unknown[] }
     const details = (raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.values as never[])) as { detail: string }[]).map(row => row.detail).join('\n')
-    expect(details).not.toMatch(/TEMP B-TREE|SCAN entries/)
-    expect(details.match(/SEARCH entries USING (COVERING )?INDEX entries_custom_scripts \(script_other>\?\)/g)).toHaveLength(2)
+    expect(details).not.toMatch(/TEMP B-TREE|SCAN (claims|tags|tag_aliases)\b/)
+    expect(details).toContain('claims_by_entry')
   })
 })
 
@@ -1549,7 +1533,7 @@ describe('typed tags and implications', () => {
 
   test('seeded tags carry their types and regional/form implications transitively', async () => {
     const all = await listed()
-    expect(all.find(tag => tag.name === 'nom')).toMatchObject({ type: 'form', implies: ['dialect', '越南'] })
+    expect(all.find(tag => tag.name === 'nom')).toMatchObject({ type: 'script', implies: ['dialect', '越南'] })
     expect(all.find(tag => tag.name === 'kokuji')).toMatchObject({ type: 'form', implies: ['dialect', '日本'] })
     expect(all.find(tag => tag.name === 'ゲバ字')).toMatchObject({ type: 'form', implies: ['日本'] })
     expect(all.find(tag => tag.name === '日本')).toMatchObject({ type: 'region', implies: [] })
@@ -1567,7 +1551,7 @@ describe('typed tags and implications', () => {
 
     // Pure implicationClosure tracks diamond DAG paths cleanly.
     const grouped = arrangeTags(all, [])
-    expect(grouped.map(g => g.type)).toEqual(['region', 'language', 'form', 'domain'])
+    expect(grouped.map(g => g.type)).toEqual(['script', 'region', 'language', 'form', 'domain'])
     const closure = implicationClosure(['nom', 'shinjitai'], all)
     expect(closure.direct).toEqual(['nom', 'shinjitai'])
     expect(closure.implied).toEqual(expect.arrayContaining([
@@ -1747,7 +1731,7 @@ describe('typed tags and implications', () => {
     raw.run('PRAGMA foreign_keys = OFF')
     raw.transaction(() => {
       for (let i = 1000; i < 1000 + MOVE_RECORDS_MAX + 1; i += 1) {
-        raw.run("INSERT INTO entries(id, script, created_by, created_at, updated_at, sightings) VALUES (?, 'han', 'p', 'x', 'x', 1)", [i])
+        raw.run("INSERT INTO entries(id, created_by, created_at, updated_at, sightings) VALUES (?, 'p', 'x', 'x', 1)", [i])
         raw.run("INSERT INTO claims(entry_id, position, key, kind, value, data, sightings, under) VALUES (?, 0, 'tag00001', 'tag', 'H', NULL, '[]', '[]')", [i])
         raw.run("INSERT INTO entry_tags(tag, entry_id, sightings) VALUES ('t:H', ?, 1)", [i])
       }
@@ -1899,29 +1883,29 @@ describe('typed tags and implications', () => {
 
   test('merging files a tag\'s records under another, keeps its name as an alias, and undoes back to the tag it was', async () => {
     await made('布依字', 'general', ['dialect'])
-    await made('布依方塊字', 'general')
+    await made('方塊布依', 'general')
     await made('壯字', 'general', ['布依字'])
     const direct = await createEntry(db, fields({ claims: [claim('tag', '布依字')] }), seen(), [], who)
     const carried = await createEntry(db, fields({ claims: [claim('tag', '壯字')] }), seen(), [], who)
-    const other = await createEntry(db, fields({ claims: [claim('tag', '布依方塊字')] }), seen(), [], who)
+    const other = await createEntry(db, fields({ claims: [claim('tag', '方塊布依')] }), seen(), [], who)
     const before = everything()
     expect(tagsOf(direct)).toEqual(['t:dialect', 't:布依字'])
 
-    expect(await mergeTag(db, await listed(), { name: '布依字', into: '布依方塊字' }, who)).toEqual({ ok: true })
+    expect(await mergeTag(db, await listed(), { name: '布依字', into: '方塊布依' }, who)).toEqual({ ok: true })
     expect(await row('布依字')).toBeUndefined()
-    expect(await row('布依方塊字')).toMatchObject({ implies: ['dialect'], aliases: ['布依字'], n: 3 })
-    expect(await row('壯字')).toMatchObject({ implies: ['布依方塊字'] })
+    expect(await row('方塊布依')).toMatchObject({ implies: ['dialect'], aliases: ['布依字'], n: 3 })
+    expect(await row('壯字')).toMatchObject({ implies: ['方塊布依'] })
     // Claims stay as written; the records are filed under the tag the alias stands for.
     expect((await getEntry(db, direct))!.claims.map(c => c.value)).toEqual(['布依字'])
-    expect(tagsOf(direct)).toEqual(['t:dialect', 't:布依方塊字'])
-    expect(tagsOf(carried)).toEqual(['t:dialect', 't:壯字', 't:布依方塊字'])
-    expect(tagsOf(other)).toEqual(['t:dialect', 't:布依方塊字'])
+    expect(tagsOf(direct)).toEqual(['t:dialect', 't:方塊布依'])
+    expect(tagsOf(carried)).toEqual(['t:dialect', 't:壯字', 't:方塊布依'])
+    expect(tagsOf(other)).toEqual(['t:dialect', 't:方塊布依'])
     expect(countOf('t:布依字')).toBe(0)
     expect(raw.query("SELECT count(*) AS n FROM tag_counts WHERE tag = 't:布依字'").get()).toEqual({ n: 0 })
     // The alias resolves wherever a name is typed or shown, and an edit or refresh files the same way.
-    expect(cleanTag('布依字', await listed())).toBe('布依方塊字')
-    expect(tagLabels(await listed()).get('布依字')).toBe('布依方塊字')
-    expect(implicationClosure(['布依字'], await listed()).all).toEqual(['布依方塊字', 'dialect'])
+    expect(cleanTag('布依字', await listed())).toBe('方塊布依')
+    expect(tagLabels(await listed()).get('布依字')).toBe('方塊布依')
+    expect(implicationClosure(['布依字'], await listed()).all).toEqual(['方塊布依', 'dialect'])
     const merged = filed()
     await refreshAll()
     expect(filed()).toEqual(merged)
@@ -1930,8 +1914,8 @@ describe('typed tags and implications', () => {
     // A name taken by an alias is refused as a label or a new alias; the tag holding aliases stays.
     expect(await renameTag(db, await listed(), { name: '壯字', label: '布依字' }, who)).toEqual({ ok: false, code: 'aliased' })
     expect(await aliasTag(db, await listed(), { name: '壯字', alias: '布依字' }, who)).toEqual({ ok: false, code: 'aliased' })
-    expect(await aliasTag(db, await listed(), { name: '壯字', alias: '布依方塊字' }, who)).toEqual({ ok: false, code: 'exists' })
-    expect(await deleteTag(db, await listed(), { name: '布依方塊字' }, who)).toEqual({ ok: false, code: 'used' })
+    expect(await aliasTag(db, await listed(), { name: '壯字', alias: '方塊布依' }, who)).toEqual({ ok: false, code: 'exists' })
+    expect(await deleteTag(db, await listed(), { name: '方塊布依' }, who)).toEqual({ ok: false, code: 'used' })
 
     // Undo brings the tag back with its implications, and every row as it was.
     expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
@@ -1939,11 +1923,11 @@ describe('typed tags and implications', () => {
     const shape = (rows: unknown[]) => (rows as { name: string; label: string; type: string; group_id: number | null; position: number }[]).map(({ name, label, type, group_id, position }) => ({ name, label, type, group_id, position }))
     expect([shape(undone[0]), undone[1], undone[3], undone[4]]).toEqual([shape(before[0]), before[1], before[3], before[4]])
     expect(await row('布依字')).toMatchObject({ implies: ['dialect'], aliases: [] })
-    expect(await row('布依方塊字')).toMatchObject({ implies: [], aliases: [] })
+    expect(await row('方塊布依')).toMatchObject({ implies: [], aliases: [] })
     expect(await row('壯字')).toMatchObject({ implies: ['布依字'] })
     // Undoing that split merges again.
     expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
-    expect(await row('布依方塊字')).toMatchObject({ aliases: ['布依字'] })
+    expect(await row('方塊布依')).toMatchObject({ aliases: ['布依字'] })
   })
 
   test('a merge refused for any reason changes nothing, refiles records whose implication could not move, and never closes a cycle', async () => {
@@ -2128,7 +2112,7 @@ describe('chronology', () => {
   // Records first seen in 1803, 1813, … 1933, then CHRONICLE_PAGE more from 1950 on, and one with no year.
   const years = [...Array.from({ length: 14 }, (_, i) => 1803 + i * 10), ...Array.from({ length: CHRONICLE_PAGE }, (_, i) => 1950 + Math.floor(i / 3)), null]
   beforeEach(() => {
-    years.forEach((year, i) => raw.prepare("INSERT INTO entries(id, script, first_year, first_year_kind, created_by, created_at, updated_at) VALUES(?, 'han', ?, 'report', ?, '2026', '2026')").run(i + 1, year === null ? null : String(year), who.actor))
+    years.forEach((year, i) => raw.prepare("INSERT INTO entries(id, first_year, first_year_kind, created_by, created_at, updated_at) VALUES(?, ?, 'report', ?, '2026', '2026')").run(i + 1, year === null ? null : String(year), who.actor))
     raw.exec("INSERT INTO entry_tags(tag, entry_id, year) SELECT 'all', id, CAST(first_year AS INTEGER) FROM entries")
     raw.exec("INSERT INTO entry_tags(tag, entry_id, year) SELECT 'y:' || (CAST(first_year AS INTEGER) / 10 * 10), id, CAST(first_year AS INTEGER) FROM entries WHERE first_year IS NOT NULL")
     raw.exec("INSERT INTO tag_counts(tag, n) SELECT tag, count(*) FROM entry_tags GROUP BY tag")
@@ -2379,7 +2363,7 @@ test('parts typed with no structure find the records that spell them another way
   expect(await found({ query: '水', also: ['㇇𰛅'] })).toEqual([strokes])
   expect(await found({ query: '㇇' })).toEqual([strokes])
   // The widest search stays under the number of values one statement may bind.
-  const widest = { script: 'han', filter: 'variant', facet: 't:hakka', radical: '口', decade: '1930', within: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], without: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], query: '㔾七丸儿兔', also: ['兹冃冊凷刀', '叉友另囘堇', '夂奂尒彐擧'] }
+  const widest = { filter: 'variant', facet: 't:hakka', radical: '口', decade: '1930', within: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], without: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], query: '㔾七丸儿兔', also: ['兹冃冊凷刀', '叉友另囘堇', '夂奂尒彐擧'] }
   const bound = (statement: unknown) => (statement as { values: unknown[] }).values.length
   expect(bound(listStatement(db, widest))).toBeLessThanOrEqual(100)
   expect(bound(totalStatement(db, widest, { words: Array(16).fill('p:一') }))).toBeLessThanOrEqual(100)
@@ -2390,20 +2374,20 @@ describe('search total', () => {
     await createEntry(db, described('⿰木木'), seen(), [], who)
     await createEntry(db, described('⿰木水'), seen(), [], who)
     await createEntry(db, described('⿰水水'), seen({ place: 'A temple in Lukang' }), [], who)
-    expect(await searchTotal(db, { script: 'han', query: '木' })).toEqual({ n: 2, floor: false, pool: 3 })
-    expect(await searchTotal(db, { script: 'han', query: '木 水' })).toEqual({ n: 1, floor: false, pool: 3 })
-    expect(await searchTotal(db, { script: 'han', query: '⿰木水' })).toEqual({ n: 1, floor: false, pool: 3 })
-    expect(await searchTotal(db, { script: 'han', query: 'Lukang' })).toEqual({ n: 1, floor: false, pool: 3 })
-    expect(await searchTotal(db, { script: 'han', query: 'absent' })).toEqual({ n: 0, floor: false, pool: 3 })
-    expect(await searchTotal(db, { script: 'han', filter: 'variant', query: '木' })).toEqual({ n: 0, floor: false, pool: 0 })
+    expect(await searchTotal(db, { query: '木' })).toEqual({ n: 2, floor: false, pool: 3 })
+    expect(await searchTotal(db, { query: '木 水' })).toEqual({ n: 1, floor: false, pool: 3 })
+    expect(await searchTotal(db, { query: '⿰木水' })).toEqual({ n: 1, floor: false, pool: 3 })
+    expect(await searchTotal(db, { query: 'Lukang' })).toEqual({ n: 1, floor: false, pool: 3 })
+    expect(await searchTotal(db, { query: 'absent' })).toEqual({ n: 0, floor: false, pool: 3 })
+    expect(await searchTotal(db, { filter: 'variant', query: '木' })).toEqual({ n: 0, floor: false, pool: 0 })
     // A list with nothing to test is no search, and its count is the chip's.
-    expect(await searchTotal(db, { script: 'han' })).toBeNull()
+    expect(await searchTotal(db, {})).toBeNull()
   })
 
   test('past the records it may read, the count is a floor', async () => {
     const n = TOTAL_READ + 5
     raw.prepare(`WITH RECURSIVE seq(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM seq WHERE x < ?)
-      INSERT INTO entries(id, script, created_by, created_at, updated_at) SELECT x, 'han', ?, '2026', '2026' FROM seq`).run(n, who.actor)
+      INSERT INTO entries(id, created_by, created_at, updated_at) SELECT x, ?, '2026', '2026' FROM seq`).run(n, who.actor)
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'all', id FROM entries")
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'w:wide', id FROM entries")
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'w:even', id FROM entries WHERE id % 2 = 0")
@@ -2415,12 +2399,12 @@ describe('search total', () => {
   test('each read is a range of an index', () => {
     const plan = (sql: string, values: unknown[]) => (raw.query(`EXPLAIN QUERY PLAN ${sql}`).all(...(values as never[])) as { detail: string }[]).map(row => row.detail)
     const statements = [
-      totalStatement(db, { script: 'han', query: '亻 木' }, { words: ['w:木', 'p:木'] }),
-      totalStatement(db, { script: 'han', query: 'word 木' }, { words: ['w:word'] }),
-      totalStatement(db, { script: 'han', query: '艹時', also: ['艹日寺', '蒔'] }, { words: ['w:時', 'p:時', 'p:寺', 'p:蒔'] }),
-      totalStatement(db, { script: 'han', filter: 'variant', within: ['unicode'], query: '亻' }, { tag: 'r:unicode' }),
-      totalStatement(db, { script: 'han', query: '⿰木木' }, { words: ['p:⿰木木'] }),
-      totalStatement(db, { script: 'han', query: '⿰木木', also: ['⿱木木', '⿰木水'] }, { words: ['p:⿰木木', 'p:⿱木木', 'p:⿰木水'] }),
+      totalStatement(db, { facet: 't:han', query: '亻 木' }, { words: ['w:木', 'p:木'] }),
+      totalStatement(db, { facet: 't:han', query: 'word 木' }, { words: ['w:word'] }),
+      totalStatement(db, { facet: 't:han', query: '艹時', also: ['艹日寺', '蒔'] }, { words: ['w:時', 'p:時', 'p:寺', 'p:蒔'] }),
+      totalStatement(db, { facet: 't:han', filter: 'variant', within: ['unicode'], query: '亻' }, { tag: 'r:unicode' }),
+      totalStatement(db, { facet: 't:han', query: '⿰木木' }, { words: ['p:⿰木木'] }),
+      totalStatement(db, { facet: 't:han', query: '⿰木木', also: ['⿱木木', '⿰木水'] }, { words: ['p:⿰木木', 'p:⿱木木', 'p:⿰木水'] }),
     ].map(statement => statement as unknown as { sql: string; values: unknown[] })
     for (const { sql, values } of [...statements, { sql: wordSize(1), values: ['w:word'] }, { sql: wordSize(3), values: ['w:艹', 'p:艹', 'p:艸'] }]) {
       const details = plan(sql, values)

@@ -11,7 +11,7 @@ const records: [number, string, string | null][] = [
 function fixture() {
   const { db, raw } = openTestDb()
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('a', 'anon', '2026')")
-  const entry = raw.prepare("INSERT INTO entries(id, script, ids, layout, created_by, created_at, updated_at, hidden_at, merged_into) VALUES (?, 'han', ?, ?, 'a', '2026', '2026', ?, ?)")
+  const entry = raw.prepare("INSERT INTO entries(id, ids, layout, created_by, created_at, updated_at, hidden_at, merged_into) VALUES (?, ?, ?, 'a', '2026', '2026', ?, ?)")
   const claim = raw.prepare("INSERT INTO claims(entry_id, position, key, kind, value) VALUES (?, 0, ?, 'ids', ?)")
   const tag = raw.prepare('INSERT INTO entry_tags(tag, entry_id) VALUES (?, ?)')
   for (const [id, ids, hidden] of records) {
@@ -37,7 +37,7 @@ test('records sharing a part come back, exact ones first, without hidden or merg
 
 test('a record that shares more parts comes before one that shares fewer, after the exact ones', async () => {
   const { event, raw } = fixture()
-  raw.exec("INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES (8, 'han', '⿱亻⿰木木', 'a', '2026', '2026'); INSERT INTO entry_tags(tag, entry_id) VALUES ('p:亻', 8), ('p:木', 8)")
+  raw.exec("INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES (8, '⿱亻⿰木木', 'a', '2026', '2026'); INSERT INTO entry_tags(tag, entry_id) VALUES ('p:亻', 8), ('p:木', 8)")
   expect((await ask(event, q('⿰亻木'))).map(record => record.id)).toEqual([1, 8, 5, 2])
 })
 
@@ -56,7 +56,7 @@ test('a record comes with every description it states, and is exact by any of th
 
 test('each part reads the newest records first', async () => {
   const { event, raw } = fixture()
-  const entry = raw.prepare("INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES (?, 'han', '⿰亥亥', 'a', '2026', '2026')")
+  const entry = raw.prepare("INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES (?, '⿰亥亥', 'a', '2026', '2026')")
   const tag = raw.prepare("INSERT INTO entry_tags(tag, entry_id) VALUES ('p:亥', ?)")
   for (let id = 100; id < 400; id++) { entry.run(id); tag.run(id) }
   const found = await ask(event, q('⿰亥木'))

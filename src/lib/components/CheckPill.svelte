@@ -20,6 +20,7 @@
   .box { display: grid; place-items: center; flex: none; width: 20px; height: 20px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface) }
   .box svg { width: 12px; height: 12px; opacity: 0; transition: opacity .12s ease }
   .text { min-inline-size: 0; overflow-wrap: anywhere }
+  .pill[data-tag-type=script] { --pill-ink: var(--tag-script-ink); --pill-bg: var(--tag-script-bg); --pill-line: var(--tag-script-line) }
   .pill[data-tag-type=region] { --pill-ink: var(--tag-region-ink); --pill-bg: var(--tag-region-bg); --pill-line: var(--tag-region-line) }
   .pill[data-tag-type=language] { --pill-ink: var(--tag-language-ink); --pill-bg: var(--tag-language-bg); --pill-line: var(--tag-language-line) }
   .pill[data-tag-type=form] { --pill-ink: var(--tag-form-ink); --pill-bg: var(--tag-form-bg); --pill-line: var(--tag-form-line) }

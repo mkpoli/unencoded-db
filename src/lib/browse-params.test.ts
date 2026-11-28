@@ -14,7 +14,6 @@ test('browseSearchParams omits empty and default values and preserves active fil
   expect(browseSearchParams({
     query: '   ',
     also: ['⿰木木'],
-    script: '',
     filter: '',
     tag: '',
     decade: '',
@@ -27,7 +26,6 @@ test('browseSearchParams omits empty and default values and preserves active fil
   const full = browseSearchParams({
     query: ' ⿰木木 ',
     also: ['⿰木木', '⿰木木', ''],
-    script: 'han',
     filter: 'encoded',
     tag: 'hakka',
     radical: '木',
@@ -41,7 +39,6 @@ test('browseSearchParams omits empty and default values and preserves active fil
   })
   expect(full.get('q')).toBe('⿰木木')
   expect(full.getAll('also')).toEqual(['⿰木木'])
-  expect(full.get('script')).toBe('han')
   expect(full.get('filter')).toBe('encoded')
   expect(full.get('tag')).toBe('hakka')
   expect(full.get('radical')).toBe('木')
@@ -69,16 +66,17 @@ test('browseSearchParams prefers collection over tag and after over page', () =>
 
 test('browseHref returns bare locale path when no params remain', () => {
   expect(browseHref('/zh-Hant', {})).toBe('/zh-Hant')
-  expect(browseHref('/zh-Hant', { query: '木', script: 'han' })).toBe('/zh-Hant?q=%E6%9C%A8&script=han')
+  expect(browseHref('/zh-Hant', { query: '木', tag: 'han' })).toBe('/zh-Hant?q=%E6%9C%A8&tag=han')
 })
 
-test('cleanBrowseSearch strips empty, default, stale and unknown params and normalizes legacy genre', () => {
+test('cleanBrowseSearch strips empty, default, stale and unknown params and normalizes legacy genre and script', () => {
   expect(cleanBrowseSearch('?q=&script=&filter=&tag=&decade=')).toBe('')
   expect(cleanBrowseSearch('?q=+foo+&script=&filter=encoded&tag=&decade=&sort=most&per=48&page=1&seed=99&unknown=1'))
     .toBe('?q=foo&filter=encoded')
-  expect(cleanBrowseSearch('?genre=hakka&script=han')).toBe('?script=han&tag=hakka')
-  expect(cleanBrowseSearch('?tag=&genre=hakka&script=han')).toBe('?script=han')
-  expect(cleanBrowseSearch('?also=%E2%BF%B0%E6%9C%A8%E6%9C%A8&script=han')).toBe('?script=han')
+  expect(cleanBrowseSearch('?genre=hakka&script=han')).toBe('?tag=hakka')
+  expect(cleanBrowseSearch('?tag=&genre=hakka&script=han')).toBe('')
+  expect(cleanBrowseSearch('?also=%E2%BF%B0%E6%9C%A8%E6%9C%A8&script=han')).toBe('?tag=han')
+  expect(cleanBrowseSearch('?script=other')).toBe('')
   expect(cleanBrowseSearch('?sort=random&seed=12345&page=2')).toBe('?sort=random&seed=12345&page=2')
 })
 
@@ -115,8 +113,8 @@ test('toggleMark toggles a registry chip and clears the opposite side', () => {
 test('BrowseReturnTracker keeps older record tied to its own search across browse A -> record A -> browse B -> Back', () => {
   const tracker = new BrowseReturnTracker()
   // Enter browse A
-  tracker.track({ type: 'enter', fromRoute: null, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '?q=alpha&script=han' })
-  expect(tracker.savedSearch).toBe('?q=alpha&script=han')
+  tracker.track({ type: 'enter', fromRoute: null, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '?q=alpha&tag=han' })
+  expect(tracker.savedSearch).toBe('?q=alpha&tag=han')
   expect(tracker.directFromBrowse).toBe(false)
 
   // Open record A from browse A
@@ -124,11 +122,11 @@ test('BrowseReturnTracker keeps older record tied to its own search across brows
     type: 'link',
     fromRoute: '/[locale]',
     fromLocale: 'zh-Hant',
-    fromSearch: '?q=alpha&script=han',
+    fromSearch: '?q=alpha&tag=han',
     toRoute: '/[locale]/[code=recordCode]',
     toLocale: 'zh-Hant',
   })
-  expect(tracker.savedSearch).toBe('?q=alpha&script=han')
+  expect(tracker.savedSearch).toBe('?q=alpha&tag=han')
   expect(tracker.directFromBrowse).toBe(true)
 
   // Navigate to browse B
@@ -153,7 +151,7 @@ test('BrowseReturnTracker keeps older record tied to its own search across brows
     toRoute: '/[locale]/[code=recordCode]',
     toLocale: 'zh-Hant',
   })
-  expect(tracker.savedSearch).toBe('?q=alpha&script=han')
+  expect(tracker.savedSearch).toBe('?q=alpha&tag=han')
   expect(tracker.directFromBrowse).toBe(true)
 })
 
@@ -184,12 +182,12 @@ test('BrowseReturnTracker handles hashchange, multi-hop history links, and reloa
   // Reload on record hydrates saved search and survives browse B -> Back
   const reloaded = new BrowseReturnTracker()
   reloaded.track({ type: 'enter', fromRoute: null, toRoute: '/[locale]/[code=recordCode]', toLocale: 'en' })
-  reloaded.hydrate('?q=wood&script=han', null)
-  expect(reloaded.savedSearch).toBe('?q=wood&script=han')
+  reloaded.hydrate('?q=wood&tag=han', null)
+  expect(reloaded.savedSearch).toBe('?q=wood&tag=han')
   expect(reloaded.directFromBrowse).toBe(false)
   reloaded.track({ type: 'link', fromRoute: '/[locale]/[code=recordCode]', toRoute: '/[locale]', toLocale: 'en', toSearch: '?q=other' })
   reloaded.track({ type: 'popstate', delta: -1, fromRoute: '/[locale]', fromLocale: 'en', fromSearch: '?q=other', toRoute: '/[locale]/[code=recordCode]', toLocale: 'en' })
-  expect(reloaded.savedSearch).toBe('?q=wood&script=han')
+  expect(reloaded.savedSearch).toBe('?q=wood&tag=han')
   expect(reloaded.directFromBrowse).toBe(false)
 })
 

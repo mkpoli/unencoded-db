@@ -7,7 +7,7 @@ import { authorKeys, nameKey, nameLabel, sourceKeys, sourceNameKey } from '../na
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
-import { CITES_MAX, closenessOf, closenessRank, CONTEXTS, datesOriginal, datingOriginal, isCiteKind, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
+import { CITES_MAX, closenessOf, closenessRank, CONTEXTS, datesOriginal, datingOriginal, isCiteKind, NEEDS, sourceKind, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
 import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
@@ -34,7 +34,7 @@ import { datedYear, prepareDates, readDates, sightingDates, type DateBook } from
 import { hashHex } from './image'
 import { ORDER, PAGE, PAGE_SIZES, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
 
-export type EntryFields = { script: string; script_other: string | null; description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
+export type EntryFields = { description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
 // A source as its citation fields. A sighting's `vias` list them from the one nearest the cited work outward.
 export type Citation = Record<typeof CITATION_FIELDS[number], string | null>
 // A link in a sighting's chain: the source, the words of it this sighting quotes, and pictures of the source
@@ -55,7 +55,7 @@ export type Entry = Omit<EntryFields, 'claims'> & { status: Status | null; id: n
 export type Sighting = Omit<SightingFields, 'vias' | 'cites'> & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; vias: (Via & { id: number })[]; cites: ResolvedCite[]; cited_by: InboundCite[]; media: StoredImage[]; hidden_at: string | null; removed_by: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string; by_agent?: string | null; by_model?: string | null }
 
 // What an entry has one of. What it has several of is in `claims`.
-export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical', 'strokes'] as const
+export const ENTRY_FIELDS = ['description', 'radical', 'strokes'] as const
 // The fields a record may take from a duplicate when it has none of its own.
 const FILLED_FIELDS = ['description', 'radical', 'strokes'] as const
 // A sighting's citation is its source; the other fields are the sighting's own. Its `vias` are the sources
@@ -246,14 +246,12 @@ const oneOf = (value: string | null, allowed: readonly string[]) => (value && al
 const now = () => new Date().toISOString()
 
 export function readEntryFields(form: FormData, tags: readonly Pick<Tag, 'name' | 'label'>[], base?: Partial<EntryFields>): { fields: EntryFields; error: ClaimError | null } {
-  const named = form.has('script') ? resolveScript(String(form.get('script'))) : { script: base?.script ?? 'han', script_other: base?.script_other ?? null }
   const strokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
   const field = (name: 'description' | 'radical', max: number) => form.has(name) ? text(form, name, max) : base?.[name] ?? null
   const read = readClaims(form, tags, base?.claims)
   return {
     error: read.error,
     fields: {
-      ...named,
       description: field('description', 20000),
       radical: field('radical', 20),
       strokes: form.has('strokes') ? (Number.isInteger(strokes) && strokes >= 0 && strokes < 200 ? strokes : null) : base?.strokes ?? null,
@@ -338,10 +336,10 @@ export function parseMarks(raw: string | null | undefined): string[] {
   } catch { return [] }
 }
 
-type TagInput = Pick<Entry, 'script' | 'status' | 'description' | 'script_other'>
+type TagInput = Pick<Entry, 'status' | 'description'>
 // A record's tag rows (`t:`) are written by `tagRows` from the tags and implications as its batch finds
 // them, and are left out here.
-export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key' | 'radical' | 'first_year'>, hasSource: boolean, claims: readonly Claim[] = []) {
+export function facetTags(entry: Pick<Entry, 'status' | 'ids' | 'cover_key' | 'radical' | 'first_year'>, hasSource: boolean, claims: readonly Claim[] = []) {
   const filters = entry.status ? [`f:${entry.status}`] : []
   if (!entry.cover_key) filters.push('n:image')
   if (!entry.ids) filters.push('n:ids')
@@ -360,14 +358,14 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   const filed = [...pathsOf(filing?.path ?? []).map(path => `b:${path}`), ...(filing?.stated ? [`b!${filing.stated}`] : [])]
   // A record with a year is listed under its decade.
   const decade = entry.first_year === null ? [] : [`y:${decadeOf(Number(entry.first_year))}`]
-  return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks, ...filed, ...decade]
+  return ['all', ...filters, ...own, ...marks, ...filed, ...decade]
 }
 
 const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'document', 'relation', 'ivd', 'tag', 'creator']
 function wordTags(entry: TagInput, claims: readonly Claim[], sightings: SightingFields[]) {
   const words = new Set<string>()
   const add = (value: unknown) => { if (typeof value === 'string') for (const term of terms(value)) words.add(term) }
-  for (const field of ['description', 'script_other'] as const) add(entry[field])
+  add(entry.description)
   for (const claim of claims) if (WORD_KINDS.includes(claim.kind)) { add(claim.value); add(claim.data?.difference); add(claim.data?.evidence) }
   // Compact document numbers without a space (e.g. IRGN2850) find the normalized form (IRG N2850).
   for (const claim of claims) if (claim.kind === 'document') add(claim.value.replace(/\s+/g, ''))
@@ -1010,12 +1008,12 @@ async function writeSighting(db: D1Database, id: number, baseRev: number, sent: 
 export function entryFieldsOf(raw: string): EntryFields | null {
   try {
     const value = JSON.parse(raw)
-    if (!value || typeof value !== 'object' || Array.isArray(value) || !isScript(value.script)) return null
-    for (const field of ['script_other', 'description', 'radical'] as const) if (typeof value[field] !== 'string' && value[field] != null) return null
+    if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray(value.claims)) return null
+    for (const field of ['description', 'radical'] as const) if (typeof value[field] !== 'string' && value[field] != null) return null
     if (value.strokes != null && (!Number.isInteger(value.strokes) || value.strokes < 0 || value.strokes >= 200)) return null
-    const claims = parseClaims(value.claims ?? [])
+    const claims = parseClaims(value.claims)
     if (!claims) return null
-    return { script: value.script, script_other: value.script === 'other' ? value.script_other ?? null : null, description: value.description ?? null, radical: value.radical ?? null, strokes: value.strokes ?? null, claims }
+    return { description: value.description ?? null, radical: value.radical ?? null, strokes: value.strokes ?? null, claims }
   } catch { return null }
 }
 
@@ -1570,14 +1568,14 @@ export async function mediaVisible(db: D1Database, key: string) {
     UNION ALL SELECT 1 FROM sighting_via_media x INDEXED BY sighting_via_media_by_image ${live} AND x.image_key = ?1 UNION ALL SELECT 1 FROM sighting_via_media x INDEXED BY sighting_via_media_by_thumb ${live} AND x.thumb_key = ?1 LIMIT 1`).bind(key).first())
 }
 
-export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; creator?: string | null; radical?: string | null; decade?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; also?: readonly string[]; order?: Order; seed?: number | null; after?: string | null; limit?: number }
+export type Listing = { filter?: string | null; facet?: string | null; creator?: string | null; radical?: string | null; decade?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; also?: readonly string[]; order?: Order; seed?: number | null; after?: string | null; limit?: number }
 export const SEARCH_WINDOW = 256
 
-// The one key a script and a filter name, or null for a filter that is not one.
-export function listTag(script?: string | null, filter?: string | null) {
+// The one key a filter names, or null for a filter that is not one.
+export function listTag(filter?: string | null) {
   const f = !filter ? null : (STATUSES as readonly string[]).includes(filter) ? `f:${filter}` : (NEEDS as readonly string[]).includes(filter as Need) ? `n:${filter}` : undefined
-  if (f === undefined || (script && !isScript(script))) return null
-  return script && f ? `s:${script}|${f}` : script ? `s:${script}` : f ?? 'all'
+  if (f === undefined) return null
+  return f ?? 'all'
 }
 
 // A collection (`c:`) or a tag (`t:`), as the key it is listed under.
@@ -1684,8 +1682,8 @@ export const alsoSearch = (query: string, values: readonly string[] = []) => exa
 
 // The keys every row of a listing holds and the words it is searched for. Each word is the rows any of which
 // holds it; `spelt` are the other spellings of a query of parts, each the rows of its parts. Null names a listing that is not one.
-function listPlan({ script, filter, facet, creator, radical, decade, within, without, query, also }: Listing) {
-  const base = listTag(script, filter), own = facetTag(facet), maker = creatorTag(creator), filed = radicalTag(radical), period = decadeTag(decade), marks = markTags(within, without)
+function listPlan({ filter, facet, creator, radical, decade, within, without, query, also }: Listing) {
+  const base = listTag(filter), own = facetTag(facet), maker = creatorTag(creator), filed = radicalTag(radical), period = decadeTag(decade), marks = markTags(within, without)
   if (!base || own === undefined || maker === undefined || filed === undefined || period === undefined || !marks) return null
   if (searchProblem(query ?? '')) return null
   const { structures, words } = readQuery(query ?? '')
@@ -2439,8 +2437,6 @@ export async function exportPage(db: D1Database, after: number, limit: number, s
 
 export type IndexEntry = {
   id: number
-  script: string
-  script_other: string | null
   ids: string | null
   cover_key: string | null
   status: string | null
@@ -2455,7 +2451,7 @@ export type IndexEntry = {
 /** One page of live entries and their claims without evidence rows, for lightweight index consumers. */
 export async function exportIndexPage(db: D1Database, after: number, limit: number) {
   const { results: entries } = await db.prepare(
-    `SELECT id, script, script_other, ids, cover_key, status, description, radical, strokes, first_year, sightings
+    `SELECT id, ids, cover_key, status, description, radical, strokes, first_year, sightings
      FROM entries INDEXED BY entries_live_export
      WHERE id > ? AND merged_into IS NULL AND hidden_at IS NULL
      ORDER BY id LIMIT ?`,
@@ -2476,19 +2472,23 @@ export async function exportIndexPage(db: D1Database, after: number, limit: numb
   return { entries: page, next: entries.length > limit ? page.at(-1)!.id : null }
 }
 
-export const CUSTOM_SCRIPTS_MAX = 100
-// Each name is one seek in `entries_custom_scripts` for the least name after the one before, so the list
-// reads at most CUSTOM_SCRIPTS_MAX index entries however many records share a name.
-const CUSTOM = `script = 'other' AND script_other IS NOT NULL AND merged_into IS NULL AND hidden_at IS NULL`
-export const customScriptsStatement = (db: D1Database) => db.prepare(`WITH RECURSIVE names(name, n) AS (
-  SELECT (SELECT MIN(script_other) FROM entries WHERE ${CUSTOM}), 1
-  UNION ALL
-  SELECT (SELECT MIN(script_other) FROM entries WHERE ${CUSTOM} AND script_other > names.name), n + 1 FROM names WHERE name IS NOT NULL AND n < ?
-) SELECT name FROM names WHERE name IS NOT NULL`).bind(CUSTOM_SCRIPTS_MAX)
+/** The script tags a record carries, in the order stated, for labels such as social cards. */
+export const entryScriptTagsStatement = (db: D1Database, id: number) => db.prepare(
+  `SELECT t.label, t.names
+   FROM claims c INDEXED BY claims_by_entry
+   JOIN tags t ON t.name = COALESCE((SELECT a.tag FROM tag_aliases a WHERE a.alias = c.value), c.value)
+   WHERE c.entry_id = ? AND c.kind = 'tag' AND t.type = 'script'
+   ORDER BY c.position LIMIT 4`,
+).bind(id)
 
-/** The names visible records give scripts outside the list. */
-export async function customScripts(db: D1Database) {
-  return (await customScriptsStatement(db).all<{ name: string }>()).results.map(row => row.name)
+export async function entryScriptTags(db: D1Database, id: number) {
+  const { results } = await entryScriptTagsStatement(db, id).all<{ label: string; names: string }>()
+  return results.map(({ label, names }) => {
+    try {
+      const parsed: unknown = JSON.parse(names || '{}')
+      return { label, names: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, string> : {} }
+    } catch { return { label, names: {} } }
+  })
 }
 
 export const STEMMA_HOPS_MAX = 4

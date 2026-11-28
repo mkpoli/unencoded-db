@@ -3,7 +3,6 @@
   import CharacterFields from '$lib/components/CharacterFields.svelte'
   import CheckPill from '$lib/components/CheckPill.svelte'
   import IdentityFields from '$lib/components/IdentityFields.svelte'
-  import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import Seo from '$lib/components/Seo.svelte'
   import SightingCard from '$lib/components/SightingCard.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
@@ -39,7 +38,6 @@
       <section class="panel">
         <CharacterFields values={descriptions} {layout} bind:primary exclude={data.id} placed={id => href(`/${recordCode(data.id)}/sighting/${data.sighting.id}/move?to=${id}`)} onfill={facts => filled = facts}>
           <div class="sheet">
-            <ScriptPicker value={form ? form.values.script : data.script} other={form ? form.values.script_other : data.script_other} />
             <IdentityFields claims={form?.values.claims ?? []} radical={form?.values.radical ?? null} strokes={form?.values.strokes ?? null} fill={filled} ids={primary} />
           </div>
         </CharacterFields>

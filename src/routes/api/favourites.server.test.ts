@@ -10,9 +10,9 @@ import { load as favouritesPageLoad } from '../[locale]/favourites/+page.server'
 function setup() {
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p1', 'Person', '2026');
-    INSERT INTO entries(id, script, ids, sightings, created_by, created_at, updated_at) VALUES
-      (1, 'han', '⿰木木', 1, 'p1', '2026', '2026'),
-      (2, 'han', '⿰火火', 2, 'p1', '2026', '2026');`)
+    INSERT INTO entries(id, ids, sightings, created_by, created_at, updated_at) VALUES
+      (1, '⿰木木', 1, 'p1', '2026', '2026'),
+      (2, '⿰火火', 2, 'p1', '2026', '2026');`)
   const jar = new Map<string, string>()
   const cookies = {
     get: (k: string) => jar.get(k),

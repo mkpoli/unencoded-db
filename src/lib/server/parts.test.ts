@@ -9,7 +9,7 @@ import { load as partsIndexLoad } from '../../routes/[locale]/parts/+page.server
 import { GET as functionsApi } from '../../routes/api/parts/functions/+server'
 
 const who = { actor: 'p1', ip: null }
-const fields = (claims: Claim[] = []): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims })
+const fields = (claims: Claim[] = []): EntryFields => ({ description: null, radical: null, strokes: null, claims })
 const seen = (): SightingFields => ({ place: 'A lexicon', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null })
 
 function open() {

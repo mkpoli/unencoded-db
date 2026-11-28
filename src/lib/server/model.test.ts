@@ -10,7 +10,7 @@ import { openTestDb } from './testdb'
 
 const migration = (name: string) => readFileSync(join(import.meta.dir, '../../../migrations', name), 'utf8')
 const who = { actor: 'p1', ip: null }
-const fields = (claims: Claim[] = []): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims })
+const fields = (claims: Claim[] = []): EntryFields => ({ description: null, radical: null, strokes: null, claims })
 const seen = (extra: Partial<SightingFields> = {}): SightingFields => ({ place: 'a shop sign', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...extra })
 const image = (name: string, box: string | null = null): StoredImage => ({ image_key: `${name}.jpg`, image_type: 'image/jpeg', image_w: 10, image_h: 10, thumb_key: `${name}-t.jpg`, box })
 const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null, links: Partial<Pick<Claim, 'sightings' | 'under'>> = {}): Claim => newClaim(kind, value, data, links)
@@ -32,9 +32,9 @@ describe('claims', () => {
     expect(found!.claims).toEqual(claims)
     expect((await claimedBy(db, 'ids', '⿰山东')).map(row => row.id)).toEqual([id])
     expect((await claimedBy(db, 'encoding', 'U+5D20')).map(row => row.id)).toEqual([id])
-    for (const facet of ['t:hakka', 't:dialect', 't:IRG']) expect((await list(db, { script: 'han', facet }))!.tiles.map(tile => tile.id)).toEqual([id])
-    expect((await list(db, { script: 'han', facet: 't:music' }))!.tiles).toEqual([])
-    expect((await list(db, { script: 'han', query: '⿰山东' }))!.tiles.map(tile => tile.id)).toEqual([id])
+    for (const facet of ['t:hakka', 't:dialect', 't:IRG']) expect((await list(db, { facet }))!.tiles.map(tile => tile.id)).toEqual([id])
+    expect((await list(db, { facet: 't:music' }))!.tiles).toEqual([])
+    expect((await list(db, { query: '⿰山东' }))!.tiles.map(tile => tile.id)).toEqual([id])
   })
 
   test('an edit replaces the claims, a revert brings them back, and the journal holds both', async () => {
@@ -46,7 +46,7 @@ describe('claims', () => {
     const first = await db.prepare("SELECT id FROM revisions WHERE entry_id = ? AND kind = 'create'").bind(id).first<{ id: number }>()
     expect(await revertEntry(db, id, first!.id, who)).toEqual({ ok: true, rev: 3 })
     expect((await getEntry(db, id))!.claims).toEqual([tung])
-    expect((await list(db, { script: 'han', query: 'dong' }))!.tiles).toEqual([])
+    expect((await list(db, { query: 'dong' }))!.tiles).toEqual([])
   })
 
   test('a claim rests only on a sighting of its own record', async () => {
@@ -433,7 +433,7 @@ describe('pictures', () => {
     const { db } = open()
     const id = await createEntry(db, fields(), seen({ report_date: '2026-11-07', original_date: '1850', types: '["mention"]' }), [], who)
     await addSighting(db, id, seen({ report_date: '1700', types: '["reading"]' }), [], who)
-    const tile = (await list(db, { script: 'han' }))!.tiles[0]
+    const tile = (await list(db, {}))!.tiles[0]
     expect([tile.sightings, tile.types, tile.firstYear, tile.firstYearKind]).toEqual([2, ['mention', 'reading'], '1700', 'report'])
   })
 })
@@ -503,7 +503,7 @@ describe('search by an encoded character', () => {
     const { db } = open()
     const id = await createEntry(db, fields([claim('ids', '⿳吅工吅'), claim('encoding', 'U+5650', { charset: 'unicode' })]), seen(), [], who)
     await createEntry(db, fields([claim('ids', '⿰山東'), claim('encoding', 'A140', { charset: 'big5' })]), seen(), [], who)
-    expect((await list(db, { script: 'han', query: '噐' }))!.tiles.map(tile => tile.id)).toEqual([id])
+    expect((await list(db, { query: '噐' }))!.tiles.map(tile => tile.id)).toEqual([id])
   })
 })
 

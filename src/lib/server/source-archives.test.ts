@@ -5,7 +5,7 @@ import { createPerson } from './people'
 import { archivesOfSources, editSourceArchive, sourceArchiveChanges, sourceArchives } from './source-archives'
 import { openTestDb } from './testdb'
 
-const fields: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] }
+const fields: EntryFields = { description: null, radical: null, strokes: null, claims: [] }
 const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: '甲', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
 const copy = 'https://web.archive.org/web/20240101000000/https://example.org/post/1'
 

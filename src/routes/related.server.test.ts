@@ -19,7 +19,7 @@ function formWithRows(count: number, character = '木', relationship = 'variant'
 
 function setup() {
   const { db, raw } = openTestDb()
-  raw.exec("INSERT INTO people(id,name,created_at) VALUES('p','Person','2026'); INSERT INTO entries(id,script,created_by,created_at,updated_at) VALUES(1,'han','p','2026','2026')")
+  raw.exec("INSERT INTO people(id,name,created_at) VALUES('p','Person','2026'); INSERT INTO entries(id,created_by,created_at,updated_at) VALUES(1,'p','2026','2026')")
   const event = (form: FormData) => ({ request: { formData: async () => form }, url: new URL('https://example.test/en'), params: { locale: 'en', code: 'R+0001' }, locals: {}, platform: { env: { DB: db, MEDIA: {} } }, getClientAddress: () => '127.0.0.1' }) as any
   const mismatched = formWithRows(1); mismatched.append('related_evidence', 'extra source')
   const cases = [formWithRows(1, '   '), formWithRows(51), formWithRows(1, '𠀀'.repeat(41)), formWithRows(1, '木', 'invented'), mismatched]
