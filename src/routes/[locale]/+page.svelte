@@ -6,7 +6,7 @@
   import Seo from '$lib/components/Seo.svelte'
   import Tile from '$lib/components/Tile.svelte'
   import SearchSuggestions from '$lib/components/SearchSuggestions.svelte'
-  import { COLLECTIONS, arrangeTags, localized, tagDepths, tagParents } from '$lib/tags'
+  import { COLLECTIONS, arrangeTags, localized, shownNote, tagDepths, tagParents } from '$lib/tags'
   import { MARKED } from '$lib/registries'
   import { ORDER, PAGE, PAGE_SIZES, SORTS, pageSteps } from '$lib/order'
   import { STATUSES, NEEDS } from '$lib/scripts'
@@ -454,7 +454,7 @@
     {:else}
       <div class="field"><label for="tag">{t('field.tags')}</label><select class="input" class:active={Boolean(tag)} id="tag" name="tag" bind:value={tag} onchange={() => applyFilters({ noScroll: true, keepFocus: true })}>
         <option value="">{t('browse.all')}</option>
-        {#each tagSections as section (section.type)}{#each section.shelves as shelf (shelf.group?.id ?? 0)}<optgroup label={shelf.group ? `${t(`tagType.${section.type}`)} › ${shelf.group.label}` : t(`tagType.${section.type}`)}>{#each shelf.tags as item (item.name)}<option value={item.name}>{tagIndent(item.name)}{item.label} ({item.n})</option>{/each}</optgroup>{/each}{/each}
+        {#each tagSections as section (section.type)}{#each section.shelves as shelf (shelf.group?.id ?? 0)}<optgroup label={shelf.group ? `${t(`tagType.${section.type}`)} › ${shelf.group.label}` : t(`tagType.${section.type}`)}>{#each shelf.tags as item (item.name)}<option value={item.name} title={shownNote(item, locale()) || undefined}>{tagIndent(item.name)}{item.label} ({item.n})</option>{/each}</optgroup>{/each}{/each}
       </select></div>
     {/if}
     {#if makers.length}

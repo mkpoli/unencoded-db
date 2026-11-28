@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { arrangeTags, tagDepths, tagParents, type Tag, type TagGroup } from './tags'
 
-const tag = (name: string, implies: string[] = [], extra: Partial<Tag> = {}): Tag => ({ name, label: name, type: 'script', position: 0, rev: 1, n: 0, implies, group: null, aliases: [], names: {}, ...extra })
+const tag = (name: string, implies: string[] = [], extra: Partial<Tag> = {}): Tag => ({ name, label: name, type: 'script', position: 0, rev: 1, n: 0, implies, group: null, aliases: [], names: {}, notes: {}, ...extra })
 
 test('a tag stands under the tag of its own type it implies, at any depth', () => {
   const tags = [tag('方塊苗文'), tag('板塘', ['方塊苗文']), tag('古丈', ['方塊苗文']), tag('板塘甲', ['板塘']), tag('板塘甲一', ['板塘甲'])]

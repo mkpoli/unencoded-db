@@ -811,6 +811,8 @@
   "tags.change.alias": "다른 이름 추가",
   "tags.change.unalias": "다른 이름 삭제",
   "error.tagAliased": "이미 어떤 태그의 다른 이름입니다.",
+  "tags.notes": "정의",
+  "tags.change.note": "정의 설정",
   "tags.names": "언어별 이름",
   "tags.change.name": "이름 설정",
   "tags.groupChange.name": "중분류 이름 설정",

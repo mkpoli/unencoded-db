@@ -2,12 +2,12 @@
   // One choice among several that can be taken together: a native checkbox drawn as a pill.
   import type { TagType } from '$lib/tags'
 
-  let { name, value, label, checked = false, strong = false, implied = false, tagType, onchange }: {
-    name?: string; value: string; label: string; checked?: boolean; strong?: boolean; implied?: boolean; tagType?: TagType; onchange?: (checked: boolean) => void
+  let { name, value, label, checked = false, strong = false, implied = false, tagType, title, onchange }: {
+    name?: string; value: string; label: string; checked?: boolean; strong?: boolean; implied?: boolean; tagType?: TagType; title?: string; onchange?: (checked: boolean) => void
   } = $props()
 </script>
 
-<label class="pill" class:strong class:implied data-tag-type={tagType}>
+<label class="pill" class:strong class:implied data-tag-type={tagType} title={title || undefined}>
   <input type="checkbox" {name} {value} {checked} onchange={event => onchange?.(event.currentTarget.checked)} />
   <span class="box" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 6.4 4.6 9 10.2 2.8" /></svg></span><span class="text">{label}</span>
 </label>
