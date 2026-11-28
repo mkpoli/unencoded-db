@@ -115,10 +115,11 @@
               {#each data.lineage.cites as peer (peer.id)}
                 <li class="peer-row">
                   <a class="text-link" href={href(`/source/${peer.id}`)}>{sourceName(peer, t).text}</a>
-                  <a class="badge peer-count" href={href(`/sources/graph?from=${source.id}&to=${peer.id}`)}>{t(peer.shared === 1 ? 'source.record' : 'source.records', { n: peer.shared })}</a>
+                  <a class="badge peer-count" href={href(`/sources/graph?citing=${source.id}&cited=${peer.id}`)}>{t(peer.shared === 1 ? 'source.record' : 'source.records', { n: peer.shared })}</a>
                 </li>
               {/each}
             </ul>
+            {#if data.lineage.hasMoreCites}<a class="text-link small" href={href(`/sources/graph?source=${source.id}`)}>{t('sourceGraph.more')} →</a>{/if}
           </div>
         {/if}
         {#if data.lineage.citedBy.length}
@@ -128,10 +129,11 @@
               {#each data.lineage.citedBy as peer (peer.id)}
                 <li class="peer-row">
                   <a class="text-link" href={href(`/source/${peer.id}`)}>{sourceName(peer, t).text}</a>
-                  <a class="badge peer-count" href={href(`/sources/graph?from=${peer.id}&to=${source.id}`)}>{t(peer.shared === 1 ? 'source.record' : 'source.records', { n: peer.shared })}</a>
+                  <a class="badge peer-count" href={href(`/sources/graph?citing=${peer.id}&cited=${source.id}`)}>{t(peer.shared === 1 ? 'source.record' : 'source.records', { n: peer.shared })}</a>
                 </li>
               {/each}
             </ul>
+            {#if data.lineage.hasMoreCitedBy}<a class="text-link small" href={href(`/sources/graph?source=${source.id}`)}>{t('sourceGraph.more')} →</a>{/if}
           </div>
         {/if}
       </div>

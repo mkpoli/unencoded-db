@@ -75,3 +75,31 @@ test('layoutSourceGraph breaks mutual-citation cycles deterministically by year 
   expect(layout.edges.find(edge => edge.backEdge)!.from).toBe(20)
   expect(layout.edges.find(edge => edge.backEdge)!.to).toBe(10)
 })
+
+test('layoutSourceGraph routes skip-column arcs below taller intermediate columns', () => {
+  const graph: SourceGraphData = {
+    focusId: null,
+    truncated: false,
+    nodes: [
+      makeNode({ id: 1, title: 'Root', year: 1500 }),
+      makeNode({ id: 2, title: 'Mid A', year: 1600 }),
+      makeNode({ id: 3, title: 'Mid B', year: 1610 }),
+      makeNode({ id: 4, title: 'Mid C', year: 1620 }),
+      makeNode({ id: 5, title: 'Leaf', year: 1700 }),
+    ],
+    edges: [
+      { from: 1, to: 2, records: 1, quotes: 1, edition: 0, derived: 0 },
+      { from: 1, to: 3, records: 1, quotes: 1, edition: 0, derived: 0 },
+      { from: 1, to: 4, records: 1, quotes: 1, edition: 0, derived: 0 },
+      { from: 2, to: 5, records: 1, quotes: 1, edition: 0, derived: 0 },
+      { from: 3, to: 5, records: 1, quotes: 1, edition: 0, derived: 0 },
+      { from: 4, to: 5, records: 1, quotes: 1, edition: 0, derived: 0 },
+      { from: 1, to: 5, records: 2, quotes: 2, edition: 0, derived: 0 },
+    ],
+  }
+  const layout = layoutSourceGraph(graph, 'full')
+  const midBottom = Math.max(...layout.units.filter(u => u.col === 1).map(u => u.y + u.height))
+  const skip = layout.edges.find(edge => edge.from === 1 && edge.to === 5)!
+  expect(skip.labelY).toBeGreaterThan(midBottom)
+  expect(layout.height).toBeGreaterThan(skip.labelY)
+})

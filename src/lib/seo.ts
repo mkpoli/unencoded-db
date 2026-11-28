@@ -7,7 +7,7 @@ const LIST_PARAMS: Record<string, readonly string[]> = {
   '': ['q', 'also', 'script', 'filter', 'genre', 'collection', 'tag', 'creator', 'radical', 'decade', 'in', 'out', 'sort', 'seed', 'after', 'page', 'per'],
   '/chronology': ['at', 'before', 'from'],
   '/sources': ['sort', 'after'],
-  '/sources/graph': ['source', 'from', 'to'],
+  '/sources/graph': ['source', 'citing', 'cited'],
 }
 
 export function isPublicPage(path: string): boolean {

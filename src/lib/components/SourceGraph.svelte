@@ -60,7 +60,7 @@
   }
 
   function pairHref(citingId: number, citedId: number): string {
-    return href(`/sources/graph?from=${citingId}&to=${citedId}`)
+    return href(`/sources/graph?citing=${citingId}&cited=${citedId}`)
   }
 </script>
 

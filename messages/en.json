@@ -874,7 +874,7 @@
   "sourceGraph.region": "Work-to-work quotation graph",
   "sourceGraph.legend": "Quotation graph legend",
   "sourceGraph.legendQuotes": "Quotes or edition",
-  "sourceGraph.legendCount": "Shared records (click to inspect)",
+  "sourceGraph.legendCount": "Shared records",
   "sourceGraph.works": "{count} works",
   "sourceGraph.links": "{count} links",
   "sourceGraph.truncated": "Showing up to {edges} links ({nodes} works, {hops} hops). Focus a work to explore further.",
@@ -885,9 +885,7 @@
   "sourceGraph.focusTitle": "Focus quotation graph on {name}",
   "sourceGraph.focusCited": "Focus quoted work",
   "sourceGraph.clearPair": "Close",
-  "sourceGraph.pairAria": "{citing} cites {cited} in {count} records",
-  "sourceGraph.pairCount": "{count} citations",
-  "sourceGraph.pairMore": "{count}+ citations",
+  "sourceGraph.pairAria": "{citing} links to {cited} in {count} records",
   "sourceGraph.pairEmpty": "No visible citations recorded between these two works.",
   "sourceGraph.pairs": "Quotation pairs",
   "sourceGraph.empty": "No work-to-work quotations recorded yet.",
@@ -895,5 +893,7 @@
   "sourceGraph.lineage": "Quotation lineage",
   "sourceGraph.full": "Full graph",
   "sourceGraph.quotesWorks": "Quotes older works",
-  "sourceGraph.quotedByWorks": "Quoted by later works"
+  "sourceGraph.quotedByWorks": "Quoted by later works",
+  "sourceGraph.showingFirst": "First {count} shown",
+  "sourceGraph.more": "More"
 }

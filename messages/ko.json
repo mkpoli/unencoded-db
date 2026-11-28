@@ -874,7 +874,7 @@
   "sourceGraph.region": "문헌 간 인용 계통도",
   "sourceGraph.legend": "인용 계통도 범례",
   "sourceGraph.legendQuotes": "인용 · 판본",
-  "sourceGraph.legendCount": "공통 기록 수(클릭해 확인)",
+  "sourceGraph.legendCount": "공통 기록 수",
   "sourceGraph.works": "문헌 {count}건",
   "sourceGraph.links": "연결 {count}건",
   "sourceGraph.truncated": "최대 {edges}건의 연결({nodes}개 문헌 · {hops}단계)까지 표시합니다. 특정 문헌을 중심으로 열면 더 살펴볼 수 있습니다.",
@@ -885,9 +885,7 @@
   "sourceGraph.focusTitle": "{name} 중심으로 인용 계통도 보기",
   "sourceGraph.focusCited": "인용된 문헌 중심 보기",
   "sourceGraph.clearPair": "닫기",
-  "sourceGraph.pairAria": "{citing}이(가) {cited}을(를) 인용({count}건)",
-  "sourceGraph.pairCount": "인용 {count}건",
-  "sourceGraph.pairMore": "인용 {count}건 이상",
+  "sourceGraph.pairAria": "{citing}에서 {cited}로 연결({count}건)",
   "sourceGraph.pairEmpty": "두 문헌 사이에 표시할 인용 기록이 없습니다.",
   "sourceGraph.pairs": "인용 관계 목록",
   "sourceGraph.empty": "아직 기록된 문헌 간 인용 관계가 없습니다.",
@@ -895,5 +893,7 @@
   "sourceGraph.lineage": "인용 계통",
   "sourceGraph.full": "전체 계통도",
   "sourceGraph.quotesWorks": "인용하는 선행 문헌",
-  "sourceGraph.quotedByWorks": "이 문헌을 인용하는 후행 문헌"
+  "sourceGraph.quotedByWorks": "이 문헌을 인용하는 후행 문헌",
+  "sourceGraph.showingFirst": "앞 {count}건 표시",
+  "sourceGraph.more": "더 보기"
 }

@@ -49,7 +49,15 @@
           <a class="text-link" href={href(`/source/${data.pair.cited.id}`)}>{citedName}</a>
         </h2>
         <div class="row badges">
-          <span class="badge">{data.pair.hasMore ? t('sourceGraph.pairMore', { count: data.limits.pair }) : t('sourceGraph.pairCount', { count: data.pair.items.length })}</span>
+          {#if data.pair.summary}
+            <span class="badge">{t(data.pair.summary.records === 1 ? 'source.record' : 'source.records', { n: data.pair.summary.records })}</span>
+            {#if data.pair.summary.quotes > 0}<span class="badge">{t('cite.kind.quotes')} · {data.pair.summary.quotes}</span>{/if}
+            {#if data.pair.summary.edition > 0}<span class="badge">{t('cite.kind.edition')} · {data.pair.summary.edition}</span>{/if}
+            {#if data.pair.summary.derived > 0}<span class="badge">{t('cite.kind.derived')} · {data.pair.summary.derived}</span>{/if}
+          {/if}
+          {#if data.pair.hasMore}
+            <span class="badge">{t('sourceGraph.showingFirst', { count: data.limits.pair })}</span>
+          {/if}
           <a class="text-link small" href={href(`/sources/graph?source=${data.pair.cited.id}`)}>{t('sourceGraph.focusCited')}</a>
           <a class="text-link small" href={href('/sources/graph')}>{t('sourceGraph.clearPair')}</a>
         </div>
@@ -126,7 +134,7 @@
                 {#if edge.quotes > 0}<span class="badge">{t('cite.kind.quotes')} · {edge.quotes}</span>{/if}
                 {#if edge.edition > 0}<span class="badge">{t('cite.kind.edition')} · {edge.edition}</span>{/if}
                 {#if edge.derived > 0}<span class="badge">{t('cite.kind.derived')} · {edge.derived}</span>{/if}
-                <a class="button small" href={href(`/sources/graph?from=${newer.id}&to=${older.id}`)}>
+                <a class="button small" href={href(`/sources/graph?citing=${newer.id}&cited=${older.id}`)}>
                   {t(edge.records === 1 ? 'source.record' : 'source.records', { n: edge.records })} →
                 </a>
               </div>

@@ -264,6 +264,11 @@ export function layoutSourceGraph(graph: SourceGraphData, mode: 'strip' | 'full'
     }
   }
 
+  // Compute bottom of each column so skip-column arcs route cleanly below any taller intermediate column.
+  const colBottom = columns.map((col, c) =>
+    col.length ? Math.max(...col.map(id => { const u = placedById.get(id)!; return u.y + u.height })) : m.padY + m.tileH,
+  )
+
   const routes: SourceGraphRoute[] = validEdges.map((edge, idx) => {
     const from = placedById.get(edge.from)!
     const to = placedById.get(edge.to)!
@@ -291,11 +296,15 @@ export function layoutSourceGraph(graph: SourceGraphData, mode: 'strip' | 'full'
       const outIdx = outPeers.indexOf(key)
       const inFrac = inPeers.length > 1 ? 0.18 + (inIdx / (inPeers.length - 1)) * 0.34 : 0.25
       const outFrac = outPeers.length > 1 ? 0.52 + (outIdx / (outPeers.length - 1)) * 0.3 : 0.75
-      const laneY = Math.max(from.y + from.height, to.y + to.height) + 22 + inIdx * 18
+      let clearance = Math.max(from.y + from.height, to.y + to.height)
+      for (let c = from.col + 1; c < to.col; c++) clearance = Math.max(clearance, colBottom[c])
       const sx1 = from.x + from.width * outFrac
       const sy1 = from.y + from.height
       const sx2 = to.x + to.width * inFrac
       const sy2 = to.y + to.height
+      // Solve 0.25 * avg(sy1, sy2) + 0.75 * laneY = targetY so the curve apex actually clears every intermediate column.
+      const targetY = clearance + 20 + inIdx * 22
+      const laneY = Math.round((targetY - 0.125 * (sy1 + sy2)) / 0.75)
       const mid = cubicMidpoint(sx1, sy1, sx1, laneY, sx2, laneY, sx2, sy2)
       height = Math.max(height, mid.y + m.padY + 14)
       return { ...edge, key, derivedOnly, backEdge: false, strokeWidth, path: `M ${sx1} ${sy1} C ${sx1} ${laneY}, ${sx2} ${laneY}, ${sx2} ${sy2}`, labelX: mid.x, labelY: mid.y }

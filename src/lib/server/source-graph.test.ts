@@ -126,8 +126,9 @@ test('source_citations tracks create, edit, hide, remove, restore, merge, unmerg
   ])
   expect(lineage.graph?.edges).toHaveLength(3)
 
-  // Check pair sightings (康熙字典 -> 字彙補)
+  // Check pair sightings (康熙字典 -> 字彙補) + exact summary count
   const pair = (await sourcePairSightings(db, idKangxi, idZihui))!
+  expect(pair.summary).toEqual({ records: 2, quotes: 2, edition: 0, derived: 0 })
   expect(pair.items).toHaveLength(2)
   expect(pair.items.map(i => i.quote)).toEqual(['《字彙補》音東', '《字彙補》音西'])
   expect(pair.hasMore).toBe(false)
@@ -173,6 +174,22 @@ test('source_citations tracks create, edit, hide, remove, restore, merge, unmerg
   expect(edited.ok).toBe(true)
   expect(raw.query('SELECT id FROM sources WHERE id = ?').get(idLongkan)).toBeNull()
   expect((await sourceLineage(db, idKangxi)).cites.map(p => p.id)).toEqual([idZihui])
+
+  // Change citing sighting's source from 康熙字典 -> 新康熙字典 while keeping cites: old edge drops, new edge appears
+  const k1b = (await getEntry(db, e1))!.sightings.find(s => s.id === sKangxi1!)!
+  const swapped = await editSighting(db, k1b.id, k1b.rev, makeSighting({
+    title: '新康熙字典',
+    report_date: '1717',
+    place: '新康熙字典 頁10',
+    cites: [makeCite({ sighting: sZihui1.id, quote: '《字彙補》音東' })],
+  }), null, who, 'swap citing source', e1)
+  expect(swapped.ok).toBe(true)
+  const idNewKangxi = srcId('新康熙字典')
+  expect((await sourceLineage(db, idKangxi)).cites).toEqual([])
+  expect((await sourceLineage(db, idNewKangxi)).cites.map(p => [p.id, p.shared])).toEqual([[idZihui, 1]])
+  // Downstream 漢語大字典 cited sKangxi1, so its cited source updated automatically to 新康熙字典 too
+  expect((await sourceLineage(db, idNewKangxi)).citedBy.map(p => p.id)).toEqual([idHanyu])
+  expect((await sourceLineage(db, idKangxi)).citedBy).toEqual([])
   expect(raw.query('PRAGMA foreign_key_check').all()).toEqual([])
 })
 
@@ -251,7 +268,7 @@ test('sourceGraph walks 2 hops, sets truncated only when hop 3 exists, and passe
   await sourceLineage(traced, w2)
   await sourcePairSightings(traced, w2, w1)
   const writePlans: { sql: string; detail: string }[] = []
-  for (const stmt of sourceCitationsRefreshStatements(traced, e, [w1]) as unknown as { sql: string; values: unknown[] }[]) {
+  for (const stmt of sourceCitationsRefreshStatements(traced, e) as unknown as { sql: string; values: unknown[] }[]) {
     const detail = (raw.query(`EXPLAIN QUERY PLAN ${stmt.sql}`).all(...(stmt.values as never[])) as { detail: string }[]).map(r => r.detail).join('\n')
     writePlans.push({ sql: stmt.sql, detail })
   }
@@ -265,21 +282,29 @@ test('sourceGraph walks 2 hops, sets truncated only when hop 3 exists, and passe
       }
     }
   }
-  expect(writePlans).toHaveLength(2)
+  // Pair query must read directly from source_citation_edges_by_pair (never scanning sightings_by_source).
+  const pairPlan = plans.find(p => p.sql.includes('source_citation_edges_by_pair'))!
+  expect(pairPlan.detail).toContain('source_citation_edges_by_pair')
+  expect(pairPlan.detail).not.toContain('sightings_by_source')
+
+  expect(writePlans).toHaveLength(5)
   for (const { sql, detail } of writePlans) {
+    expect(detail).not.toContain('sightings_by_source')
     for (const line of detail.split('\n')) {
-      if (/\bSCAN\b/.test(line) && !/USING (?:COVERING )?INDEX|VIRTUAL TABLE|touched\b|SUBQUERY/.test(line)) {
+      if (/\bSCAN\b/.test(line) && !/USING (?:COVERING )?INDEX|VIRTUAL TABLE|CONSTANT ROW|affected\b|old_pairs\b|new_pairs\b|p\b|SUBQUERY/.test(line)) {
         throw new Error(`Unindexed table SCAN in write query:\n${sql}\nPlan:\n${detail}`)
       }
     }
   }
 
-  // Index-drop proof: dropping source_citations_by_records or source_citations_by_citing breaks pinned queries.
-  for (const idx of ['source_citations_by_records', 'source_citations_by_citing', 'source_citations_by_cited']) {
+  // Index-drop proof: dropping any of our 4 serving indexes breaks pinned queries.
+  for (const idx of ['source_citations_by_records', 'source_citations_by_citing', 'source_citations_by_cited', 'source_citation_edges_by_pair']) {
     const broken = await setup()
     broken.raw.exec(`DROP INDEX ${idx}`)
     if (idx === 'source_citations_by_records') {
       await expect(sourceGraph(broken.db, null)).rejects.toThrow()
+    } else if (idx === 'source_citation_edges_by_pair') {
+      await expect(sourcePairSightings(broken.db, 2, 1)).rejects.toThrow()
     } else {
       await expect(sourceLineage(broken.db, 1)).rejects.toThrow()
     }

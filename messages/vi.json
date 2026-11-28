@@ -874,7 +874,7 @@
   "sourceGraph.region": "Sơ đồ trích dẫn giữa các tài liệu",
   "sourceGraph.legend": "Chú giải sơ đồ trích dẫn",
   "sourceGraph.legendQuotes": "Trích dẫn hoặc bản in",
-  "sourceGraph.legendCount": "Số mục chung (nhấp để xem)",
+  "sourceGraph.legendCount": "Số mục chung",
   "sourceGraph.works": "{count} tài liệu",
   "sourceGraph.links": "{count} liên kết",
   "sourceGraph.truncated": "Hiển thị tối đa {edges} liên kết ({nodes} tài liệu, {hops} bước). Chọn trọng tâm một tài liệu để xem thêm.",
@@ -885,9 +885,7 @@
   "sourceGraph.focusTitle": "Đặt {name} làm trọng tâm sơ đồ trích dẫn",
   "sourceGraph.focusCited": "Trọng tâm nguồn được trích",
   "sourceGraph.clearPair": "Đóng",
-  "sourceGraph.pairAria": "{citing} trích dẫn {cited} trong {count} mục",
-  "sourceGraph.pairCount": "{count} trích dẫn",
-  "sourceGraph.pairMore": "{count}+ trích dẫn",
+  "sourceGraph.pairAria": "{citing} liên kết tới {cited} trong {count} mục",
   "sourceGraph.pairEmpty": "Chưa có trích dẫn hiển thị nào giữa hai tài liệu này.",
   "sourceGraph.pairs": "Các cặp trích dẫn",
   "sourceGraph.empty": "Chưa có liên kết trích dẫn giữa các tài liệu.",
@@ -895,5 +893,7 @@
   "sourceGraph.lineage": "Hệ thống trích dẫn",
   "sourceGraph.full": "Sơ đồ đầy đủ",
   "sourceGraph.quotesWorks": "Trích dẫn tài liệu trước đó",
-  "sourceGraph.quotedByWorks": "Được các tài liệu sau trích dẫn"
+  "sourceGraph.quotedByWorks": "Được các tài liệu sau trích dẫn",
+  "sourceGraph.showingFirst": "Hiển thị {count} mục đầu",
+  "sourceGraph.more": "Xem thêm"
 }

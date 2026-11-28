@@ -9,27 +9,29 @@ import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async (event) => {
   const sourceParam = event.url.searchParams.get('source')
-  const fromParam = event.url.searchParams.get('from')
-  const toParam = event.url.searchParams.get('to')
+  const citingParam = event.url.searchParams.get('citing')
+  const citedParam = event.url.searchParams.get('cited')
 
-  if ((fromParam !== null) !== (toParam !== null)) error(404)
+  if ((citingParam !== null) !== (citedParam !== null)) error(404)
+  if (sourceParam !== null && citingParam !== null) error(404)
+
   const focusParamId = sourceParam === null ? null : positiveId(sourceParam)
   if (sourceParam !== null && !focusParamId) error(404)
-  const fromId = fromParam === null ? null : positiveId(fromParam)
-  const toId = toParam === null ? null : positiveId(toParam)
-  if ((fromParam !== null && !fromId) || (toParam !== null && !toId)) error(404)
-  if (fromId !== null && toId !== null && fromId === toId) error(404)
+  const citingId = citingParam === null ? null : positiveId(citingParam)
+  const citedId = citedParam === null ? null : positiveId(citedParam)
+  if ((citingParam !== null && !citingId) || (citedParam !== null && !citedId)) error(404)
+  if (citingId !== null && citedId !== null && citingId === citedId) error(404)
 
   const db = env(event).DB
-  const effectiveFocus = focusParamId ?? fromId
+  const effectiveFocus = focusParamId ?? citingId
 
   const [graphFound, pair] = await Promise.all([
     sourceGraph(db, effectiveFocus),
-    fromId !== null && toId !== null ? sourcePairSightings(db, fromId, toId) : Promise.resolve(null),
+    citingId !== null && citedId !== null ? sourcePairSightings(db, citingId, citedId) : Promise.resolve(null),
   ])
 
   if (!graphFound) error(404)
-  if (fromId !== null && toId !== null && !pair) error(404)
+  if (citingId !== null && citedId !== null && !pair) error(404)
 
   const pairDates = pair ? await readDates(db, [pair.citing.report_date, pair.cited.report_date, ...pair.items.map(item => item.original_date)]) : new Map()
   const dates = new Map([...graphFound.dates, ...pairDates])

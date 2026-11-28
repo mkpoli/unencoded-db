@@ -874,7 +874,7 @@
   "sourceGraph.region": "文献间转引谱系图",
   "sourceGraph.legend": "转引谱系图图例",
   "sourceGraph.legendQuotes": "引用或版本",
-  "sourceGraph.legendCount": "共有条目数（点击查看）",
+  "sourceGraph.legendCount": "共有条目数",
   "sourceGraph.works": "{count}部文献",
   "sourceGraph.links": "{count}条关系",
   "sourceGraph.truncated": "最多显示{edges}条关系（{nodes}部文献、{hops}层）。聚焦某部文献可继续查看。",
@@ -885,9 +885,7 @@
   "sourceGraph.focusTitle": "以《{name}》为中心查看转引谱系",
   "sourceGraph.focusCited": "聚焦被引文献",
   "sourceGraph.clearPair": "关闭",
-  "sourceGraph.pairAria": "{citing}引自{cited}（共{count}条记录）",
-  "sourceGraph.pairCount": "{count}处转引",
-  "sourceGraph.pairMore": "{count}处以上转引",
+  "sourceGraph.pairAria": "{citing}关联至{cited}（共{count}条记录）",
   "sourceGraph.pairEmpty": "这两部文献之间暂无可显示的转引记录。",
   "sourceGraph.pairs": "文献转引列表",
   "sourceGraph.empty": "尚无文献间转引记录。",
@@ -895,5 +893,7 @@
   "sourceGraph.lineage": "文献转引关系",
   "sourceGraph.full": "完整谱系图",
   "sourceGraph.quotesWorks": "引用的较早文献",
-  "sourceGraph.quotedByWorks": "被较晚文献引用"
+  "sourceGraph.quotedByWorks": "被较晚文献引用",
+  "sourceGraph.showingFirst": "仅显示前{count}处",
+  "sourceGraph.more": "查看更多"
 }
