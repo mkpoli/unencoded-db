@@ -93,3 +93,7 @@ test('a placeholder in the query keeps it from the same and probable tiers', () 
   }
   expect(tier('⿰木〇', '⿰木〇')?.tier).toBe('same')
 })
+
+test('equivalent stroke-level remainder splits are similar', () => {
+  expect(tierOf('⿱亠⿰丿小', real.all.get('亦')!, real)).toEqual({ tier: 'similar', score: 0.92 })
+})

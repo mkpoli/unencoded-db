@@ -29,7 +29,12 @@ export const SIMILAR_MIN = 0.6
 /** The score from which a description is made of the typed parts and no other. */
 export const MADE_OF = 0.95
 const REARRANGED = MADE_OF
+const STROKE_SPLIT = 0.92
 const ONE_OFF = 0.9
+const STROKE_EQUIVALENTS: Record<string, string> = {
+  '㇒': '丿', '㇐': '一', '㇑': '丨', '㇚': '亅', '㇔': '丶', '㇏': '丶', '乀': '丶', '乁': '丶', '㇄': '乚', '㇆': '𠃌', '㇠': '乙',
+}
+const normStroke = (stroke: string) => STROKE_EQUIVALENTS[stroke] ?? stroke
 
 const idOrder = (a: string, b: string) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0) || (a < b ? -1 : a > b ? 1 : 0)
 const groupsOf = new Map<string, string[]>(Object.entries(groupData.groups as Record<string, string[]>).map(([part, ids]) => [part, [...ids].sort(idOrder)]))
@@ -64,14 +69,50 @@ export const hasOverlay = (tree: Tree): boolean => typeof tree !== 'string' && (
 export const hasStroke = (tree: Tree): boolean => typeof tree === 'string' ? isStroke(tree) : tree.parts.some(hasStroke)
 // What a description expands to, or null when it is not made of whole components.
 const wholes = new Map<string, Tree | null>()
+const strokeCache = new Map<string, string[]>()
 /** Forgets the expansions kept for the descriptions read so far; they are read again when needed. */
-export const forgetExpansions = () => wholes.clear()
+export const forgetExpansions = () => { wholes.clear(); strokeCache.clear() }
 function wholeTree(description: string) {
   if (wholes.has(description)) return wholes.get(description)!
   const tree = treeOf(description)
   const whole = tree && !hasOverlay(tree) && !hasStroke(tree) ? tree : null
   wholes.set(description, whole)
   return whole
+}
+
+function strokeLeaves(leaf: string, data: Data, depth = 3): string[] {
+  if (depth === 3) {
+    const cached = strokeCache.get(leaf)
+    if (cached) return cached
+  }
+  if (depth <= 0 || isStroke(leaf)) return [normStroke(leaf)]
+  const described = data.described.get(leaf)
+  if (!described) return [normStroke(leaf)]
+  const tree = treeOf(described)
+  if (!tree) return [normStroke(leaf)]
+  const result = leavesOf(tree).flatMap(part => strokeLeaves(part, data, depth - 1))
+  if (depth === 3) strokeCache.set(leaf, result)
+  return result
+}
+
+function sameRemainderStrokes(q: Prepared, c: Prepared, data: Data): boolean {
+  let shared = 0
+  const qRem: string[] = [], cRem: string[] = []
+  const cLeft = new Map(c.counts)
+  for (let i = 0; i < q.keys.length; i++) {
+    const k = q.keys[i], n = cLeft.get(k) ?? 0
+    if (n > 0) { cLeft.set(k, n - 1); shared++ }
+    else qRem.push(q.leaves[i])
+  }
+  if (shared < 2 || !qRem.length || qRem.length > 4) return false
+  const qLeft = new Map(q.counts)
+  for (let i = 0; i < c.keys.length; i++) {
+    const k = c.keys[i], n = qLeft.get(k) ?? 0
+    if (n > 0) qLeft.set(k, n - 1)
+    else cRem.push(c.leaves[i])
+  }
+  if (!cRem.length || cRem.length > 4) return false
+  return sameCounts(qRem.flatMap(leaf => strokeLeaves(leaf, data)), cRem.flatMap(leaf => strokeLeaves(leaf, data)))
 }
 
 function expandTree(tree: Tree, data: Data, budget: number): Tree {
@@ -156,12 +197,13 @@ const RANK: Record<Tier, number> = { same: 0, probable: 1, similar: 2 }
 /** The nearer of two hits: the better tier, then the higher score. */
 export const nearer = (a: Hit | null, b: Hit | null) => !b || (a && (RANK[a.tier] - RANK[b.tier] || b.score - a.score) <= 0) ? a : b
 
-function tierOne(q: Prepared, c: Prepared | null, text: string): Hit | null {
+function tierOne(q: Prepared, c: Prepared | null, text: string, data: Data): Hit | null {
   const open = !q.placeholder
   if (open && q.text === text) return { tier: 'same', score: 1 }
   if (!c) return null
   if (open && (q.normal === c.normal || q.grouped === c.grouped)) return { tier: 'probable', score: 1 }
   if (sameCounts(q.leaves, c.leaves)) return { tier: 'similar', score: REARRANGED }
+  if (sameRemainderStrokes(q, c, data)) return { tier: 'similar', score: STROKE_SPLIT }
   const structured = q.shape !== '*' && q.shape === c.shape
   if (structured && q.keys.length === c.keys.length && q.keys.filter((key, i) => key !== c.keys[i]).length === 1) return { tier: 'similar', score: ONE_OFF }
   const score = jaccard(q.counts, c.counts)
@@ -191,7 +233,7 @@ export function tierOf(query: string | Prepared, candidate: string | Prepared | 
   let best: Hit | null = null
   for (const own of Array.isArray(candidate) ? candidate : [candidate]) {
     const c = typeof own === 'string' ? prepare(own, data) : own
-    best = nearer(best, tierOne(q, c, typeof own === 'string' ? plain(own) : own.text))
+    best = nearer(best, tierOne(q, c, typeof own === 'string' ? plain(own) : own.text, data))
   }
   return best
 }
