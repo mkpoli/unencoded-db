@@ -131,9 +131,9 @@ declare module 'han-compose' {
     store(): unknown
   }
   export const dataUrls: Record<string, string>
-  export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'regular' | 'fangsong' | 'pen-writing' }): Promise<Drawing>
+  export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'woodblock' | 'regular' | 'fangsong' | 'pen-writing' }): Promise<Drawing>
   /** The composer in a Web Worker, reading han-compose's export at `base`. */
-  export function composerPreview(options: { base: string; separate?: boolean; fontStyle?: 'sans' | 'serif' | 'regular' | 'fangsong' | 'pen-writing'; loaders?: Record<string, string> }): ComposerPreview
+  export function composerPreview(options: { base: string; separate?: boolean; fontStyle?: 'sans' | 'serif' | 'woodblock' | 'regular' | 'fangsong' | 'pen-writing'; loaders?: Record<string, string> }): ComposerPreview
 }
 
 declare module 'han-compose/variants' {
@@ -168,14 +168,14 @@ declare module 'han-compose/source' {
 }
 
 declare module 'han-compose/local' {
-  export function onlyBundled(sequence: string, separate?: boolean, unicode?: boolean, fontStyle?: 'sans' | 'serif' | 'regular' | 'fangsong' | 'pen-writing'): boolean
+  export function onlyBundled(sequence: string, separate?: boolean, unicode?: boolean, fontStyle?: 'sans' | 'serif' | 'woodblock' | 'regular' | 'fangsong' | 'pen-writing'): boolean
 }
 
 declare module 'han-compose/loader' {
   import type { ComposerSource, Drawing, SketchLeaf } from 'han-compose'
-  export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'regular' | 'fangsong' | 'pen-writing' }): Promise<Drawing>
+  export function compose(source: ComposerSource, sequence: string, options?: { separate?: boolean; fontStyle?: 'sans' | 'serif' | 'woodblock' | 'regular' | 'fangsong' | 'pen-writing' }): Promise<Drawing>
   /** Where each leaf of `sequence` goes before it is drawn. */
-  export function sketch(source: ComposerSource, sequence: string, options?: { fontStyle?: 'sans' | 'serif' | 'regular' | 'fangsong' | 'pen-writing' }): Promise<SketchLeaf[]>
+  export function sketch(source: ComposerSource, sequence: string, options?: { fontStyle?: 'sans' | 'serif' | 'woodblock' | 'regular' | 'fangsong' | 'pen-writing' }): Promise<SketchLeaf[]>
 }
 
 declare module 'han-compose/document-view' {

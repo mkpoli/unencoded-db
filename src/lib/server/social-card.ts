@@ -25,7 +25,7 @@ const STYLE_BUDGET_MS = 5000
 // The evidence lies on the backdrop's paper as a sheet, leaving the cloth and paper around it in view.
 const PANEL_X = 776, PANEL_Y = 38, PANEL_WIDTH = 382, PANEL_HEIGHT = 554
 const COLUMN_END = 700
-const PLATE = 124, PLATE_GAP = 5, PLATE_Y = 390
+const PLATE = 104, PLATE_GAP = 4, PLATE_Y = 390
 
 async function renderer() {
   initialized ??= import('@resvg/resvg-wasm/index_bg.wasm').then(wasm => initWasm(wasm.default)).catch(error => {
@@ -260,7 +260,7 @@ function plates(glyphs: CardArt['glyphs']) {
 type Card = { key: string; label: string; title: string; keep?: readonly string[]; detail?: string | null; caption?: string; art?: () => Promise<CardArt>; size?: number }
 
 // Bumped when the card's layout or backdrop changes, so cards drawn before it are not served again.
-const CARD_DESIGN = 1
+const CARD_DESIGN = 2
 const CARD_MAX_AGE = 86400
 
 // Browsers and crawlers keep a card for a day, but no shared cache may: a shared cache in front of the Worker
