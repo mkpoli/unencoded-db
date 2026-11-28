@@ -1875,9 +1875,9 @@ describe('typed tags and implications', () => {
     const created = (raw.query("SELECT id FROM tag_changes WHERE subject = 'group' AND name = ? AND kind = 'create'").get(String(made2.id)) as { id: number }).id
     expect(await undoTagChange(db, await state(), created, who)).toEqual({ ok: false, code: 'conflict' })
 
-    // The tiers read back in order: groups first, then the tags in none.
+    // The tiers read back in order: groups first, then the tags in none; a tag that implies one of its type stands under it, on its shelf.
     const form = arrangeTags(await listed(), (await state()).groups).find(section => section.type === 'form')!
-    expect(form.shelves.map(shelf => [shelf.group?.label ?? null, shelf.tags.length])).toEqual([['簡化字', 3], [null, form.shelves.at(-1)!.tags.length]])
+    expect(form.shelves.map(shelf => [shelf.group?.label ?? null, shelf.tags.length])).toEqual([['簡化字', 7], [null, form.shelves.at(-1)!.tags.length]])
     expect(arrangeTags(await listed(), (await state()).groups, { every: true }).find(section => section.type === 'form')!.shelves.map(shelf => shelf.group?.label ?? null)).toEqual(['俗字', '簡化字', null])
   })
 

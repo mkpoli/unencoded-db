@@ -6,13 +6,16 @@
     TAG_LENGTH_MAX,
     TAG_TYPES,
     arrangeTags,
+    byTagOrder,
     canImply,
     implicationClosure,
     localized,
     sectionTags,
     tagErrorKey,
     tagLabels,
+    tagDepths,
     tagLookup,
+    tagParents,
     type Tag,
     type TagGroup,
     type TagType,
@@ -48,6 +51,13 @@
   const labels = $derived(tagLabels(shownTags))
   const groupById = $derived(new Map(shownGroups.map(group => [group.id, group])))
   const sections = $derived(arrangeTags(shownTags, shownGroups, { every: true }))
+  // Where each tag stands in the tree: under the tag of its own type it implies (`tagParents`).
+  const parents = $derived(tagParents(tags))
+  const depths = $derived(tagDepths(tags, parents))
+  const isAncestor = (name: string, of: string) => {
+    for (let at = parents.get(of), steps = 0; at !== undefined && steps < 64; at = parents.get(at), steps++) if (at === name) return true
+    return false
+  }
 
   // A place as a select's value: a type alone, or a group by its id after `#`.
   const placeValue = (type: TagType, group: number | null) => (group === null ? type : `#${group}`)
@@ -153,11 +163,32 @@
   const moveTag = (tag: Tag, place: { type?: TagType; group: number | null; index?: number }) => mutate({ action: 'move', name: tag.name, ...place, rev: tag.rev })
   const moveGroup = (group: TagGroup, place: { type: TagType; index: number }) => mutate({ action: 'group.move', id: group.id, ...place, rev: group.rev })
 
+  // A tag is put under another by implying it, and taken from under its parent by dropping that
+  // implication, so its records are filed under every tag above it.
+  async function setParent(name: string, next: string | null) {
+    const before = parents.get(name) ?? null
+    if (next === before) return true
+    if (next && !(await mutate({ action: 'imply', name, target: next, rev: own.get(name)?.rev }))) return false
+    const now = own.get(name)
+    if (before && now?.implies.includes(before)) return mutate({ action: 'unimply', name, target: before, rev: now.rev })
+    return true
+  }
+  // The tags a tag can be put under: of its own type, and not under it already.
+  const parentChoices = (tag: Tag) => shownTags.filter(other => other.type === tag.type && other.name !== tag.name && !isAncestor(tag.name, other.name)).sort(byTagOrder)
+
+  // A place among a shelf's rows, as the server counts it: before the given row in the tags of that
+  // type and group, or at the end.
+  function shelfIndex(type: TagType, group: number | null, before: string | null, moving: string) {
+    const shelf = tags.filter(tag => tag.type === type && tag.group === group && tag.name !== moving).sort(byTagOrder)
+    const at = before === null ? -1 : shelf.findIndex(tag => tag.name === before)
+    return at < 0 ? shelf.length : at
+  }
+
   // Dragging. A tag lands among the rows of the shelf under the pointer, before the first row whose middle
   // is below it; a group lands among the group cards of the type under the pointer the same way. The
   // dragged item keeps its place, dimmed, until it is let go.
   type Drag = { kind: 'tag'; tag: Tag } | { kind: 'group'; group: TagGroup }
-  type Drop = { type: TagType; group: number | null; index: number }
+  type Drop = { type: TagType; group: number | null; index: number; before: string | null; after: string | null; nest?: undefined } | { nest: string; type?: undefined; group?: undefined; index?: undefined }
   let drag = $state<Drag | null>(null)
   let drop = $state<Drop | null>(null)
   let ghost = $state({ x: 0, y: 0 })
@@ -172,6 +203,9 @@
     const under = document.elementFromPoint(x, y)
     if (!under || !board?.contains(under)) return null
     if (item.kind === 'tag') {
+      // Over another tag's name, under that tag.
+      const onto = under.closest<HTMLElement>('[data-nest]')?.dataset.nest
+      if (onto && onto !== item.tag.name && !isAncestor(item.tag.name, onto) && own.get(onto)?.type === item.tag.type) return { nest: onto }
       // Over a group's heading, the group; anywhere else in a type, the tags of the type in no group.
       const shelf = under.closest<HTMLElement>('[data-shelf]')
         ?? under.closest('[data-group-card]')?.querySelector<HTMLElement>('[data-shelf]')
@@ -179,12 +213,13 @@
       if (!shelf) return null
       const rows = [...shelf.querySelectorAll('[data-tag-row]')].filter(row => row.getAttribute('data-tag-row') !== item.tag.name)
       const group = shelf.dataset.group ? Number(shelf.dataset.group) : null
-      return { type: shelf.dataset.type as TagType, group, index: rows.filter(middleAbove(y)).length }
+      const index = rows.filter(middleAbove(y)).length
+      return { type: shelf.dataset.type as TagType, group, index, before: rows[index]?.getAttribute('data-tag-row') ?? null, after: rows[index - 1]?.getAttribute('data-tag-row') ?? null }
     }
     const section = under.closest<HTMLElement>('[data-section]')
     if (!section) return null
     const cards = [...section.querySelectorAll('[data-group-card]')].filter(card => card.getAttribute('data-group-card') !== String(item.group.id))
-    return { type: section.dataset.section as TagType, group: null, index: cards.filter(middleAbove(y)).length }
+    return { type: section.dataset.section as TagType, group: null, index: cards.filter(middleAbove(y)).length, before: null, after: null }
   }
 
   function startDrag(event: PointerEvent, item: Drag) {
@@ -222,8 +257,9 @@
       const landing = now.type === 'pointerup' && moved ? drop : null
       stop()
       if (!landing) return
-      if (item.kind === 'tag') moveTag(item.tag, landing.group === null ? { type: landing.type, group: null, index: landing.index } : { group: landing.group, index: landing.index })
-      else moveGroup(item.group, { type: landing.type, index: landing.index })
+      if (item.kind === 'group') return void moveGroup(item.group, { type: landing.type!, index: landing.index! })
+      if (landing.nest !== undefined) return void setParent(item.tag.name, landing.nest)
+      placeTag(item.tag.name, landing)
     }
     const listeners = [['pointermove', move], ['pointerup', end], ['pointercancel', end], ['keydown', end]] as const
     for (const [name, listener] of listeners) addEventListener(name, listener as EventListener)
@@ -237,7 +273,31 @@
     step(event.key === 'ArrowUp' ? -1 : 1)
   }
 
+  // A tag let go between rows takes that place; it stays under its parent only when the row above it is
+  // in its parent's branch, and otherwise comes out from under it.
+  async function placeTag(name: string, landing: { type?: TagType; group?: number | null; before: string | null; after: string | null }) {
+    const parent = parents.get(name)
+    if (parent !== undefined && !(landing.after !== null && (landing.after === parent || isAncestor(parent, landing.after))) && !(await setParent(name, null))) return
+    const type = landing.type!, group = landing.group ?? null
+    const tag = own.get(name)
+    if (!tag) return
+    const index = shelfIndex(type, group, landing.before, name)
+    moveTag(tag, group === null ? { type, group: null, index } : { group, index })
+  }
+
+  // The arrow keys move a tag past the tag beside it under the same parent.
+  function stepTag(tag: Tag, shelfTags: Tag[], by: number) {
+    const siblings = shelfTags.filter(other => parents.get(other.name) === parents.get(tag.name))
+    const at = siblings.findIndex(other => other.name === tag.name)
+    const past = siblings[at + by]
+    if (!past) return
+    const before = by < 0 ? past.name : siblings[at + 2]?.name ?? null
+    const index = shelfIndex(tag.type, tag.group, before, tag.name)
+    moveTag(own.get(tag.name) ?? tag, tag.group === null ? { type: tag.type, group: null, index } : { group: tag.group, index })
+  }
+
   const dropsHere = (type: TagType, group: number | null, index: number) => drag?.kind === 'tag' && drop?.type === type && drop.group === group && drop.index === index
+  const nestsHere = (name: string) => drag?.kind === 'tag' && drop?.nest === name
   const groupDropsHere = (type: TagType, index: number) => drag?.kind === 'group' && drop?.type === type && drop.index === index
 
   function parse(raw: string | null) {
@@ -316,16 +376,15 @@
   {@const dirty = currentLabel.trim() !== ownLabel && currentLabel.trim().length > 0}
   {@const closure = implicationClosure([tag.name], tags)}
   {@const candidates = tags.filter(other => canImply(tags, tag.name, other.name) === null)}
-  {@const parents = impliedBy.get(tag.name) ?? []}
-  {@const locked = Boolean(tag.used || parents.length)}
-  <div class="tag-row" class:dragged={drag?.kind === 'tag' && drag.tag.name === tag.name} data-tag-row={tag.name}>
+  {@const carriers = impliedBy.get(tag.name) ?? []}
+  {@const locked = Boolean(tag.used || carriers.length)}
+  <div class="tag-row" class:dragged={drag?.kind === 'tag' && drag.tag.name === tag.name} class:child={parents.has(tag.name)} style:--depth={depths.get(tag.name) ?? 0} data-tag-row={tag.name}>
     <div class="row-main">
       <div class="identity">
         {@render grip(t('tags.drag', { name: tag.label }), event => startDrag(event, { kind: 'tag', tag }), event => gripKey(event, by => {
-          const index2 = index + by
-          if (index2 >= 0 && index2 < shelfTags.length) moveTag(tag, tag.group === null ? { type: tag.type, group: null, index: index2 } : { group: tag.group, index: index2 })
+          stepTag(tag, shelfTags, by)
         }))}
-        <span class="tag-chip" data-tag-type={tag.type}>{tag.label}</span>
+        <span class="tag-chip nest-target" class:nesting={nestsHere(tag.name)} data-nest={tag.name} data-tag-type={tag.type}>{tag.label}</span>
         {#if tag.label !== tag.name}<code class="slug">{tag.name}</code>{/if}
         <a class="n" href={href(`/?tag=${encodeURIComponent(tag.name)}`)}>{tag.n}</a>
       </div>
@@ -343,6 +402,19 @@
         {#if dirty}
           <button type="button" class="button" disabled={busy} onclick={() => saveLabel(tag)}>{t('tags.save')}</button>
         {/if}
+        <select
+          class="input type-select"
+          aria-label={t('tags.parentOf', { name: tag.label })}
+          title={t('tags.parent')}
+          value={parents.get(tag.name) ?? ''}
+          disabled={busy}
+          onchange={event => setParent(tag.name, event.currentTarget.value || null)}
+        >
+          <option value="">{t('tags.parentNone')}</option>
+          {#each parentChoices(tag) as other (other.name)}
+            <option value={other.name}>{'\u3000'.repeat(depths.get(other.name) ?? 0)}{other.label}</option>
+          {/each}
+        </select>
         <select
           class="input type-select"
           aria-label={t('tags.moveTo', { name: tag.label })}
@@ -638,6 +710,8 @@
   .empty-shelf { block-size: 36px; border: 1px dashed var(--line); border-radius: 8px }
   .tag-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface) }
   .tag-row.dragged, .group-card.dragged { opacity: 0.45 }
+  .tag-row.child { margin-inline-start: calc(var(--depth, 0) * 28px); border-inline-start: 3px solid var(--line-strong) }
+  .nest-target.nesting { outline: 2px solid var(--accent); outline-offset: 2px }
   .drop-line { block-size: 3px; border-radius: 2px; background: var(--accent) }
   .row-main { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center }
   .identity { display: flex; flex-wrap: wrap; min-inline-size: 0; align-items: center; gap: 8px }
