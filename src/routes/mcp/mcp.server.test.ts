@@ -955,3 +955,83 @@ test('moderator MCP tools are advertised and callable only by unbanned moderator
   expect(await callAs('list_reports', {}, modAuth)).toMatchObject({ failed: true })
   expect(await callAs('set_hidden', { record: 1, hidden: true, agent: { harness: 'Mod' } }, modAuth)).toMatchObject({ failed: true })
 })
+
+test('add_record and edit_record set, preserve, update, and clear composition claims', async () => {
+  const { call } = fixture()
+  const added = await call('add_record', {
+    agent: { harness: 'Antigravity', model: 'Gemini 4 Neon' },
+    ids: ['⿰亻汝'],
+    composition: {
+      parts: [
+        { part: '亻', role: 'semantic', function: '提示白讀或訓讀（福州方言字）' },
+        { part: '汝', role: 'phonetic' },
+      ],
+    },
+    sightings: [{ place: 'Lexicon p. 1', url: 'https://example.test/1' }],
+  })
+  expect(added.failed).toBe(false)
+  const id = added.value.id as number
+
+  const first = (await call('get_record', { record: id })).value
+  expect(first.claims.find((c: { kind: string }) => c.kind === 'composition')).toMatchObject({
+    kind: 'composition',
+    value: '⿰亻汝',
+    data: {
+      parts: ['亻', '汝'],
+      roles: ['semantic', 'phonetic'],
+      functions: ['提示白讀或訓讀（福州方言字）', ''],
+      formation: null,
+    },
+  })
+
+  // Omitting composition preserves it.
+  const keep = await call('edit_record', {
+    agent: { harness: 'Antigravity', model: 'Gemini 4 Neon' },
+    record: id,
+    rev: first.rev,
+    description: 'Updated note',
+  })
+  expect(keep.failed).toBe(false)
+  expect((await call('get_record', { record: id })).value.claims.find((c: { kind: string }) => c.kind === 'composition')?.data).toMatchObject({
+    functions: ['提示白讀或訓讀（福州方言字）', ''],
+  })
+
+  // Updating composition replaces roles/functions/formation.
+  const updated = await call('edit_record', {
+    agent: { harness: 'Antigravity', model: 'Gemini 4 Neon' },
+    record: id,
+    rev: keep.value.rev,
+    composition: {
+      formation: 'phonoSemantic',
+      parts: [
+        { part: '亻', role: 'semantic', function: '表示民族名' },
+        { part: '汝', role: 'phonetic' },
+      ],
+    },
+  })
+  expect(updated.failed).toBe(false)
+  expect((await call('get_record', { record: id })).value.claims.find((c: { kind: string }) => c.kind === 'composition')?.data).toEqual({
+    parts: ['亻', '汝'],
+    roles: ['semantic', 'phonetic'],
+    functions: ['表示民族名', ''],
+    formation: 'phonoSemantic',
+  })
+
+  // Passing null clears composition.
+  const cleared = await call('edit_record', {
+    agent: { harness: 'Antigravity', model: 'Gemini 4 Neon' },
+    record: id,
+    rev: updated.value.rev,
+    composition: null,
+  })
+  expect(cleared.failed).toBe(false)
+  expect((await call('get_record', { record: id })).value.claims.find((c: { kind: string }) => c.kind === 'composition')).toBeUndefined()
+
+  // Setting composition on a record without ids is refused.
+  const noIds = await call('add_record', {
+    agent: { harness: 'Antigravity', model: 'Gemini 4 Neon' },
+    composition: { parts: [{ part: '亻', role: 'semantic' }] },
+    sightings: [{ place: 'Lexicon p. 2', url: 'https://example.test/2' }],
+  })
+  expect(noIds.failed).toBe(true)
+})

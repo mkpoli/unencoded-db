@@ -6,7 +6,8 @@ import { readDates, sightingDates } from '$lib/server/date-readings'
 // (https://modelcontextprotocol.io/specification/2025-11-25/server/tools).
 import { isHttpError, type RequestEvent } from '@sveltejs/kit'
 import { isDescription } from 'ids-input'
-import { creatorKey, newClaimKey, type Claim, type ClaimKind } from '$lib/claims'
+import { creatorKey, newClaimKey, primaryIdsOf, type Claim, type ClaimKind } from '$lib/claims'
+import { composeValue, FORMATIONS, FORMATION_MAX, FUNCTION_MAX, PART_MAX, PARTS_MAX, ROLES, ROLE_MAX } from '$lib/composition'
 import { parseRecordCode, recordCode } from '$lib/code'
 import { DOCULECTS } from '$lib/doculects'
 import { cleanTag, COLLECTIONS, DEFAULT_SCRIPT_TAG, type Tag } from '$lib/tags'
@@ -413,6 +414,41 @@ function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) 
     }
   }
   for (const name of ['description', 'radical', 'strokes']) if (given(name)) form.set(name, text(input[name]))
+
+  if (given('composition')) {
+    if (input.composition === null) {
+      form.set('composition', '')
+    } else {
+      if (!input.composition || typeof input.composition !== 'object' || Array.isArray(input.composition)) {
+        throw new Refusal('composition must be an object with parts and/or formation, or null to clear it.')
+      }
+      const comp = input.composition as Json
+      const primary = form.has('ids') ? String(form.getAll('ids')[0] ?? '') : (primaryIdsOf(current) ?? '')
+      const rawFormation = comp.formation === undefined || comp.formation === null ? '' : text(comp.formation).normalize('NFC').trim()
+      if ([...rawFormation].length > FORMATION_MAX) throw new Refusal(`composition.formation is at most ${FORMATION_MAX} characters.`)
+      const rawParts = comp.parts === undefined ? [] : items(comp.parts)
+      if (rawParts.length > PARTS_MAX) throw new Refusal(`composition.parts holds up to ${PARTS_MAX} parts.`)
+      const parts: string[] = []
+      const roles: string[] = []
+      const functions: string[] = []
+      for (const entry of rawParts) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Refusal('Each item in composition.parts must be an object with `part`.')
+        const row = entry as Json
+        const part = text(row.part).normalize('NFC').trim()
+        const role = text(row.role).normalize('NFC').trim()
+        const fn = text(row.function).normalize('NFC').trim()
+        if (!part || [...part].length > PART_MAX) throw new Refusal(`Each part in composition.parts is 1 to ${PART_MAX} characters.`)
+        if ([...role].length > ROLE_MAX) throw new Refusal(`composition.parts[].role is at most ${ROLE_MAX} characters.`)
+        if ([...fn].length > FUNCTION_MAX) throw new Refusal(`composition.parts[].function is at most ${FUNCTION_MAX} characters.`)
+        parts.push(part)
+        roles.push(role)
+        functions.push(fn)
+      }
+      const hasAnalysis = roles.some(Boolean) || functions.some(Boolean) || Boolean(rawFormation)
+      if (hasAnalysis && !primary) throw new Refusal('composition requires ids on the record.')
+      form.set('composition', hasAnalysis ? composeValue(primary, parts, roles, rawFormation || null, functions) : '')
+    }
+  }
 
   const held = new Map(current.map(claim => [claim.key, claim]))
   const taken = new Set<string>()
@@ -1141,6 +1177,24 @@ function recordFields(evidence: Json, key?: Json) {
   const own = key ? { key } : {}
   return {
     ids: { type: 'array', minItems: 1, items: { type: 'string' }, description: 'Ideographic description sequences of the form as the picture shows it. The first one draws the glyph; the others are further ways to describe the same form. Leave it out when the form cannot be described: the record then shows its picture.' },
+    composition: {
+      type: ['object', 'null'],
+      description: 'Structural analysis of the first IDS: component roles, optional reusable function labels (作用), and optional formation override. Pass null to clear; omit to keep unchanged.',
+      properties: {
+        formation: { type: 'string', description: `Optional formation override (${FORMATIONS.join(', ')}, or custom text). Leave out to derive from part roles.` },
+        parts: {
+          type: 'array', maxItems: PARTS_MAX,
+          items: {
+            type: 'object', required: ['part'],
+            properties: {
+              part: { type: 'string', description: 'Component character or IDS sub-expression.' },
+              role: { type: 'string', description: `Role of the part: ${ROLES.join(', ')}, or custom text.` },
+              function: { type: 'string', description: 'Optional reusable function label describing why this component is used (e.g. 度量衡「倍」字省略, 提示白讀或訓讀（福州方言字）, 表示民族名).' },
+            },
+          },
+        },
+      },
+    },
     description: { type: 'string', description: 'What is notable about the form, in prose.' },
     radical: { type: 'string', description: 'The radical, when the source states one.' },
     strokes: { type: 'integer', minimum: 0, description: 'Total strokes.' },
