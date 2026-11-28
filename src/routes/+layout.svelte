@@ -16,7 +16,7 @@
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
   const localeSearch = $derived(path === '' ? cleanBrowseSearch(page.url.search) : page.url.search)
   const isRecord = $derived(parseRecordUrlCode(path.split('/')[1] ?? '') !== null)
-  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path === '/u' || path.startsWith('/u/') ? 'people' : path.startsWith('/duplicates') ? 'duplicates' : path.startsWith('/mcp') ? 'mcp' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || isRecord ? 'browse' : '')
+  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path === '/u' || path.startsWith('/u/') ? 'people' : path.startsWith('/duplicates') ? 'duplicates' : path.startsWith('/mcp') ? 'mcp' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path === '/parts' || path.startsWith('/part/') ? 'parts' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || isRecord ? 'browse' : '')
   $effect(() => { syncFavourites(data.person?.id ?? null, data.favourites) })
   type NavMode = 'full' | 'priority' | 'compact'
   let navMode = $state<NavMode>()
@@ -128,6 +128,7 @@
     <div class="site-links" id="site-links" bind:this={navLinks} popover={navMode === 'full' ? undefined : 'auto'} onbeforetoggle={event => { if (event.newState === 'open') positionNavigation() }}>
       {#if navMode !== 'priority'}{@render primaryLinks()}{/if}
       <a class:active={section === 'radicals'} aria-current={section === 'radicals' ? 'page' : undefined} href={href('/radicals')}>{t('nav.radicals')}</a>
+      <a class:active={section === 'parts'} aria-current={section === 'parts' ? 'page' : undefined} href={href('/parts')}>{t('nav.parts')}</a>
       <a class:active={section === 'tags'} aria-current={section === 'tags' ? 'page' : undefined} href={href('/tags')}>{t('nav.tags')}</a>
       <a class:active={section === 'chronology'} aria-current={section === 'chronology' ? 'page' : undefined} href={href('/chronology')}>{t('nav.chronology')}</a>
       <a class:active={section === 'sources'} aria-current={section === 'sources' ? 'page' : undefined} href={href('/sources')}>{t('nav.sources')}</a>

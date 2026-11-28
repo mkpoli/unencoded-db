@@ -36,7 +36,7 @@
   import ArchiveLinks from '$lib/components/ArchiveLinks.svelte'
   import type { Fill } from '$lib/encoded'
   import { compositionOf, documentsOf, encodingsOf, idsForms, primaryLayoutOf, supportedBy, valuesOf } from '$lib/claims'
-  import { analyze } from '$lib/composition'
+  import { analyze, partKey, validPartKey } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { codePage, marksOf, registryLabel } from '$lib/registries'
   import { documentUrl, formatDocumentPage } from '$lib/unicode-docs'
@@ -249,7 +249,7 @@
       </div>
     {/if}
     {#if analysis?.tagged}
-      <p class="formation"><span class="label">{t('field.formation')}</span><span class="method">{formationLabel(at, analysis.formation)}</span>{#each analysis.parts.filter(part => part.role) as part, index (index)}<span class="part">{part.part} · {roleLabel(at, part.role)}</span>{/each}<EditLink field="composition" name={t('field.formation')} /></p>
+      <p class="formation"><span class="label">{t('field.formation')}</span><span class="method">{formationLabel(at, analysis.formation)}</span>{#each analysis.parts.filter(part => part.role || part.func) as part, index (index)}{@const key = partKey(part.part)}{#if validPartKey(key)}<a class="part part-link" href={href(`/part/${encodeURIComponent(key)}`)}><span class="part-glyph">{part.part}</span>{#if part.role}<span class="part-role">· {roleLabel(at, part.role)}</span>{/if}{#if part.func}<span class="part-func">{part.func}</span>{/if}</a>{:else}<span class="part"><span class="part-glyph">{part.part}</span>{#if part.role}<span class="part-role">· {roleLabel(at, part.role)}</span>{/if}{#if part.func}<span class="part-func">{part.func}</span>{/if}</span>{/if}{/each}<EditLink field="composition" name={t('field.formation')} /></p>
     {:else if analysis}
       <p class="formation"><span class="label">{t('field.formation')}</span><EditLink field="composition" name={t('entry.addFormation')} add /></p>
     {/if}
@@ -427,7 +427,10 @@
   .alt:hover, .alt:focus-visible { border-color:var(--accent); color:var(--accent) }
   .ids-text { overflow-wrap:anywhere } .alt-add { flex:none; color:var(--muted) } .alt:hover .alt-add { color:inherit }
   .formation { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px } .formation .label { color:var(--muted); font-size:12px; font-weight:400 }
-  .method { font-weight:600 } .part { padding:1px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12.5px }
+  .method { font-weight:600 } .part { display:inline-flex; flex-wrap:wrap; align-items:center; gap:4px; padding:1px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12.5px }
+  .part-link:hover, .part-link:focus-visible { border-color:var(--accent); color:var(--accent) }
+  .part-glyph { color:var(--ink); font-weight:500 } .part-link:hover .part-glyph { color:inherit }
+  .part-func { padding:0 6px; border-radius:999px; background:var(--accent-light); color:var(--accent); font-size:11.5px }
   .description { white-space:pre-wrap; overflow-wrap:anywhere } .badges { gap:6px }
   .chips { display:flex; flex-wrap:wrap; align-items:center; gap:6px } .chip-link { padding:2px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px } .chip-link:hover { border-color:var(--accent); color:var(--accent) } .chips .tag-chip:hover { filter: brightness(0.95) }
   .marks { display:flex; flex-wrap:wrap; gap:6px; margin:0; padding:0; list-style:none } .marks a:hover { text-decoration:underline }
