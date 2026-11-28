@@ -4,10 +4,10 @@ import { createTag, taxonomy } from '$lib/server/tags'
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit'
 import { addComment, cleanComment, commentsOf, setCommentHidden } from '$lib/server/comments'
 import { isDescription } from 'ids-input'
-import { cleanIds } from '$lib/ids'
+import { cleanIds, encodedCharacter } from '$lib/ids'
 import { earliestSighting, editEntry, evidenceOrder, getEntry, radicalCounts, readEntryFields } from '$lib/server/entries'
 import { readNewTag } from '$lib/tags'
-import { newClaim } from '$lib/claims'
+import { encodingsOf, newClaim } from '$lib/claims'
 import { filedUnder, radicalPath } from '$lib/radicals'
 import { env, guardWrite, ipHash } from '$lib/server/guard'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
@@ -15,6 +15,7 @@ import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
 import { relatedRecords } from '$lib/server/related-records'
 import { archivesOfSources } from '$lib/server/source-archives'
+import { irgSourcesFor } from '$lib/server/unihan'
 import { positiveId, recordIdParam } from '../../_submission.server'
 import type { Actions, PageServerLoad } from './$types'
 
@@ -41,9 +42,20 @@ export const load: PageServerLoad = async (event) => {
   // The evidence a comment is to be about, ?about=: one of the record's own.
   const asked = positiveId(event.url.searchParams.get('about') ?? '')
   const about = asked && sightings.some(sighting => sighting.id === asked) ? asked : null
-  const comments = await commentsOf(env(event).DB, id, Boolean(event.locals.person?.moderator))
-  const related = await relatedRecords(env(event).DB, id, found.claims)
-  return { dates, archives, idsAdd, related, about, comments, entry: found.entry, claims: found.claims, sightings, filed, ...(await taxonomy(env(event).DB)), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
+  const unicodeChars = encodingsOf(found.claims)
+    .filter(encoding => encoding.charset === 'unicode')
+    .map(encoding => encodedCharacter(encoding.code))
+    .filter(Boolean)
+  const [comments, related, irgSources] = await Promise.all([
+    commentsOf(env(event).DB, id, Boolean(event.locals.person?.moderator)),
+    relatedRecords(env(event).DB, id, found.claims),
+    irgSourcesFor(unicodeChars, {
+      assets: event.platform?.env?.ASSETS,
+      fetch: event.fetch,
+      origin: event.url.origin,
+    }),
+  ])
+  return { dates, archives, idsAdd, related, about, comments, irgSources, entry: found.entry, claims: found.claims, sightings, filed, ...(await taxonomy(env(event).DB)), earliest: earliest && { year: earliest.text, kind: earliest.kind, sighting: earliest.sighting.id } }
 }
 
 async function commentVisibility(event: RequestEvent, hidden: boolean) {

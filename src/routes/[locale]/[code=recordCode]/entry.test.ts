@@ -25,6 +25,28 @@ test('a description in ids_add is passed to the page when it is a whole one, and
   expect(await idsAdd('?ids_add=')).toBeNull()
 })
 
+test('record load returns Unihan IRG sources for encoded Unicode claims via ASSETS', async () => {
+  const { db } = openTestDb()
+  const encodedFields: EntryFields = {
+    ...fields,
+    claims: [newClaim('ids', '⿷匚一'), newClaim('encoding', 'U+30002', { charset: 'unicode' })],
+  }
+  const id = await createEntry(db, encodedFields, sighting, [], { actor: (await createPerson(db)).id, ip: null })
+  const assets = {
+    fetch: async (input: RequestInfo | URL) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
+      return new Response(readFileSync(`static${url.pathname}`, 'utf8'))
+    },
+  }
+  const page = (await load({
+    params: { locale: 'en', code: recordCode(id) },
+    url: new URL(`https://example.test/en/${recordCode(id)}`),
+    locals: { person: null },
+    platform: { env: { DB: db, ASSETS: assets } },
+  } as any)) as any
+  expect(page.irgSources).toEqual({ '\u{30002}': ['UTC-00969'] })
+})
+
 test('a comment is saved under its writer and may name only the record\'s own evidence', async () => {
   const { db } = openTestDb()
   const author = await createPerson(db), reader = await createPerson(db)
