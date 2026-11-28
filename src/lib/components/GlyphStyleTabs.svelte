@@ -42,6 +42,7 @@
   /* The label subsets cover the names in ASCII; the specimen face carries 永 alone. */
   .choice[data-style="sans"] { font-family: Inter, "Noto Sans", var(--cjk), sans-serif }
   .choice[data-style="serif"] { font-family: var(--cjk-serif) }
+  .choice[data-style="woodblock"] { font-family: var(--cjk-serif) }
   .choice[data-style="fangsong"] { font-family: "Zhuque Label", "Zhuque Specimen", var(--cjk-serif) }
   .choice[data-style="regular"] { font-family: "TW-Kai Label", "TW-Kai Specimen", var(--cjk-serif) }
   .choice[data-style="pen-writing"] { font-family: "Kureedo Label", "Kureedo Specimen", var(--cjk), sans-serif }

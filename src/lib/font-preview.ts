@@ -8,7 +8,7 @@ import { cleanLayout, layoutForStyle, layoutText } from './layout'
 type Row = { id: number; ids: string | null; layout: string | null; cover_key: string | null; marked_sighting: number | null }
 type Face = { style: GlyphStyle; version: string; adjustedVersion?: string; source: string }
 export const faceNames: Record<GlyphStyle, string> = {
-  sans: 'Sans', serif: 'Serif', fangsong: 'Fangsong', regular: 'Kai', 'pen-writing': 'Pen'
+  sans: 'Sans', serif: 'Serif', woodblock: 'Woodblock', fangsong: 'Fangsong', regular: 'Kai', 'pen-writing': 'Pen'
 }
 export type FontCatalogue = { records: Row[]; styles: Face[] }
 

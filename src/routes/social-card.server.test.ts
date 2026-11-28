@@ -96,7 +96,7 @@ test('record artwork draws every style beside the evidence panel', async () => {
   const picture = { image_key: 'page.png', thumb_key: 'cover.png', image_w: 1, image_h: 1, box: null }
   const context = { origin: 'https://rare.glyphatlas.org', locale: 'en', assets: { fetch: async () => new Response(null, { status: 404 }) } }
   const combined = await recordArtwork(bucket, { ids: '永' }, picture, context)
-  expect(combined.glyphs.map(glyph => glyph.name)).toEqual(['Sans', 'Serif', 'Fangsong', 'Regular', 'Pen'])
+  expect(combined.glyphs.map(glyph => glyph.name)).toEqual(['Sans', 'Serif', 'Woodblock', 'Fangsong', 'Regular', 'Pen'])
   expect(combined.glyphs[0].drawing).toBe(path)
   expect(combined.evidence).toContain('preserveAspectRatio="xMidYMid slice"')
   expect(await recordArtwork(bucket, { ids: null }, picture, context)).toMatchObject({ glyphs: [] })

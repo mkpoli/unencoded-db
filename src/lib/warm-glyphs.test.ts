@@ -81,7 +81,7 @@ test('a run asks only for the addresses no earlier run settled', async () => {
   const addresses = addressesOf(records)
   const first = site()
   const whole = await warm(origin, addresses, [], first.options)
-  expect(first.asked.length).toBe(10)
+  expect(first.asked.length).toBe(GLYPH_STYLES.length * 2)
   expect(whole.unwarmed).toEqual([])
   expect(new Set(whole.settled)).toEqual(new Set(GLYPH_STYLES.flatMap(style => addresses[style])))
   const again = site()
@@ -91,14 +91,14 @@ test('a run asks only for the addresses no earlier run settled', async () => {
   const next = site()
   const grown = await warm(origin, more, whole.settled, next.options)
   expect(next.asked).toEqual(GLYPH_STYLES.map(style => origin + glyphAddress('⿰木木', null, style)))
-  expect(grown.settled.length).toBe(15)
+  expect(grown.settled.length).toBe(GLYPH_STYLES.length * 3)
 })
 
 test('the settled list holds only addresses still wanted', async () => {
   const addresses = addressesOf(records.slice(0, 1))
   const { asked, options } = site()
   const { settled } = await warm(origin, addresses, [...addresses.sans, '/api/glyph?ids=gone&v=old'], options)
-  expect(asked.length).toBe(4)
+  expect(asked.length).toBe(GLYPH_STYLES.length - 1)
   expect(new Set(settled)).toEqual(new Set(GLYPH_STYLES.flatMap(style => addresses[style])))
 })
 
@@ -107,8 +107,8 @@ test('descriptions the composer cannot draw are settled and do not fail the run'
   const { asked, options } = site(Object.fromEntries(GLYPH_STYLES.flatMap(style => addresses[style].map(address => [origin + address, [undrawable]]))))
   const { settled, unwarmed } = await warm(origin, addresses, [], options)
   expect(unwarmed).toEqual([])
-  expect(settled.length).toBe(10)
-  expect(asked.length).toBe(10)
+  expect(settled.length).toBe(GLYPH_STYLES.length * 2)
+  expect(asked.length).toBe(GLYPH_STYLES.length * 2)
 })
 
 test('a style mostly unanswered fails the run, and its open addresses stay unsettled', async () => {
@@ -117,7 +117,7 @@ test('a style mostly unanswered fails the run, and its open addresses stay unset
   const { settled, unwarmed } = await warm(origin, addresses, [], options)
   expect(unwarmed).toEqual(['serif'])
   expect(settled.some(address => address.includes('style=serif'))).toBe(false)
-  expect(settled.length).toBe(8)
+  expect(settled.length).toBe((GLYPH_STYLES.length - 1) * 2)
 })
 
 test('a few open addresses leave the run completed and are asked again by the next', async () => {
