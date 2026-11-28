@@ -2,18 +2,17 @@
   import { page } from '$app/state'
   import { isLocale, LOCALES, translate, type Locale } from '$lib/i18n'
   import { isIndexable, SITE_ORIGIN, snippet } from '$lib/seo'
-  import { jsonLdScript } from '$lib/structured-data'
+  import { jsonLdScript, websiteData } from '$lib/structured-data'
   import { getSocialPage, socialPageFor, socialPageTitle } from '$lib/social-pages'
   import { t } from '$lib/t'
 
   const SOCIAL_LOCALES: Record<Locale, string> = { en: 'en_US', ja: 'ja_JP', 'zh-Hant': 'zh_TW', 'zh-Hans': 'zh_CN', ko: 'ko_KR', vi: 'vi_VN' }
-  const SITE_SCHEMA = jsonLdScript({
-    '@context': 'https://schema.org', '@type': 'WebSite', url: `${SITE_ORIGIN}/`,
-    name: translate('en', 'app.name'), alternateName: translate('zh-Hant', 'app.name'),
-  })
 
   let { title, description, image, imageAlt, data }: { title?: string; description?: string; image?: string | null; imageAlt?: string; data?: unknown[] } = $props()
   const language = $derived(isLocale(page.params.locale) ? page.params.locale : 'en')
+  const siteSchema = $derived(jsonLdScript(websiteData({
+    locale: language, name: translate('en', 'app.name'), alternateName: translate('zh-Hant', 'app.name'), description: t('app.description'),
+  })))
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
   const index = $derived(page.status < 400 && isIndexable(path, page.url.searchParams))
   const canonical = $derived(`${SITE_ORIGIN}/${language}${path}`)
@@ -42,7 +41,7 @@
     {/each}
     <link rel="alternate" hreflang="x-default" href={`${SITE_ORIGIN}${path ? `/en${path}` : '/'}`} />
     {#if !path}
-      {@html SITE_SCHEMA}
+      {@html siteSchema}
     {:else if data?.length && page.status < 400}
       {#each data as item}{@html jsonLdScript(item)}{/each}
     {/if}

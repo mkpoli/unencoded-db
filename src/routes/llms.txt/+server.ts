@@ -37,6 +37,7 @@ ${tools}
 - [About](${origin}/en/about): Project scope and community links
 - [PUA fonts](${origin}/en/fonts): Preview and download generated TTF/OTF fonts
 - [Radicals](${origin}/en/radicals): Browse records by radical
+- [Parts](${origin}/en/parts): Browse records by component and role
 - [Tags](${origin}/en/tags): Typed tag taxonomy
 - [Sources](${origin}/en/sources): Cited works and digitized copies
 - [Timeline](${origin}/en/chronology): Records ordered by earliest attestation
