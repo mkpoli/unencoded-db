@@ -413,12 +413,17 @@ export function readClaims(form: FormData, tags: readonly Pick<Tag, 'name' | 'la
   }
   const primary = next.get('ids')![0]?.value ?? null
 
-  // Roles belong to one sequence: a changed first description takes them away unless the form names it.
+  // Roles and functions belong to one sequence: a changed first description takes them away unless the form names it.
   if (form.has('composition')) {
     const parsed = parseComposition(form.get('composition'))
     const analysis = parsed && primary && parsed.ids === primary ? analyze(primary, parsed) : null
-    const parts = analysis?.parts.map(part => part.part) ?? [], roles = analysis?.parts.map(part => part.role) ?? []
-    next.set('composition', analysis && parsed && (roles.some(Boolean) || parsed.formation) ? [made('composition', primary!, { parts, roles, formation: parsed.formation })] : [])
+    const parts = analysis?.parts.map(part => part.part) ?? []
+    const roles = analysis?.parts.map(part => part.role) ?? []
+    const functions = analysis?.parts.map(part => part.func) ?? []
+    const hasFunctions = functions.some(Boolean)
+    next.set('composition', analysis && parsed && (roles.some(Boolean) || hasFunctions || parsed.formation)
+      ? [made('composition', primary!, { parts, roles, ...(hasFunctions ? { functions } : {}), formation: parsed.formation })]
+      : [])
   } else if (next.get('composition')![0]?.value !== primary) next.set('composition', [])
 
   // A reading may name its doculect in `reading_doculect`, which then runs parallel to `reading`.

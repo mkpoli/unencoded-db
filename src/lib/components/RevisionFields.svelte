@@ -51,7 +51,7 @@
       case 'reading': { const doculect = typeof claim.data?.doculect === 'string' ? claim.data.doculect : ''; const key = doculectKey(doculect); return doculect ? `${key ? t(key) : doculect} ${claim.value}` : claim.value }
       case 'composition': {
         const analysis = analyze(claim.value, compositionOf(claims))
-        return analysis ? [formationLabel(at, analysis.formation), ...analysis.parts.filter(part => part.role).map(part => `${part.part} · ${roleLabel(at, part.role)}`)].join(', ') : claim.value
+        return analysis ? [formationLabel(at, analysis.formation), ...analysis.parts.filter(part => part.role || part.func).map(part => [part.part, part.role && roleLabel(at, part.role), part.func].filter(Boolean).join(' · '))].join(', ') : claim.value
       }
       default: return claim.value
     }

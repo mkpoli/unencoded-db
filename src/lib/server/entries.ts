@@ -12,7 +12,8 @@ import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
-import { creatorKey, encodingsOf, joinClaims, mapSightings, moveClaims, newClaim, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, relationsTo, restoreClaims, validCreator, valuesOf, type Brought, type Claim, type ClaimError } from '$lib/claims'
+import { compositionOf, creatorKey, encodingsOf, joinClaims, mapSightings, moveClaims, newClaim, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, relationsTo, restoreClaims, validCreator, valuesOf, type Brought, type Claim, type ClaimError } from '$lib/claims'
+import { partRoleRowsOf, type PartRole } from '$lib/composition'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { FILE_ROWS, ensureTags, filedUnder } from './tags'
@@ -478,6 +479,22 @@ function formRows(db: D1Database, owner: number | string, forms: readonly string
     db.prepare(`INSERT INTO forms(form, entry_id) SELECT value, ${sql} FROM json_each(?) WHERE NOT EXISTS (SELECT 1 FROM forms WHERE form = value AND entry_id = ${sql})`).bind(...values, JSON.stringify(forms), ...values),
   ]
 }
+/** The composition part-role rows of a record, brought to `entry_part_roles`; triggers keep `part_function_counts` and `part_counts` in sync. */
+function partRoleRows(db: D1Database, owner: number | string, rows: readonly PartRole[]) {
+  const { sql, values } = owned(owner)
+  const payload = JSON.stringify(rows)
+  return [
+    db.prepare(`DELETE FROM entry_part_roles WHERE entry_id = ${sql} AND NOT EXISTS (
+      SELECT 1 FROM json_each(?) j
+      WHERE json_extract(j.value, '$.part') = entry_part_roles.part
+        AND json_extract(j.value, '$.role') = entry_part_roles.role
+        AND json_extract(j.value, '$.func') = entry_part_roles.func
+    )`).bind(...values, payload),
+    db.prepare(`INSERT OR IGNORE INTO entry_part_roles(part, entry_id, role, func)
+      SELECT json_extract(j.value, '$.part'), ${sql}, json_extract(j.value, '$.role'), json_extract(j.value, '$.func')
+      FROM json_each(?) j`).bind(...values, payload),
+  ]
+}
 const SIGHTING_SEQ = "(SELECT seq FROM sqlite_sequence WHERE name = 'sightings')"
 // A summary names the sighting that holds the record's year by its id (1), or, for one the same write
 // inserts, by how many inserted sightings follow it (2).
@@ -505,6 +522,7 @@ async function reindex(db: D1Database, id: number, entry: Entry, claims: readonl
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(added.filter(facet))),
     ...tagRows(db, id),
     ...formRows(db, id, live ? formsOf(claims) : []),
+    ...partRoleRows(db, id, live ? partRoleRowsOf(primaryIdsOf(claims), compositionOf(claims)) : []),
   ]
 }
 
@@ -694,6 +712,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
       db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),
       ...tagRows(db, ENTRY_SEQ),
       ...formRows(db, ENTRY_SEQ, formsOf(claims)),
+      ...partRoleRows(db, ENTRY_SEQ, partRoleRowsOf(primaryIdsOf(claims), compositionOf(claims))),
       recount(db, ENTRY_SEQ),
       ...dates.reindex,
     ])
