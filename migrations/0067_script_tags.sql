@@ -138,6 +138,10 @@ WHERE NOT EXISTS (SELECT 1 FROM tags t WHERE t.name = m.tag OR t.label = m.tag)
   AND NOT EXISTS (SELECT 1 FROM tag_aliases a WHERE a.alias = m.tag)
 GROUP BY m.tag;
 
+UPDATE tags
+SET type = 'script', group_id = NULL
+WHERE name IN (SELECT tag FROM custom_script_map) AND type <> 'script';
+
 -- 4. Attach each record's script tag claim when not already carried directly or via an alias.
 WITH entry_script(entry_id, tag) AS (
   SELECT e.id, m.tag
@@ -169,8 +173,7 @@ WHERE NOT EXISTS (
     WHERE c.entry_id = es.entry_id
       AND c.kind = 'tag'
       AND COALESCE((SELECT a.tag FROM tag_aliases a WHERE a.alias = c.value), c.value) = es.tag
-  )
-  AND (SELECT count(*) FROM claims c WHERE c.entry_id = es.entry_id AND c.kind = 'tag') < 30;
+  );
 
 -- 5. Fold `script` / `script_other` into `$.claims` in historical entry snapshots, then drop those keys.
 -- Each revision's script tag is found once into a keyed table, so the update below reads one row per revision.
@@ -206,11 +209,7 @@ WHERE EXISTS (
         (SELECT a.tag FROM tag_aliases a WHERE a.alias = ltrim(json_extract(c.value, '$.value'), '#')),
         ltrim(json_extract(c.value, '$.value'), '#')
       ) = revision_script_map.tag
-  )
-  OR (
-    SELECT count(*) FROM revisions r, json_each(r.snapshot, '$.claims') c
-    WHERE r.id = revision_script_map.id AND json_extract(c.value, '$.kind') IN ('tag', 'genre')
-  ) >= 30;
+  );
 
 UPDATE revisions
 SET snapshot = json_insert(

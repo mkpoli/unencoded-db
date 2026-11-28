@@ -85,3 +85,10 @@ test('every row is charged to the add allowance before anything is saved', async
   expect(result.data.values.rows).toHaveLength(3)
   expect(count('entries')).toBe(0)
 })
+
+test('validates each row ids independently even when combined rows exceed IDS_MAX', async () => {
+  const { event, count } = fixture()
+  const rows = Array.from({ length: 7 }, () => ({ ids: '⿰山東\n⿱木木\n⿰木木', picture: true }))
+  await expect(actions.default(event(form(rows, { place: 'A book', tag: 'han' })))).rejects.toMatchObject({ status: 303, location: '/en/R+0001' })
+  expect(count('entries')).toBe(7)
+})

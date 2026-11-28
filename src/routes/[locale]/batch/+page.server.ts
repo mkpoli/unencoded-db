@@ -29,7 +29,11 @@ export const actions: Actions = {
     const { DB, MEDIA } = env(event)
     const form = await event.request.formData()
     const { tags } = await taxonomy(DB)
-    const { fields: base, error: baseError } = readEntryFields(form, tags), shared = readSightingFields(form)
+    const sharedFiling = new FormData()
+    for (const name of ['tags_present', 'tag', 'tags', 'genres_present', 'genre', 'collections_present', 'collection']) {
+      for (const value of form.getAll(name)) sharedFiling.append(name, value)
+    }
+    const { fields: base, error: baseError } = readEntryFields(sharedFiling, tags), shared = readSightingFields(form)
     const ids = form.getAll('ids').map(String), notes = form.getAll('row_note').map(String)
     const files = form.getAll('image'), thumbs = form.getAll('thumb'), boxes = form.getAll('box')
     const count = Math.max(ids.length, notes.length, files.length)
