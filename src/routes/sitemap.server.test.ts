@@ -92,7 +92,8 @@ test('page sitemaps name every language and the English default for each page', 
   expect(entry).toContain('xmlns:xhtml="http://www.w3.org/1999/xhtml"')
   const site = await (await child({ platform: { env: { DB: db } }, params: { part: 'site' } } as Parameters<typeof child>[0])).text()
   expect(site).toContain(`hreflang="x-default" href="${SITE_ORIGIN}/"`)
-  expect(site).toContain(`<loc>${SITE_ORIGIN}/en/parts</loc>`)
+  expect(site).toContain(`<loc>${SITE_ORIGIN}/en/radicals</loc>`)
+  expect(site).not.toContain(`<loc>${SITE_ORIGIN}/en/parts</loc>`)
 })
 
 test('sitemap includes parts and digitized copies shards when populated', async () => {

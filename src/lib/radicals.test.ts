@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { filedUnder, fileRecord, parsePath, pathsOf, radicalPath, radicalStrokes, standing } from './radicals'
+import { filedUnder, fileRecord, parsePath, pathsOf, radicalBase, radicalForms, radicalPath, radicalStrokes, standing } from './radicals'
 
 test('a description is filed under the radical of its head, through the characters on the way', () => {
   expect(radicalPath('⿰氵⿱艹男')).toEqual(['水'])
@@ -101,4 +101,20 @@ test('a branch stands on the records that stay in it, and the radicals come in K
   expect(filedUnder(['儿', '兄'], counts).map(branch => branch.radical)).toEqual(['儿'])
   expect(filedUnder(['口', '吅'], counts).map(branch => branch.radical)).toEqual(['口'])
   expect(filedUnder(['山'], counts)).toEqual([])
+})
+
+test('radicalBase and radicalForms link variant forms to their Kangxi radical', () => {
+  expect(radicalBase('亻')).toBe('人')
+  expect(radicalBase('⺅')).toBe('人')
+  expect(radicalBase('人')).toBe('人')
+  expect(radicalBase('氵')).toBe('水')
+  expect(radicalBase('扌')).toBe('手')
+  expect(radicalBase('艹')).toBe('艸')
+  expect(radicalBase('汝')).toBeNull()
+  expect(radicalBase('不')).toBeNull()
+  expect(radicalBase('⿰亻汝')).toBeNull()
+  expect(radicalForms('人')).toContain('亻')
+  expect(radicalForms('亻')).toContain('人')
+  expect(radicalForms('水')).toContain('氵')
+  expect(radicalForms('汝')).toEqual([])
 })

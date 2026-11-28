@@ -12,7 +12,7 @@ import { GET as copyCard } from './[locale]/sources/copy/[slug]/card.png/+server
 
 test('successful routes use their registered card or a generic site preview', () => {
   expect(socialPageFor('/[locale]', null)).toBe('home')
-  expect(socialPageFor('/[locale]/parts', null)).toBe('parts')
+  expect(socialPageFor('/[locale]/radicals', null)).toBe('radicals')
   expect(socialPageFor('/[locale]/part/[part]', null)).toBe('part')
   expect(socialPageFor('/[locale]/sources/copy/[slug]', null)).toBe('source-copy')
   const notifications = socialPageFor('/[locale]/notifications', null)

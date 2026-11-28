@@ -100,7 +100,7 @@ test('partData and copyData emit CollectionPage and breadcrumbs', () => {
   const [partPage, partTrail] = partData({ locale: 'en', part: '木', name: 'Part 木', description: '3 records', siteName: 'Site', partsName: 'Parts' }) as any[]
   expect(partPage).toMatchObject({ '@type': 'CollectionPage', url: 'https://rare.glyphatlas.org/en/part/%E6%9C%A8', inLanguage: 'en' })
   expect(partTrail.itemListElement.map((item: any) => item.item)).toEqual([
-    'https://rare.glyphatlas.org/en', 'https://rare.glyphatlas.org/en/parts', 'https://rare.glyphatlas.org/en/part/%E6%9C%A8',
+    'https://rare.glyphatlas.org/en', 'https://rare.glyphatlas.org/en/radicals', 'https://rare.glyphatlas.org/en/part/%E6%9C%A8',
   ])
 
   const [copyPage, copyTrail] = copyData({ locale: 'en', slug: 'ntcu-848', name: '彙音字典 · NTCU', description: '2 records', siteName: 'Site', sourcesName: 'Sources' }) as any[]

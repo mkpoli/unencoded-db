@@ -63,7 +63,8 @@ test('recordCode param matcher and SEO indexability align with canonical R+XXXX 
   expect(isPublicPage('/r+0009')).toBe(false)
   expect(isPublicPage('/entry/9')).toBe(false)
   expect(isPublicPage('/source/1')).toBe(true)
-  expect(isPublicPage('/parts')).toBe(true)
+  expect(isPublicPage('/radicals')).toBe(true)
+  expect(isPublicPage('/parts')).toBe(false)
   expect(isPublicPage('/part/%E6%9C%A8')).toBe(true)
   expect(isPublicPage('/part/%E2%BF%B0')).toBe(false) // lone IDS operator
   expect(isPublicPage('/part/a/b')).toBe(false)

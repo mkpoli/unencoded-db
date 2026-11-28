@@ -29,8 +29,15 @@
 <Seo data={structured} title={heading} description={summaryText} />
 <div class="page stack">
   <div class="row nav-row">
-    <a class="text-link back" href={href('/parts')}>← {t('nav.parts')}</a>
-    <a class="text-link small" href={browseHref(href(), { query: data.part })}>{t('part.browseAll', { part: data.part })}</a>
+    <a class="text-link back" href={href('/radicals')}>← {t('nav.parts')}</a>
+    <div class="nav-links">
+      {#if data.radical}
+        <a class="text-link small" href={href(`?radical=${encodeURIComponent(data.radical.path)}`)}>
+          {t('part.browseRadical', { radical: data.radical.path, n: data.radical.records })}
+        </a>
+      {/if}
+      <a class="text-link small" href={browseHref(href(), { query: data.part })}>{t('part.browseAll', { part: data.part })}</a>
+    </div>
   </div>
 
   <div class="hero">
@@ -38,6 +45,17 @@
     <div class="stack title">
       <h1>{t('part.title', { part: data.part })}</h1>
       <p class="muted">{t('part.total', { n: data.total })}</p>
+      {#if data.related.length}
+        <div class="related">
+          <span class="muted small">{t('part.relatedForms')}</span>
+          {#each data.related as item (item.part)}
+            <a class="related-chip" href={href(`/part/${encodeURIComponent(item.part)}`)} aria-label={t('part.chartLabel', { part: item.part, count: item.n })}>
+              <span class="glyph">{item.part}</span>
+              <span class="cnt">{item.n}</span>
+            </a>
+          {/each}
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -97,11 +115,17 @@
 </div>
 
 <style>
-  .nav-row { justify-content: space-between; align-items: baseline }
+  .nav-row { justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px 16px }
+  .nav-links { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px }
   .back { color: var(--muted) }
   .hero { display: flex; align-items: center; gap: 16px }
   .specimen { display: grid; place-items: center; inline-size: 64px; block-size: 64px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 36px; line-height: 1; flex: none }
   .title { gap: 4px }
+  .related { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 2px }
+  .related-chip { display: inline-flex; align-items: baseline; gap: 5px; min-block-size: 28px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: 13px; color: var(--ink) }
+  .related-chip:hover { border-color: var(--accent); background: var(--surface-selected) }
+  .related-chip .glyph { font-size: 16px; line-height: 1.2 }
+  .related-chip .cnt { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums }
   .panel { padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface) }
   .head { display: flex; flex-direction: column; gap: 10px }
   .filters { display: flex; flex-wrap: wrap; gap: 6px }

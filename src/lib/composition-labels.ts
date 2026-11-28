@@ -1,5 +1,14 @@
-import { FORMATIONS, FORMATION_MAX, ROLES, ROLE_MAX } from './composition'
 import { translate } from './i18n'
+
+// `initial` and `final` are the two spellers of a 切身字: the part read for its initial and the part read for its final.
+export const ROLES = ['semantic', 'phonetic', 'symbol', 'initial', 'final'] as const
+export type Role = (typeof ROLES)[number]
+
+export const FORMATIONS = ['phonoSemantic', 'ideographic', 'indicative', 'sign', 'fanqie', 'single', 'unknown'] as const
+export type Formation = (typeof FORMATIONS)[number]
+
+export const ROLE_MAX = 40
+export const FORMATION_MAX = 40
 
 /** The localized label of a standard role, or custom text as the editor wrote it. */
 export function roleLabel(locale: string, role: string): string {

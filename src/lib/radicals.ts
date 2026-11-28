@@ -16,6 +16,7 @@ type Count = [head: number, seen: number]
 type Tables = {
   runs: [start: number, length: number, radical: number][]
   forms: Set<string>
+  formsByRadical: Map<string, string[]>
   equivalents: Map<string, string>
   via: Map<string, string[]>
   prior: Map<string, number[]>
@@ -44,10 +45,27 @@ function tables(): Tables {
     }
     parts.set(part, total)
   }
+  const runs: [start: number, length: number, radical: number][] = RADICAL_RUNS.split(' ').map(run => { const [start, length, radical] = run.split(':'); return [parseInt(start, 36), parseInt(length, 36), Number(radical)] })
+  const forms = new Set(RADICAL_FORMS)
+  const equivalents = new Map(RADICAL_EQUIVALENTS.split(' ').map(pair => [...pair] as [string, string]))
+  const formsByRadical = new Map<string, string[]>()
+  for (const form of forms) {
+    const point = form.codePointAt(0)!
+    let low = 0, high = runs.length - 1
+    while (low < high) { const middle = (low + high + 1) >> 1; if (runs[middle][0] <= point) low = middle; else high = middle - 1 }
+    const [start, length, radical] = runs[low]
+    if (point >= start && point < start + length) {
+      const base = kangxi[radical - 1]
+      const list = formsByRadical.get(base)
+      if (list) list.push(form)
+      else formsByRadical.set(base, [form])
+    }
+  }
   return loaded = {
-    runs: RADICAL_RUNS.split(' ').map(run => { const [start, length, radical] = run.split(':'); return [parseInt(start, 36), parseInt(length, 36), Number(radical)] }),
-    forms: new Set(RADICAL_FORMS),
-    equivalents: new Map(RADICAL_EQUIVALENTS.split(' ').map(pair => [...pair] as [string, string])),
+    runs,
+    forms,
+    formsByRadical,
+    equivalents,
     via: new Map(RADICAL_VIA.split(' ').map(item => { const [char, ...between] = [...item]; return [char, between] })),
     prior: new Map(HEAD_PRIOR.split(' ').map(item => { const [shape, places] = item.split('='); return [shape, places.split(',').map(Number)] })),
     slots, parts,
@@ -56,6 +74,23 @@ function tables(): Tables {
 
 /** The ideograph a radical-supplement or Kangxi radical code point stands for, or the character itself. */
 export const radicalEquivalent = (char: string) => tables().equivalents.get(char) ?? char
+
+/** The Kangxi radical a character is a direct form of (e.g. `亻` → `人`, `氵` → `水`, `人` → `人`), or null. */
+export function radicalBase(written: string): string | null {
+  const text = bare(written)
+  if ([...text].length !== 1) return null
+  const found = tables()
+  const char = found.equivalents.get(text) ?? text
+  if (!found.forms.has(char)) return null
+  const radical = radicalOf(char)
+  return radical === null ? null : kangxi[radical - 1]
+}
+
+/** All canonical forms of a Kangxi radical (e.g. `人` → `['人', '亻', …]`), or empty when not a Kangxi radical. */
+export function radicalForms(written: string): readonly string[] {
+  const base = radicalBase(written)
+  return base ? (tables().formsByRadical.get(base) ?? []) : []
+}
 
 // A variation selector picks a glyph of the character before it and leaves its radical alone.
 const bare = (text: string) => text.replace(/[\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/gu, '')

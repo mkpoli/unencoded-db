@@ -1,8 +1,6 @@
-import { env } from '$lib/server/guard'
-import { listParts } from '$lib/server/parts'
+import { redirect } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 
-export const load: PageServerLoad = async (event) => {
-  const parts = await listParts(env(event).DB)
-  return { parts }
+export const load: PageServerLoad = (event) => {
+  redirect(301, `/${event.params.locale}/radicals`)
 }

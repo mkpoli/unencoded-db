@@ -1,8 +1,9 @@
 import { error, redirect } from '@sveltejs/kit'
 import { FUNCTION_MAX, partKey, validPartKey } from '$lib/composition'
+import { parsePath, radicalBase, radicalForms } from '$lib/radicals'
 import { tileGlyphs } from '$lib/server/glyphs'
 import { env } from '$lib/server/guard'
-import { parsePartCursor, partEntries, partSummary, type PartCursor } from '$lib/server/parts'
+import { parsePartCursor, partEntries, partSummary, radicalRecordCount, relatedPartCounts, type PartCursor } from '$lib/server/parts'
 import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async (event) => {
@@ -35,10 +36,17 @@ export const load: PageServerLoad = async (event) => {
     if (!after) error(404)
   }
 
+  const radical = radicalBase(canonical) ?? parsePath(canonical)
+  const siblingCandidates = radical
+    ? [...new Set(radicalForms(radical).map(partKey))].filter(form => form !== canonical)
+    : []
+
   const db = env(event).DB
-  const [summary, page] = await Promise.all([
+  const [summary, page, radicalCount, related] = await Promise.all([
     partSummary(db, canonical),
     partEntries(db, canonical, { func: selected, after }),
+    radical ? radicalRecordCount(db, radical) : Promise.resolve(0),
+    siblingCandidates.length ? relatedPartCounts(db, siblingCandidates) : Promise.resolve([]),
   ])
   const glyphs = await tileGlyphs(
     event.platform,
@@ -55,5 +63,7 @@ export const load: PageServerLoad = async (event) => {
     entries: page.entries,
     more: page.more,
     glyphs,
+    radical: radical && radicalCount > 0 ? { path: radical, records: radicalCount } : null,
+    related,
   }
 }

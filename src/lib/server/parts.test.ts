@@ -2,10 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { analyze, composeValue, parseComposition, partKey, partRoleRowsOf } from '$lib/composition'
 import { createEntry, editEntry, mergeEntry, setHidden, type EntryFields, type SightingFields } from './entries'
-import { listParts, parsePartCursor, partCountsStatement, partEntries, partEntriesStatement, partFunctionCountsStatement, partFunctionSuggestionsStatement, partSuggestions, partSummary } from './parts'
+import { listParts, parsePartCursor, partCountsByKeysStatement, partCountsStatement, partEntries, partEntriesStatement, partFunctionCountsStatement, partFunctionSuggestionsStatement, partSuggestions, partSummary, radicalRecordCountStatement, relatedPartsStatement } from './parts'
 import { openTestDb } from './testdb'
 import { load as partPageLoad } from '../../routes/[locale]/part/[part]/+page.server'
-import { load as partsIndexLoad } from '../../routes/[locale]/parts/+page.server'
+import { load as partsRedirectLoad } from '../../routes/[locale]/parts/+page.server'
+import { load as radicalsPageLoad } from '../../routes/[locale]/radicals/+page.server'
 import { GET as functionsApi } from '../../routes/api/parts/functions/+server'
 
 const who = { actor: 'p1', ip: null }
@@ -192,6 +193,17 @@ describe('part functions', () => {
         formation: null,
       }),
     ]), seen(), [], who)
+    await createEntry(db, {
+      ...fields([
+        newClaim('ids', '⿱人田'),
+        newClaim('composition', '⿱人田', {
+          parts: ['人', '田'],
+          roles: ['semantic', 'phonetic'],
+          formation: null,
+        }),
+      ]),
+      radical: '人',
+    }, seen(), [], who)
 
     const makeEvent = (part: string, query = '') => ({
       params: { locale: 'zh-Hant', part },
@@ -211,9 +223,18 @@ describe('part functions', () => {
     expect(loaded.part).toBe('亻')
     expect(loaded.total).toBe(1)
     expect(loaded.entries).toHaveLength(1)
+    expect(loaded.radical).toEqual({ path: '人', records: 2 })
+    expect(loaded.related).toEqual([{ part: '人', n: 1 }])
 
-    const index = await partsIndexLoad({ platform: { env: { DB: db } } } as any) as any
-    expect(index.parts[0]).toEqual({ part: '亻', n: 1 })
+    // `/parts` redirects permanently to the unified `/radicals` page, which carries both radicals and annotated parts.
+    expect(() => partsRedirectLoad({ params: { locale: 'zh-Hant' } } as any)).toThrow(expect.objectContaining({ status: 301, location: '/zh-Hant/radicals' }))
+
+    const unified = await radicalsPageLoad({ platform: { env: { DB: db } } } as any) as any
+    expect(unified.groups.some((g: any) => g.radicals.some((r: any) => r.radical === '人'))).toBe(true)
+    expect(unified.parts).toContainEqual({ part: '亻', n: 1 })
+    expect(unified.parts).toContainEqual({ part: '人', n: 1 })
+    expect(unified.radicalParts['人']).toEqual({ part: '人', n: 1 })
+    expect(unified.variantsByRadical['人']).toEqual([{ part: '亻', n: 1 }])
 
     const res = await functionsApi({ url: new URL('https://example.test/api/parts/functions?part=%E2%BA%85'), platform: { env: { DB: db } } } as any)
     expect(await res.json()).toEqual({ part: '亻', functions: [{ func: '度量衡「倍」字省略', n: 1 }] })
@@ -230,8 +251,11 @@ describe('part functions', () => {
 
     const statements = [
       partCountsStatement(db),
+      partCountsByKeysStatement(db, ['人', '亻', '口']),
       partFunctionCountsStatement(db, '亻'),
       partFunctionSuggestionsStatement(db, '亻'),
+      radicalRecordCountStatement(db, '人'),
+      relatedPartsStatement(db, ['人', '亻']),
       partEntriesStatement(db, '亻', null, null),
       partEntriesStatement(db, '亻', null, { id: 100, role: 'semantic', func: '表示民族名' }),
       partEntriesStatement(db, '亻', '度量衡「倍」字省略', null),

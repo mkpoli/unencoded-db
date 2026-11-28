@@ -7,18 +7,12 @@ import { isNode, parse, write, type IdsPart } from 'ids-input'
 import { IDS_LENGTH_MAX, splitIds } from './ids'
 import { radicalEquivalent } from './radicals'
 
-// `initial` and `final` are the two spellers of a 切身字: the part read for its initial and the part read for its final.
-export const ROLES = ['semantic', 'phonetic', 'symbol', 'initial', 'final'] as const
-export type Role = (typeof ROLES)[number]
-
-export const FORMATIONS = ['phonoSemantic', 'ideographic', 'indicative', 'sign', 'fanqie', 'single', 'unknown'] as const
-export type Formation = (typeof FORMATIONS)[number]
+import { FORMATIONS, FORMATION_MAX, ROLES, ROLE_MAX, type Formation, type Role } from './composition-labels'
+export { FORMATIONS, FORMATION_MAX, ROLES, ROLE_MAX, type Formation, type Role }
 
 export const PARTS_MAX = 8
 export const PART_MAX = 200
-export const ROLE_MAX = 40
 export const FUNCTION_MAX = 60
-export const FORMATION_MAX = 40
 
 /** One part, the role given to it, and an optional reusable function label (作用). */
 export type PartRole = { part: string; role: string; func: string }
