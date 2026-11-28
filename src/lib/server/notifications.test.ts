@@ -86,7 +86,7 @@ test('changes made before notices existed are queued for the recorder', async ()
   const migrations = join(import.meta.dir, '../../../migrations')
   const names = readdirSync(migrations).sort()
   // The code under test writes the source and sighting columns, the forms and the pictures of a chain, and reads the tag aliases and source keys, of today, so their migrations run first.
-  const early = (name: string) => name < '0035' || name === '0041_source_container.sql' || name === '0044_tag_groups.sql' || name === '0045_tag_aliases.sql' || name === '0046_tag_names.sql' || name === '0047_sighting_contexts.sql' || name === '0048_source_kind.sql' || name === '0054_source_keys.sql' || name === '0055_via_pictures.sql' || name === '0056_forms.sql' || name === '0058_agent_attribution.sql' || name === '0060_agent_model.sql' || name === '0065_sighting_cites.sql' || name === '0066_sighting_closeness.sql' || name === '0067_part_functions.sql' || name === '0068_script_tags.sql'
+  const early = (name: string) => name < '0035' || name === '0041_source_container.sql' || name === '0044_tag_groups.sql' || name === '0045_tag_aliases.sql' || name === '0046_tag_names.sql' || name === '0047_sighting_contexts.sql' || name === '0048_source_kind.sql' || name === '0054_source_keys.sql' || name === '0055_via_pictures.sql' || name === '0056_forms.sql' || name === '0058_agent_attribution.sql' || name === '0060_agent_model.sql' || name === '0065_sighting_cites.sql' || name === '0066_sighting_closeness.sql' || name === '0067_part_functions.sql' || name === '0069_part_role_as_function.sql' || name === '0068_script_tags.sql'
   for (const name of names.filter(early)) raw.exec(readFileSync(join(migrations, name), 'utf8'))
   const db = d1Over(raw)
   const recorder = await createPerson(db), second = await createPerson(db), maintenance = await createPerson(db, null, 'Catalogue maintenance')
@@ -148,7 +148,7 @@ test('the rebuilt table keeps the notices it held', async () => {
   const migrations = join(import.meta.dir, '../../../migrations')
   const names = readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()
   // The chain's pictures and the sighting columns of today are read by the code under test, so their migrations come first.
-  const early = (name: string) => name < '0049' || name === '0055_via_pictures.sql' || name === '0056_forms.sql' || name === '0065_sighting_cites.sql' || name === '0066_sighting_closeness.sql' || name === '0067_part_functions.sql' || name === '0068_script_tags.sql'
+  const early = (name: string) => name < '0049' || name === '0055_via_pictures.sql' || name === '0056_forms.sql' || name === '0065_sighting_cites.sql' || name === '0066_sighting_closeness.sql' || name === '0067_part_functions.sql' || name === '0069_part_role_as_function.sql' || name === '0068_script_tags.sql'
   const old = new Database(':memory:')
   for (const name of names.filter(early)) old.exec(readFileSync(join(migrations, name), 'utf8'))
   const db = d1Over(old)

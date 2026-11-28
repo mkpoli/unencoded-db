@@ -57,7 +57,7 @@
             {t('part.allFunctions')} <span class="cnt">{data.total}</span>
           </a>
           {#each data.slices as slice (slice.func)}
-            {@const label = slice.func === '' ? t('part.unlabeled') : slice.func}
+            {@const label = slice.func === '' ? t('part.unlabeled') : roleLabel(at, slice.func)}
             {@const active = data.selected === slice.func}
             <a class="pill" class:active aria-current={active ? 'page' : undefined} href={filterHref(slice.func)}>
               {label} <span class="cnt">{slice.n}</span>

@@ -32,9 +32,10 @@ for (const row of compositions) {
     if (want.has(key)) continue
     want.add(key)
     if (!have.has(key)) {
+      const bucket = item.func || item.role
       updates.push(
-        `INSERT OR IGNORE INTO entry_part_roles(part, entry_id, role, func) ` +
-        `SELECT ${literal(item.part)}, ${row.entry_id}, ${literal(item.role)}, ${literal(item.func)} ` +
+        `INSERT OR IGNORE INTO entry_part_roles(part, entry_id, role, func, bucket) ` +
+        `SELECT ${literal(item.part)}, ${row.entry_id}, ${literal(item.role)}, ${literal(item.func)}, ${literal(bucket)} ` +
         `WHERE EXISTS (SELECT 1 ${LIVE} AND e.id = ${row.entry_id}) AND (${CHANGED} ${row.entry_id}) = ${row.change};`,
       )
     }
