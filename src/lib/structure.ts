@@ -3,7 +3,7 @@
 // of leaving some of its parts open (⿰氵？, ⿰？五), so a search for a structure reads one row and never the
 // descriptions themselves. A structure typed to search with is read into the same keys.
 // Nothing here touches the network or the page, so it runs in the browser, on the server and in tests.
-import { parseQuery, unalias } from 'ids-input'
+import { isNode, parse, unalias, type IdsPart } from 'ids-input'
 import { radicalEquivalent } from './radicals'
 import { treeOf, write, type Tree } from './similar'
 
@@ -47,6 +47,8 @@ export const partsOf = (ids: string) => [...new Set([...ids].filter(char => !/[\
 export const partRowsOf = (ids: string) => [...new Set([...partsOf(ids), ...structureKeys(ids)])].map(key => `p:${key}`)
 
 type Pattern = null | string | { op: string; parts: Pattern[] }
+// A part left open reads as null, as a missing one does.
+const patternOf = (part: IdsPart | undefined): Pattern => part === null || part === undefined || part === OPEN || part === '⬚' || part === '＋' ? null : isNode(part) ? { op: part.op, parts: part.parts.map(patternOf) } : part
 const isOpen = (pattern: Pattern): boolean => pattern === null || (typeof pattern !== 'string' && pattern.parts.some(isOpen))
 const written = (pattern: Pattern): string => pattern === null ? OPEN : typeof pattern === 'string' ? pattern : pattern.op + pattern.parts.map(written).join('')
 
@@ -60,20 +62,28 @@ function patternKeys(pattern: Pattern, keys: string[]) {
 // A part left open is written ？, ⬚ or ＋ in a description, and ? or * on a keyboard.
 const opened = (text: string) => text.replace(/[?*＊]/gu, OPEN)
 
+// Operators named in capitals (LR氵五) are read only in a term that starts with a name and names its parts by
+// characters: a word in Latin letters alone (OUP, XXI, LD50) stays a word.
+function named(typed: string) {
+  if (!/^[A-Z]{2}/.test(typed) || !/[^\x00-\x7F]/u.test(typed)) return typed
+  const read = unalias(typed)
+  return /[A-Za-z0-9]/.test(read) ? typed : read
+}
+
 /**
  * The keys a structure typed to search with is found by, every one of which a record must hold: ⿲ is the
  * operator, ⿰氵 is ⿰氵？, and ⿰氵⿱？木 is ⿰氵？ with ⿱？木. Operators may be typed by their names in capitals
- * (LR, UD). Null for a text that does not start with an operator, or holds more than its operators join.
+ * before parts (LR氵五). The text is read as a description is filed, by the same parser. Null for a text that
+ * does not start with an operator, or holds more than its operators join.
  */
 export function structurePattern(text: string): string[] | null {
   const typed = text.normalize('NFC').replace(/\s+/gu, '')
-  const term = [...opened(/\p{Ll}/u.test(typed) ? typed : unalias(typed))].map(radicalEquivalent).join('')
+  const term = [...opened(named(typed))].map(radicalEquivalent).join('')
   if (!isOperator([...term][0])) return null
-  const read = parseQuery(term, { literal: true })
-  const found = read.terms[0]
-  if (read.problem || read.terms.length !== 1 || found.kind !== 'structure') return null
+  const read = parse(term, { open: true })
+  if (read.problem || !isNode(read.tree)) return null
   const keys: string[] = []
-  patternKeys(found.tree as Pattern, keys)
+  patternKeys(patternOf(read.tree), keys)
   const unique = [...new Set(keys)]
   return unique.length && unique.length <= PATTERN_KEYS_MAX ? unique : null
 }
