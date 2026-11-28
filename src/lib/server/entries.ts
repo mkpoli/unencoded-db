@@ -29,6 +29,7 @@ import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
 import { formsOf } from '$lib/forms'
 import { compareDays, dateText, decadeOf, decadeStart, isDecade } from '$lib/dates'
+import { buildEntryStemma, removedNodeId, STEMMA_NODES_LIMIT, unseenNodeId, witnessNodeId, yearFor, type StemmaEdge, type StemmaGraph, type StemmaNode } from '$lib/stemma'
 import { datedYear, prepareDates, readDates, sightingDates, type DateBook } from './date-readings'
 import { hashHex } from './image'
 import { ORDER, PAGE, PAGE_SIZES, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
@@ -1424,11 +1425,16 @@ type CiteQueryRow = Citation & {
 type CitedByRow = InboundCite & { target_id: number }
 
 // Lazy lookup of `removed_by` only when a hidden target without own `source_id` exists, keeping pre-0051 test schemas working.
+// Chunked below D1's 100-parameter limit for multi-hop stemma walks.
 async function fillRemovedBy(db: D1Database, rows: CiteQueryRow[]): Promise<CiteQueryRow[]> {
   const hiddenIds = [...new Set(rows.filter(row => row.cited_id !== null && row.source_id === null && row.t_hidden_at !== null && row.te_hidden_at === null && row.te_merged_into === null).map(row => row.cited_id!))]
   if (!hiddenIds.length) return rows
-  const { results } = await db.prepare(`SELECT id, removed_by FROM sightings WHERE id IN (${hiddenIds.map(() => '?').join(', ')})`).bind(...hiddenIds).all<{ id: number; removed_by: string | null }>()
-  const byId = new Map(results.map(row => [row.id, row.removed_by]))
+  const byId = new Map<number, string | null>()
+  for (let i = 0; i < hiddenIds.length; i += 80) {
+    const chunk = hiddenIds.slice(i, i + 80)
+    const { results } = await db.prepare(`SELECT id, removed_by FROM sightings WHERE id IN (${chunk.map(() => '?').join(', ')})`).bind(...chunk).all<{ id: number; removed_by: string | null }>()
+    for (const row of results) byId.set(row.id, row.removed_by)
+  }
   return rows.map(row => row.cited_id !== null && byId.has(row.cited_id) ? { ...row, t_removed_by: byId.get(row.cited_id)! } : row)
 }
 
@@ -2483,4 +2489,200 @@ export const customScriptsStatement = (db: D1Database) => db.prepare(`WITH RECUR
 /** The names visible records give scripts outside the list. */
 export async function customScripts(db: D1Database) {
   return (await customScriptsStatement(db).all<{ name: string }>()).results.map(row => row.name)
+}
+
+export const STEMMA_HOPS_MAX = 4
+export const STEMMA_NODES_MAX = STEMMA_NODES_LIMIT
+
+/**
+ * Multi-hop provenance stemma centered on `entryId`, walking up to 4 hops and 60 nodes across records
+ * with one batched pair of indexed queries per hop (starting from hop 1 after seeding hop 0 from `sightingRows`).
+ * Returns immediately on merged records so callers can redirect without walking the graph.
+ */
+export async function entryStemma(db: D1Database, entryId: number): Promise<{ entry: Entry; graph: StemmaGraph; dates: DateBook } | null> {
+  const entry = await getEntryRow(db, entryId)
+  if (!entry || entry.hidden_at) return null
+  if (entry.merged_into) {
+    return { entry, dates: new Map(), graph: { entryId, nodes: [], edges: [], unlinkedCount: 0, truncated: false } }
+  }
+  const own = await sightingRows(db, entryId)
+  const visibleOwn = own.filter(sighting => !sighting.hidden_at)
+  const seeded = buildEntryStemma(entryId, visibleOwn, undefined, STEMMA_NODES_MAX)
+  if (!seeded) {
+    return { entry, dates: new Map(), graph: { entryId, nodes: [], edges: [], unlinkedCount: visibleOwn.length, truncated: false } }
+  }
+
+  const nodes = new Map<string, StemmaNode>(seeded.nodes.map(node => [node.id, { ...node }]))
+  const edges: StemmaEdge[] = [...seeded.edges]
+  const edgeKeys = new Set<string>(edges.map(edge => `${edge.from}\u0000${edge.to}\u0000${edge.kind}`))
+  const expanded = new Set<number>(visibleOwn.map(sighting => sighting.id))
+  const linkedOwn = new Set<number>(seeded.nodes.filter(node => node.kind === 'witness' && node.entryId === entryId && node.sightingId !== null).map(node => node.sightingId!))
+  let truncated = Boolean(seeded.truncated)
+
+  // Seed hop 1 frontier with newly discovered 1-hop cross-record witnesses (hop 0 was already loaded by `sightingRows`).
+  let frontier = [...new Set(seeded.nodes.filter(node => node.kind === 'witness' && node.sightingId !== null && !expanded.has(node.sightingId)).map(node => node.sightingId!))]
+
+  const putNode = (node: StemmaNode): boolean => {
+    const existing = nodes.get(node.id)
+    if (existing) {
+      if (!existing.thumbKey && node.thumbKey) existing.thumbKey = node.thumbKey
+      if (!existing.title && node.title) existing.title = node.title
+      if (!existing.date && node.date) existing.date = node.date
+      if (!existing.originalDate && node.originalDate) existing.originalDate = node.originalDate
+      if (!existing.reportDate && node.reportDate) existing.reportDate = node.reportDate
+      return true
+    }
+    if (nodes.size >= STEMMA_NODES_MAX) {
+      truncated = true
+      return false
+    }
+    nodes.set(node.id, node)
+    return true
+  }
+
+  const addEdge = (edge: StemmaEdge) => {
+    if (edge.from === edge.to || !nodes.has(edge.from) || !nodes.has(edge.to)) return
+    const key = `${edge.from}\u0000${edge.to}\u0000${edge.kind}`
+    if (edgeKeys.has(key)) return
+    edgeKeys.add(key)
+    edges.push(edge)
+  }
+
+  const inLimit = STEMMA_NODES_MAX * 2
+  // Hop 0 was loaded by `sightingRows`; walk remaining hops (1 .. STEMMA_HOPS_MAX - 1).
+  for (let hop = 1; hop < STEMMA_HOPS_MAX && frontier.length; hop++) {
+    const batchIds = frontier.filter(id => !expanded.has(id)).slice(0, 80)
+    if (!batchIds.length) break
+    for (const id of batchIds) expanded.add(id)
+    const placeholders = batchIds.map(() => '?').join(', ')
+    const [outRes, inRes] = await db.batch<unknown>([
+      db.prepare(`SELECT ${CITE_ROW_COLUMNS} FROM sighting_cites sc ${CITE_JOINS} WHERE sc.sighting_id IN (${placeholders})`).bind(...batchIds),
+      db.prepare(`SELECT ${CITED_BY_COLUMNS} FROM sighting_cites sc INDEXED BY sighting_cites_by_cited JOIN sightings s ON s.id = sc.sighting_id JOIN entries e ON e.id = s.entry_id LEFT JOIN sources c ON c.id = s.source_id WHERE sc.cited_id IN (${placeholders}) AND s.hidden_at IS NULL AND ${LIVE} LIMIT ${inLimit + 1}`).bind(...batchIds),
+    ])
+    const outRows = (await fillRemovedBy(db, outRes.results as CiteQueryRow[])).sort((a, b) => a.sighting_id - b.sighting_id || a.position - b.position)
+    const rawIn = inRes.results as CitedByRow[]
+    if (rawIn.length > inLimit) truncated = true
+    const inRows = rawIn.slice(0, inLimit).sort((a, b) => a.target_id - b.target_id || a.sighting_id - b.sighting_id || a.position - b.position)
+    const nextFrontier = new Set<number>()
+
+    for (const row of outRows) {
+      const resolved = resolveCiteRow(row)
+      if (!resolved) continue
+      const toId = witnessNodeId(row.sighting_id)
+      if (resolved.status === 'witness' && resolved.target) {
+        const fromId = witnessNodeId(resolved.target.id)
+        if (putNode({
+          id: fromId,
+          kind: 'witness',
+          sightingId: resolved.target.id,
+          entryId: resolved.target.entry_id,
+          sourceId: resolved.source_id,
+          title: resolved.target.title || resolved.title,
+          place: resolved.target.place,
+          date: resolved.target.original_date ?? resolved.target.report_date,
+          originalDate: resolved.target.original_date,
+          reportDate: resolved.target.report_date,
+          year: null,
+          thumbKey: resolved.target.thumb_key,
+        })) {
+          if (resolved.target.entry_id === entryId) linkedOwn.add(resolved.target.id)
+          addEdge({ from: fromId, to: toId, kind: resolved.kind })
+          if (!expanded.has(resolved.target.id)) nextFrontier.add(resolved.target.id)
+        }
+      } else if (resolved.status === 'unseen' && resolved.source_id !== null) {
+        const fromId = unseenNodeId(resolved.source_id)
+        if (putNode({
+          id: fromId,
+          kind: 'unseen',
+          sightingId: null,
+          entryId: null,
+          sourceId: resolved.source_id,
+          title: resolved.title || resolved.author || resolved.url,
+          place: '',
+          date: resolved.report_date,
+          originalDate: null,
+          reportDate: resolved.report_date,
+          year: null,
+          thumbKey: null,
+        })) {
+          addEdge({ from: fromId, to: toId, kind: resolved.kind })
+        }
+      } else if (resolved.status === 'removed' && resolved.target) {
+        const fromId = removedNodeId(resolved.target.id)
+        if (putNode({
+          id: fromId,
+          kind: 'removed',
+          sightingId: resolved.target.id,
+          entryId: resolved.target.entry_id,
+          sourceId: null,
+          title: resolved.title || resolved.target.title,
+          place: resolved.target.place,
+          date: resolved.target.original_date ?? resolved.target.report_date,
+          originalDate: resolved.target.original_date,
+          reportDate: resolved.target.report_date,
+          year: null,
+          thumbKey: null,
+        })) {
+          addEdge({ from: fromId, to: toId, kind: resolved.kind })
+        }
+      }
+    }
+
+    for (const row of inRows) {
+      const fromId = witnessNodeId(row.target_id)
+      const toId = witnessNodeId(row.sighting_id)
+      if (putNode({
+        id: toId,
+        kind: 'witness',
+        sightingId: row.sighting_id,
+        entryId: row.entry_id,
+        sourceId: null,
+        title: row.title,
+        place: row.place,
+        date: row.original_date ?? row.report_date,
+        originalDate: row.original_date,
+        reportDate: row.report_date,
+        year: null,
+        thumbKey: row.thumb_key,
+      })) {
+        if (row.entry_id === entryId) linkedOwn.add(row.sighting_id)
+        addEdge({ from: fromId, to: toId, kind: row.kind })
+        if (!expanded.has(row.sighting_id)) nextFrontier.add(row.sighting_id)
+      }
+    }
+
+    frontier = [...nextFrontier]
+  }
+
+  // Probe leftover frontier at hop STEMMA_HOPS_MAX only if not already truncated, avoiding false truncation hints when a chain naturally terminates.
+  if (!truncated && frontier.length) {
+    const leftover = frontier.filter(id => !expanded.has(id)).slice(0, 80)
+    if (leftover.length) {
+      const placeholders = leftover.map(() => '?').join(', ')
+      const [moreOut, moreIn] = await db.batch<unknown>([
+        db.prepare(`SELECT sc.sighting_id, sc.cited_id, sc.source_id FROM sighting_cites sc LEFT JOIN sightings cs ON cs.id = sc.cited_id LEFT JOIN entries ce ON ce.id = cs.entry_id WHERE sc.sighting_id IN (${placeholders}) AND ((cs.id IS NOT NULL AND cs.hidden_at IS NULL AND ce.hidden_at IS NULL AND ce.merged_into IS NULL) OR sc.source_id IS NOT NULL)`).bind(...leftover),
+        db.prepare(`SELECT sc.sighting_id, sc.cited_id FROM sighting_cites sc INDEXED BY sighting_cites_by_cited JOIN sightings s ON s.id = sc.sighting_id JOIN entries e ON e.id = s.entry_id WHERE sc.cited_id IN (${placeholders}) AND s.hidden_at IS NULL AND ${LIVE}`).bind(...leftover),
+      ])
+      for (const row of moreOut.results as { sighting_id: number; cited_id: number | null; source_id: number | null }[]) {
+        if (row.cited_id !== null && !nodes.has(witnessNodeId(row.cited_id))) { truncated = true; break }
+        if (row.cited_id === null && row.source_id !== null && !nodes.has(unseenNodeId(row.source_id))) { truncated = true; break }
+      }
+      if (!truncated) {
+        for (const row of moreIn.results as { sighting_id: number; cited_id: number }[]) {
+          if (!nodes.has(witnessNodeId(row.sighting_id))) { truncated = true; break }
+        }
+      }
+    }
+  }
+
+  const allDates = [...nodes.values()].flatMap(node => [node.originalDate, node.reportDate, node.date]).filter((value): value is string => Boolean(value))
+  const dates = await readDates(db, allDates)
+  const resolvedNodes = [...nodes.values()].map(node => ({ ...node, year: yearFor(node.originalDate, node.reportDate ?? node.date, dates) }))
+  const unlinkedCount = Math.max(0, visibleOwn.length - linkedOwn.size)
+
+  return {
+    entry,
+    dates,
+    graph: { entryId, nodes: resolvedNodes, edges, unlinkedCount, truncated },
+  }
 }

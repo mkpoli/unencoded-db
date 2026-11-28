@@ -23,6 +23,7 @@ test('record URL redirects canonicalize legacy /entry/ and non-canonical codes i
   for (const [input, status, location] of [
     ['https://rare.glyphatlas.org/zh-Hant/entry/9', 308, '/zh-Hant/R+0009'],
     ['https://rare.glyphatlas.org/zh-Hant/entry/9/history?before=5', 308, '/zh-Hant/R+0009/history?before=5'],
+    ['https://rare.glyphatlas.org/zh-Hant/entry/9/stemma', 308, '/zh-Hant/R+0009/stemma'],
     ['https://rare.glyphatlas.org/en/entry/1734/sighting/3/edit', 308, '/en/R+06C6/sighting/3/edit'],
     ['https://rare.glyphatlas.org/en/entry/1/card.png?v=1', 308, '/en/R+0001/card.png?v=1'],
     ['https://rare.glyphatlas.org/zh-Hant/r+9/history', 308, '/zh-Hant/R+0009/history'],

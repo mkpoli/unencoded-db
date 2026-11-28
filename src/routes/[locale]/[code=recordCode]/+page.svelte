@@ -52,10 +52,33 @@
   import { browseReturnHref, canReturnViaHistory, markReturningFrom } from '$lib/browse-return.svelte'
   import { kindName } from '$lib/source-kind'
   import { recordCode, recordName } from '$lib/code'
+  import StemmaGraph from '$lib/components/StemmaGraph.svelte'
+  import { buildEntryStemma } from '$lib/stemma'
   let { data, form } = $props()
   const entry = $derived(data.entry)
   const claims = $derived(data.claims)
   const derivedCount = $derived(data.sightings.filter(s => s.cites.some(c => c.status === 'witness')).length)
+  const stemma = $derived(buildEntryStemma(entry.id, data.sightings, data.dates))
+  let activeSighting = $state<number | null>(null)
+  $effect(() => {
+    if (!stemma || typeof IntersectionObserver === 'undefined') { activeSighting = null; return }
+    const cards = [...document.querySelectorAll<HTMLElement>('article[id^="sighting-"]')]
+    if (!cards.length) return
+    const ratios = new Map<number, number>()
+    const observer = new IntersectionObserver(entries => {
+      for (const item of entries) {
+        const sid = Number(item.target.id.slice('sighting-'.length))
+        if (Number.isInteger(sid)) ratios.set(sid, item.isIntersecting ? item.intersectionRatio : 0)
+      }
+      let best: number | null = null, bestRatio = 0
+      for (const [sid, ratio] of ratios) {
+        if (ratio > bestRatio) { bestRatio = ratio; best = sid }
+      }
+      activeSighting = best
+    }, { threshold: [0, 0.25, 0.6], rootMargin: '-10% 0px -40% 0px' })
+    for (const card of cards) observer.observe(card)
+    return () => observer.disconnect()
+  })
   // A source cited on several sightings points at the first in page order, the closest to the original.
   const witnessBySource = $derived(new Map(data.sightings.filter(s => s.source_id !== null).map(s => [s.source_id!, s.id] as const).reverse()))
   const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
@@ -350,6 +373,18 @@
   {/if}
   <section class="stack">
     <div class="row"><h2>{t('entry.sightings')}</h2>{#if derivedCount > 0}<span class="badge">{t('entry.derivedCount', { derived: derivedCount, total: data.sightings.length })}</span>{/if}</div>
+    {#if stemma}
+      <div class="panel stemma-strip">
+        <div class="row stemma-head">
+          <div class="row stemma-meta">
+            <h3>{t('stemma.title')}</h3>
+            {#if stemma.unlinkedCount > 0}<span class="badge">{t('stemma.unlinked', { count: stemma.unlinkedCount })}</span>{/if}
+          </div>
+          <a class="text-link small" href={href(`/${recordCode(entry.id)}/stemma`)}>{t('stemma.full')} →</a>
+        </div>
+        <StemmaGraph graph={stemma} mode="strip" dates={data.dates} activeSightingId={activeSighting} />
+      </div>
+    {/if}
     {#each data.sightings as sighting (sighting.id)}
       {@const types = parseSightingTypes(sighting.types)}
       {@const contexts = parseContexts(sighting.contexts)}
@@ -455,4 +490,7 @@
   .badge.earliest { background:var(--accent-light); color:var(--accent) }
   .badge.closeness { background:none; box-shadow:inset 0 0 0 1px var(--line) }
   .attribution { display:flex; flex-wrap:wrap; align-items:center; gap:6px }
+  .stemma-strip { display:flex; flex-direction:column; gap:10px; padding:14px 16px }
+  .stemma-head { justify-content:space-between; align-items:baseline }
+  .stemma-meta { gap:8px }
 </style>

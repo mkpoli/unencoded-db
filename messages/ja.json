@@ -865,6 +865,17 @@
   "mcp.authTitle": "ログインと書き込み",
   "mcp.authBody": "ログインしなくても利用でき、接続ごとに新しい匿名の名前が付きます。OAuth 2.1対応のクライアントからGlyph Atlasで認証すると、ご自身のアカウント名義で記録されます。",
   "mcp.writesBody": "書き込みにはWebフォームと同じ検証が適用されます。証拠画像は公開URLから取得されます。",
+  "stemma.title": "出典系統",
+  "stemma.full": "系統図全体",
+  "stemma.pageTitle": "出典系統図・{id}",
+  "stemma.region": "証拠の出典系統図",
+  "stemma.legend": "系統図の凡例",
+  "stemma.nodes": "証拠{count}件",
+  "stemma.edges": "関係{count}件",
+  "stemma.unlinked": "未接続{count}件",
+  "stemma.truncated": "最大{hops}段階（{nodes}件）まで表示しています。別の記録の証拠を開くと、さらに先をたどれます。",
+  "stemma.empty": "この文字の出典関係はまだ記録されていません。",
+  "stemma.limit": "最大{hops}段階・{nodes}件",
   "search.suggestions": "検索候補",
   "search.written": "表記"
 }

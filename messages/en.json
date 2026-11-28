@@ -865,6 +865,17 @@
   "mcp.authTitle": "Sign-in and writes",
   "mcp.authBody": "Works without signing in, under a new anonymous name per connection. Clients that support OAuth 2.1 can sign in through Glyph Atlas to credit writes to your account.",
   "mcp.writesBody": "Writes pass the same checks as the web forms; evidence pictures are fetched from public URLs.",
+  "stemma.title": "Provenance",
+  "stemma.full": "Full stemma",
+  "stemma.pageTitle": "Provenance stemma · {id}",
+  "stemma.region": "Evidence provenance stemma",
+  "stemma.legend": "Stemma legend",
+  "stemma.nodes": "{count} witnesses",
+  "stemma.edges": "{count} links",
+  "stemma.unlinked": "{count} unlinked",
+  "stemma.truncated": "Showing up to {hops} hops ({nodes} nodes). Open a cross-record witness to explore further.",
+  "stemma.empty": "No provenance links recorded for this character yet.",
+  "stemma.limit": "Up to {hops} hops · {nodes} max",
   "search.suggestions": "Suggestions",
   "search.written": "Written as"
 }
