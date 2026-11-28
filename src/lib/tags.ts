@@ -1,6 +1,7 @@
-// Typed tags with DAG implications, in three tiers: a type (which determines its color), an optional
-// group within the type, and the tag. A tag may automatically carry other tags via `implies`, and a
-// record carrying a tag is also listed under every tag it transitively implies.
+// Typed tags with DAG implications: a type (which determines its color), an optional group within the
+// type, and the tags, which nest under each other to any depth. A tag may automatically carry other tags
+// via `implies`, and a record carrying a tag is also listed under every tag it transitively implies; a
+// tag that implies another of its own type stands under it.
 export const TAG_TYPES = ['script', 'region', 'language', 'form', 'domain', 'meta', 'general'] as const
 export type TagType = (typeof TAG_TYPES)[number]
 export const isTagType = (value: unknown): value is TagType => TAG_TYPES.includes(value as TagType)
@@ -37,7 +38,7 @@ export const isCollection = (slug: string) => COLLECTIONS.some(collection => col
 
 export const TAG_LENGTH_MAX = 40
 export const TAG_IMPLIES_MAX = 20
-export const TAG_IMPLY_DEPTH_MAX = 8
+export const TAG_IMPLY_DEPTH_MAX = 16
 export const TAG_CLOSURE_MAX = 64
 export const TAG_ALIASES_MAX = 20
 export const GROUP_LABEL_MAX = 40
@@ -90,18 +91,77 @@ export const byGroupOrder = (a: Pick<TagGroup, 'position' | 'id'>, b: Pick<TagGr
 export type TagShelf<T> = { group: TagGroup | null; tags: T[] }
 export type TagSection<T> = { type: TagType; shelves: TagShelf<T>[] }
 
+const typeOf = (tag: Pick<Tag, 'type'>): TagType => (isTagType(tag.type) ? tag.type : 'general')
+
+/**
+ * Each tag's parent in the tree: of the tags of its own type it implies, the one with the longest chain of
+ * such parents above it, so a tag that implies both 略字 and 大陸簡體字 sits under 大陸簡體字. Ties go to
+ * the first by order. A tag with none is a root. Only tags in the list count.
+ */
+export function tagParents<T extends Pick<Tag, 'name' | 'type' | 'position' | 'implies'>>(tags: readonly T[]): Map<string, string> {
+  const byName = new Map(tags.map(tag => [tag.name, tag]))
+  const candidates = (tag: T) => tag.implies.map(name => byName.get(name)).filter((other): other is T => Boolean(other) && other!.name !== tag.name && typeOf(other!) === typeOf(tag))
+  const height = new Map<string, number>()
+  const heightOf = (tag: T, seen: Set<string>): number => {
+    const known = height.get(tag.name)
+    if (known !== undefined) return known
+    if (seen.has(tag.name)) return 0
+    seen.add(tag.name)
+    const above = Math.max(0, ...candidates(tag).map(other => 1 + heightOf(other, seen)))
+    seen.delete(tag.name)
+    height.set(tag.name, above)
+    return above
+  }
+  const parents = new Map<string, string>()
+  for (const tag of tags) {
+    const best = candidates(tag).sort((a, b) => heightOf(b, new Set()) - heightOf(a, new Set()) || byTagOrder(a, b))[0]
+    if (best) parents.set(tag.name, best.name)
+  }
+  return parents
+}
+
+/** Each tag's depth in the tree, 0 for a root. */
+export function tagDepths(tags: readonly Pick<Tag, 'name'>[], parents: ReadonlyMap<string, string>): Map<string, number> {
+  const depths = new Map<string, number>()
+  for (const tag of tags) {
+    let depth = 0
+    for (let at = parents.get(tag.name); at !== undefined && depth <= tags.length; at = parents.get(at)) depth++
+    depths.set(tag.name, depth)
+  }
+  return depths
+}
+
 /**
  * Tags by type, and by group within each type: the groups in their order, then the tags in no group.
- * Sorted by position and name within each shelf. With `every`, every type and every group is listed,
- * empty ones too, so that there is somewhere to put a tag.
+ * A tag stands under its parent (`tagParents`) at any depth, on the shelf of its root, so each shelf
+ * lists its tags in tree order: a tag, then its children by position and name. With `every`, every type
+ * and every group is listed, empty ones too, so that there is somewhere to put a tag.
  */
-export function arrangeTags<T extends Pick<Tag, 'name' | 'type' | 'position' | 'group'>>(tags: readonly T[], groups: readonly TagGroup[], { every = false } = {}): TagSection<T>[] {
+export function arrangeTags<T extends Pick<Tag, 'name' | 'type' | 'position' | 'group' | 'implies'>>(tags: readonly T[], groups: readonly TagGroup[], { every = false } = {}): TagSection<T>[] {
   const sorted = [...groups].sort(byGroupOrder)
   const known = new Map(sorted.map(group => [group.id, group]))
+  const parents = tagParents(tags)
+  const children = new Map<string, T[]>()
+  for (const tag of [...tags].sort(byTagOrder)) {
+    const parent = parents.get(tag.name)
+    if (parent !== undefined) children.set(parent, [...(children.get(parent) ?? []), tag])
+  }
+  // A tag, then each child after it, depth first; a tag met twice is listed once.
+  const tree = (roots: readonly T[]) => {
+    const listed: T[] = [], seen = new Set<string>()
+    const walk = (tag: T) => {
+      if (seen.has(tag.name)) return
+      seen.add(tag.name)
+      listed.push(tag)
+      for (const child of children.get(tag.name) ?? []) walk(child)
+    }
+    for (const root of roots) walk(root)
+    return listed
+  }
   return TAG_TYPES.map(type => {
-    const own = [...tags].sort(byTagOrder).filter(tag => (isTagType(tag.type) ? tag.type : 'general') === type)
-    const grouped = (group: TagGroup) => own.filter(tag => tag.group === group.id)
-    const loose = own.filter(tag => tag.group === null || known.get(tag.group)?.type !== type)
+    const roots = [...tags].sort(byTagOrder).filter(tag => typeOf(tag) === type && !parents.has(tag.name))
+    const grouped = (group: TagGroup) => tree(roots.filter(tag => tag.group === group.id))
+    const loose = tree(roots.filter(tag => tag.group === null || known.get(tag.group)?.type !== type))
     const shelves: TagShelf<T>[] = [
       ...sorted.filter(group => group.type === type).map(group => ({ group, tags: grouped(group) })),
       { group: null, tags: loose },

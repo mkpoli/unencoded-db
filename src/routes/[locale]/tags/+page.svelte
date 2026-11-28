@@ -1,7 +1,7 @@
 <script lang="ts">
   import Seo from '$lib/components/Seo.svelte'
   import TagBoard from '$lib/components/TagBoard.svelte'
-  import { TAG_TYPES, arrangeTags, implicationClosure, localized, tagLookup } from '$lib/tags'
+  import { TAG_TYPES, arrangeTags, implicationClosure, localized, tagDepths, tagLookup, tagParents } from '$lib/tags'
   import { href, locale, t } from '$lib/t'
   import type { PageData } from './$types'
 
@@ -15,6 +15,13 @@
   const tags = $derived(localized(liveTags ?? data.tags, locale()))
   const byName = $derived(tagLookup(tags))
   const sections = $derived(arrangeTags(tags, localized(liveGroups ?? data.groups, locale())))
+  const parents = $derived(tagParents(tags))
+  const depths = $derived(tagDepths(tags, parents))
+  // The tags a tag stands under are shown by its place in the tree, not again after its arrow.
+  const isAncestor = (name: string, of: string) => {
+    for (let at = parents.get(of), steps = 0; at !== undefined && steps < 64; at = parents.get(at), steps++) if (at === name) return true
+    return false
+  }
 </script>
 
 <Seo title={t('nav.tags')} />
@@ -59,22 +66,24 @@
               <ul class="tag-list">
                 {#each shelf.tags as tag (tag.name)}
                   {@const closure = implicationClosure([tag.name], tags)}
-                  <li>
+                  {@const parent = parents.get(tag.name)}
+                  {@const carried = tag.implies.filter(target => target !== parent)}
+                  <li class:child={parent !== undefined} style:--depth={depths.get(tag.name) ?? 0}>
                     <a class="tag-chip" data-tag-type={tag.type} href={href(`/?tag=${encodeURIComponent(tag.name)}`)}>
                       <span>{tag.label}</span>
                       {#if tag.label !== tag.name}<span class="slug">({tag.name})</span>{/if}
                       <span class="n">{tag.n}</span>
                     </a>
                     {#each tag.aliases as alias (alias)}<span class="alias">= {alias}</span>{/each}
-                    {#if tag.implies.length}
+                    {#if carried.length}
                       <span class="arrow" aria-hidden="true">→</span>
-                      {#each tag.implies as target (target)}
+                      {#each carried as target (target)}
                         {@const targetTag = byName.get(target)}
                         <a class="tag-chip small" data-tag-type={targetTag?.type ?? 'general'} href={href(`/?tag=${encodeURIComponent(target)}`)}>
                           {targetTag?.label ?? target}
                         </a>
                       {/each}
-                      {#each closure.implied.filter(item => !tag.implies.includes(item.name)) as indirect (indirect.name)}
+                      {#each closure.implied.filter(item => !tag.implies.includes(item.name) && !isAncestor(item.name, tag.name)) as indirect (indirect.name)}
                         {@const indirectTag = byName.get(indirect.name)}
                         <a class="tag-chip small implied" data-tag-type={indirectTag?.type ?? 'general'} href={href(`/?tag=${encodeURIComponent(indirect.name)}`)}>
                           {indirectTag?.label ?? indirect.name}
@@ -106,7 +115,9 @@
   .shelf h3 { margin: 0; font-size: 14px; font-weight: 600 }
   .count { font-size: 13px; font-weight: 400; color: var(--muted) }
   .tag-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px }
-  .tag-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px }
+  .tag-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-inline-start: calc(var(--depth, 0) * 22px) }
+  .tag-list li.child { position: relative }
+  .tag-list li.child::before { content: ''; position: absolute; inset-inline-start: -14px; inset-block: -8px 50%; inline-size: 9px; border-inline-start: 1.5px solid var(--line-strong); border-block-end: 1.5px solid var(--line-strong); border-end-start-radius: 5px }
   .slug, .n { font-size: 11.5px; opacity: 0.78 }
   .arrow { color: var(--muted); font-size: 13px }
   .alias { color: var(--muted); font-size: 12.5px }

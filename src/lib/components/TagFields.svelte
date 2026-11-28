@@ -14,6 +14,7 @@
     tagErrorKey,
     tagLabels,
     tagLookup,
+    tagParents,
     type Tag,
     type TagGroup,
     type TagType,
@@ -83,6 +84,16 @@
     })
   })
   const sections = $derived(arrangeTags(pillTags, groups))
+  // A tag with tags under it starts a line of its own, its children indented beneath it.
+  const pillParents = $derived(tagParents(pillTags))
+  const pillChildren = $derived.by(() => {
+    const map = new Map<string, Tag[]>()
+    for (const section of sections) for (const shelf of section.shelves) for (const row of shelf.tags) {
+      const parent = pillParents.get(row.name)
+      if (parent !== undefined) map.set(parent, [...(map.get(parent) ?? []), row])
+    }
+    return map
+  })
   const allSections = $derived(arrangeTags(all, groups))
   const draftGroups = $derived(groups.filter(group => group.type === draftType))
 
@@ -140,23 +151,39 @@
   <input type="hidden" name="tags_present" value="1" />
   <input type="hidden" name="collections_present" value="1" />
 
+  {#snippet pill(row: Tag)}
+    <CheckPill
+      name="tag"
+      value={row.name}
+      label={row.label}
+      tagType={row.type}
+      checked={isChecked(row.name)}
+      implied={Boolean(impliedMap.get(row.name))}
+      onchange={on => setChecked(row.name, on)}
+    />
+  {/snippet}
+  {#snippet branch(row: Tag)}
+    {@const kids = pillChildren.get(row.name) ?? []}
+    {#if kids.length}
+      <div class="branch">
+        {@render pill(row)}
+        <div class="pills nested">
+          {#each kids as kid (kid.name)}{@render branch(kid)}{/each}
+        </div>
+      </div>
+    {:else}
+      {@render pill(row)}
+    {/if}
+  {/snippet}
+
   {#each sections as section (section.type)}
     <div class="type-group">
       <span class="type-heading" data-tag-type={section.type}>{t(`tagType.${section.type}`)}</span>
       {#each section.shelves as shelf (shelf.group?.id ?? 0)}
       {#if shelf.group}<span class="shelf-heading">{shelf.group.label}</span>{/if}
       <div class="pills">
-        {#each shelf.tags as row (row.name)}
-          {@const via = impliedMap.get(row.name)}
-          <CheckPill
-            name="tag"
-            value={row.name}
-            label={row.label}
-            tagType={row.type}
-            checked={isChecked(row.name)}
-            implied={Boolean(via)}
-            onchange={on => setChecked(row.name, on)}
-          />
+        {#each shelf.tags.filter(row => !pillParents.has(row.name)) as row (row.name)}
+          {@render branch(row)}
         {/each}
       </div>
       {/each}
@@ -296,6 +323,8 @@
   .type-heading[data-tag-type=meta] { color: var(--tag-meta-ink) }
   .shelf-heading { font-size: 12px; color: var(--muted) }
   .pills { display: flex; flex-wrap: wrap; gap: 6px }
+  .branch { display: grid; flex: 1 0 100%; gap: 6px; justify-items: start }
+  .pills.nested { padding-inline-start: 14px; margin-inline-start: 10px; border-inline-start: 2px solid var(--line) }
   .implied-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 7px; background: var(--surface-sunken); font-size: 12.5px }
   .implied-label { color: var(--muted); font-weight: 500 }
   .tag-chip.suggest { min-block-size: max(28px, var(--target-size)); cursor: pointer }
