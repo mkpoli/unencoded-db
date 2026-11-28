@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { codePage, marksOf, registryLabel, unicodeAge } from './registries'
+import { codePage, marksOf, registryLabel, registryOf, unicodeAge } from './registries'
 
 const marks = (encodings: { charset: string; code: string }[]) => Object.fromEntries(marksOf(encodings).map(mark => [mark.registry.mark, mark.code]))
 const pages = (encodings: { charset: string; code: string }[]) => Object.fromEntries(marksOf(encodings).map(mark => [mark.registry.mark, mark.href]))
@@ -41,9 +41,13 @@ test('a code links to its page only in the form the work writes', () => {
   expect(codePage({ charset: 'glyphwiki', code: 'Zihai 12' })).toBeNull()
   expect(codePage({ charset: 'mj', code: '059588' })).toBeNull()
   expect(codePage({ charset: 'irg-ws', code: 'WS2024-00001' })).toBe('https://hc.jsecs.org/irg/ws2024/app/index.php?id=00001')
-  expect(codePage({ charset: 'irg-ws', code: 'ws2021 10' })).toBe('https://hc.jsecs.org/irg/ws2021/app/index.php?id=00010')
+  expect(codePage({ charset: 'irg-ws', code: 'WS2021-00010' })).toBe('https://hc.jsecs.org/irg/ws2021/app/index.php?id=00010')
+  expect(codePage({ charset: 'irg-ws', code: 'ws2021 10' })).toBeNull()
+  expect(codePage({ charset: 'irg-ws', code: 'WS2024-1' })).toBeNull()
   expect(codePage({ charset: 'irg-ws', code: 'WS2024-00000' })).toBeNull()
   expect(codePage({ charset: 'irg-ws', code: 'pending' })).toBeNull()
+  expect(registryOf('irg-ws')?.names?.('WS2024-00001')).toBe(true)
+  expect(registryOf('irg-ws')?.names?.('WS2024-1')).toBe(false)
   expect(codePage({ charset: 'big5', code: 'A140' })).toBeNull()
   expect(codePage({ charset: 'my set', code: 'A140' })).toBeNull()
 })

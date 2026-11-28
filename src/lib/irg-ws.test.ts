@@ -51,24 +51,29 @@ test('uax45Url escapes the hyphen per the Scroll-to-Text Fragment grammar', () =
   expect(uax45Url('UK-02764')).toBeNull()
 })
 
-test('parseWorkingSetCode and workingSetPage resolve WS2015-WS2024 serials with 5-digit zero padding', () => {
+test('parseWorkingSetCode, ortSerialUrl and workingSetPage enforce canonical 5-digit WS2015-WS2024 serials', () => {
   expect(parseWorkingSetCode('WS2024-00001')).toEqual({ ws: 'ws2024', serial: '00001' })
-  expect(parseWorkingSetCode('ws2015 42')).toEqual({ ws: 'ws2015', serial: '00042' })
+  expect(parseWorkingSetCode('WS2015-00042')).toEqual({ ws: 'ws2015', serial: '00042' })
   expect(parseWorkingSetCode('WS2017-01234')).toEqual({ ws: 'ws2017', serial: '01234' })
-  expect(parseWorkingSetCode('WS2021-10')).toEqual({ ws: 'ws2021', serial: '00010' })
-  expect(parseWorkingSetCode('WS2024-00000')).toBeNull()
-  expect(parseWorkingSetCode('WS2099-00001')).toBeNull()
-  expect(parseWorkingSetCode('WS2024-123456')).toBeNull()
-  expect(parseWorkingSetCode('pending')).toBeNull()
+  expect(parseWorkingSetCode('WS2021-00010')).toEqual({ ws: 'ws2021', serial: '00010' })
+  for (const invalid of ['WS2024-00000', 'WS2024-1', 'ws2024-00001', 'WS2024 00001', 'WS2024--00001', 'IRG WS2024-00001', 'WS2099-00001', 'WS2024-123456', 'pending']) {
+    expect(parseWorkingSetCode(invalid)).toBeNull()
+  }
 
-  expect(workingSetPage('WS2024-1')).toBe('https://hc.jsecs.org/irg/ws2024/app/index.php?id=00001')
-  expect(workingSetPage('WS2015-00001')).toBe(ortSerialUrl('ws2015', '1'))
-  expect(workingSetPage('WS2024-0')).toBeNull()
+  expect(ortSerialUrl('ws2015', '1')).toBe('https://hc.jsecs.org/irg/ws2015/app/index.php?id=00001')
+  expect(ortSerialUrl('ws2024', '0')).toBeNull()
+  expect(ortSerialUrl('ws2024', '1&find=x')).toBeNull()
+  expect(ortSerialUrl('ws2024', '123456')).toBeNull()
+
+  expect(workingSetPage('WS2024-00001')).toBe('https://hc.jsecs.org/irg/ws2024/app/index.php?id=00001')
+  expect(workingSetPage('WS2015-00001')).toBe(ortSerialUrl('ws2015', '00001'))
+  expect(workingSetPage('WS2024-00000')).toBeNull()
 })
 
-test('ortIdsUrl builds an IDS lookup link for the active working set', () => {
+test('ortIdsUrl builds an escaped IDS lookup link for active working sets', () => {
   expect(ortIdsUrl('⿰山東')).toBe('https://hc.jsecs.org/irg/ws2024/app/index.php?ids=%E2%BF%B0%E5%B1%B1%E6%9D%B1')
   expect(ortIdsUrl(' ⿰ 山 東 ', 'ws2021')).toBe('https://hc.jsecs.org/irg/ws2021/app/index.php?ids=%E2%BF%B0%E5%B1%B1%E6%9D%B1')
+  expect(ortIdsUrl('⿰#(a&b?c+d)')).toBe('https://hc.jsecs.org/irg/ws2024/app/index.php?ids=%E2%BF%B0%23(a%26b%3Fc%2Bd)')
   expect(ortIdsUrl('   ')).toBeNull()
 })
 

@@ -25,11 +25,10 @@ export function characterLinks(char: string, locale: string, sources?: readonly 
 export function descriptionLinks(ids: string, locale: string): SiteLink[] {
   const sequence = cleanIds(ids)
   if (!sequence) return []
-  const wsHref = ortIdsUrl(sequence)
   return [
     atlas(sequence, locale),
     { name: 'IDS Workshop', href: workshopUrl(sequence) },
     { name: '字統網 zi.tools', href: `https://zi.tools/?secondary=ids&seq=${encodeURIComponent(sequence)}` },
-    ...(wsHref ? [{ name: ACTIVE_WORKING_SET_LABEL, href: wsHref }] : []),
+    { name: ACTIVE_WORKING_SET_LABEL, href: ortIdsUrl(sequence)!, title: `IDS: ${sequence}` },
   ]
 }

@@ -265,7 +265,7 @@
           <a class="text-link small" href="#edit-ids" onclick={another}>+ {t('entry.idsAnother')}</a>
         </div>
       </div>
-      <p class="sites">{#each descriptionLinks(sequences[0], at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</p>
+      <p class="sites">{#each descriptionLinks(sequences[0], at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener" title={link.title}>{link.name} ↗</a>{/each}</p>
     {:else}
       <div class="identity">
         {#if entry.cover_key}<a class="pictured" href={media(entry.cover_key)} target="_blank" rel="noopener"><img src={media(entry.cover_key)} alt={t('entry.record', { id: recordCode(entry.id) })} decoding="async" /></a>{/if}
