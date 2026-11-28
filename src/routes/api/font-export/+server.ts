@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit'
-import { composerDrawing, composerUrl, GLYPH_STYLES } from '$lib/composer'
+import { composerBrowserUrl, composerDrawing, GLYPH_STYLES } from '$lib/composer'
 import { env } from '$lib/server/guard'
 import type { RequestHandler } from './$types'
 
@@ -15,7 +15,7 @@ export const GET: RequestHandler = async event => {
   ).all()
   const styles = GLYPH_STYLES.map(style => {
     const version = composerDrawing(style), adjustedVersion = composerDrawing(style, true)
-    return { style, version, ...(adjustedVersion !== version && { adjustedVersion }), source: composerUrl(style) }
+    return { style, version, ...(adjustedVersion !== version && { adjustedVersion }), source: composerBrowserUrl(style, event.url?.origin) }
   })
   return json({ records, styles }, { headers: { 'cache-control': 'no-store' } })
 }

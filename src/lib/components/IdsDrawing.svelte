@@ -3,7 +3,7 @@
   // worker and the export files it has already read. Parts are drawn one by one only where a layout moves them.
   import type { ComposerPreview } from 'han-compose'
   import type { DocumentSession } from 'ids-input/document'
-  import { composerUrl, type GlyphStyle } from '$lib/composer'
+  import { composerBrowserUrl, type GlyphStyle } from '$lib/composer'
   import { composerDataFor } from '$lib/composer-data'
   import { idsMessages } from '$lib/ids-messages'
 
@@ -12,7 +12,8 @@
     const key = `${style}:${separate}`
     let found = composers.get(key)
     if (!found) {
-      found = import('han-compose').then(({ composerPreview, dataUrls }) => composerPreview({ base: composerUrl(style), fontStyle: style, separate, loaders: { ...dataUrls, ...composerDataFor(style) } }))
+      const base = composerBrowserUrl(style, typeof location === 'object' ? location.origin : undefined)
+      found = import('han-compose').then(({ composerPreview, dataUrls }) => composerPreview({ base, fontStyle: style, separate, loaders: { ...dataUrls, ...composerDataFor(style) } }))
       composers.set(key, found)
       found.catch(() => composers.delete(key))
     }
