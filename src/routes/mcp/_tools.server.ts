@@ -424,9 +424,14 @@ function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) 
       }
       const comp = input.composition as Json
       const primary = form.has('ids') ? String(form.getAll('ids')[0] ?? '') : (primaryIdsOf(current) ?? '')
-      const rawFormation = comp.formation === undefined || comp.formation === null ? '' : text(comp.formation).normalize('NFC').trim()
+      if (comp.formation !== undefined && typeof comp.formation !== 'string') {
+        throw new Refusal('composition.formation must be a string.')
+      }
+      const rawFormation = comp.formation === undefined ? '' : comp.formation.normalize('NFC').trim()
       if ([...rawFormation].length > FORMATION_MAX) throw new Refusal(`composition.formation is at most ${FORMATION_MAX} characters.`)
-      const rawParts = comp.parts === undefined ? [] : items(comp.parts)
+      const hasParts = comp.parts !== undefined
+      if (hasParts && !Array.isArray(comp.parts)) throw new Refusal('composition.parts must be an array.')
+      const rawParts = hasParts ? (comp.parts as unknown[]) : []
       if (rawParts.length > PARTS_MAX) throw new Refusal(`composition.parts holds up to ${PARTS_MAX} parts.`)
       const parts: string[] = []
       const roles: string[] = []
@@ -434,9 +439,12 @@ function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) 
       for (const entry of rawParts) {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Refusal('Each item in composition.parts must be an object with `part`.')
         const row = entry as Json
-        const part = text(row.part).normalize('NFC').trim()
-        const role = text(row.role).normalize('NFC').trim()
-        const fn = text(row.function).normalize('NFC').trim()
+        if (typeof row.part !== 'string') throw new Refusal('Each item in composition.parts must have a string `part`.')
+        if (row.role !== undefined && typeof row.role !== 'string') throw new Refusal('composition.parts[].role must be a string.')
+        if (row.function !== undefined && typeof row.function !== 'string') throw new Refusal('composition.parts[].function must be a string.')
+        const part = row.part.normalize('NFC').trim()
+        const role = (row.role ?? '').normalize('NFC').trim()
+        const fn = (row.function ?? '').normalize('NFC').trim()
         if (!part || [...part].length > PART_MAX) throw new Refusal(`Each part in composition.parts is 1 to ${PART_MAX} characters.`)
         if ([...role].length > ROLE_MAX) throw new Refusal(`composition.parts[].role is at most ${ROLE_MAX} characters.`)
         if ([...fn].length > FUNCTION_MAX) throw new Refusal(`composition.parts[].function is at most ${FUNCTION_MAX} characters.`)
@@ -445,8 +453,13 @@ function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) 
         functions.push(fn)
       }
       const hasAnalysis = roles.some(Boolean) || functions.some(Boolean) || Boolean(rawFormation)
-      if (hasAnalysis && !primary) throw new Refusal('composition requires ids on the record.')
-      form.set('composition', hasAnalysis ? composeValue(primary, parts, roles, rawFormation || null, functions) : '')
+      if (!hasAnalysis) throw new Refusal('composition needs a formation or at least one part with a role or function; pass null to clear it.')
+      if (!primary) throw new Refusal('composition requires ids on the record.')
+      // When `parts` is omitted (formation-only override), omit `parts` from JSON so `analyze` keeps the parsed IDS parts.
+      const serialized = hasParts
+        ? composeValue(primary, parts, roles, rawFormation || null, functions)
+        : JSON.stringify({ ids: primary, roles: [], formation: rawFormation || null })
+      form.set('composition', serialized)
     }
   }
 
@@ -1178,7 +1191,7 @@ function recordFields(evidence: Json, key?: Json) {
   return {
     ids: { type: 'array', minItems: 1, items: { type: 'string' }, description: 'Ideographic description sequences of the form as the picture shows it. The first one draws the glyph; the others are further ways to describe the same form. Leave it out when the form cannot be described: the record then shows its picture.' },
     composition: {
-      type: ['object', 'null'],
+      type: 'object',
       description: 'Structural analysis of the first IDS: component roles, optional reusable function labels (作用), and optional formation override. Pass null to clear; omit to keep unchanged.',
       properties: {
         formation: { type: 'string', description: `Optional formation override (${FORMATIONS.join(', ')}, or custom text). Leave out to derive from part roles.` },
