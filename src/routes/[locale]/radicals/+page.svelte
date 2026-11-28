@@ -18,7 +18,10 @@
 
 <Seo title={t('nav.radicals')} />
 <div class="page stack">
-  <h1>{t('nav.radicals')}</h1>
+  <div class="head">
+    <h1>{t('nav.radicals')}</h1>
+    <a class="text-link small" href={href('/parts')}>{t('nav.parts')}</a>
+  </div>
   {#if data.groups.length}
     <dl class="table">
       {#each data.groups as group (group.strokes ?? 0)}
@@ -41,6 +44,7 @@
 </div>
 
 <style>
+  .head { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px 16px }
   .table { display:flex; flex-direction:column; margin:0; border-top:1px solid var(--line) }
   .row { display:grid; grid-template-columns:48px minmax(0,1fr); gap:8px; padding:12px 0; border-bottom:1px solid var(--line) }
   dt { padding-top:10px; color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; text-align:end; padding-inline-end:8px }

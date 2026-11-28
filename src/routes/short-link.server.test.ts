@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { LOCALE_COOKIE } from '$lib/i18n'
-import { readShortRecordCode, shortRecordCode } from '$lib/short-record'
+import { readShortRecordCode, shortRecordCode, shortShareUrl } from '$lib/short-record'
 import { GET } from './[short=shortRecord]/+server'
 
 function request(short: string, preferred?: string, browser = 'en') {
@@ -14,11 +14,11 @@ function request(short: string, preferred?: string, browser = 'en') {
 test('short record links redirect to the reader’s language without caching the preference', async () => {
   const preferred = await request('RN', 'zh-Hant', 'ja')
   expect(preferred.status).toBe(302)
-  expect(preferred.headers.get('location')).toBe('/zh-Hant/entry/1734')
+  expect(preferred.headers.get('location')).toBe('/zh-Hant/R+06C6')
   expect(preferred.headers.get('vary')).toBe('Accept-Language, Cookie')
   expect(preferred.headers.get('cache-control')).toContain('no-store')
-  expect((await request('RN', undefined, 'ja-JP')).headers.get('location')).toBe('/ja/entry/1734')
-  expect((await request('RN', 'invalid', 'fr')).headers.get('location')).toBe('/en/entry/1734')
+  expect((await request('RN', undefined, 'ja-JP')).headers.get('location')).toBe('/ja/R+06C6')
+  expect((await request('RN', 'invalid', 'fr')).headers.get('location')).toBe('/en/R+06C6')
 })
 
 test('the codec uses the shortest available length and round-trips safe record IDs', () => {
@@ -28,6 +28,12 @@ test('the codec uses the shortest available length and round-trips safe record I
     expect(code).toHaveLength(length)
     expect(readShortRecordCode(code)).toBe(id)
   }
+})
+
+test('short share URLs use the uppercase hexadecimal record code on mkpo.li', () => {
+  expect(shortShareUrl(9)).toBe('https://mkpo.li/r/0009')
+  expect(shortShareUrl(0xbeef)).toBe('https://mkpo.li/r/BEEF')
+  expect(shortShareUrl(0x10000)).toBe('https://mkpo.li/r/10000')
 })
 
 test('short record links leave lowercase routes and locale prefixes available', () => {

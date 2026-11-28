@@ -46,10 +46,10 @@
     if (node.kind === 'witness' && node.sightingId !== null && node.entryId !== null) {
       return mode === 'strip' && node.entryId === graph.entryId
         ? `#sighting-${node.sightingId}`
-        : href(`/entry/${node.entryId}#sighting-${node.sightingId}`)
+        : href(`/${recordCode(node.entryId)}#sighting-${node.sightingId}`)
     }
     if (node.kind === 'unseen' && node.sourceId !== null) return href(`/source/${node.sourceId}`)
-    if (node.kind === 'removed' && node.entryId !== null) return href(`/entry/${node.entryId}/history`)
+    if (node.kind === 'removed' && node.entryId !== null) return href(`/${recordCode(node.entryId)}/history`)
     return null
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { CLAIM_LIMITS, CLAIMS_LENGTH_MAX, CLAIM_SCOPES_MAX, CLAIM_SIGHTINGS_MAX, claimsUnder, idsForms, isClaimKey, joinClaims, mapSightings, partClaims, newClaimKey, parseClaims, readClaims, scopesOf, splitCharacters, supportedBy, validClaim, type Claim } from './claims'
+import { CLAIM_LIMITS, CLAIMS_LENGTH_MAX, CLAIM_SCOPES_MAX, CLAIM_SIGHTINGS_MAX, claimsUnder, documentsOf, idsForms, isClaimKey, joinClaims, mapSightings, partClaims, newClaimKey, parseClaims, readClaims, scopesOf, splitCharacters, supportedBy, validClaim, type Claim } from './claims'
 import { cleanTag } from './tags'
 import { cleanIds, IDS_LENGTH_MAX, IDS_MAX } from './ids'
 
@@ -71,6 +71,81 @@ describe('encodings', () => {
   test('more codes than a record holds are refused', () => {
     const rows = Array.from({ length: CLAIM_LIMITS.encoding.max + 1 }, (_, i): [string, string][] => [['encoding_charset', 'unicode'], ['encoding_code', `U+${(0x5d20 + i).toString(16)}`]]).flat()
     expect(read(rows)).toEqual({ error: 'encodings' })
+  })
+})
+
+describe('documents', () => {
+  const row = (doc: string, page = '', url = ''): [string, string][] => [['document_number', doc], ['document_page', page], ['document_url', url]]
+
+  test('normalizes document numbers, skips blank rows, keeps distinct pages/URLs and drops exact duplicates', () => {
+    const pdf = 'https://www.unicode.org/L2/L2025/25056-uax45-3-abbreviated%20ideographs.pdf'
+    const result = read([
+      ['documents_present', '1'],
+      ...row('l2/25-056', '12', pdf),
+      ...row('L2/25-056', '12', pdf),
+      ...row('L2/25-056', '12', ''),
+      ...row('L2/25-056', '15', ''),
+      ...row('irg n2850r', '', ''),
+      ...row('WG2N5234', '3', ''),
+      ...row('', '', ''),
+    ])
+    expect(result).toEqual({
+      claims: [
+        claim('document', 'L2/25-056', { page: '12', url: pdf }),
+        claim('document', 'L2/25-056', { page: '12' }),
+        claim('document', 'L2/25-056', { page: '15' }),
+        claim('document', 'IRG N2850R'),
+        claim('document', 'WG2 N5234', { page: '3' }),
+      ],
+    })
+    expect(documentsOf(keyed(result.claims!))).toEqual([
+      { doc: 'L2/25-056', page: '12', url: pdf },
+      { doc: 'L2/25-056', page: '12', url: null },
+      { doc: 'L2/25-056', page: '15', url: null },
+      { doc: 'IRG N2850R', page: null, url: null },
+      { doc: 'WG2 N5234', page: '3', url: null },
+    ])
+  })
+
+  test('an empty list clears documents, and omitting the fields preserves existing ones', () => {
+    const base = [claim('document', 'L2/25-056', { page: '4' })]
+    expect(read([], base)).toEqual({ claims: base })
+    expect(read([['documents_present', '1']], base)).toEqual({ claims: [] })
+  })
+
+  test('rejects invalid document numbers, overlong pages, non-http(s) URLs, mismatched columns and too many rows', () => {
+    expect(read([['documents_present', '1'], ...row('not-a-doc')])).toEqual({ error: 'documents' })
+    expect(read([['documents_present', '1'], ...row('', '12')])).toEqual({ error: 'documents' })
+    expect(read([['documents_present', '1'], ...row('L2/25-056', 'x'.repeat(81))])).toEqual({ error: 'documents' })
+    expect(read([['documents_present', '1'], ...row('L2/25-056', '', 'javascript:alert(1)')])).toEqual({ error: 'documents' })
+    expect(read([['documents_present', '1'], ...row('L2/25-056', '', 'ftp://example.com/doc.pdf')])).toEqual({ error: 'documents' })
+    expect(read([['documents_present', '1'], ['document_number', 'L2/25-056'], ['document_page', '1'], ['document_page', '2']])).toEqual({ error: 'documents' })
+    const tooMany = Array.from({ length: CLAIM_LIMITS.document.max + 1 }, (_, i) => row(`L2/25-${String(i).padStart(3, '0')}`)).flat()
+    expect(read([['documents_present', '1'], ...tooMany])).toEqual({ error: 'documents' })
+  })
+
+  test('returns typed draft rows when document validation fails', () => {
+    const draft = readClaims(form([['documents_present', '1'], ...row('bad-doc', '7', 'https://example.com/a.pdf')]), [])
+    expect(draft.error).toBe('documents')
+    expect(draft.claims.map(stated)).toEqual([claim('document', 'bad-doc', { page: '7', url: 'https://example.com/a.pdf' })])
+  })
+
+  test('validates stored document claims strictly and preserves claim keys by doc + page', () => {
+    expect(valid(claim('document', 'L2/25-056'))).toBe(true)
+    expect(valid(claim('document', 'IRG N2850', { page: '5', url: 'https://example.com/irg.pdf' }))).toBe(true)
+    expect(valid(claim('document', 'l2/25-056'))).toBe(false)
+    expect(valid(claim('document', 'L2/25-056', {}))).toBe(false)
+    expect(valid(claim('document', 'L2/25-056', { page: '' }))).toBe(false)
+    expect(valid(claim('document', 'L2/25-056', { page: 'x'.repeat(81) }))).toBe(false)
+    expect(valid(claim('document', 'L2/25-056', { url: 'ftp://example.com/x.pdf' }))).toBe(false)
+    expect(valid(claim('document', 'L2/25-056', { page: '1', extra: true }))).toBe(false)
+    expect(valid(claim('document', 'L2/25-056', null, { under: ['mean0001'] }))).toBe(false)
+
+    const pdf = 'https://www.unicode.org/L2/L2025/25056.pdf'
+    const base = keyed([claim('document', 'L2/25-056', { page: '4', url: pdf }), claim('document', 'L2/25-056', { page: '9' })])
+    const kept = readClaims(form([['documents_present', '1'], ...row('L2/25-056', '9'), ...row('L2/25-056', '4', pdf)]), [], base)
+    expect(kept.error).toBeNull()
+    expect(kept.claims.map(item => [item.key, item.data?.page])).toEqual([[base[1].key, '9'], [base[0].key, '4']])
   })
 })
 

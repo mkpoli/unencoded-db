@@ -8,6 +8,7 @@ import { claimsOf, type Claim } from '$lib/claims'
 import { codedRecord, recordCode } from '$lib/code'
 import { cleanIds, codePointCharacters, codePoints, encodedCharacter } from '$lib/ids'
 import { isRelationKind, type RelationKind } from '$lib/related'
+import { datingOriginal } from '$lib/scripts'
 import { TILE_COLUMNS, toTile, type Tile, type TileRow } from './entries'
 
 export const RELATED_MAX = 12
@@ -37,7 +38,7 @@ export const relatedTilesStatement = (db: D1Database, ids: readonly number[]) =>
 
 // The first picture of each of a record's first visible sightings.
 export const relatedPicturesStatement = (db: D1Database, ids: readonly number[]) =>
-  db.prepare(`SELECT s.entry_id, s.id AS sighting, x.thumb_key, s.place, c.title, COALESCE(s.original_date, c.report_date) AS date
+  db.prepare(`SELECT s.entry_id, s.id AS sighting, x.thumb_key, s.place, c.title, COALESCE(${datingOriginal('s')}, c.report_date) AS date
     FROM entries e CROSS JOIN sightings s ON s.id IN (SELECT id FROM sightings WHERE entry_id = e.id AND hidden_at IS NULL ORDER BY id LIMIT ${RELATED_PICTURES})
     JOIN sighting_media x ON x.sighting_id = s.id AND x.position = 0
     LEFT JOIN sources c ON c.id = s.source_id

@@ -4,7 +4,7 @@
 // geometry for layered HTML tiles + SVG cubic Bezier edges.
 import type { DateReading } from './dates'
 import { parseYear } from './cites'
-import type { CiteKind } from './scripts'
+import { datesOriginal, type CiteKind } from './scripts'
 import type { Sighting } from './server/entries'
 
 export const STEMMA_NODES_LIMIT = 60
@@ -151,6 +151,7 @@ export function buildEntryStemma(
     if (sighting.hidden_at) continue
     if (!sighting.cites.length && !sighting.cited_by.length) continue
     const selfId = witnessNodeId(sighting.id)
+    const selfOriginal = datesOriginal(sighting.closeness) ? sighting.original_date : null
     const selfAdded = putNode({
       id: selfId,
       kind: 'witness',
@@ -159,10 +160,10 @@ export function buildEntryStemma(
       sourceId: sighting.source_id,
       title: sighting.title,
       place: sighting.place,
-      date: sighting.original_date ?? sighting.report_date,
-      originalDate: sighting.original_date,
+      date: selfOriginal ?? sighting.report_date,
+      originalDate: selfOriginal,
       reportDate: sighting.report_date,
-      year: yearFor(sighting.original_date, sighting.report_date, dates),
+      year: yearFor(selfOriginal, sighting.report_date, dates),
       thumbKey: sighting.media[0]?.thumb_key ?? null,
     })
     if (!selfAdded) continue

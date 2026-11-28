@@ -14,7 +14,7 @@ test('only ISO dates are published as dates', () => {
 test('a record is a licensed work with its cited sources and a trail', () => {
   const [work, trail] = recordData({ locale: 'ja', id: 12, name: '⿰山東 · R-12', description: 'd', siteName: 'Site', image: '/media/v2/k.jpg', sources: [source, source, { id: 8, report_date: '明萬曆34年' }] }) as any[]
   expect(work['@type']).toBe('CreativeWork')
-  expect(work['@id']).toBe('https://rare.glyphatlas.org/ja/entry/12')
+  expect(work['@id']).toBe('https://rare.glyphatlas.org/ja/R+000C')
   expect(work.image).toEqual({ '@type': 'ImageObject', contentUrl: 'https://rare.glyphatlas.org/media/v2/k.jpg' })
   expect('license' in work.image).toBe(false)
   expect(work.license).toBe(RECORD_LICENSE)
@@ -24,7 +24,7 @@ test('a record is a licensed work with its cited sources and a trail', () => {
     { '@type': 'CreativeWork', name: '康熙字典', creator: '張玉書', datePublished: '1716', url: 'https://rare.glyphatlas.org/ja/source/7' },
     { '@type': 'CreativeWork', url: 'https://rare.glyphatlas.org/ja/source/8' },
   ])
-  expect(trail.itemListElement.map((item: any) => item.item)).toEqual(['https://rare.glyphatlas.org/ja', 'https://rare.glyphatlas.org/ja/entry/12'])
+  expect(trail.itemListElement.map((item: any) => item.item)).toEqual(['https://rare.glyphatlas.org/ja', 'https://rare.glyphatlas.org/ja/R+000C'])
 })
 
 test('the vias are cited once after the works, with their container, and a via that is also a cited work stays one entry', () => {

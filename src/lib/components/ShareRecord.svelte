@@ -1,11 +1,10 @@
 <script lang="ts">
-  import { page } from '$app/state'
   import { onDestroy } from 'svelte'
-  import { shortRecordCode } from '$lib/short-record'
+  import { shortShareUrl } from '$lib/short-record'
   import { t } from '$lib/t'
 
   let { id }: { id: number } = $props()
-  const url = $derived(new URL(`/${shortRecordCode(id)}`, page.url.origin).href)
+  const url = $derived(shortShareUrl(id))
   const labelId = $props.id()
   let dialog: HTMLDialogElement
   let field: HTMLInputElement

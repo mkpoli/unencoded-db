@@ -10,12 +10,13 @@
   import ViaPictures from './ViaPictures.svelte'
   import { tick, untrack } from 'svelte'
   import { flip } from 'svelte/animate'
-  import { CITE_KINDS, CITES_MAX, CONTEXTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, parseContexts, parseSightingTypes, type CiteKind } from '$lib/scripts'
+  import { CITE_KINDS, CITES_MAX, CLOSENESS, CONTEXTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, parseContexts, parseSightingTypes, type CiteKind } from '$lib/scripts'
   import { dateOrderWarnings } from '$lib/cites'
   import { cleanLinkInput } from '$lib/link-input'
   import { fetchPost, postId, type PostInfo } from '$lib/source-url'
   import { westernDate } from '$lib/dates'
   import { eraRead, t } from '$lib/t'
+  import Toggletip, { tipId } from './Toggletip.svelte'
   import type { Citation, Cite, SightingFields, Via, ViaPicture } from '$lib/server/entries'
   import { VIAS_MAX } from '$lib/scripts'
   import { MEDIA_MAX } from '$lib/limits'
@@ -25,7 +26,7 @@
   const uid = $props.id()
   const selected = $derived(new Set(parseSightingTypes(values.types)))
   const appears = $derived(new Set(parseContexts(values.contexts)))
-  const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.container || values.source_kind || values.original_date || values.page || values.contexts || values.style || values.types || values.quotes || values.note))
+  const filled = $derived(Boolean(values.title || values.author || values.publisher || values.report_date || values.container || values.source_kind || values.original_date || values.page || values.contexts || values.style || values.closeness || values.types || values.quotes || values.note))
 
   let place = $state(untrack(() => values.place ?? ''))
   let url = $state(untrack(() => values.url ?? ''))
@@ -40,6 +41,7 @@
   let publisher = $state(untrack(() => values.publisher ?? ''))
   let container = $state(untrack(() => values.container ?? ''))
   let kind = $state(untrack(() => values.source_kind ?? ''))
+  let closeness = $state(untrack(() => values.closeness ?? ''))
 
   // The chain, nearest the cited work first. One empty row is always there to fill.
   type Row = { key: number; url: string; title: string; author: string; publisher: string; date: string; container: string; kind: string; quote: string; pictures: readonly ViaPicture[] }
@@ -105,7 +107,7 @@
   const siblingById = $derived(new Map(siblings.map(item => [String(item.id), item])))
   const dateWarnings = $derived.by(() => {
     const list = dateOrderWarnings(
-      { report_date: reportDate, original_date: originalDate },
+      { report_date: reportDate, original_date: originalDate, closeness },
       vias.map(row => ({ report_date: row.date })),
       cites.map(row => {
         const sibling = siblingById.get(row.sighting.trim().replace(/^#/, ''))
@@ -366,9 +368,11 @@
     {@render kindField(`${uid}-source_kind`, 'source_kind', kind, value => kind = value)}
     <div class="field"><label for="{uid}-page">{t('field.page')}</label><input id="{uid}-page" class="input" name="page" bind:value={page} maxlength="80" /></div>
     <div class="field"><label for="{uid}-report_date">{t('field.reportDate')}</label><input id="{uid}-report_date" class="input" name="report_date" bind:value={reportDate} aria-describedby="{uid}-report_date-hint {uid}-report_date-read" /><p class="hint" id="{uid}-report_date-hint">{t('field.reportDateHint')}</p>{@render yearRead(`${uid}-report_date`, reportDate)}</div>
-    <div class="field"><label for="{uid}-original_date">{t('field.originalDate')}</label><input id="{uid}-original_date" class="input" name="original_date" bind:value={originalDate} aria-describedby="{uid}-original_date-hint {uid}-original_date-read" /><p class="hint" id="{uid}-original_date-hint">{t('field.originalDateHint')}</p>{@render yearRead(`${uid}-original_date`, originalDate)}</div>
+    <div class="field"><label for="{uid}-original_date" id="{uid}-original_date-label">{t('field.originalDate')}</label><input id="{uid}-original_date" class="input" name="original_date" bind:value={originalDate} aria-describedby="{uid}-original_date-hint {tipId(`${uid}-original_date`)} {uid}-original_date-read" /><p class="hint"><span id="{uid}-original_date-hint">{t('field.originalDateHint')}</span><Toggletip id="{uid}-original_date" of="{uid}-original_date-label" text={t('field.originalDateTooltip')} /></p>{@render yearRead(`${uid}-original_date`, originalDate)}</div>
     <div class="field"><label for="{uid}-style">{t('field.style')}</label>
       <select id="{uid}-style" class="input" name="style" value={values.style ?? ''}><option value="">{t('field.unset')}</option>{#each STYLES as item}<option value={item}>{t(`style.${item}`)}</option>{/each}</select></div>
+    <div class="field"><label for="{uid}-closeness">{t('field.closeness')}</label>
+      <select id="{uid}-closeness" class="input" name="closeness" bind:value={closeness} title={closeness ? t(`closeness.${closeness}.hint`) : undefined}><option value="">{t('field.unset')}</option>{#each CLOSENESS as item}<option value={item} title={t(`closeness.${item}.hint`)}>{t(`closeness.${item}`)}</option>{/each}</select></div>
   </div>
   <fieldset class="types">
     <legend>{t('field.context')}</legend>

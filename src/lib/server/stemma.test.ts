@@ -20,6 +20,7 @@ function makeSighting(overrides: Partial<SightingFields> = {}): SightingFields {
     vias: [],
     cites: [],
     original_date: null,
+    closeness: null,
     page: null,
     contexts: null,
     style: null,

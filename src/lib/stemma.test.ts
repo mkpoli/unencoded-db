@@ -19,6 +19,7 @@ function fakeSighting(overrides: Partial<Sighting> & { id: number; entry_id: num
     cites: [],
     cited_by: [],
     original_date: null,
+    closeness: null,
     page: null,
     contexts: null,
     style: null,

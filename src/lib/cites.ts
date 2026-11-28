@@ -1,4 +1,5 @@
 import { westernDate, yearOfDay, type DateReading } from './dates'
+import { datesOriginal } from './scripts'
 
 export type DateWarning =
   | { side: 'via'; index: number; viaYear: number; workYear: number }
@@ -17,13 +18,13 @@ export function parseYear(text: string | null | undefined, book?: DateLookup): n
  * (`cite`) postdates it. Returns advisory warnings; callers never refuse a write for date order.
  */
 export function dateOrderWarnings(
-  work: { report_date?: string | null; original_date?: string | null },
+  work: { report_date?: string | null; original_date?: string | null; closeness?: string | null },
   vias: readonly { report_date?: string | null }[],
   cites: readonly { report_date?: string | null; target_report_date?: string | null; target_original_date?: string | null }[],
   book?: DateLookup,
 ): DateWarning[] {
   const reportYear = parseYear(work.report_date, book)
-  const originalYear = parseYear(work.original_date, book)
+  const originalYear = datesOriginal(work.closeness) ? parseYear(work.original_date, book) : null
   const workYears = [reportYear, originalYear].filter((year): year is number => year !== null)
   if (!workYears.length) return []
   const earliestWork = Math.min(...workYears)

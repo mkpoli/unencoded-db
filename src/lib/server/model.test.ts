@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { isOperator, partRowsOf } from '$lib/structure'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { addSighting, claimedBy, createEntry, editEntry, editSighting, exportPage, getEntry, getSighting, history, list, mediaVisible, mergeEntry, readSightingFields, redactRevision, restoreSighting, revertEntry, setHidden, sourcePage, unmergeEntry, type EntryFields, type SightingFields, type StoredImage, type Via } from './entries'
 import { readFileSync } from 'node:fs'
@@ -10,7 +11,7 @@ import { openTestDb } from './testdb'
 const migration = (name: string) => readFileSync(join(import.meta.dir, '../../../migrations', name), 'utf8')
 const who = { actor: 'p1', ip: null }
 const fields = (claims: Claim[] = []): EntryFields => ({ script: 'han', script_other: null, description: null, radical: null, strokes: null, claims })
-const seen = (extra: Partial<SightingFields> = {}): SightingFields => ({ place: 'a shop sign', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...extra })
+const seen = (extra: Partial<SightingFields> = {}): SightingFields => ({ place: 'a shop sign', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...extra })
 const image = (name: string, box: string | null = null): StoredImage => ({ image_key: `${name}.jpg`, image_type: 'image/jpeg', image_w: 10, image_h: 10, thumb_key: `${name}-t.jpg`, box })
 const claim = (kind: Claim['kind'], value: string, data: Claim['data'] = null, links: Partial<Pick<Claim, 'sightings' | 'under'>> = {}): Claim => newClaim(kind, value, data, links)
 const book = { title: '字書', author: '某', publisher: '某社', report_date: '1900', url: null }
@@ -512,9 +513,11 @@ describe('part rows', () => {
   test('a record has one part row per distinct part of each of its descriptions, kept current on every write', async () => {
     const { db, raw } = open()
     const id = await createEntry(db, fields([claim('ids', '⿰⺅⿱木木'), claim('ids', '⿰⼈水')]), seen({ report_date: '1930' }), [], who)
-    expect(parts(raw)).toEqual(['人', '亻', '木', '水'].sort().map(part => ({ entry_id: id, tag: `p:${part}`, sightings: 0, year: null })))
+    const rows = [...new Set([...partRowsOf('⿰⺅⿱木木'), ...partRowsOf('⿰⼈水')])].sort()
+    expect(rows).toEqual(expect.arrayContaining(['p:人', 'p:亻', 'p:木', 'p:水', 'p:⿰', 'p:⿱', 'p:⿱木木', 'p:⿰亻？', 'p:⿰？水']))
+    expect(parts(raw)).toEqual(rows.map(tag => ({ entry_id: id, tag, sightings: 0, year: null })))
     await editEntry(db, id, 1, fields([claim('ids', '⿰火土')]), who, null)
-    expect(parts(raw).map(row => row.tag)).toEqual(['p:土', 'p:火'])
+    expect(parts(raw).map(row => row.tag)).toEqual(partRowsOf('⿰火土').sort())
     await setHidden(db, { entry: id }, true, who, null)
     expect(parts(raw)).toEqual([])
     expect((raw.query("SELECT tag FROM tag_counts WHERE tag GLOB 'p:*'").all())).toEqual([])
@@ -529,7 +532,8 @@ describe('part rows', () => {
     const merged = await createEntry(db, fields([claim('ids', '⿰火火')]), seen(), [], who)
     await mergeEntry(db, merged, a, who, null)
     await createEntry(db, fields(), seen(), [], who)
-    const written = parts(raw)
+    // The migration files the parts; the structures are filed by a write or by scripts/sweep-structures.ts.
+    const written = parts(raw).filter(row => [...row.tag.slice(2)].length === 1 && !isOperator(row.tag.slice(2)))
     expect(written).toHaveLength(9)
     raw.exec("DELETE FROM entry_tags WHERE tag GLOB 'p:*'")
     raw.exec(migration('0020_part_tags.sql').slice(migration('0020_part_tags.sql').indexOf('WITH RECURSIVE')))

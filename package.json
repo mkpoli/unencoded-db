@@ -9,7 +9,7 @@
     "preview": "bun run build && wrangler dev --local --infer-origin-from-routes=false",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "svelte-kit sync && bun test ./src",
-    "db:local": "wrangler d1 migrations apply DB --local && bun scripts/sweep-source-names.ts --local && bun scripts/sweep-publishers.ts --local && bun scripts/sweep-dates.ts --local && bun scripts/sweep-title-readings.ts --local && bun scripts/sweep-forms.ts --local",
+    "db:local": "wrangler d1 migrations apply DB --local && bun scripts/sweep-source-names.ts --local && bun scripts/sweep-publishers.ts --local && bun scripts/sweep-dates.ts --local && bun scripts/sweep-title-readings.ts --local && bun scripts/sweep-forms.ts --local && bun scripts/sweep-structures.ts --local && bun scripts/sweep-part-roles.ts --local",
     "postinstall": "node scripts/prepare-composer.mjs"
   },
   "devDependencies": {
@@ -38,8 +38,8 @@
     "fast-png": "8.0.0",
     "fflate": "^0.8.3",
     "fonteditor-core": "^2.6.3",
-    "han-compose": "github:mkpoli/han-compose#package",
-    "ids-input": "github:mkpoli/ids-input#5b06e3110efa770115200fe3eb0256d52f83fb4c",
+    "han-compose": "github:mkpoli/han-compose#06b207f4aec4361c221b79d4e0c1750eba6d6fc9",
+    "ids-input": "github:mkpoli/ids-input#6e44775c2d6aa72589a901189a463129ae67a798",
     "jose": "^6.2.15",
     "opentype.js": "1.3.4",
     "svgpath": "^2.6.0"

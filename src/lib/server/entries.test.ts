@@ -11,12 +11,13 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TAG_IMPLY_DEPTH_MAX, TAG_TYPES, arrangeTags, canImply, cleanTag, implicationClosure, localized, tagLabels } from '$lib/tags'
 import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, tagChanges, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement, mergeTag, aliasTag, unaliasTag, aliasesStatement, nameTier } from './tags'
-import { newClaim, readClaims, type Claim } from '$lib/claims'
+import { documentsOf, newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
 import { decadeOf } from '$lib/dates'
 import { recordCode } from '$lib/code'
-import { type Via, addSighting, moveSighting, getSighting, claimedBy, counts, countsStatement, creatorCounts, creatorCountsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, searchFound, foundStatement, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { readDates, sightingDates } from './date-readings'
+import { type Via, evidenceOrder, addSighting, moveSighting, getSighting, claimedBy, counts, countsStatement, creatorCounts, creatorCountsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, searchProblem, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, searchFound, foundStatement, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { PAGE, PAGE_SIZES, pageSizeOf } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
@@ -28,7 +29,7 @@ const relation = (character: string, relationship: string, difference = '', evid
 // A source is found among the sightings that passed through it by the index of the chain, never by a scan.
 const VIA_SEARCH = /SEARCH v USING (COVERING )?INDEX sighting_vias_by_source \(source_id=\?\)/
 const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, quote: null, ...over })
-const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
+const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
 const image: StoredImage = { image_key: 'a.webp', image_type: 'image/webp', image_w: 100, image_h: 100, thumb_key: 't.webp', box: null }
 
 let db: D1Database, raw: ReturnType<typeof openTestDb>['raw'], who: { actor: string; ip: null }
@@ -84,6 +85,55 @@ test('omitted comparison controls preserve existing data; explicit empty control
   expect(readEntryFields(form, [], original).fields.claims).toEqual(original.claims)
   form.set('related_characters_present', '1')
   expect(readEntryFields(form, [], original).fields.claims).toEqual([])
+})
+
+test('Unicode and IRG documents persist across create, edit, revert and search', async () => {
+  const pdf = 'https://www.unicode.org/L2/L2025/25056-uax45-3-abbreviated%20ideographs.pdf'
+  const form = new FormData()
+  form.set('ids', '⿰木木')
+  form.set('documents_present', '1')
+  form.append('document_number', 'l2/25-056')
+  form.append('document_page', '12')
+  form.append('document_url', pdf)
+  form.append('document_number', 'irg n2850')
+  form.append('document_page', '')
+  form.append('document_url', '')
+  const { fields: values, error } = readEntryFields(form, [])
+  expect(error).toBeNull()
+  expect(documentsOf(values.claims)).toEqual([
+    { doc: 'L2/25-056', page: '12', url: pdf },
+    { doc: 'IRG N2850', page: null, url: null },
+  ])
+
+  const id = await createEntry(db, values, seen(), [], who)
+  const stored = (await getEntry(db, id))!
+  expect(documentsOf(stored.claims)).toEqual([
+    { doc: 'L2/25-056', page: '12', url: pdf },
+    { doc: 'IRG N2850', page: null, url: null },
+  ])
+  for (const query of ['L2/25-056', '25-056', 'IRG N2850', 'IRGN2850', 'irgn2850', 'N2850']) {
+    expect((await list(db, { query }))!.tiles.map(tile => tile.id)).toEqual([id])
+  }
+
+  const original = (await history(db, id)).find(row => row.kind === 'create')!
+  const editForm = new FormData()
+  editForm.set('documents_present', '1')
+  editForm.append('document_number', 'wg2 n5234')
+  editForm.append('document_page', '4')
+  editForm.append('document_url', '')
+  const edited = readEntryFields(editForm, [], { ...stored.entry, claims: stored.claims })
+  expect(edited.error).toBeNull()
+  await editEntry(db, id, stored.entry.rev, edited.fields, who, null)
+  expect(documentsOf((await getEntry(db, id))!.claims)).toEqual([{ doc: 'WG2 N5234', page: '4', url: null }])
+  expect((await list(db, { query: 'N5234' }))!.tiles.map(tile => tile.id)).toEqual([id])
+  expect((await list(db, { query: 'L2/25-056' }))!.tiles).toEqual([])
+
+  await revertEntry(db, id, original.id, who)
+  expect(documentsOf((await getEntry(db, id))!.claims)).toEqual([
+    { doc: 'L2/25-056', page: '12', url: pdf },
+    { doc: 'IRG N2850', page: null, url: null },
+  ])
+  expect((await list(db, { query: 'L2/25-056' }))!.tiles.map(tile => tile.id)).toEqual([id])
 })
 
 describe('marked works', () => {
@@ -228,13 +278,23 @@ describe('adding a record', () => {
 })
 
 describe('search', () => {
-  test('complete IDS searches the exact normalized sequence, not components or prose', async () => {
+  test('a complete IDS finds the descriptions that hold it, not components or prose', async () => {
     const exact = await createEntry(db, described('⿰木木'), seen(), [], who)
-    await createEntry(db, described('⿱木木'), seen(), [], who)
-    await createEntry(db, described('⿰木水'), seen(), [], who)
+    const stacked = await createEntry(db, described('⿱木木'), seen(), [], who)
+    const water = await createEntry(db, described('⿰木水'), seen(), [], who)
     await createEntry(db, fields({ description: '⿰木木' }), seen(), [], who)
     expect((await list(db, { query: '⿰ 木 木' }))!.tiles.map(tile => tile.id)).toEqual([exact])
-    expect((await list(db, { query: '⿰木' }))!.tiles).toHaveLength(4)
+    // A structure left open finds every description that fills it.
+    expect((await list(db, { query: '⿰木', order: 'old' }))!.tiles.map(tile => tile.id)).toEqual([exact, water])
+    expect((await list(db, { query: '⿰？水' }))!.tiles.map(tile => tile.id)).toEqual([water])
+    expect((await list(db, { query: '⿱', order: 'old' }))!.tiles.map(tile => tile.id)).toEqual([stacked])
+    const inside = await createEntry(db, described('⿱艹⿰木木'), seen(), [], who)
+    expect((await list(db, { query: '⿰木木', order: 'old' }))!.tiles.map(tile => tile.id)).toEqual([exact, inside])
+    expect((await list(db, { query: '⿱艹⿰？木' }))!.tiles.map(tile => tile.id)).toEqual([inside])
+    expect((await list(db, { query: 'UD艹' }))!.tiles.map(tile => tile.id)).toEqual([inside])
+    expect((await list(db, { query: 'OUP' }))!.tiles).toEqual([])
+    await editEntry(db, inside, 1, described('⿱艹木'), who, null)
+    expect((await list(db, { query: '⿰木木' }))!.tiles.map(tile => tile.id)).toEqual([exact])
     const variant = await createEntry(db, described('⿰𠀀󠄀木'), seen(), [], who)
     await createEntry(db, described('⿰𠀀木'), seen(), [], who)
     expect((await list(db, { query: '⿰𠀀󠄀木' }))!.tiles.map(tile => tile.id)).toEqual([variant])
@@ -260,13 +320,14 @@ describe('search', () => {
     expect(await list(db, { query: '木', also: ['⿺𡕤面'] })).toEqual(await list(db, { query: '木' }))
   })
 
-  test('exact IDS search pages through bounded candidates without skipping', async () => {
+  test('a description search pages through bounded candidates without skipping', async () => {
     const n = SEARCH_WINDOW * 2 + 10
     raw.prepare(`WITH RECURSIVE seq(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM seq WHERE x < ?)
       INSERT INTO entries(id, script, ids, created_by, created_at, updated_at)
       SELECT x, 'han', CASE WHEN x IN (1, 2, 300, 520) THEN '⿰木木' ELSE '⿱木木' END, ?, '2026', '2026' FROM seq`).run(n, who.actor)
     raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) SELECT id, 0, printf('ids%05d', id), 'ids', ids FROM entries")
     raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'all', id FROM entries")
+    raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'p:' || ids, id FROM entries")
     let after: string | null = null
     const found: number[] = []
     let pages = 0
@@ -332,7 +393,7 @@ describe('search', () => {
   test('rejects excess distinct terms and queries without searchable terms', async () => {
     await createEntry(db, fields({ description: 'one two three four five' }), seen(), [], who)
     expect(await list(db, { query: 'one two three four five six' })).toBeNull()
-    expect(await list(db, { query: '... ⿰' })).toBeNull()
+    expect(await list(db, { query: '... 、' })).toBeNull()
     expect(await list(db, { query: 'a'.repeat(201) })).toBeNull()
     expect((await list(db, { query: 'one one two three four five' }))!.tiles).toHaveLength(1)
   })
@@ -797,6 +858,22 @@ test('a sighting keeps every context checked, in the order of the list', () => {
   expect(readSightingFields(new FormData()).contexts).toBeNull()
 })
 
+test('a sighting keeps one closeness of the list, and the table refuses any other', async () => {
+  const form = new FormData()
+  form.set('closeness', 'secondary_cited')
+  expect(readSightingFields(form).closeness).toBe('secondary_cited')
+  form.set('closeness', 'tertiary')
+  expect(readSightingFields(form).closeness).toBeNull()
+  expect(readSightingFields(new FormData()).closeness).toBeNull()
+  const id = await createEntry(db, fields(), seen({ closeness: 'memory' }), [], who)
+  const sighting = (await getEntry(db, id))!.sightings[0]
+  expect(sighting.closeness).toBe('memory')
+  expect(JSON.parse((await history(db, id)).find(row => row.kind === 'sighting')!.snapshot).closeness).toBe('memory')
+  expect(await editSighting(db, sighting.id, 1, seen({ closeness: 'primary' }), null, who, null, id)).toMatchObject({ ok: true })
+  expect((await getEntry(db, id))!.sightings[0].closeness).toBe('primary')
+  expect(() => raw.run("UPDATE sightings SET closeness = 'tertiary' WHERE id = ?", [sighting.id])).toThrow(/CHECK/)
+})
+
 describe('source types', () => {
   test('reads several checked types, ignores unknown values, and orders them for storage', () => {
     const form = new FormData()
@@ -1228,16 +1305,17 @@ describe('query cost', () => {
     expect(listStatement(db, { order: 'new' }, undefined, 1)).toBeNull()
   })
 
-  test('an exact description search reads the claims index by value', () => {
+  test('a description search reads the row of its structure by key', () => {
     const statement = listStatement(db, { query: '⿰木木' }) as unknown as { sql: string; values: unknown[] }
-    expect(plan(statement.sql, statement.values).join('\n')).toMatch(/SEARCH k USING COVERING INDEX claims_by_value \(kind=\? AND value=\? AND entry_id=\?\)/)
+    expect(statement.values[0]).toBe('p:⿰木木')
+    expect(plan(statement.sql, statement.values).join('\n')).toMatch(/SEARCH w USING (COVERING INDEX|PRIMARY KEY)[^\n]*\((tag=\? AND entry_id=\?|entry_id=\? AND tag=\?)\)/)
   })
 
-  test('an exact description search with other spellings reads the claims index by value for each', () => {
+  test('a description search with other spellings reads the row of each by key', () => {
     const statement = listStatement(db, { query: '⿰木木', also: ['⿱木木', '⿰木水'] }) as unknown as { sql: string; values: unknown[] }
-    expect(statement.values.slice(0, 3)).toEqual(['⿰木木', '⿱木木', '⿰木水'])
+    expect(statement.values.slice(0, 3)).toEqual(['p:⿰木木', 'p:⿱木木', 'p:⿰木水'])
     const details = plan(statement.sql, statement.values).join('\n')
-    expect(details).toMatch(/SEARCH k USING COVERING INDEX claims_by_value \(kind=\? AND value=\? AND entry_id=\?\)/)
+    expect(details).toMatch(/SEARCH w USING (COVERING INDEX|PRIMARY KEY)[^\n]*\((tag=\? AND entry_id=\?|entry_id=\? AND tag=\?)\)/)
     expect(details).not.toMatch(/TEMP B-TREE FOR ORDER BY/)
   })
 
@@ -1413,7 +1491,7 @@ describe('records a search finds', () => {
     await setHidden(db, { entry: ids[4] }, true, who, null)
     expect(await searchFound(db, { query: '艹時', also: ['艹日寺', '蒔'] }, 5)).toEqual([ids[2], ids[1], ids[0]])
     expect(await searchFound(db, { query: '⿱艹時', also: ['⿱艹⿰日寺'] }, 5)).toEqual([ids[2], ids[0]])
-    const ranges = [{ words: ['w:口', 'p:口'] }, { exact: ['⿱艹時', '⿱艹⿰日寺'] }, { tag: 'w:口' }, { exact: ['⿰木口'] }] as const
+    const ranges = [{ words: ['w:口', 'p:口'] }, { words: ['p:⿱艹時', 'p:⿱艹⿰日寺'] }, { tag: 'w:口' }, { words: ['p:⿰木口'] }] as const
     for (const from of ranges) {
       const statement = foundStatement(db, { query: '口' }, from as never, 5) as unknown as { sql: string; values: unknown[] }
       const details = (raw.query(`EXPLAIN QUERY PLAN ${statement.sql}`).all(...(statement.values as never[])) as { detail: string }[]).map(row => row.detail)
@@ -2225,6 +2303,45 @@ test('a record names the evidence that holds its earliest year through every wri
   const undated = await createEntry(db, fields(), seen(), [], who)
   expect(first(undated)).toBeNull()
 })
+test('evidence is read closest first, and only primary or unjudged evidence is dated by the work it names', async () => {
+  const picture = (key: string): StoredImage => ({ ...image, image_key: `${key}.webp`, thumb_key: `${key}-t.webp` })
+  const reindexSql = readFileSync(new URL('../../../scripts/reindex-dates.sql', import.meta.url), 'utf8')
+  const summary = (id: number) => raw.query('SELECT first_year, first_year_kind, first_sighting, cover_key, cover_place FROM entries WHERE id = ?').get(id) as { first_year: string; first_year_kind: string; first_sighting: number; cover_key: string; cover_place: string }
+  const swept = (id: number) => { raw.exec('UPDATE entries SET first_year = NULL, first_year_kind = NULL, first_sighting = NULL'); raw.exec(reindexSql); return summary(id) }
+  // A write that repairs a date runs the file statement by statement, split at each semicolon.
+  for (const statement of reindexSql.split(';').map(sql => sql.trim()).filter(Boolean)) raw.prepare(statement)
+  const id = await createEntry(db, fields(), seen({ place: 'dictionary', closeness: 'secondary_uncited', report_date: '1994', original_date: '1606' }), [picture('dictionary')], who, [
+    { fields: seen({ place: 'stele', closeness: 'primary', report_date: '2001', original_date: '1650' }), media: [picture('stele')] },
+    { fields: seen({ place: 'chat', closeness: 'memory', report_date: '1400' }), media: [] },
+    { fields: seen({ place: 'cited', closeness: 'secondary_cited', report_date: '1890', original_date: '1500' }), media: [] },
+    { fields: seen({ place: 'sign', report_date: '2020' }), media: [picture('sign')] },
+  ])
+  await addSighting(db, id, seen({ place: 'undated' }), [], who)
+  const order = async () => {
+    const { sightings } = (await getEntry(db, id))!
+    return evidenceOrder(sightings, await readDates(db, sightingDates(sightings))).map(sighting => sighting.place)
+  }
+  expect(await order()).toEqual(['stele', 'sign', 'undated', 'cited', 'dictionary', 'chat'])
+  const place = (name: string) => (raw.query('SELECT id FROM sightings WHERE place = ?').get(name) as { id: number }).id
+  // A memory reported earliest still dates the record by its report; the dictionaries' older dates do not.
+  expect(summary(id)).toEqual({ first_year: '1400', first_year_kind: 'report', first_sighting: place('chat'), cover_key: 'stele-t.webp', cover_place: 'stele' })
+  expect(swept(id)).toMatchObject({ first_year: '1400', first_year_kind: 'report', first_sighting: place('chat') })
+  const chat = (await getEntry(db, id))!.sightings.find(sighting => sighting.place === 'chat')!
+  await setHidden(db, { entry: id, sighting: chat.id }, true, who, null)
+  expect(summary(id)).toMatchObject({ first_year: '1650', first_year_kind: 'original', first_sighting: place('stele') })
+  expect(swept(id)).toMatchObject({ first_year: '1650', first_year_kind: 'original', first_sighting: place('stele') })
+  // Unjudged again, the dictionary's own date counts.
+  const dictionary = (await getEntry(db, id))!.sightings.find(sighting => sighting.place === 'dictionary')!
+  expect(await editSighting(db, dictionary.id, dictionary.rev, seen({ place: 'dictionary', report_date: '1994', original_date: '1606' }), null, who, null, id)).toMatchObject({ ok: true })
+  expect(summary(id)).toMatchObject({ first_year: '1606', first_year_kind: 'original', first_sighting: place('dictionary'), cover_key: 'stele-t.webp' })
+  expect(swept(id)).toMatchObject({ first_year: '1606', first_sighting: place('dictionary') })
+  // Of two sightings with one date, the closer holds it, though it was added later.
+  const tie = await createEntry(db, fields(), seen({ place: 'unjudged', report_date: '1700' }), [picture('unjudged')], who)
+  const primary = await addSighting(db, tie, seen({ place: 'original', closeness: 'primary', report_date: '1700' }), [picture('original')], who)
+  expect(summary(tie)).toMatchObject({ first_year: '1700', first_sighting: primary, cover_key: 'original-t.webp', cover_place: 'original' })
+  expect(swept(tie)).toMatchObject({ first_year: '1700', first_sighting: primary })
+})
+
 test('parts typed with no structure find the records that spell them another way', async () => {
   const typed = await createEntry(db, described('⿱艹時'), seen(), [], who)
   const radical = await createEntry(db, described('⿱⺾時'), seen(), [], who)
@@ -2242,6 +2359,8 @@ test('parts typed with no structure find the records that spell them another way
   expect(await searchTotal(db, { query: '艹時', also: ['艹日寺', '蒔'] })).toMatchObject({ n: 5, floor: false })
   expect(searchParts('艹時')).toEqual(['艹', '時'])
   expect(searchParts('⿱艹時')).toBeNull()
+  expect(searchParts('⿱ 艹')).toBeNull()
+  expect([searchProblem(''), searchProblem('⿲'), searchProblem('、'), searchProblem('一 二 三 四 五 六'), searchProblem('⿰一⿱二⿰三⿱四？ ⿰五⿱六⿰七⿱八？ ⿰九？')]).toEqual([null, null, 'noSearchTerms', 'tooManyTerms', 'tooManyTerms'])
   expect(searchParts('艹 word')).toBeNull()
   // Another spelling is parts alone, is not the query in another order, and is one of a few.
   expect(alsoSearchParts('艹時', ['時艹', '艹日寺', '艹 日 寺', '⿱艹時', 'word', '日寺艹', '蒔', '一二三四五六'])).toEqual(['艹日寺', '蒔'])
@@ -2254,6 +2373,11 @@ test('parts typed with no structure find the records that spell them another way
   expect(await found({ query: '⺾時' })).toEqual([typed, radical, mate])
   const flesh = await createEntry(db, described('⿰⺼木'), seen(), [], who)
   expect(await found({ query: '月木' })).toEqual([flesh])
+  // A character is found written out in the strokes it is drawn from, which the browser names as another spelling.
+  const strokes = await createEntry(db, described('⿲㇇丨𰛅'), seen(), [], who)
+  expect(alsoSearchParts('水', ['㇇𰛅'])).toEqual(['㇇𰛅'])
+  expect(await found({ query: '水', also: ['㇇𰛅'] })).toEqual([strokes])
+  expect(await found({ query: '㇇' })).toEqual([strokes])
   // The widest search stays under the number of values one statement may bind.
   const widest = { script: 'han', filter: 'variant', facet: 't:hakka', radical: '口', decade: '1930', within: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], without: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], query: '㔾七丸儿兔', also: ['兹冃冊凷刀', '叉友另囘堇', '夂奂尒彐擧'] }
   const bound = (statement: unknown) => (statement as { values: unknown[] }).values.length
@@ -2295,10 +2419,10 @@ describe('search total', () => {
       totalStatement(db, { script: 'han', query: 'word 木' }, { words: ['w:word'] }),
       totalStatement(db, { script: 'han', query: '艹時', also: ['艹日寺', '蒔'] }, { words: ['w:時', 'p:時', 'p:寺', 'p:蒔'] }),
       totalStatement(db, { script: 'han', filter: 'variant', within: ['unicode'], query: '亻' }, { tag: 'r:unicode' }),
-      totalStatement(db, { script: 'han', query: '⿰木木' }, { exact: ['⿰木木'] }),
-      totalStatement(db, { script: 'han', query: '⿰木木', also: ['⿱木木', '⿰木水'] }, { exact: ['⿰木木', '⿱木木', '⿰木水'] }),
+      totalStatement(db, { script: 'han', query: '⿰木木' }, { words: ['p:⿰木木'] }),
+      totalStatement(db, { script: 'han', query: '⿰木木', also: ['⿱木木', '⿰木水'] }, { words: ['p:⿰木木', 'p:⿱木木', 'p:⿰木水'] }),
     ].map(statement => statement as unknown as { sql: string; values: unknown[] })
-    for (const { sql, values } of [...statements, { sql: wordSize(1), values: ['w:word'] }, { sql: wordSize(3), values: ['w:艹', 'p:艹', 'p:艸'] }, { sql: exactSize(1), values: ['⿰木木'] }, { sql: exactSize(3), values: ['⿰木木', '⿱木木', '⿰木水'] }]) {
+    for (const { sql, values } of [...statements, { sql: wordSize(1), values: ['w:word'] }, { sql: wordSize(3), values: ['w:艹', 'p:艹', 'p:艸'] }]) {
       const details = plan(sql, values)
       // Counting records once uses a temporary tree, over the capped range alone; nothing is sorted or grouped.
       expect(details.join('\n')).not.toMatch(/TEMP B-TREE FOR (ORDER BY|GROUP BY)/)

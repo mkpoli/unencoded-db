@@ -32,6 +32,7 @@ const seen = (over: Partial<SightingFields> = {}): SightingFields => ({
   types: null,
   quotes: null,
   note: null,
+  closeness: null,
   ...over,
 })
 

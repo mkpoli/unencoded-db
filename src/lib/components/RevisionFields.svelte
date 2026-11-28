@@ -9,6 +9,7 @@
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { registryLabel } from '$lib/registries'
+  import { formatDocument } from '$lib/unicode-docs'
   import { COLLECTIONS, type TagType } from '$lib/tags'
   import { parseContexts, parseSightingTypes } from '$lib/scripts'
   import { statusOf } from '$lib/status'
@@ -31,7 +32,7 @@
   ] as const
   const KIND_LABELS: Record<ClaimKind, `${string}.${string}`> = {
     ids: 'field.ids', composition: 'field.formation', reading: 'field.reading', meaning: 'field.meaning', encoding: 'field.encodings',
-    relation: 'field.relatedCharacters', ivd: 'field.ivd', collection: 'field.collection', tag: 'field.tags', creator: 'field.creator',
+    document: 'field.documents', relation: 'field.relatedCharacters', ivd: 'field.ivd', collection: 'field.collection', tag: 'field.tags', creator: 'field.creator',
   }
   const WIDE: ClaimKind[] = ['reading', 'meaning', 'relation', 'composition']
   const at = locale()
@@ -39,13 +40,18 @@
   function shown(claim: Claim, claims: Claim[]): string {
     switch (claim.kind) {
       case 'encoding': return `${registryLabel(String(claim.data?.charset ?? ''))} ${claim.value}`
+      case 'document': {
+        const label = formatDocument(claim.value, typeof claim.data?.page === 'string' ? claim.data.page : null)
+        const url = typeof claim.data?.url === 'string' ? claim.data.url : ''
+        return url ? `${label} · ${url}` : label
+      }
       case 'ivd': return claim.value === 'none' ? t('field.ivdNone') : claim.value
       case 'collection': return COLLECTIONS.find(item => item.slug === claim.value)?.label ?? claim.value
       case 'tag': return labels.get(claim.value) ?? claim.value
       case 'reading': { const doculect = typeof claim.data?.doculect === 'string' ? claim.data.doculect : ''; const key = doculectKey(doculect); return doculect ? `${key ? t(key) : doculect} ${claim.value}` : claim.value }
       case 'composition': {
         const analysis = analyze(claim.value, compositionOf(claims))
-        return analysis ? [formationLabel(at, analysis.formation), ...analysis.parts.filter(part => part.role).map(part => `${part.part} · ${roleLabel(at, part.role)}`)].join(', ') : claim.value
+        return analysis ? [formationLabel(at, analysis.formation), ...analysis.parts.filter(part => part.role || part.func).map(part => [part.part, part.role && roleLabel(at, part.role), part.func].filter(Boolean).join(' · '))].join(', ') : claim.value
       }
       default: return claim.value
     }
@@ -68,6 +74,7 @@
       {#each sourceFields as field}{#if source[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={source[field.key]} reading={dates?.get(source[field.key] ?? '')} />{:else if field.key === 'source_kind'}{kindName(source.source_kind)}{:else}{source[field.key]}{/if}</dd></div>{/if}{/each}
       {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
       {#if source.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${source.style}`)}</dd></div>{/if}
+      {#if source.closeness}<div><dt>{t('field.closeness')}</dt><dd>{t(`closeness.${source.closeness}`)}</dd></div>{/if}
       {#if types.length}<div><dt>{t('field.sourceTypes')}</dt><dd>{types.map(type => t(`evidence.type.${type}`)).join(' · ')}</dd></div>{/if}
       {#if source.cites?.length}
         <div class="wide"><dt>{t('field.cites')}</dt><dd>

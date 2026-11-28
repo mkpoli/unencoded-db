@@ -62,7 +62,7 @@
           <div class="records">
             {#each source.tiles as tile (tile.id)}
               {@const label = [tile.ids, recordCode(tile.id)].filter(Boolean).join(' ')}
-              <a class="record" href={href(`/entry/${tile.id}`)} title={label}>
+              <a class="record" href={href(`/${recordCode(tile.id)}`)} title={label}>
                 {#if tile.ids}<IdsGlyph ids={tile.ids} layout={tile.layout} path={data.glyphs?.[tile.id]} /><span class="sr-only">{label}</span>
                 {:else if tile.cover_key}<img src={media(tile.cover_key)} alt={t('entry.record', { id: recordCode(tile.id) })} loading="lazy" decoding="async" />
                 {:else}<span class="code">{recordCode(tile.id)}</span>{/if}

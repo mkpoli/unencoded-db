@@ -7,12 +7,13 @@ import { authorKeys, nameKey, nameLabel, sourceKeys, sourceNameKey } from '../na
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
-import { CITES_MAX, CONTEXTS, isCiteKind, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
+import { CITES_MAX, closenessOf, closenessRank, CONTEXTS, datesOriginal, datingOriginal, isCiteKind, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
 import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
 import { statusOf } from '$lib/status'
-import { creatorKey, encodingsOf, joinClaims, mapSightings, moveClaims, newClaim, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, relationsTo, restoreClaims, validCreator, valuesOf, type Brought, type Claim, type ClaimError } from '$lib/claims'
+import { compositionOf, creatorKey, encodingsOf, joinClaims, mapSightings, moveClaims, newClaim, parseClaims, partClaims, primaryIdsOf, primaryLayoutOf, readClaims, relationsTo, restoreClaims, validCreator, valuesOf, type Brought, type Claim, type ClaimError } from '$lib/claims'
+import { partRoleRowsOf, type PartRole } from '$lib/composition'
 import { layoutText } from '$lib/layout'
 import { MARKED, registeredIn } from '$lib/registries'
 import { FILE_ROWS, ensureTags, filedUnder } from './tags'
@@ -20,6 +21,7 @@ import { WHO, WHO_COLUMNS } from './people'
 import type { Tag } from '$lib/tags'
 import { BRANCH_MIN, fileRecord, KANGXI, parsePath, pathsOf, radicalEquivalent } from '$lib/radicals'
 import { groupMates } from '$lib/similar'
+import { partRowsOf, partsOf, structurePattern } from '$lib/structure'
 import { codedRecord, recordCode } from '$lib/code'
 import type { RelationKind } from '$lib/related'
 import { PART_RUN_MAX, PART_SPELLINGS_MAX } from '$lib/ids-variants'
@@ -45,7 +47,7 @@ export type CiteTarget = { id: number; entry_id: number; title: string | null; p
 export type ResolvedCite = Cite & { source_id: number | null; target: CiteTarget | null; status: 'witness' | 'unseen' | 'removed' }
 export type InboundCite = { position: number; kind: CiteKind; sighting_id: number; entry_id: number; title: string | null; place: string; author: string | null; report_date: string | null; original_date: string | null; thumb_key: string | null; quote: string | null; note: string | null }
 export type CiteError = 'citeNote' | 'citeSelf' | 'citeMissing' | 'citeCycle'
-export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; source_kind: string | null; vias: Via[]; cites?: Cite[]; original_date: string | null; page: string | null; contexts: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null }
+export type SightingFields = { place: string; url: string | null; title: string | null; author: string | null; publisher: string | null; report_date: string | null; container: string | null; source_kind: string | null; vias: Via[]; cites?: Cite[]; original_date: string | null; page: string | null; contexts: string | null; style: string | null; types: string | null; note: string | null; quotes: string | null; closeness: string | null }
 export type StoredImage = { image_key: string; image_type: string; image_w: number; image_h: number; thumb_key: string; box: string | null }  // `box` is a JSON array of [x, y, width, height], or null
 export type ViaPicture = Omit<StoredImage, 'box'>
 export type YearKind = 'report' | 'original'
@@ -67,8 +69,8 @@ const blankCitation = (citation: Citation) => CITATION_FIELDS.every(field => fie
 export const VIA_INPUTS = ['via_url', 'via_title', 'via_author', 'via_publisher', 'via_report_date', 'via_container', 'via_source_kind', 'via_quote'] as const
 // The form sends each cited older work as one value of each of these, aligned by position.
 export const CITE_INPUTS = ['cite_kind', 'cite_sighting', 'cite_url', 'cite_title', 'cite_author', 'cite_publisher', 'cite_report_date', 'cite_container', 'cite_source_kind', 'cite_quote', 'cite_note'] as const
-export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
-export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes'] as const
+export const OCCURRENCE_FIELDS = ['place', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes', 'closeness'] as const
+export const SIGHTING_FIELDS = ['place', 'url', 'title', 'author', 'publisher', 'report_date', 'container', 'source_kind', 'original_date', 'page', 'contexts', 'style', 'types', 'note', 'quotes', 'closeness'] as const
 export const IMAGE_FIELDS = ['image_key', 'image_type', 'image_w', 'image_h', 'thumb_key', 'box'] as const
 
 export const VIA_IMAGE_FIELDS = ['image_key', 'image_type', 'image_w', 'image_h', 'thumb_key'] as const
@@ -289,6 +291,7 @@ export function readSightingFields(form: FormData, viaPictures: readonly ViaPict
     types: storeChosen(SIGHTING_TYPES, chosen('types')),
     note: text(form, 'note', 5000),
     quotes: quotes.length ? JSON.stringify(quotes) : null,
+    closeness: closenessOf(text(form, 'closeness', 20)),
   }
   if (blankCitation(fields)) fields.source_kind = null
   return fields
@@ -313,13 +316,13 @@ export function readBoxes(raw: unknown, width: number, height: number) {
 
 // ---------- The tags a record holds ----------
 
-const WORD = /[\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Hangul}\p{N}]+|[^\s\p{P}\p{S}\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Hangul}\p{N}]|[⿰-⿿]/gu
+const WORD = /[\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Hangul}\p{N}]+|[^\s\p{P}\p{S}\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Hangul}\p{N}]|[⿰-⿿]|[\u31C0-\u31E5]/gu
 const WORDS_MAX = 400
 export const SEARCH_TERMS_MAX = 5
 export const SEARCH_LENGTH_MAX = 200
 
 // Letters are words and every other character is a term of its own, which finds a part inside a description
-// sequence and needs no word breaking for CJK text.
+// sequence and needs no word breaking for CJK text. A stroke (㇇) is a symbol to Unicode and a part here.
 export function terms(value: string) {
   // A radical code point is a symbol to Unicode and a part here: it is read as the ideograph it stands for.
   return ([...value.normalize('NFKC').toLowerCase()].map(radicalEquivalent).join('').match(WORD) ?? []).filter(term => !/^[⿰-⿿]$/.test(term))
@@ -360,12 +363,14 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks, ...filed, ...decade]
 }
 
-const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'tag', 'creator']
+const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'document', 'relation', 'ivd', 'tag', 'creator']
 function wordTags(entry: TagInput, claims: readonly Claim[], sightings: SightingFields[]) {
   const words = new Set<string>()
   const add = (value: unknown) => { if (typeof value === 'string') for (const term of terms(value)) words.add(term) }
   for (const field of ['description', 'script_other'] as const) add(entry[field])
   for (const claim of claims) if (WORD_KINDS.includes(claim.kind)) { add(claim.value); add(claim.data?.difference); add(claim.data?.evidence) }
+  // Compact document numbers without a space (e.g. IRGN2850) find the normalized form (IRG N2850).
+  for (const claim of claims) if (claim.kind === 'document') add(claim.value.replace(/\s+/g, ''))
   // A Unicode code is found by the character it names, which is what another site links with.
   for (const claim of claims) if (claim.kind === 'encoding' && claim.data?.charset === 'unicode') add(encodedCharacter(claim.value))
   for (const sighting of sightings) for (const field of ['place', 'title', 'author', 'publisher', 'container', 'note'] as const) add(sighting[field])
@@ -375,11 +380,10 @@ function wordTags(entry: TagInput, claims: readonly Claim[], sightings: Sighting
   return [...words].slice(0, WORDS_MAX).map(word => `w:${word}`)
 }
 
-/** The parts of a description: its characters other than the operators and spaces, radical code points as the ideographs they stand for. */
-export const partsOf = (ids: string) => [...new Set([...ids].filter(char => !/[\s\u2FF0-\u2FFF\u31EF]/u.test(char)).map(radicalEquivalent))]
-// A record is found by the parts of each description it states (`p:`), read by key like a word and kept the same way.
+export { partsOf }
+// A record is found by the parts and the structures of each description it states (`p:`), read by key like a word and kept the same way.
 function partTags(claims: readonly Claim[]) {
-  return [...new Set(claims.filter(claim => claim.kind === 'ids').flatMap(claim => partsOf(claim.value)))].map(part => `p:${part}`)
+  return [...new Set(claims.filter(claim => claim.kind === 'ids').flatMap(claim => partRowsOf(claim.value)))]
 }
 
 // The year a list is read by: a record's first year as a number, which keeps no leading zero.
@@ -390,34 +394,45 @@ type Year = NonNullable<ReturnType<typeof datedYear>>
 // scripts/reindex-dates.sql ranks by the same order.
 const before = (a: Year, b: Year) => a.n < b.n || (a.n === b.n && compareDays(a.end, b.end) < 0)
 
+type Dated = Pick<SightingFields, 'report_date' | 'original_date'> & { closeness?: string | null }
 // A sighting's year: the work's own date unless the report's year is the earlier. A work is no later
-// than its report, so the nearer last day of the two bounds it.
-function sightingYear(sighting: Pick<SightingFields, 'report_date' | 'original_date'>, dates: DateBook) {
-  const report = datedYear(sighting.report_date, dates), original = datedYear(sighting.original_date, dates)
+// than its report, so the nearer last day of the two bounds it. A compilation or a memory is dated by
+// its report alone, whatever older work it names.
+function sightingYear(sighting: Dated, dates: DateBook) {
+  const report = datedYear(sighting.report_date, dates), original = datesOriginal(sighting.closeness) ? datedYear(sighting.original_date, dates) : null
   const year = original && (!report || original.n <= report.n) ? { ...original, kind: 'original' as const } : report && { ...report, kind: 'report' as const }
   return year && original && report ? { ...year, end: compareDays(original.end, report.end) < 0 ? original.end : report.end } : year
 }
 
-// The earliest attestation among visible sightings, and the sighting that holds it: the first added
-// of those that share its date.
-export function earliestSighting<T extends Pick<SightingFields, 'report_date' | 'original_date'> & { id?: number; hidden_at?: string | null }>(sightings: T[], dates: DateBook = new Map()) {
+// The earliest attestation among visible sightings, and the sighting that holds it: of those that share
+// its date, the closest to the original, then the first added.
+export function earliestSighting<T extends Dated & { id?: number; hidden_at?: string | null }>(sightings: T[], dates: DateBook = new Map()) {
   let found: (Year & { kind: YearKind; sighting: T }) | null = null
   for (const sighting of sightings) {
     if (sighting.hidden_at) continue
     const year = sightingYear(sighting, dates)
-    if (year && (!found || before(year, found))) found = { ...year, sighting }
+    if (year && (!found || before(year, found) || (!before(found, year) && closenessRank(sighting.closeness) < closenessRank(found.sighting.closeness)))) found = { ...year, sighting }
   }
   return found
+}
+
+/** A record's evidence in the order its page reads: closest to the original first, then by date with the
+ * undated last, then as added. Rows keep their ids, so claims and exports that name them by id are unchanged. */
+export function evidenceOrder<T extends Dated & { id: number }>(sightings: readonly T[], dates: DateBook) {
+  const dated = sightings.map(sighting => ({ sighting, rank: closenessRank(sighting.closeness), year: sightingYear(sighting, dates) }))
+  return dated.sort((a, b) => a.rank - b.rank || (a.year && b.year ? (before(a.year, b.year) ? -1 : before(b.year, a.year) ? 1 : 0) : a.year ? -1 : b.year ? 1 : 0) || a.sighting.id - b.sighting.id).map(item => item.sighting)
 }
 
 type SightingState = SightingFields & { media?: StoredImage[]; hidden_at?: string | null }
 
 // What a tile shows of a record, read from its visible sightings: the cover, where it was seen, which
-// source types it has and the earliest year among them. An older work in a recent post dates the
-// sighting, not the post.
+// source types it has and the earliest year among them. An older work reproduced in a recent post
+// dates the sighting, not the post.
 function summarize(sightings: SightingState[], dates: DateBook) {
   const visible = sightings.filter(sighting => !sighting.hidden_at)
-  const cover = visible.find(sighting => sighting.media?.length)
+  // The cover is from the closest sighting with a picture, the first added of equals.
+  const closest = [...visible].sort((a, b) => closenessRank(a.closeness) - closenessRank(b.closeness))
+  const cover = closest.find(sighting => sighting.media?.length)
   const types = new Set<SightingType>()
   for (const sighting of visible) for (const type of parseSightingTypes(sighting.types)) types.add(type)
   const year = earliestSighting(visible, dates)
@@ -430,7 +445,7 @@ function summarize(sightings: SightingState[], dates: DateBook) {
   return {
     visible,
     cover_key: cover?.media?.[0].thumb_key ?? null,
-    cover_place: (cover ?? visible[0])?.place ?? null,
+    cover_place: (cover ?? closest[0])?.place ?? null,
     types: chosen.length ? JSON.stringify(chosen) : null,
     first_year: year?.text ?? null,
     first_year_kind: year?.kind ?? null,
@@ -467,6 +482,22 @@ function formRows(db: D1Database, owner: number | string, forms: readonly string
     db.prepare(`INSERT INTO forms(form, entry_id) SELECT value, ${sql} FROM json_each(?) WHERE NOT EXISTS (SELECT 1 FROM forms WHERE form = value AND entry_id = ${sql})`).bind(...values, JSON.stringify(forms), ...values),
   ]
 }
+/** The composition part-role rows of a record, brought to `entry_part_roles`; triggers keep `part_function_counts` and `part_counts` in sync. */
+function partRoleRows(db: D1Database, owner: number | string, rows: readonly PartRole[]) {
+  const { sql, values } = owned(owner)
+  const payload = JSON.stringify(rows)
+  return [
+    db.prepare(`DELETE FROM entry_part_roles WHERE entry_id = ${sql} AND NOT EXISTS (
+      SELECT 1 FROM json_each(?) j
+      WHERE json_extract(j.value, '$.part') = entry_part_roles.part
+        AND json_extract(j.value, '$.role') = entry_part_roles.role
+        AND json_extract(j.value, '$.func') = entry_part_roles.func
+    )`).bind(...values, payload),
+    db.prepare(`INSERT OR IGNORE INTO entry_part_roles(part, entry_id, role, func)
+      SELECT json_extract(j.value, '$.part'), ${sql}, json_extract(j.value, '$.role'), json_extract(j.value, '$.func')
+      FROM json_each(?) j`).bind(...values, payload),
+  ]
+}
 const SIGHTING_SEQ = "(SELECT seq FROM sqlite_sequence WHERE name = 'sightings')"
 // A summary names the sighting that holds the record's year by its id (1), or, for one the same write
 // inserts, by how many inserted sightings follow it (2).
@@ -494,6 +525,7 @@ async function reindex(db: D1Database, id: number, entry: Entry, claims: readonl
     db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(added.filter(facet))),
     ...tagRows(db, id),
     ...formRows(db, id, live ? formsOf(claims) : []),
+    ...partRoleRows(db, id, live ? partRoleRowsOf(primaryIdsOf(claims), compositionOf(claims)) : []),
   ]
 }
 
@@ -683,6 +715,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
       db.prepare('INSERT INTO tag_counts(tag, n) SELECT value, 1 FROM json_each(?) WHERE true ON CONFLICT(tag) DO UPDATE SET n = n + 1').bind(JSON.stringify(tags.filter(facet))),
       ...tagRows(db, ENTRY_SEQ),
       ...formRows(db, ENTRY_SEQ, formsOf(claims)),
+      ...partRoleRows(db, ENTRY_SEQ, partRoleRowsOf(primaryIdsOf(claims), compositionOf(claims))),
       recount(db, ENTRY_SEQ),
       ...dates.reindex,
     ])
@@ -1371,7 +1404,7 @@ const MEDIA_OF_ENTRY = `SELECT x.sighting_id, ${IMAGE_FIELDS.map(field => `x.${f
 
 const CITE_ROW_COLUMNS = `sc.sighting_id, sc.position, sc.kind, sc.source_id, sc.cited_id, sc.quote, sc.note,
   ${CITATION_FIELDS.map(field => `ns.${field}`).join(', ')},
-  cs.entry_id AS t_entry_id, cs.place AS t_place, cs.original_date AS t_original_date,
+  cs.entry_id AS t_entry_id, cs.place AS t_place, ${datingOriginal('cs')} AS t_original_date,
   cs.hidden_at AS t_hidden_at, cs.source_id AS t_source_id,
   ce.hidden_at AS te_hidden_at, ce.merged_into AS te_merged_into,
   ${CITATION_FIELDS.map(field => `csrc.${field} AS t_${field}`).join(', ')},
@@ -1379,7 +1412,7 @@ const CITE_ROW_COLUMNS = `sc.sighting_id, sc.position, sc.kind, sc.source_id, sc
 const CITE_JOINS = `LEFT JOIN sources ns ON ns.id = sc.source_id LEFT JOIN sightings cs ON cs.id = sc.cited_id LEFT JOIN entries ce ON ce.id = cs.entry_id LEFT JOIN sources csrc ON csrc.id = cs.source_id`
 const CITES_OF_ENTRY = `SELECT ${CITE_ROW_COLUMNS} FROM sightings s JOIN sighting_cites sc ON sc.sighting_id = s.id ${CITE_JOINS} WHERE s.entry_id = ?1 AND s.id <= COALESCE((SELECT id FROM sightings WHERE entry_id = ?1 ORDER BY id LIMIT 1 OFFSET ${SIGHTINGS_MAX - 1}), ${Number.MAX_SAFE_INTEGER}) ORDER BY s.id`
 const CITED_BY_MAX = 60
-const CITED_BY_COLUMNS = `sc.cited_id AS target_id, sc.sighting_id, sc.position, sc.kind, sc.quote, sc.note, s.entry_id, s.place, s.original_date, c.title, c.author, c.report_date, (SELECT x.thumb_key FROM sighting_media x WHERE x.sighting_id = s.id ORDER BY x.position LIMIT 1) AS thumb_key`
+const CITED_BY_COLUMNS = `sc.cited_id AS target_id, sc.sighting_id, sc.position, sc.kind, sc.quote, sc.note, s.entry_id, s.place, ${datingOriginal('s')} AS original_date, c.title, c.author, c.report_date, (SELECT x.thumb_key FROM sighting_media x WHERE x.sighting_id = s.id ORDER BY x.position LIMIT 1) AS thumb_key`
 const CITED_BY_OF_ENTRY = `SELECT ${CITED_BY_COLUMNS} FROM sightings t JOIN sighting_cites sc INDEXED BY sighting_cites_by_cited ON sc.cited_id = t.id JOIN sightings s ON s.id = sc.sighting_id JOIN entries e ON e.id = s.entry_id LEFT JOIN sources c ON c.id = s.source_id WHERE t.entry_id = ?1 AND t.hidden_at IS NULL AND s.hidden_at IS NULL AND ${LIVE} AND t.id <= COALESCE((SELECT id FROM sightings WHERE entry_id = ?1 ORDER BY id LIMIT 1 OFFSET ${SIGHTINGS_MAX - 1}), ${Number.MAX_SAFE_INTEGER}) ORDER BY t.id LIMIT ${CITED_BY_MAX}`
 
 type CiteQueryRow = Citation & {
@@ -1480,7 +1513,7 @@ export function preserveHiddenCites(submitted: readonly Cite[], raw: readonly Ci
 }
 
 export async function sightingSiblings(db: D1Database, entryId: number, excludeId: number) {
-  const { results } = await db.prepare(`SELECT s.id, c.title, s.place, c.report_date, s.original_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.entry_id = ? AND s.hidden_at IS NULL AND s.id != ? ORDER BY s.id LIMIT ${SIGHTINGS_MAX}`)
+  const { results } = await db.prepare(`SELECT s.id, c.title, s.place, c.report_date, ${datingOriginal('s')} AS original_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.entry_id = ? AND s.hidden_at IS NULL AND s.id != ? ORDER BY s.id LIMIT ${SIGHTINGS_MAX}`)
     .bind(entryId, excludeId).all<{ id: number; title: string | null; place: string; report_date: string | null; original_date: string | null }>()
   return results
 }
@@ -1602,11 +1635,32 @@ export const MATES_MAX = 2
 // The part rows a part is found under: the ideograph its radical code point stands for, then the parts IWDS counts as one with it.
 const partRows = (part: string) => { const own = radicalEquivalent(part); return [...new Set([own, ...groupMates(own).slice(0, MATES_MAX).map(radicalEquivalent)])].map(spelling => `p:${spelling}`) }
 
-/** The parts of a query that is parts alone, such as 艹時, or null for a description or a query with a longer word. */
+/** Structure keys at most in one search, over all the structures typed. */
+export const SEARCH_KEYS_MAX = 8
+// A query as the structures and the words typed in it. A whole description is one structure, spaces and
+// all; otherwise each run between spaces that starts with an operator is one (⿲, ⿰氵, ⿰氵⿱？木), read into
+// the keys a record must hold (see `$lib/structure`), and the rest are words.
+function readQuery(query: string) {
+  const whole = exactSearchIds(query)
+  const typed = whole ? [whole] : query.trim().split(/\s+/u).filter(Boolean)
+  const structures: string[][] = [], rest: string[] = []
+  for (const term of typed) { const keys = structurePattern(term); if (keys) structures.push(keys); else rest.push(term) }
+  return { structures, words: [...new Set(terms(rest.join(' ')))] }
+}
+
+/** Why a query cannot be searched, or null for one that can, the empty one included. */
+export function searchProblem(query: string): 'queryTooLong' | 'noSearchTerms' | 'tooManyTerms' | null {
+  const typed = query.trim()
+  if (typed.length > SEARCH_LENGTH_MAX) return 'queryTooLong'
+  const { structures, words } = readQuery(typed)
+  if (typed && !structures.length && !words.length) return 'noSearchTerms'
+  return structures.length + words.length > SEARCH_TERMS_MAX || structures.flat().length > SEARCH_KEYS_MAX ? 'tooManyTerms' : null
+}
+
+/** The parts of a query that is parts alone, such as 艹時, or null for a description, a structure or a query with a longer word. */
 export function searchParts(query: string) {
-  if (exactSearchIds(query)) return null
-  const parts = [...new Set(terms(query))]
-  return parts.length && parts.length <= SEARCH_TERMS_MAX && parts.every(isPart) ? parts : null
+  const { structures, words } = readQuery(query)
+  return !structures.length && words.length && words.length <= SEARCH_TERMS_MAX && words.every(isPart) ? words : null
 }
 
 // Other spellings of the parts searched for, found in the browser, are searched with them: at most
@@ -1633,16 +1687,16 @@ export const alsoSearch = (query: string, values: readonly string[] = []) => exa
 function listPlan({ script, filter, facet, creator, radical, decade, within, without, query, also }: Listing) {
   const base = listTag(script, filter), own = facetTag(facet), maker = creatorTag(creator), filed = radicalTag(radical), period = decadeTag(decade), marks = markTags(within, without)
   if (!base || own === undefined || maker === undefined || filed === undefined || period === undefined || !marks) return null
-  if ((query?.trim().length ?? 0) > SEARCH_LENGTH_MAX) return null
-  const typed = exactSearchIds(query ?? '')
-  const exact = typed ? [typed, ...alsoSearchIds(query ?? '', also)] : null
-  const words = exact ? [] : [...new Set(terms(query ?? ''))]
-  if (!exact && (words.length > SEARCH_TERMS_MAX || (query?.trim() && !words.length))) return null
+  if (searchProblem(query ?? '')) return null
+  const { structures, words } = readQuery(query ?? '')
+  // A whole description is found under its other spellings too, each one structure of its own.
+  const others = alsoSearchIds(query ?? '', also).flatMap(ids => { const keys = structurePattern(ids); return keys?.length === 1 ? keys : [] })
+  const held = structures.flatMap(keys => keys.map(key => [...new Set([key, ...(keys.length === 1 ? others : [])])].map(row => `p:${row}`)))
   const keys = [...(own ? [own] : []), ...(maker ? [maker] : []), ...(filed ? [filed] : []), ...(period ? [period] : []), ...marks, ...(base !== 'all' ? [base] : [])]
   // A spelling that is one character, the one the parts make, is found wherever a record names it: as a
   // part, a related character, a code, or a word of its notes and sources.
-  const spelt = exact ? [] : alsoSearchParts(query ?? '', also).map(run => [...run]).map(run => run.map(part => run.length === 1 ? [`w:${part}`, ...partRows(part)] : partRows(part)))
-  return { keys, exact, words: words.map(word => [`w:${word}`, ...(isPart(word) ? partRows(word) : [])]), spelt }
+  const spelt = alsoSearchParts(query ?? '', also).map(run => [...run]).map(run => run.map(part => run.length === 1 ? [`w:${part}`, ...partRows(part)] : partRows(part)))
+  return { keys, words: [...held, ...words.map(word => [`w:${word}`, ...(isPart(word) ? partRows(word) : [])])], spelt }
 }
 type Plan = NonNullable<ReturnType<typeof listPlan>>
 
@@ -1659,7 +1713,7 @@ function wordsTest(plan: Plan, from: 't' | 'd', given?: readonly string[]) {
 function listRead(plan: Plan, range = plan.keys[0] ?? 'all') {
   const words = wordsTest(plan, 't'), keys = plan.keys.filter(key => key !== range)
   const tests = [...words.tests, ...keys.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = t.entry_id)')]
-  return { tag: range, tests, values: [...words.values, ...keys], searching: plan.exact !== null || tests.length > 0 }
+  return { tag: range, tests, values: [...words.values, ...keys], searching: tests.length > 0 }
 }
 
 export const TILE_COLUMNS = 'e.id, e.ids, e.layout, e.cover_key, e.sightings, e.status, e.types, e.first_year, e.first_year_kind, e.marks'
@@ -1712,13 +1766,10 @@ export function listStatement(db: D1Database, listing: Listing, range?: string, 
   const read = listRead(plan, range)
   // The range drives the query. Tests are projections, not filters:
   // LIMIT therefore bounds candidates read even when no row passes.
-  const tests = [
-    ...(plan.exact ? [`EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value IN (${plan.exact.map(() => '?')}) AND k.entry_id = t.entry_id)`] : []),
-    ...read.tests,
-  ].join(' AND ') || '1'
+  const tests = read.tests.join(' AND ') || '1'
   const { by, past, key } = order === 'random' ? { by: RANK, past: `${RANK} >= ? AND ${RANK} < ? AND ${LISTED}`, key: RANK } : ORDER_READS[order]
   return db.prepare(`SELECT ${TILE_COLUMNS}, ${key} AS counted, (${tests}) AS matches FROM entry_tags t CROSS JOIN entries e ON e.id = t.entry_id WHERE t.tag = ? AND ${past} ORDER BY ${by} LIMIT ?`)
-    .bind(...(plan.exact ?? []), ...read.values, read.tag, ...(ranks ?? cursor), (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1 - taken)
+    .bind(...read.values, read.tag, ...(ranks ?? cursor), (read.searching ? SEARCH_WINDOW : listing.limit ?? PAGE) + 1 - taken)
 }
 
 export type TileRow = Pick<Entry, 'id' | 'ids' | 'layout' | 'cover_key' | 'sightings' | 'status' | 'types' | 'first_year' | 'first_year_kind' | 'marks'>
@@ -1792,45 +1843,40 @@ export async function pageCount(db: D1Database, listing: Listing): Promise<{ rec
   return { records, pages: Math.ceil(records / (listing.limit ?? PAGE)), floor: records === PAGED_MAX }
 }
 
-// A search is counted once, from the shortest range it is tested against: a key, a word or the exact
-// description. A query of parts with other spellings is counted from one word of each spelling, since a
+// A search is counted once, from the shortest range it is tested against: a key or a word. A query of parts with other spellings is counted from one word of each spelling, since a
 // record found holds every word of one of them. At most TOTAL_READ records of that range are read; past
 // that the count is a floor.
 export const TOTAL_READ = 1000
-type TotalRange = { tag: string; exact?: undefined; words?: undefined } | { tag?: undefined; exact: readonly string[]; words?: undefined } | { tag?: undefined; exact?: undefined; words: readonly string[] }
+type TotalRange = { tag: string; words?: undefined } | { tag?: undefined; words: readonly string[] }
 const rowsIn = (rows: number) => rows === 1 ? '= ?' : `IN (${Array(rows).fill('?')})`
 export const wordSize = (rows: number) => `SELECT count(*) AS n FROM (SELECT 1 FROM entry_tags WHERE tag ${rowsIn(rows)} LIMIT ${TOTAL_READ + 1})`
-export const exactSize = (spellings: number) => `SELECT count(*) AS n FROM (SELECT entry_id FROM claims WHERE kind = 'ids' AND value IN (${Array(spellings).fill('?')}) LIMIT ${TOTAL_READ + 1})`
 // The records of a range that the search finds, as `d`: at most TOTAL_READ read. When `newest`, each tag or
 // spelling of the range is read newest first on its own, an equal share of TOTAL_READ each, since the index
 // gives several of them in no one order and sorting them all would read every row.
 function rangeFound(plan: Plan, from: TotalRange, newest = false) {
   const tags = (plan.keys.length ? plan.keys : ['all']).filter(tag => tag !== from.tag)
-  const exact = from.exact ? null : plan.exact
   // The rows of one word read alone are known to hold it, unless another spelling could do without it.
-  const read = from.exact ?? from.words ?? [from.tag]
+  const read = from.words ?? [from.tag]
   const given = from.words && !plan.spelt.length ? plan.words.find(rows => rows.length === read.length && rows.every((row, i) => row === read[i])) : undefined
   const words = wordsTest(plan, 'd', given)
   const tests = [
-    ...(exact ? [`EXISTS (SELECT 1 FROM claims k WHERE k.kind = 'ids' AND k.value IN (${exact.map(() => '?')}) AND k.entry_id = d.entry_id)`] : []),
     ...words.tests,
     ...tags.map(() => 'EXISTS (SELECT 1 FROM entry_tags w WHERE w.tag = ? AND w.entry_id = d.entry_id)'),
   ].join(' AND ') || '1'
   // Several spellings or rows are read unordered, since none of them is one range of the index.
   const each = Math.ceil(TOTAL_READ / read.length)
-  const one = from.exact ? `SELECT entry_id FROM claims WHERE kind = 'ids' AND value = ? ORDER BY entry_id DESC LIMIT ${each}` : `SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id DESC LIMIT ${each}`
+  const one = `SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id DESC LIMIT ${each}`
   const range = newest ? read.map(() => `SELECT entry_id FROM (${one})`).join(' UNION ALL ')
-    : from.exact ? `SELECT entry_id FROM claims WHERE kind = 'ids' AND value IN (${from.exact.map(() => '?')}) LIMIT ${TOTAL_READ}`
     : read.length > 1 ? `SELECT entry_id FROM entry_tags WHERE tag ${rowsIn(read.length)} LIMIT ${TOTAL_READ}`
     : `SELECT entry_id FROM entry_tags WHERE tag = ? ORDER BY entry_id LIMIT ${TOTAL_READ}`
-  return { range, tests, values: [...read, ...(exact ?? []), ...words.values, ...tags] }
+  return { range, tests, values: [...read, ...words.values, ...tags] }
 }
 export function totalStatement(db: D1Database, listing: Listing, from: TotalRange) {
   const plan = listPlan(listing)
   if (!plan) return null
   const { range, tests, values } = rangeFound(plan, from)
   // A tag range holds each record once; only several spellings or rows can name one record twice.
-  const several = from.tag === undefined && (from.exact ?? from.words).length > 1
+  const several = from.tag === undefined && from.words.length > 1
   return db.prepare(`SELECT ${several ? 'count(DISTINCT d.entry_id)' : 'count(*)'} AS n FROM (${range}) d WHERE ${tests}`).bind(...values)
 }
 
@@ -1839,12 +1885,11 @@ export function totalStatement(db: D1Database, listing: Listing, from: TotalRang
 async function searchRange(db: D1Database, listing: Listing) {
   const plan = listPlan(listing)
   const keys = plan?.keys.length ? plan.keys : ['all']
-  if (!plan || (!plan.exact && !plan.words.length && keys.length < 2)) return null
+  if (!plan || (!plan.words.length && keys.length < 2)) return null
   const spellings = [plan.words, ...plan.spelt].filter(spelling => spelling.length), words = spellings.flat()
   const [known, ...read] = await db.batch<{ tag: string; n: number }>([
     db.prepare('SELECT tag, n FROM tag_counts WHERE tag IN (SELECT value FROM json_each(?))').bind(JSON.stringify(keys)),
     ...words.map(rows => db.prepare(wordSize(rows.length)).bind(...rows)),
-    ...(plan.exact ? [db.prepare(exactSize(plan.exact.length)).bind(...plan.exact)] : []),
   ])
   const sizes = new Map(known.results.map(row => [row.tag, row.n]))
   const sized = new Map(words.map((rows, i) => [rows, read[i].results[0]?.n ?? 0]))
@@ -1853,7 +1898,6 @@ async function searchRange(db: D1Database, listing: Listing) {
   const ranges: (TotalRange & { size: number })[] = [
     ...keys.map(tag => ({ tag, size: sizes.get(tag) ?? 0 })),
     ...(spellings.length > 1 ? [{ words: [...new Set(least.flat())], size: least.reduce((sum, rows) => sum + sized.get(rows)!, 0) }] : plan.words.map(rows => ({ words: rows, size: sized.get(rows)! }))),
-    ...(plan.exact ? [{ exact: plan.exact, size: read[words.length].results[0]?.n ?? 0 }] : []),
   ]
   return { plan, from: ranges.reduce((least, range) => range.size < least.size ? range : least), pool: Math.min(...keys.map(tag => sizes.get(tag) ?? 0)) }
 }
@@ -1890,7 +1934,7 @@ export async function searchFound(db: D1Database, listing: Listing, limit: numbe
 // page starts at its own first row. The decades and their counts come from the counts kept with each write.
 export const CHRONICLE_PAGE = 100
 export const decadeCountsStatement = (db: D1Database) => db.prepare("SELECT tag, n FROM tag_counts WHERE tag >= 'y:' AND tag < 'y;' AND n > 0")
-const CHRONICLE_COLUMNS = `${TILE_COLUMNS}, t.year AS year, s.id AS s_id, s.place AS s_place, s.original_date AS s_original, c.title AS c_title, c.author AS c_author, c.report_date AS c_report`
+const CHRONICLE_COLUMNS = `${TILE_COLUMNS}, t.year AS year, s.id AS s_id, s.place AS s_place, ${datingOriginal('s')} AS s_original, c.title AS c_title, c.author AS c_author, c.report_date AS c_report`
 const CHRONICLE_FROM = `entry_tags t CROSS JOIN entries e ON e.id = t.entry_id LEFT JOIN sightings s ON s.id = e.first_sighting LEFT JOIN sources c ON c.id = s.source_id`
 const CHRONICLE_DATED = `t.tag = 'all' AND t.year IS NOT NULL AND ${LISTED}`
 // A page is read forwards from a place, inclusive, or backwards from just before one; both read one row
@@ -2038,7 +2082,7 @@ export async function sourcePage(db: D1Database, id: number) {
   const direct = { from: 'sightings s INDEXED BY sightings_by_source CROSS JOIN entries e ON e.id = s.entry_id', live: 's.source_id = ?', order: 's.id' }
   const via = { from: 'sighting_vias v INDEXED BY sighting_vias_by_source CROSS JOIN sightings s ON s.id = v.sighting_id CROSS JOIN entries e ON e.id = s.entry_id', live: 'v.source_id = ? AND s.source_id IS NOT v.source_id', order: 'v.sighting_id' }
   const live = (way: typeof direct) => `${way.live} AND s.hidden_at IS NULL AND ${LIVE}`
-  const namedQuery = `SELECT ${TILE_COLUMNS}, s.id AS s_id, sc.position AS sc_position, s.place AS s_place, s.original_date AS s_original_date, cs_src.title AS s_title, cs_src.author AS s_author, cs_src.report_date AS s_report_date, sc.kind AS sc_kind, sc.quote AS sc_quote, sc.note AS sc_note
+  const namedQuery = `SELECT ${TILE_COLUMNS}, s.id AS s_id, sc.position AS sc_position, s.place AS s_place, ${datingOriginal('s')} AS s_original_date, cs_src.title AS s_title, cs_src.author AS s_author, cs_src.report_date AS s_report_date, sc.kind AS sc_kind, sc.quote AS sc_quote, sc.note AS sc_note
     FROM sighting_cites sc INDEXED BY sighting_cites_by_source
     CROSS JOIN sightings s ON s.id = sc.sighting_id
     CROSS JOIN entries e ON e.id = s.entry_id

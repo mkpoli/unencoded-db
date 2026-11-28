@@ -36,6 +36,8 @@ jobs:
       - run: bun run build
       - run: bunx wrangler d1 migrations apply DB --remote
       - run: bun scripts/sweep-source-names.ts --remote
+      # File the structure rows the new search reads before it goes live.
+      - run: bun scripts/sweep-structures.ts --remote
       - run: bunx wrangler deploy
       # Reconcile citations entered by the previous Worker during the release.
       - run: bun scripts/sweep-source-names.ts --remote
@@ -43,3 +45,4 @@ jobs:
       - run: bun scripts/sweep-title-readings.ts --remote
       - run: bun scripts/sweep-dates.ts --remote
       - run: bun scripts/sweep-forms.ts --remote
+      - run: bun scripts/sweep-structures.ts --remote

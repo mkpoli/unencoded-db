@@ -1,3 +1,4 @@
+import { recordCode } from './code'
 import { SITE_ORIGIN } from './seo'
 
 export const RECORD_LICENSE = 'https://creativecommons.org/licenses/by-sa/4.0/'
@@ -56,7 +57,7 @@ export type RecordFacts = {
 // The record is a CreativeWork: it holds evidence and claims, not a definition of a term. The licence covers
 // the record text only; the pictures keep the rights of the works they come from.
 export function recordData(facts: RecordFacts): Json[] {
-  const url = `${SITE_ORIGIN}/${facts.locale}/entry/${facts.id}`
+  const url = `${SITE_ORIGIN}/${facts.locale}/${recordCode(facts.id)}`
   const seen = new Set<number>()
   const sources = [...facts.sources, ...facts.vias ?? []].filter(source => !seen.has(source.id) && seen.add(source.id))
   return [
