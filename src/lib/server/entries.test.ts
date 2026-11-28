@@ -9,8 +9,8 @@ import { Database } from 'bun:sqlite'
 import { isDescription, rateFormsOfPart } from 'ids-input'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { TAG_IMPLY_DEPTH_MAX, TAG_TYPES, arrangeTags, canImply, cleanTag, implicationClosure, localized, tagLabels } from '$lib/tags'
-import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, tagChanges, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement, mergeTag, aliasTag, unaliasTag, aliasesStatement, nameTier } from './tags'
+import { TAG_IMPLY_DEPTH_MAX, TAG_NOTE_MAX, TAG_TYPES, arrangeTags, canImply, cleanTag, implicationClosure, localized, shownNote, tagLabels } from '$lib/tags'
+import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, tagChanges, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement, mergeTag, aliasTag, unaliasTag, aliasesStatement, nameTier, noteTag } from './tags'
 import { documentsOf, newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
@@ -2028,6 +2028,32 @@ describe('typed tags and implications', () => {
     expect(await deleteGroup(db, (await taxonomy(db)).groups, { id: group.id }, who)).toEqual({ ok: true })
     expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
     expect((await taxonomy(db)).groups.find(item => item.id === group.id)?.names).toEqual({ en: 'Vernacular forms' })
+  })
+
+  test('a tag is defined in each language, shown in the reader\'s or another, and kept through undo, delete and merge', async () => {
+    await made('方俗字', 'form')
+    const note = async (locale: string, text: string, key = '方俗字') => noteTag(db, await listed(), { name: key, locale, text }, who)
+    expect(await note('zh-Hant', '方言中通行的俗寫。\r\n多見於地方文獻。')).toEqual({ ok: true })
+    expect(await note('en', 'Vernacular forms current in a dialect.')).toEqual({ ok: true })
+    expect(await note('xx', '甲')).toEqual({ ok: false, code: 'invalid' })
+    expect(await note('ja', '字'.repeat(TAG_NOTE_MAX + 1))).toEqual({ ok: false, code: 'invalid' })
+    const tag = (await row('方俗字'))!
+    expect(tag.notes).toEqual({ 'zh-Hant': '方言中通行的俗寫。\n多見於地方文獻。', en: 'Vernacular forms current in a dialect.' })
+    expect([shownNote(tag, 'en'), shownNote(tag, 'ko')]).toEqual(['Vernacular forms current in a dialect.', '方言中通行的俗寫。\n多見於地方文獻。'])
+    // Empty text takes it off; undo puts it back.
+    expect(await note('en', '')).toEqual({ ok: true })
+    expect((await row('方俗字'))?.notes).toEqual({ 'zh-Hant': '方言中通行的俗寫。\n多見於地方文獻。' })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect((await row('方俗字'))?.notes.en).toBe('Vernacular forms current in a dialect.')
+    // Delete and merge keep the notes for undoing.
+    await made('土俗字', 'form')
+    expect(await note('zh-Hant', '少數民族借漢字造的字。', '土俗字')).toEqual({ ok: true })
+    expect(await deleteTag(db, await listed(), { name: '土俗字' }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect((await row('土俗字'))?.notes).toEqual({ 'zh-Hant': '少數民族借漢字造的字。' })
+    expect(await mergeTag(db, await listed(), { name: '土俗字', into: '方俗字' }, who)).toEqual({ ok: true })
+    expect(await undoTagChange(db, await taxonomy(db), latest(), who)).toEqual({ ok: true })
+    expect((await row('土俗字'))?.notes).toEqual({ 'zh-Hant': '少數民族借漢字造的字。' })
   })
 
   test('every valid tag name is accepted as a t: facet', () => {

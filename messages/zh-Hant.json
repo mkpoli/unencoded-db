@@ -811,6 +811,8 @@
   "tags.change.alias": "新增別名",
   "tags.change.unalias": "移除別名",
   "error.tagAliased": "這個名稱已是某個標籤的別名。",
+  "tags.notes": "定義",
+  "tags.change.note": "設定定義",
   "tags.names": "各語言名稱",
   "tags.change.name": "設定名稱",
   "tags.groupChange.name": "設定中分類名稱",

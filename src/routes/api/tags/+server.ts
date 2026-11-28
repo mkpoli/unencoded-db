@@ -10,6 +10,7 @@ import {
   implyTag,
   mergeTag,
   nameTier,
+  noteTag,
   moveGroup,
   moveTag,
   renameGroup,
@@ -136,6 +137,10 @@ export const POST: RequestHandler = async (event) => {
       const subject = body.subject === 'group' ? 'group' : 'tag'
       const name = subject === 'group' ? String(idField(body.id) ?? '') : textField(body.name)
       const result = await nameTier(db, { tags, groups }, { subject, name, locale: textField(body.locale), label: textField(body.label), rev }, who)
+      return result.ok ? json({ ok: true, ...(await snapshot(db)) }) : fail(result.code)
+    }
+    case 'note': {
+      const result = await noteTag(db, tags, { name: textField(body.name), locale: textField(body.locale), text: typeof body.text === 'string' ? body.text : '', rev }, who)
       return result.ok ? json({ ok: true, ...(await snapshot(db)) }) : fail(result.code)
     }
     case 'group.create': {

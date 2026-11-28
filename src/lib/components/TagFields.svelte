@@ -8,6 +8,7 @@
     arrangeTags,
     canonicalName,
     localized,
+    shownNote,
     sectionTags,
     cleanTag,
     implicationClosure,
@@ -54,6 +55,7 @@
         group: null,
         aliases: [],
         names: {},
+        notes: {},
         position: Number.MAX_SAFE_INTEGER - extraNames.length + index,
         rev: 0,
         n: 0,
@@ -157,6 +159,7 @@
       value={row.name}
       label={row.label}
       tagType={row.type}
+      title={shownNote(row, locale())}
       checked={isChecked(row.name)}
       implied={Boolean(impliedMap.get(row.name))}
       onchange={on => setChecked(row.name, on)}

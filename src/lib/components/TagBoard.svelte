@@ -3,6 +3,7 @@
   // implications and undo history. A tag or a group is dragged by its grip to a new place.
   import {
     GROUP_LABEL_MAX,
+    TAG_NOTE_MAX,
     TAG_LENGTH_MAX,
     TAG_TYPES,
     arrangeTags,
@@ -315,6 +316,7 @@
     const known = groupById.get(Number(change.name))
     return known?.label ?? String(parse(change.before)?.label ?? parse(change.after)?.label ?? change.name)
   }
+  const clip = (text: unknown) => typeof text === 'string' && text ? (text.length > 24 ? `${text.slice(0, 24)}…` : text) : null
   function changeDetail(change: TagChange) {
     const before = parse(change.before), after = parse(change.after)
     if (change.kind === 'rename' && before?.label && after?.label) return `${String(before.label)} → ${String(after.label)}`
@@ -333,6 +335,7 @@
       const target = String(before.implies)
       return `× ${labels.get(target) ?? target}`
     }
+    if (change.kind === 'note' && before && after) return `${LOCALE_NAMES[String(after.locale) as keyof typeof LOCALE_NAMES] ?? String(after.locale)}: ${clip(before.text) ?? '—'} → ${clip(after.text) ?? '—'}`
     if (change.kind === 'name' && before && after) return `${LOCALE_NAMES[String(after.locale) as keyof typeof LOCALE_NAMES] ?? String(after.locale)}: ${before.label ?? '—'} → ${after.label ?? '—'}`
     if (change.kind === 'merge' && after?.into) return `→ ${labels.get(String(after.into)) ?? String(after.into)}`
     if (change.kind === 'split' && before?.tag) return `← ${labels.get(String(before.tag)) ?? String(before.tag)}`
@@ -364,6 +367,29 @@
             disabled={busy}
             onchange={event => mutate({ action: 'name', subject, ...(subject === 'group' ? { id: key } : { name: key }), locale: code, label: event.currentTarget.value, rev: item.rev })}
           />
+        </label>
+      {/each}
+    </div>
+  </details>
+{/snippet}
+
+{#snippet notesEditor(tag: Tag)}
+  {@const filled = LOCALES.filter(code => tag.notes[code]).length}
+  <details class="names">
+    <summary>{t('tags.notes')}{#if filled}{' '}<span class="muted">({filled})</span>{/if}</summary>
+    <div class="names-grid notes-grid">
+      {#each LOCALES as code (code)}
+        <label class="name-field">
+          <span lang={code}>{LOCALE_NAMES[code]}</span>
+          <textarea
+            class="input note-input"
+            lang={code}
+            rows="2"
+            maxlength={TAG_NOTE_MAX}
+            value={tag.notes[code] ?? ''}
+            disabled={busy}
+            onchange={event => mutate({ action: 'note', name: tag.name, locale: code, text: event.currentTarget.value, rev: own.get(tag.name)?.rev ?? tag.rev })}
+          ></textarea>
         </label>
       {/each}
     </div>
@@ -465,6 +491,7 @@
     </div>
 
     {@render namesEditor('tag', tag.name, own.get(tag.name) ?? tag)}
+    {@render notesEditor(own.get(tag.name) ?? tag)}
 
     <form class="implications" onsubmit={event => addAlias(event, tag)}>
       <span class="imp-label">{t('tags.aliases')}</span>
@@ -729,6 +756,8 @@
   .names-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 6px 10px; margin-top: 6px }
   .name-field { display: grid; gap: 2px; font-size: 12px; color: var(--muted) }
   .name-field .input { min-height: 30px; padding: 3px 8px; font-size: 13px }
+  .notes-grid { grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)) }
+  .note-input { resize: vertical; line-height: 1.5 }
   .alias { display: inline-flex; align-items: center; gap: 2px; padding: 1px 8px; border: 1px dashed var(--line-strong); border-radius: 999px; color: var(--muted) }
   .alias-input { inline-size: 9rem; min-height: 28px; padding: 2px 8px; font-size: 12.5px }
   .add-imp { width: auto; min-height: 28px; padding: 2px 8px; font-size: 12.5px }

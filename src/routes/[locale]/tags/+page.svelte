@@ -1,7 +1,7 @@
 <script lang="ts">
   import Seo from '$lib/components/Seo.svelte'
   import TagBoard from '$lib/components/TagBoard.svelte'
-  import { TAG_TYPES, arrangeTags, implicationClosure, localized, tagDepths, tagLookup, tagParents } from '$lib/tags'
+  import { TAG_TYPES, arrangeTags, implicationClosure, localized, shownNote, tagDepths, tagLookup, tagParents } from '$lib/tags'
   import { href, locale, t } from '$lib/t'
   import type { PageData } from './$types'
 
@@ -90,6 +90,7 @@
                         </a>
                       {/each}
                     {/if}
+                    {#if shownNote(tag, locale())}<p class="note">{shownNote(tag, locale())}</p>{/if}
                   </li>
                 {/each}
               </ul>
@@ -121,5 +122,6 @@
   .slug, .n { font-size: 11.5px; opacity: 0.78 }
   .arrow { color: var(--muted); font-size: 13px }
   .alias { color: var(--muted); font-size: 12.5px }
+  .note { flex: 1 0 100%; margin: 0; max-inline-size: 62ch; color: var(--muted); font-size: 13px; line-height: 1.55; white-space: pre-line }
   .tag-chip.small { padding: 1px 8px; font-size: 12px }
 </style>

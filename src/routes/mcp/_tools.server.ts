@@ -1060,7 +1060,7 @@ async function listTags(event: RequestEvent) {
   const { tags, groups } = await taxonomy(env(event).DB)
   return {
     groups: groups.map(group => ({ id: group.id, type: group.type, label: group.label })),
-    tags: tags.map(tag => ({ name: tag.name, label: tag.label, type: tag.type, group: tag.group, aliases: tag.aliases, implies: tag.implies })),
+    tags: tags.map(tag => ({ name: tag.name, label: tag.label, type: tag.type, group: tag.group, aliases: tag.aliases, implies: tag.implies, ...(Object.keys(tag.notes).length ? { notes: tag.notes } : {}) })),
   }
 }
 

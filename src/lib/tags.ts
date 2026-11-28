@@ -21,6 +21,8 @@ export type Tag = {
   aliases: string[]
   /** The tag's name in each interface language that has one, by locale. */
   names: Names
+  /** What the tag means, in each interface language that has it, by locale. */
+  notes: Names
   used?: boolean
 }
 export type Names = Partial<Record<string, string>>
@@ -29,6 +31,15 @@ export type TagGroup = { id: number; type: TagType; label: string; names: Names;
 
 /** What a tag or a group is called in a language: its name there, or its label. */
 export const shownLabel = (item: { label: string; names?: Names }, locale: string) => item.names?.[locale] || item.label
+export const TAG_NOTE_MAX = 500
+/** A note as stored: NFC, trimmed, at most TAG_NOTE_MAX characters, with line breaks and no other control characters; null when too long. */
+export function cleanNote(value: string): string | null {
+  const text = value.normalize('NFC').replace(/\r\n?/g, '\n').replace(/[^\P{Cc}\n]/gu, '').trim()
+  return text.length <= TAG_NOTE_MAX ? text : null
+}
+/** What a tag means in a language: its note there, else the 繁體中文 note, else any note it has. */
+export const shownNote = (tag: { notes?: Names }, locale: string) => tag.notes?.[locale] || tag.notes?.['zh-Hant'] || Object.values(tag.notes ?? {}).find(Boolean) || ''
+
 /** Tags or groups with each label as a language shows it. */
 export const localized = <T extends { label: string; names?: Names }>(items: readonly T[], locale: string): T[] => items.map(item => ({ ...item, label: shownLabel(item, locale) }))
 export type TagRef = Pick<Tag, 'name' | 'label' | 'type' | 'position' | 'implies'>
