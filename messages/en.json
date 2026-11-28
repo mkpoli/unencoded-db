@@ -383,6 +383,8 @@
   "ready.running": "In running text",
   "ready.second": "A second source",
   "ready.rules": "IRG's rules",
+  "ready.fssc": "Stroke count & first stroke (IRG N2951)",
+  "ready.radicals": "Radical assignment (IRG N2952)",
   "edit.title": "Edit record {id}",
   "edit.identity": "The character",
   "duplicates.title": "Possible duplicates",
