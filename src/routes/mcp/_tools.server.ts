@@ -9,14 +9,14 @@ import { isDescription } from 'ids-input'
 import { creatorKey, newClaimKey, type Claim, type ClaimKind } from '$lib/claims'
 import { parseRecordCode, recordCode } from '$lib/code'
 import { DOCULECTS } from '$lib/doculects'
-import { COLLECTIONS } from '$lib/tags'
+import { cleanTag, COLLECTIONS, DEFAULT_SCRIPT_TAG, type Tag } from '$lib/tags'
 import { translate } from '$lib/i18n'
 import { cleanIds, IDS_LENGTH_MAX } from '$lib/ids'
 import { ADD_SIGHTINGS_MAX, BOXES_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
 import { REGISTRIES } from '$lib/registries'
 import { RELATION_KINDS } from '$lib/related'
 import { dateOrderWarnings } from '$lib/cites'
-import { CITE_KINDS, CITES_MAX, CLOSENESS, CONTEXTS, datingOriginal, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX, type CiteKind } from '$lib/scripts'
+import { CITE_KINDS, CITES_MAX, CLOSENESS, CONTEXTS, datingOriginal, parseContexts, parseSightingTypes, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX, type CiteKind } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
 import { addComment, cleanComment, commentsOf, setCommentHidden } from '$lib/server/comments'
 import { tagList, taxonomy } from '$lib/server/tags'
@@ -404,7 +404,6 @@ async function citeDateWarnings(db: D1Database, list: readonly SightingFields[])
 function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) => number[], current: readonly Claim[] = []) {
   const form = new FormData()
   const given = (name: string) => input[name] !== undefined
-  if (text(input.script).trim()) form.set('script', text(input.script))
   if (given('ids')) {
     const sequences = items(input.ids).map(text).map(cleanIds).filter(Boolean)
     if (!sequences.length) throw new Refusal('ids holds at least one description sequence.')
@@ -503,13 +502,21 @@ const summaryOf = (input: Json) => text(input.summary).trim().slice(0, 500) || n
 // Everything is read and every picture fetched before anything is stored. Each sighting after the first
 // takes one more add from the rate window, as it does on /new, and takes it before its pictures are
 // fetched, so the window also bounds how many addresses a caller can make the site fetch.
+// A new record names its script among its tags, and is Han when none of them is a script.
+function withScript(input: Json, tags: readonly Tag[]): Json {
+  if (input.script !== undefined) throw new Refusal(`script is a tag now: name it in tags, such as ${DEFAULT_SCRIPT_TAG} or nom.`)
+  const scripts = new Set(tags.filter(tag => tag.type === 'script').map(tag => tag.name))
+  const given = [...items(input.tags), ...items(input.categories)].map(value => cleanTag(text(value), tags))
+  return given.some(name => name && scripts.has(name)) ? input : { ...input, tags: [...items(input.tags), DEFAULT_SCRIPT_TAG] }
+}
+
 async function addRecord(event: RequestEvent, input: Json) {
   await guard(event, 'ADDS')
   const inputs = items(input.sightings).map(record)
   if (!inputs.length) throw new Refusal('A record starts with at least one sighting.')
   if (inputs.length > ADD_SIGHTINGS_MAX) throw new Refusal(said('sightingsMax', { max: ADD_SIGHTINGS_MAX }))
   const tags = await tagList(env(event).DB)
-  const { fields: entry, error } = readEntryFields(entryForm(input, tags.map(tag => tag.name), value => places(value, inputs.length, 'evidence')), tags)
+  const { fields: entry, error } = readEntryFields(entryForm(withScript(input, tags), tags.map(tag => tag.name), value => places(value, inputs.length, 'evidence')), tags)
   if (error) throw new Refusal(said(error))
   const { DB, MEDIA } = env(event)
   const stated = inputs.map((sighting, index) => {
@@ -961,7 +968,6 @@ async function getRecord(event: RequestEvent, input: Json) {
   return {
     ...shown(event, id), rev: entry.rev,
     ...(entry.hidden_at ? { hidden: true } : {}),
-    script: entry.script === 'other' ? entry.script_other ?? 'other' : entry.script,
     status: entry.status, description: entry.description, radical: entry.radical, strokes: entry.strokes,
     claims: found.claims.map(claim => ({ key: claim.key, kind: claim.kind, value: claim.value, ...(claim.data ? { data: claim.data } : {}), ...(claim.under.length ? { under: claim.under } : {}), evidence: claim.sightings.filter(sighting => showHidden || visible.has(sighting)) })),
     date_readings: Object.fromEntries(dates),
@@ -1134,7 +1140,6 @@ const SUMMARY = { type: 'string', maxLength: 500, description: 'What the edit ch
 function recordFields(evidence: Json, key?: Json) {
   const own = key ? { key } : {}
   return {
-    script: { type: 'string', description: `The script: one of ${SCRIPTS.map(script => script.id).filter(id => id !== 'other').join(', ')}, or another script's name. Han when left out.` },
     ids: { type: 'array', minItems: 1, items: { type: 'string' }, description: 'Ideographic description sequences of the form as the picture shows it. The first one draws the glyph; the others are further ways to describe the same form. Leave it out when the form cannot be described: the record then shows its picture.' },
     description: { type: 'string', description: 'What is notable about the form, in prose.' },
     radical: { type: 'string', description: 'The radical, when the source states one.' },
@@ -1170,7 +1175,7 @@ function recordFields(evidence: Json, key?: Json) {
     ivd: { type: 'string', description: 'A registered IVD sequence such as "U+4E00 U+E0100", or "none" when the form is known to have none.' },
     categories: { type: 'array', items: { type: 'string' } },
     collections: { type: 'array', items: { type: 'string', enum: COLLECTIONS.map(collection => collection.slug) } },
-    tags: { type: 'array', items: { type: 'string' } },
+    tags: { type: 'array', items: { type: 'string' }, description: 'Tags by name, among them the script the form is written in (han, nom, miao and the other tags of type script). A new record without a script tag is tagged han.' },
   }
 }
 

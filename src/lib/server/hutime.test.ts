@@ -74,7 +74,7 @@ test('the source, original and via keep their transcriptions across writes, rest
   form.set('original_date', wanli)
   form.set('via_report_date', wanli)
   const fields = readSightingFields(form)
-  const entry = await createEntry(db, { script: 'han', script_other: null, radical: null, strokes: null, claims: [], description: null }, fields, [], who)
+  const entry = await createEntry(db, { radical: null, strokes: null, claims: [], description: null }, fields, [], who)
   const seen = (await getEntry(db, entry))!.sightings[0]
   expect(seen).toMatchObject({ report_date: long, original_date: wanli, vias: [{ report_date: wanli }] })
   expect(raw.query('SELECT year FROM sources WHERE report_date = ?').get(wanli)).toEqual({ year: 1606 })
@@ -112,7 +112,7 @@ test('an edit racing a recovered date retries and keeps one decade, then redacti
   const { raw, db } = openTestDb()
   const person = await createPerson(db)
   const who = { actor: person.id, ip: null }
-  const fields = { script: 'han' as const, script_other: null, radical: null, strokes: null, claims: [], description: null }
+  const fields = { radical: null, strokes: null, claims: [], description: null }
   const form = new FormData()
   form.set('place', 'Book')
   form.set('original_date', wanli)

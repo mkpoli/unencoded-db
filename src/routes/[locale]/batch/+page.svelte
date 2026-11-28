@@ -2,12 +2,13 @@
   import { untrack } from 'svelte'
   import Seo from '$lib/components/Seo.svelte'
   import PicturePicker from '$lib/components/PicturePicker.svelte'
-  import ScriptPicker from '$lib/components/ScriptPicker.svelte'
   import SightingFields from '$lib/components/SightingFields.svelte'
   import SubmitBar from '$lib/components/SubmitBar.svelte'
+  import TagFields from '$lib/components/TagFields.svelte'
+  import { DEFAULT_SCRIPT_TAG } from '$lib/tags'
   import { BATCH_ROWS_MAX, MEDIA_MAX } from '$lib/limits'
   import { href, t } from '$lib/t'
-  let { form } = $props()
+  let { data, form } = $props()
   const values = $derived(form?.values)
   let busy = $state(0), found = $state(false)
   let next = 0
@@ -24,9 +25,12 @@
   {#if message}<p class="notice bad" role="alert">{message}</p>{/if}
   <form class="stack" method="POST" enctype="multipart/form-data">
     <section class="panel stack">
-      <ScriptPicker value={values?.script} other={values?.script_other} />
       <SightingFields {values} onready={working => found = working} />
     </section>
+    <details class="panel filing">
+      <summary class="section-title">{t('field.filing')}</summary>
+      <div class="filed"><TagFields tags={data.tags} groups={data.groups} selected={values?.tags ?? [DEFAULT_SCRIPT_TAG]} collections={values?.collections ?? []} /></div>
+    </details>
     <section class="stack"><h2>{t('batch.rows')}</h2>
       {#each rows as item, index (item.key)}
         <fieldset class="panel stack">
@@ -44,6 +48,7 @@
 </div>
 <style>
   .heading { gap:8px } .panel { padding:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface); min-width:0; margin:0 }
+  .filing summary { cursor:pointer } .filed { margin-top:14px }
   legend { padding:0 6px; font-weight:600 }
   @media(max-width:700px) { .panel { padding:16px } }
 </style>

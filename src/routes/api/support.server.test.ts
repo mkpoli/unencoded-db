@@ -6,7 +6,7 @@ import { GET as exportEntries } from './entries/+server'
 function fixture() {
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id,name,created_at) VALUES('a','anon','2026-01-01');
-    INSERT INTO entries(id,script,ids,created_by,created_at,updated_at) VALUES(1,'han','⿰亻木','a','2026','2026'),(2,'han','⿰亻木','a','2026','2026');
+    INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES(1,'⿰亻木','a','2026','2026'),(2,'⿰亻木','a','2026','2026');
     INSERT INTO sightings(entry_id,first_entry,place,created_by,created_at,updated_at) VALUES(1,1,'=formula','a','2026','2026');
     INSERT INTO claims(entry_id,position,key,kind,value) VALUES(1,0,'ids00001','ids','⿰亻木'),(2,0,'ids00002','ids','⿰亻木');`)
   const event = (path: string) => ({ url: new URL(path, 'https://example.test'), platform: { env: { DB: db } } }) as any
@@ -24,7 +24,7 @@ test('match normalizes IDS and excludes hidden records', async () => {
 test('match finds the visible records that carry a Unicode code', async () => {
   const { raw, event } = fixture()
   raw.exec(`INSERT INTO claims(entry_id,position,key,kind,value,data) VALUES(1,1,'enc00001','encoding','U+4F11','{"charset":"unicode"}'),(2,1,'enc00002','encoding','U+4F11','{"charset":"unicode"}'),(1,2,'enc00003','encoding','U+4F11','{"charset":"other"}');
-    INSERT INTO entries(id,script,ids,created_by,created_at,updated_at) VALUES(3,'han','⿰亻木','a','2026','2026'),(4,'han','⿰亻木','a','2026','2026'),(5,'han','⿰亻木','a','2026','2026');
+    INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES(3,'⿰亻木','a','2026','2026'),(4,'⿰亻木','a','2026','2026'),(5,'⿰亻木','a','2026','2026');
     INSERT INTO claims(entry_id,position,key,kind,value,data) VALUES(3,0,'enc00004','encoding','u+4f11 休','{"charset":"unicode"}'),(4,0,'enc00005','encoding','U+4F11A','{"charset":"unicode"}'),(5,0,'enc00006','encoding','U+4F11','{"charset":"gb"}');
     UPDATE entries SET hidden_at = '2026' WHERE id = 2`)
   expect(((await (await match(event('/api/match?code=U%2B4F11'))).json()) as { id: number }[]).map(r => r.id)).toEqual([1, 3])

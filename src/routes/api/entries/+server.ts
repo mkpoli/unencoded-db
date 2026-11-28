@@ -52,7 +52,7 @@ export const GET: RequestHandler = async (event) => {
   // One column for each kind of claim, its values in order. A claim that holds under others names them
   // after its value, and one that rests on evidence names the rows by their `sighting_id`:
   // `東 (usage) [under: east | cmn:dōng] [evidence: #3 #7]`. The JSON form carries what else a claim holds.
-  const entryColumns = ['script', 'script_other', 'description', 'status', 'radical', 'strokes'] as const
+  const entryColumns = ['description', 'status', 'radical', 'strokes'] as const
   const columns = ['entry_id', ...entryColumns, ...CLAIM_KINDS, 'sighting_id', ...CSV_SIGHTING_FIELDS, 'vias', 'images', 'date_readings', 'cites', 'closeness'] as const
   const said = (claim: Claim) => claim.kind === 'encoding'
     ? `${claim.data?.charset}:${claim.value}`

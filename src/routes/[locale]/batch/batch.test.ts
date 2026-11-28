@@ -32,15 +32,16 @@ function form(rows: { ids?: string; note?: string; picture?: boolean }[], shared
   return data
 }
 
-test('saves each row as its own record under one source', async () => {
+test('saves each row as its own record under one source and attaches shared tags', async () => {
   const { event, count, raw } = fixture()
-  await expect(actions.default(event(form([{ ids: '⿰山東', picture: true }, { ids: '⿱木木', note: 'second', picture: true }, {}], { place: 'A book', title: 'Zidian' })))).rejects.toMatchObject({ status: 303, location: '/en/R+0001' })
+  await expect(actions.default(event(form([{ ids: '⿰山東', picture: true }, { ids: '⿱木木', note: 'second', picture: true }, {}], { place: 'A book', title: 'Zidian', tag: 'sawndip' })))).rejects.toMatchObject({ status: 303, location: '/en/R+0001' })
   expect(count('entries')).toBe(2)
   expect(count('sightings')).toBe(2)
   expect(count('sources')).toBe(1)
   expect(count('sighting_media')).toBe(2)
   expect(raw.query('SELECT count(*) AS n FROM revisions WHERE kind = ?').get('create')).toEqual({ n: 2 })
   expect(raw.query("SELECT ids FROM entries ORDER BY id").all()).toEqual([{ ids: '⿰山東' }, { ids: '⿱木木' }])
+  expect(raw.query("SELECT entry_id, value FROM claims WHERE kind = 'tag' ORDER BY entry_id").all()).toEqual([{ entry_id: 1, value: 'sawndip' }, { entry_id: 2, value: 'sawndip' }])
   expect(raw.query('SELECT note FROM sightings ORDER BY id').all()).toEqual([{ note: null }, { note: 'second' }])
 })
 
@@ -83,4 +84,11 @@ test('every row is charged to the add allowance before anything is saved', async
   expect(result.data.error).toBe('slow')
   expect(result.data.values.rows).toHaveLength(3)
   expect(count('entries')).toBe(0)
+})
+
+test('validates each row ids independently even when combined rows exceed IDS_MAX', async () => {
+  const { event, count } = fixture()
+  const rows = Array.from({ length: 7 }, () => ({ ids: '⿰山東\n⿱木木\n⿰木木', picture: true }))
+  await expect(actions.default(event(form(rows, { place: 'A book', tag: 'han' })))).rejects.toMatchObject({ status: 303, location: '/en/R+0001' })
+  expect(count('entries')).toBe(7)
 })

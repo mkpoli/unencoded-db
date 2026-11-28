@@ -7,7 +7,7 @@ import { authorKeys, nameKey, nameLabel, sourceKeys, sourceNameKey } from '../na
 // sighting is one place it was seen, and every state of a record or a sighting is a row in `revisions`.
 // Each list reads one range of `entry_tags`, so its cost does not grow with the table, and a record is
 // in a list only while it holds that list's tag.
-import { CITES_MAX, closenessOf, closenessRank, CONTEXTS, datesOriginal, datingOriginal, isCiteKind, isScript, NEEDS, sourceKind, resolveScript, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
+import { CITES_MAX, closenessOf, closenessRank, CONTEXTS, datesOriginal, datingOriginal, isCiteKind, NEEDS, sourceKind, parseContexts, parseSightingTypes, SIGHTING_TYPES, STATUSES, storeChosen, STYLES, VIAS_MAX, type CiteKind, type Context, type Need, type SightingType, type Status } from '$lib/scripts'
 import { cleanIds, codePoints, encodedCharacter } from '$lib/ids'
 import { isDescription } from 'ids-input'
 import { referenceComplete } from '$lib/readiness'
@@ -29,11 +29,12 @@ import { BOXES_MAX, MEDIA_MAX } from '$lib/limits'
 import { cleanSourceUrl } from '$lib/source-url'
 import { formsOf } from '$lib/forms'
 import { compareDays, dateText, decadeOf, decadeStart, isDecade } from '$lib/dates'
+import { buildEntryStemma, removedNodeId, STEMMA_NODES_LIMIT, unseenNodeId, witnessNodeId, yearFor, type StemmaEdge, type StemmaGraph, type StemmaNode } from '$lib/stemma'
 import { datedYear, prepareDates, readDates, sightingDates, type DateBook } from './date-readings'
 import { hashHex } from './image'
 import { ORDER, PAGE, PAGE_SIZES, SEEDS, seedOf, type Order, type SourceSort } from '$lib/order'
 
-export type EntryFields = { script: string; script_other: string | null; description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
+export type EntryFields = { description: string | null; radical: string | null; strokes: number | null; claims: Claim[] }
 // A source as its citation fields. A sighting's `vias` list them from the one nearest the cited work outward.
 export type Citation = Record<typeof CITATION_FIELDS[number], string | null>
 // A link in a sighting's chain: the source, the words of it this sighting quotes, and pictures of the source
@@ -54,7 +55,7 @@ export type Entry = Omit<EntryFields, 'claims'> & { status: Status | null; id: n
 export type Sighting = Omit<SightingFields, 'vias' | 'cites'> & { id: number; entry_id: number; first_entry: number; rev: number; source_id: number | null; vias: (Via & { id: number })[]; cites: ResolvedCite[]; cited_by: InboundCite[]; media: StoredImage[]; hidden_at: string | null; removed_by: string | null; created_by: string; created_at: string; updated_at: string; by_id?: string; by_name?: string; by_agent?: string | null; by_model?: string | null }
 
 // What an entry has one of. What it has several of is in `claims`.
-export const ENTRY_FIELDS = ['script', 'script_other', 'description', 'radical', 'strokes'] as const
+export const ENTRY_FIELDS = ['description', 'radical', 'strokes'] as const
 // The fields a record may take from a duplicate when it has none of its own.
 const FILLED_FIELDS = ['description', 'radical', 'strokes'] as const
 // A sighting's citation is its source; the other fields are the sighting's own. Its `vias` are the sources
@@ -245,14 +246,12 @@ const oneOf = (value: string | null, allowed: readonly string[]) => (value && al
 const now = () => new Date().toISOString()
 
 export function readEntryFields(form: FormData, tags: readonly Pick<Tag, 'name' | 'label'>[], base?: Partial<EntryFields>): { fields: EntryFields; error: ClaimError | null } {
-  const named = form.has('script') ? resolveScript(String(form.get('script'))) : { script: base?.script ?? 'han', script_other: base?.script_other ?? null }
   const strokes = Number.parseInt(String(form.get('strokes') ?? ''), 10)
   const field = (name: 'description' | 'radical', max: number) => form.has(name) ? text(form, name, max) : base?.[name] ?? null
   const read = readClaims(form, tags, base?.claims)
   return {
     error: read.error,
     fields: {
-      ...named,
       description: field('description', 20000),
       radical: field('radical', 20),
       strokes: form.has('strokes') ? (Number.isInteger(strokes) && strokes >= 0 && strokes < 200 ? strokes : null) : base?.strokes ?? null,
@@ -337,10 +336,10 @@ export function parseMarks(raw: string | null | undefined): string[] {
   } catch { return [] }
 }
 
-type TagInput = Pick<Entry, 'script' | 'status' | 'description' | 'script_other'>
+type TagInput = Pick<Entry, 'status' | 'description'>
 // A record's tag rows (`t:`) are written by `tagRows` from the tags and implications as its batch finds
 // them, and are left out here.
-export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cover_key' | 'radical' | 'first_year'>, hasSource: boolean, claims: readonly Claim[] = []) {
+export function facetTags(entry: Pick<Entry, 'status' | 'ids' | 'cover_key' | 'radical' | 'first_year'>, hasSource: boolean, claims: readonly Claim[] = []) {
   const filters = entry.status ? [`f:${entry.status}`] : []
   if (!entry.cover_key) filters.push('n:image')
   if (!entry.ids) filters.push('n:ids')
@@ -359,14 +358,14 @@ export function facetTags(entry: Pick<Entry, 'script' | 'status' | 'ids' | 'cove
   const filed = [...pathsOf(filing?.path ?? []).map(path => `b:${path}`), ...(filing?.stated ? [`b!${filing.stated}`] : [])]
   // A record with a year is listed under its decade.
   const decade = entry.first_year === null ? [] : [`y:${decadeOf(Number(entry.first_year))}`]
-  return ['all', `s:${entry.script}`, ...filters, ...filters.map(filter => `s:${entry.script}|${filter}`), ...own, ...marks, ...filed, ...decade]
+  return ['all', ...filters, ...own, ...marks, ...filed, ...decade]
 }
 
 const WORD_KINDS = ['ids', 'reading', 'meaning', 'encoding', 'document', 'relation', 'ivd', 'tag', 'creator']
 function wordTags(entry: TagInput, claims: readonly Claim[], sightings: SightingFields[]) {
   const words = new Set<string>()
   const add = (value: unknown) => { if (typeof value === 'string') for (const term of terms(value)) words.add(term) }
-  for (const field of ['description', 'script_other'] as const) add(entry[field])
+  add(entry.description)
   for (const claim of claims) if (WORD_KINDS.includes(claim.kind)) { add(claim.value); add(claim.data?.difference); add(claim.data?.evidence) }
   // Compact document numbers without a space (e.g. IRGN2850) find the normalized form (IRG N2850).
   for (const claim of claims) if (claim.kind === 'document') add(claim.value.replace(/\s+/g, ''))
@@ -1009,12 +1008,12 @@ async function writeSighting(db: D1Database, id: number, baseRev: number, sent: 
 export function entryFieldsOf(raw: string): EntryFields | null {
   try {
     const value = JSON.parse(raw)
-    if (!value || typeof value !== 'object' || Array.isArray(value) || !isScript(value.script)) return null
-    for (const field of ['script_other', 'description', 'radical'] as const) if (typeof value[field] !== 'string' && value[field] != null) return null
+    if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray(value.claims)) return null
+    for (const field of ['description', 'radical'] as const) if (typeof value[field] !== 'string' && value[field] != null) return null
     if (value.strokes != null && (!Number.isInteger(value.strokes) || value.strokes < 0 || value.strokes >= 200)) return null
-    const claims = parseClaims(value.claims ?? [])
+    const claims = parseClaims(value.claims)
     if (!claims) return null
-    return { script: value.script, script_other: value.script === 'other' ? value.script_other ?? null : null, description: value.description ?? null, radical: value.radical ?? null, strokes: value.strokes ?? null, claims }
+    return { description: value.description ?? null, radical: value.radical ?? null, strokes: value.strokes ?? null, claims }
   } catch { return null }
 }
 
@@ -1424,11 +1423,16 @@ type CiteQueryRow = Citation & {
 type CitedByRow = InboundCite & { target_id: number }
 
 // Lazy lookup of `removed_by` only when a hidden target without own `source_id` exists, keeping pre-0051 test schemas working.
+// Chunked below D1's 100-parameter limit for multi-hop stemma walks.
 async function fillRemovedBy(db: D1Database, rows: CiteQueryRow[]): Promise<CiteQueryRow[]> {
   const hiddenIds = [...new Set(rows.filter(row => row.cited_id !== null && row.source_id === null && row.t_hidden_at !== null && row.te_hidden_at === null && row.te_merged_into === null).map(row => row.cited_id!))]
   if (!hiddenIds.length) return rows
-  const { results } = await db.prepare(`SELECT id, removed_by FROM sightings WHERE id IN (${hiddenIds.map(() => '?').join(', ')})`).bind(...hiddenIds).all<{ id: number; removed_by: string | null }>()
-  const byId = new Map(results.map(row => [row.id, row.removed_by]))
+  const byId = new Map<number, string | null>()
+  for (let i = 0; i < hiddenIds.length; i += 80) {
+    const chunk = hiddenIds.slice(i, i + 80)
+    const { results } = await db.prepare(`SELECT id, removed_by FROM sightings WHERE id IN (${chunk.map(() => '?').join(', ')})`).bind(...chunk).all<{ id: number; removed_by: string | null }>()
+    for (const row of results) byId.set(row.id, row.removed_by)
+  }
   return rows.map(row => row.cited_id !== null && byId.has(row.cited_id) ? { ...row, t_removed_by: byId.get(row.cited_id)! } : row)
 }
 
@@ -1564,14 +1568,14 @@ export async function mediaVisible(db: D1Database, key: string) {
     UNION ALL SELECT 1 FROM sighting_via_media x INDEXED BY sighting_via_media_by_image ${live} AND x.image_key = ?1 UNION ALL SELECT 1 FROM sighting_via_media x INDEXED BY sighting_via_media_by_thumb ${live} AND x.thumb_key = ?1 LIMIT 1`).bind(key).first())
 }
 
-export type Listing = { script?: string | null; filter?: string | null; facet?: string | null; creator?: string | null; radical?: string | null; decade?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; also?: readonly string[]; order?: Order; seed?: number | null; after?: string | null; limit?: number }
+export type Listing = { filter?: string | null; facet?: string | null; creator?: string | null; radical?: string | null; decade?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; also?: readonly string[]; order?: Order; seed?: number | null; after?: string | null; limit?: number }
 export const SEARCH_WINDOW = 256
 
-// The one key a script and a filter name, or null for a filter that is not one.
-export function listTag(script?: string | null, filter?: string | null) {
+// The one key a filter names, or null for a filter that is not one.
+export function listTag(filter?: string | null) {
   const f = !filter ? null : (STATUSES as readonly string[]).includes(filter) ? `f:${filter}` : (NEEDS as readonly string[]).includes(filter as Need) ? `n:${filter}` : undefined
-  if (f === undefined || (script && !isScript(script))) return null
-  return script && f ? `s:${script}|${f}` : script ? `s:${script}` : f ?? 'all'
+  if (f === undefined) return null
+  return f ?? 'all'
 }
 
 // A collection (`c:`) or a tag (`t:`), as the key it is listed under.
@@ -1678,8 +1682,8 @@ export const alsoSearch = (query: string, values: readonly string[] = []) => exa
 
 // The keys every row of a listing holds and the words it is searched for. Each word is the rows any of which
 // holds it; `spelt` are the other spellings of a query of parts, each the rows of its parts. Null names a listing that is not one.
-function listPlan({ script, filter, facet, creator, radical, decade, within, without, query, also }: Listing) {
-  const base = listTag(script, filter), own = facetTag(facet), maker = creatorTag(creator), filed = radicalTag(radical), period = decadeTag(decade), marks = markTags(within, without)
+function listPlan({ filter, facet, creator, radical, decade, within, without, query, also }: Listing) {
+  const base = listTag(filter), own = facetTag(facet), maker = creatorTag(creator), filed = radicalTag(radical), period = decadeTag(decade), marks = markTags(within, without)
   if (!base || own === undefined || maker === undefined || filed === undefined || period === undefined || !marks) return null
   if (searchProblem(query ?? '')) return null
   const { structures, words } = readQuery(query ?? '')
@@ -2433,8 +2437,6 @@ export async function exportPage(db: D1Database, after: number, limit: number, s
 
 export type IndexEntry = {
   id: number
-  script: string
-  script_other: string | null
   ids: string | null
   cover_key: string | null
   status: string | null
@@ -2449,7 +2451,7 @@ export type IndexEntry = {
 /** One page of live entries and their claims without evidence rows, for lightweight index consumers. */
 export async function exportIndexPage(db: D1Database, after: number, limit: number) {
   const { results: entries } = await db.prepare(
-    `SELECT id, script, script_other, ids, cover_key, status, description, radical, strokes, first_year, sightings
+    `SELECT id, ids, cover_key, status, description, radical, strokes, first_year, sightings
      FROM entries INDEXED BY entries_live_export
      WHERE id > ? AND merged_into IS NULL AND hidden_at IS NULL
      ORDER BY id LIMIT ?`,
@@ -2470,17 +2472,217 @@ export async function exportIndexPage(db: D1Database, after: number, limit: numb
   return { entries: page, next: entries.length > limit ? page.at(-1)!.id : null }
 }
 
-export const CUSTOM_SCRIPTS_MAX = 100
-// Each name is one seek in `entries_custom_scripts` for the least name after the one before, so the list
-// reads at most CUSTOM_SCRIPTS_MAX index entries however many records share a name.
-const CUSTOM = `script = 'other' AND script_other IS NOT NULL AND merged_into IS NULL AND hidden_at IS NULL`
-export const customScriptsStatement = (db: D1Database) => db.prepare(`WITH RECURSIVE names(name, n) AS (
-  SELECT (SELECT MIN(script_other) FROM entries WHERE ${CUSTOM}), 1
-  UNION ALL
-  SELECT (SELECT MIN(script_other) FROM entries WHERE ${CUSTOM} AND script_other > names.name), n + 1 FROM names WHERE name IS NOT NULL AND n < ?
-) SELECT name FROM names WHERE name IS NOT NULL`).bind(CUSTOM_SCRIPTS_MAX)
+/** The script tags a record carries, in the order stated, for labels such as social cards. */
+export const entryScriptTagsStatement = (db: D1Database, id: number) => db.prepare(
+  `SELECT t.label, t.names
+   FROM claims c INDEXED BY claims_by_entry
+   JOIN tags t ON t.name = COALESCE((SELECT a.tag FROM tag_aliases a WHERE a.alias = c.value), c.value)
+   WHERE c.entry_id = ? AND c.kind = 'tag' AND t.type = 'script'
+   ORDER BY c.position LIMIT 4`,
+).bind(id)
 
-/** The names visible records give scripts outside the list. */
-export async function customScripts(db: D1Database) {
-  return (await customScriptsStatement(db).all<{ name: string }>()).results.map(row => row.name)
+export async function entryScriptTags(db: D1Database, id: number) {
+  const { results } = await entryScriptTagsStatement(db, id).all<{ label: string; names: string }>()
+  return results.map(({ label, names }) => {
+    try {
+      const parsed: unknown = JSON.parse(names || '{}')
+      return { label, names: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, string> : {} }
+    } catch { return { label, names: {} } }
+  })
+}
+
+export const STEMMA_HOPS_MAX = 4
+export const STEMMA_NODES_MAX = STEMMA_NODES_LIMIT
+
+/**
+ * Multi-hop provenance stemma centered on `entryId`, walking up to 4 hops and 60 nodes across records
+ * with one batched pair of indexed queries per hop (starting from hop 1 after seeding hop 0 from `sightingRows`).
+ * Returns immediately on merged records so callers can redirect without walking the graph.
+ */
+export async function entryStemma(db: D1Database, entryId: number): Promise<{ entry: Entry; graph: StemmaGraph; dates: DateBook } | null> {
+  const entry = await getEntryRow(db, entryId)
+  if (!entry || entry.hidden_at) return null
+  if (entry.merged_into) {
+    return { entry, dates: new Map(), graph: { entryId, nodes: [], edges: [], unlinkedCount: 0, truncated: false } }
+  }
+  const own = await sightingRows(db, entryId)
+  const visibleOwn = own.filter(sighting => !sighting.hidden_at)
+  const seeded = buildEntryStemma(entryId, visibleOwn, undefined, STEMMA_NODES_MAX)
+  if (!seeded) {
+    return { entry, dates: new Map(), graph: { entryId, nodes: [], edges: [], unlinkedCount: visibleOwn.length, truncated: false } }
+  }
+
+  const nodes = new Map<string, StemmaNode>(seeded.nodes.map(node => [node.id, { ...node }]))
+  const edges: StemmaEdge[] = [...seeded.edges]
+  const edgeKeys = new Set<string>(edges.map(edge => `${edge.from}\u0000${edge.to}\u0000${edge.kind}`))
+  const expanded = new Set<number>(visibleOwn.map(sighting => sighting.id))
+  const linkedOwn = new Set<number>(seeded.nodes.filter(node => node.kind === 'witness' && node.entryId === entryId && node.sightingId !== null).map(node => node.sightingId!))
+  let truncated = Boolean(seeded.truncated)
+
+  // Seed hop 1 frontier with newly discovered 1-hop cross-record witnesses (hop 0 was already loaded by `sightingRows`).
+  let frontier = [...new Set(seeded.nodes.filter(node => node.kind === 'witness' && node.sightingId !== null && !expanded.has(node.sightingId)).map(node => node.sightingId!))]
+
+  const putNode = (node: StemmaNode): boolean => {
+    const existing = nodes.get(node.id)
+    if (existing) {
+      if (!existing.thumbKey && node.thumbKey) existing.thumbKey = node.thumbKey
+      if (!existing.title && node.title) existing.title = node.title
+      if (!existing.date && node.date) existing.date = node.date
+      if (!existing.originalDate && node.originalDate) existing.originalDate = node.originalDate
+      if (!existing.reportDate && node.reportDate) existing.reportDate = node.reportDate
+      return true
+    }
+    if (nodes.size >= STEMMA_NODES_MAX) {
+      truncated = true
+      return false
+    }
+    nodes.set(node.id, node)
+    return true
+  }
+
+  const addEdge = (edge: StemmaEdge) => {
+    if (edge.from === edge.to || !nodes.has(edge.from) || !nodes.has(edge.to)) return
+    const key = `${edge.from}\u0000${edge.to}\u0000${edge.kind}`
+    if (edgeKeys.has(key)) return
+    edgeKeys.add(key)
+    edges.push(edge)
+  }
+
+  const inLimit = STEMMA_NODES_MAX * 2
+  // Hop 0 was loaded by `sightingRows`; walk remaining hops (1 .. STEMMA_HOPS_MAX - 1).
+  for (let hop = 1; hop < STEMMA_HOPS_MAX && frontier.length; hop++) {
+    const batchIds = frontier.filter(id => !expanded.has(id)).slice(0, 80)
+    if (!batchIds.length) break
+    for (const id of batchIds) expanded.add(id)
+    const placeholders = batchIds.map(() => '?').join(', ')
+    const [outRes, inRes] = await db.batch<unknown>([
+      db.prepare(`SELECT ${CITE_ROW_COLUMNS} FROM sighting_cites sc ${CITE_JOINS} WHERE sc.sighting_id IN (${placeholders})`).bind(...batchIds),
+      db.prepare(`SELECT ${CITED_BY_COLUMNS} FROM sighting_cites sc INDEXED BY sighting_cites_by_cited JOIN sightings s ON s.id = sc.sighting_id JOIN entries e ON e.id = s.entry_id LEFT JOIN sources c ON c.id = s.source_id WHERE sc.cited_id IN (${placeholders}) AND s.hidden_at IS NULL AND ${LIVE} LIMIT ${inLimit + 1}`).bind(...batchIds),
+    ])
+    const outRows = (await fillRemovedBy(db, outRes.results as CiteQueryRow[])).sort((a, b) => a.sighting_id - b.sighting_id || a.position - b.position)
+    const rawIn = inRes.results as CitedByRow[]
+    if (rawIn.length > inLimit) truncated = true
+    const inRows = rawIn.slice(0, inLimit).sort((a, b) => a.target_id - b.target_id || a.sighting_id - b.sighting_id || a.position - b.position)
+    const nextFrontier = new Set<number>()
+
+    for (const row of outRows) {
+      const resolved = resolveCiteRow(row)
+      if (!resolved) continue
+      const toId = witnessNodeId(row.sighting_id)
+      if (resolved.status === 'witness' && resolved.target) {
+        const fromId = witnessNodeId(resolved.target.id)
+        if (putNode({
+          id: fromId,
+          kind: 'witness',
+          sightingId: resolved.target.id,
+          entryId: resolved.target.entry_id,
+          sourceId: resolved.source_id,
+          title: resolved.target.title || resolved.title,
+          place: resolved.target.place,
+          date: resolved.target.original_date ?? resolved.target.report_date,
+          originalDate: resolved.target.original_date,
+          reportDate: resolved.target.report_date,
+          year: null,
+          thumbKey: resolved.target.thumb_key,
+        })) {
+          if (resolved.target.entry_id === entryId) linkedOwn.add(resolved.target.id)
+          addEdge({ from: fromId, to: toId, kind: resolved.kind })
+          if (!expanded.has(resolved.target.id)) nextFrontier.add(resolved.target.id)
+        }
+      } else if (resolved.status === 'unseen' && resolved.source_id !== null) {
+        const fromId = unseenNodeId(resolved.source_id)
+        if (putNode({
+          id: fromId,
+          kind: 'unseen',
+          sightingId: null,
+          entryId: null,
+          sourceId: resolved.source_id,
+          title: resolved.title || resolved.author || resolved.url,
+          place: '',
+          date: resolved.report_date,
+          originalDate: null,
+          reportDate: resolved.report_date,
+          year: null,
+          thumbKey: null,
+        })) {
+          addEdge({ from: fromId, to: toId, kind: resolved.kind })
+        }
+      } else if (resolved.status === 'removed' && resolved.target) {
+        const fromId = removedNodeId(resolved.target.id)
+        if (putNode({
+          id: fromId,
+          kind: 'removed',
+          sightingId: resolved.target.id,
+          entryId: resolved.target.entry_id,
+          sourceId: null,
+          title: resolved.title || resolved.target.title,
+          place: resolved.target.place,
+          date: resolved.target.original_date ?? resolved.target.report_date,
+          originalDate: resolved.target.original_date,
+          reportDate: resolved.target.report_date,
+          year: null,
+          thumbKey: null,
+        })) {
+          addEdge({ from: fromId, to: toId, kind: resolved.kind })
+        }
+      }
+    }
+
+    for (const row of inRows) {
+      const fromId = witnessNodeId(row.target_id)
+      const toId = witnessNodeId(row.sighting_id)
+      if (putNode({
+        id: toId,
+        kind: 'witness',
+        sightingId: row.sighting_id,
+        entryId: row.entry_id,
+        sourceId: null,
+        title: row.title,
+        place: row.place,
+        date: row.original_date ?? row.report_date,
+        originalDate: row.original_date,
+        reportDate: row.report_date,
+        year: null,
+        thumbKey: row.thumb_key,
+      })) {
+        if (row.entry_id === entryId) linkedOwn.add(row.sighting_id)
+        addEdge({ from: fromId, to: toId, kind: row.kind })
+        if (!expanded.has(row.sighting_id)) nextFrontier.add(row.sighting_id)
+      }
+    }
+
+    frontier = [...nextFrontier]
+  }
+
+  // Probe leftover frontier at hop STEMMA_HOPS_MAX only if not already truncated, avoiding false truncation hints when a chain naturally terminates.
+  if (!truncated && frontier.length) {
+    const leftover = frontier.filter(id => !expanded.has(id)).slice(0, 80)
+    if (leftover.length) {
+      const placeholders = leftover.map(() => '?').join(', ')
+      const [moreOut, moreIn] = await db.batch<unknown>([
+        db.prepare(`SELECT sc.sighting_id, sc.cited_id, sc.source_id FROM sighting_cites sc LEFT JOIN sightings cs ON cs.id = sc.cited_id LEFT JOIN entries ce ON ce.id = cs.entry_id WHERE sc.sighting_id IN (${placeholders}) AND ((cs.id IS NOT NULL AND cs.hidden_at IS NULL AND ce.hidden_at IS NULL AND ce.merged_into IS NULL) OR sc.source_id IS NOT NULL)`).bind(...leftover),
+        db.prepare(`SELECT sc.sighting_id, sc.cited_id FROM sighting_cites sc INDEXED BY sighting_cites_by_cited JOIN sightings s ON s.id = sc.sighting_id JOIN entries e ON e.id = s.entry_id WHERE sc.cited_id IN (${placeholders}) AND s.hidden_at IS NULL AND ${LIVE}`).bind(...leftover),
+      ])
+      for (const row of moreOut.results as { sighting_id: number; cited_id: number | null; source_id: number | null }[]) {
+        if (row.cited_id !== null && !nodes.has(witnessNodeId(row.cited_id))) { truncated = true; break }
+        if (row.cited_id === null && row.source_id !== null && !nodes.has(unseenNodeId(row.source_id))) { truncated = true; break }
+      }
+      if (!truncated) {
+        for (const row of moreIn.results as { sighting_id: number; cited_id: number }[]) {
+          if (!nodes.has(witnessNodeId(row.sighting_id))) { truncated = true; break }
+        }
+      }
+    }
+  }
+
+  const allDates = [...nodes.values()].flatMap(node => [node.originalDate, node.reportDate, node.date]).filter((value): value is string => Boolean(value))
+  const dates = await readDates(db, allDates)
+  const resolvedNodes = [...nodes.values()].map(node => ({ ...node, year: yearFor(node.originalDate, node.reportDate ?? node.date, dates) }))
+  const unlinkedCount = Math.max(0, visibleOwn.length - linkedOwn.size)
+
+  return {
+    entry,
+    dates,
+    graph: { entryId, nodes: resolvedNodes, edges, unlinkedCount, truncated },
+  }
 }

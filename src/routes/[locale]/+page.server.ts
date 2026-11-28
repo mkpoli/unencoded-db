@@ -9,8 +9,21 @@ import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async (event) => {
   const { searchParams } = event.url
-  // A script keeps the list to the records written in it: ?script=nom. Without one, every script is listed.
-  const script = searchParams.get('script') || null
+  const db = env(event).DB
+  // Legacy ?script= links resolve to their script tag (or drop ?script=other) via permanent redirect.
+  const rawScript = searchParams.get('script')?.normalize('NFC').trim() || null
+  if (rawScript) {
+    const next = new URL(event.url)
+    next.searchParams.delete('script')
+    if (rawScript === 'other') redirect(301, `${next.pathname}${next.search}`)
+    const { tags } = await taxonomy(db)
+    const matched = tags.find(item => item.name === rawScript || item.label === rawScript || item.aliases.includes(rawScript))
+    if (!matched) error(404)
+    if (!next.searchParams.get('tag') && !next.searchParams.get('genre') && !next.searchParams.get('collection')) {
+      next.searchParams.set('tag', matched.name)
+    }
+    redirect(301, `${next.pathname}${next.search}`)
+  }
   const filter = searchParams.get('filter') || null
   // A collection or a tag narrows the list: ?collection=, ?tag= (or legacy ?genre=).
   const genre = searchParams.get('genre'), collection = searchParams.get('collection'), rawTag = searchParams.get('tag')
@@ -41,9 +54,8 @@ export const load: PageServerLoad = async (event) => {
     dealt.searchParams.set('seed', String(crypto.getRandomValues(new Uint32Array(1))[0]))
     redirect(302, `${dealt.pathname}${dealt.search}`)
   }
-  if (!listTag(script, filter) || facetTag(rawFacet) === undefined || creatorTag(requestedCreator) === undefined || radicalTag(radical) === undefined || decadeTag(decade) === undefined || !markTags(within, without)) error(404)
+  if (!listTag(filter) || facetTag(rawFacet) === undefined || creatorTag(requestedCreator) === undefined || radicalTag(radical) === undefined || decadeTag(decade) === undefined || !markTags(within, without)) error(404)
   const searchError = searchProblem(query)
-  const db = env(event).DB
   // A record's code typed whole, R+0022 or 天天玄玄, opens the record it names.
   const coded = placed === null && number === 1 ? parseRecordCode(query) : null
   // A merged record opens the one it was merged into, and neither may be hidden.
@@ -58,7 +70,7 @@ export const load: PageServerLoad = async (event) => {
   if (named) redirect(303, `/${event.params.locale}/${recordCode(named.id)}`)
   // A whole description, or a query of parts alone, is also searched under the other spellings the browser found for it: ?also=, at most a few.
   const also = searchError ? [] : alsoSearch(query, searchParams.getAll('also'))
-  const unplaced = { script, filter, facet, creator, radical, decade, within, without, query, also, order, seed, limit: per }
+  const unplaced = { filter, facet, creator, radical, decade, within, without, query, also, order, seed, limit: per }
   // The pages are counted where the list is opened, not on the reads that add to it.
   const [start, counted] = searchError || placed !== null ? [null, null] : await Promise.all([pageCursor(db, unplaced, number), pageCount(db, unplaced)])
   const pages = counted?.pages ?? null
@@ -75,5 +87,5 @@ export const load: PageServerLoad = async (event) => {
   const [page, totals, total] = await Promise.all([searchError ? null : list(db, listing), counts(db), searchError || after !== null ? null : searchTotal(db, listing)])
   if (!page && !searchError) error(404)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, page?.tiles ?? [], event.locals.glyphStyle)
-  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, tags, groups, total, pages, per, records: counted?.records ?? null, recordsFloor: counted?.floor ?? false, number, glyphs, script, filter, collection, tag, creator, creators, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
+  return { ...(page ?? { tiles: [], next: null, partial: false, read: 0 }), counts: totals, tags, groups, total, pages, per, records: counted?.records ?? null, recordsFloor: counted?.floor ?? false, number, glyphs, filter, collection, tag, creator, creators, radical: radical?.normalize('NFC') ?? null, decade, within, without, query, also, searchError, order, seed, continued: after !== null && query.length > 0 }
 }

@@ -6,7 +6,7 @@ import { GET } from './+server'
 function fixture() {
   const { db, raw } = openTestDb()
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
-  const entry = raw.prepare("INSERT INTO entries(script, ids, created_by, created_at, updated_at, hidden_at) VALUES ('han', ?, 'p', '2026', '2026', ?)")
+  const entry = raw.prepare("INSERT INTO entries(ids, created_by, created_at, updated_at, hidden_at) VALUES (?, 'p', '2026', '2026', ?)")
   entry.run('⿰亻木', null)
   entry.run('⿰亻木', 'hidden')
   entry.run('⿱木木', null)
@@ -98,7 +98,7 @@ test('an unknown format is refused', async () => {
 function manyFixture() {
   const { db, raw } = openTestDb()
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
-  raw.exec("INSERT INTO entries(script, ids, created_by, created_at, updated_at) VALUES ('han', '⿰亻木', 'p', '2026', '2026')")
+  raw.exec("INSERT INTO entries(ids, created_by, created_at, updated_at) VALUES ('⿰亻木', 'p', '2026', '2026')")
   raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) VALUES (1, 0, 'ids00001', 'ids', '⿰亻木')")
   const insert = raw.prepare("INSERT INTO sightings(entry_id, first_entry, place, created_by, created_at, updated_at) VALUES (1, 1, ?, 'p', '2026', '2026')")
   for (let i = 0; i < 900; i++) insert.run(`source ${i}`)
@@ -169,7 +169,7 @@ test('exports preserve separated agent and model attribution alongside the comma
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id, name, atlas_sub, created_at) VALUES ('cmd', 'Commander', 'sub', '2026');
     INSERT INTO people(id, name, created_at, merged_into, agent, agent_model) VALUES ('ag1', 'Antigravity', '2026', 'cmd', 1, 'Gemini 4 Neon');
-    INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES (1, 'han', '⿰亻木', 'ag1', '2026', '2026'), (2, 'han', '⿱木木', 'cmd', '2026', '2026');
+    INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES (1, '⿰亻木', 'ag1', '2026', '2026'), (2, '⿱木木', 'cmd', '2026', '2026');
     INSERT INTO claims(entry_id, position, key, kind, value) VALUES (1, 0, 'ids00001', 'ids', '⿰亻木'), (2, 0, 'ids00002', 'ids', '⿱木木');
     INSERT INTO sightings(entry_id, first_entry, place, created_by, created_at, updated_at) VALUES (1, 1, 'Book', 'ag1', '2026', '2026'), (2, 2, 'Note', 'cmd', '2026', '2026');`)
   const body = await (await GET(event(db))).json() as any
@@ -248,7 +248,7 @@ test('format=index serves a compact cached catalogue without evidence and tolera
           if (sql.includes('FROM entries')) {
             entryReads++
             if (entryReads === 2) {
-              raw.exec("INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES (4, 'han', '⿰水水', 'p', '2026', '2026')")
+              raw.exec("INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES (4, '⿰水水', 'p', '2026', '2026')")
               raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) VALUES (4, 0, 'ids00004', 'ids', '⿰水水')")
               raw.exec("INSERT INTO revisions(entry_id, kind, rev, snapshot, actor, at) VALUES (4, 'create', 1, '{}', 'p', '2026')")
             }
@@ -303,12 +303,12 @@ test('exports resolve retired record codes to canonical live targets and omit hi
   const { db, raw } = fixture()
   // 1 and 3 are live, 2 is hidden.
   // 4 -> 1 (direct), 5 -> 2 (hidden target), 6 -> 4 -> 1 (multi-hop), 7 -> 1 (hidden itself), 8 -> 7 -> 1 (hidden intermediate).
-  raw.exec(`INSERT INTO entries(id, script, merged_into, hidden_at, created_by, created_at, updated_at) VALUES
-    (4, 'han', 1, NULL, 'p', '2026', '2026'),
-    (5, 'han', 2, NULL, 'p', '2026', '2026'),
-    (6, 'han', 4, NULL, 'p', '2026', '2026'),
-    (7, 'han', 1, 'hidden', 'p', '2026', '2026'),
-    (8, 'han', 7, NULL, 'p', '2026', '2026')`)
+  raw.exec(`INSERT INTO entries(id, merged_into, hidden_at, created_by, created_at, updated_at) VALUES
+    (4, 1, NULL, 'p', '2026', '2026'),
+    (5, 2, NULL, 'p', '2026', '2026'),
+    (6, 4, NULL, 'p', '2026', '2026'),
+    (7, 1, 'hidden', 'p', '2026', '2026'),
+    (8, 7, NULL, 'p', '2026', '2026')`)
   const expected = [
     { id: 4, code: 'R+0004', merged_into: 1, merged_into_code: 'R+0001' },
     { id: 6, code: 'R+0006', merged_into: 1, merged_into_code: 'R+0001' },
@@ -350,9 +350,9 @@ test('mergedBatches chunks target lookups below D1 parameter limits', async () =
   const { db, raw } = openTestDb()
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
   raw.exec(`WITH RECURSIVE seq(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM seq WHERE x < 120)
-    INSERT INTO entries(id, script, created_by, created_at, updated_at) SELECT x, 'han', 'p', '2026', '2026' FROM seq`)
+    INSERT INTO entries(id, created_by, created_at, updated_at) SELECT x, 'p', '2026', '2026' FROM seq`)
   raw.exec(`WITH RECURSIVE seq(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM seq WHERE x < 120)
-    INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at) SELECT x + 120, 'han', x, 'p', '2026', '2026' FROM seq`)
+    INSERT INTO entries(id, merged_into, created_by, created_at, updated_at) SELECT x + 120, x, 'p', '2026', '2026' FROM seq`)
   let maxBinds = 0
   const guarded = { prepare(sql: string) {
     const stmt = db.prepare(sql)
@@ -371,11 +371,11 @@ test('mergedBatches chunks target lookups below D1 parameter limits', async () =
 test('mergedBatches resolves each batch fresh under concurrent unmerge and re-merge', async () => {
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026');
-    INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at) VALUES
-      (1, 'han', NULL, 'p', '2026', '2026'),
-      (2, 'han', 1, 'p', '2026', '2026'),
-      (3, 'han', 1, 'p', '2026', '2026'),
-      (4, 'han', NULL, 'p', '2026', '2026');`)
+    INSERT INTO entries(id, merged_into, created_by, created_at, updated_at) VALUES
+      (1, NULL, 'p', '2026', '2026'),
+      (2, 1, 'p', '2026', '2026'),
+      (3, 1, 'p', '2026', '2026'),
+      (4, NULL, 'p', '2026', '2026');`)
   let pages = 0
   const mutating = { prepare(sql: string) {
     const stmt = db.prepare(sql)
@@ -400,8 +400,8 @@ test('mergedBatches resolves long chains across batch boundaries without droppin
   const { db, raw } = openTestDb()
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
   raw.exec(`WITH RECURSIVE seq(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM seq WHERE x < 502)
-    INSERT INTO entries(id, script, merged_into, created_by, created_at, updated_at)
-    SELECT x, 'han', CASE WHEN x = 1 THEN NULL ELSE x - 1 END, 'p', '2026', '2026' FROM seq`)
+    INSERT INTO entries(id, merged_into, created_by, created_at, updated_at)
+    SELECT x, CASE WHEN x = 1 THEN NULL ELSE x - 1 END, 'p', '2026', '2026' FROM seq`)
   for (const size of [500, 25]) {
     const rows = []
     for await (const batch of mergedBatches(db, size)) rows.push(...batch)

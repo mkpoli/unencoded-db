@@ -5,11 +5,11 @@ import { openTestDb } from './testdb'
 function setup() {
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('u1', 'One', '2026'), ('u2', 'Two', '2026'), ('u3', 'Three', '2026');
-    INSERT INTO entries(id, script, ids, sightings, created_by, created_at, updated_at) VALUES
-      (1, 'han', '⿰木木', 1, 'u1', '2026', '2026'),
-      (2, 'han', '⿰火火', 2, 'u1', '2026', '2026'),
-      (3, 'han', '⿰水水', 1, 'u1', '2026', '2026'),
-      (4, 'han', '⿰土土', 1, 'u1', '2026', '2026');
+    INSERT INTO entries(id, ids, sightings, created_by, created_at, updated_at) VALUES
+      (1, '⿰木木', 1, 'u1', '2026', '2026'),
+      (2, '⿰火火', 2, 'u1', '2026', '2026'),
+      (3, '⿰水水', 1, 'u1', '2026', '2026'),
+      (4, '⿰土土', 1, 'u1', '2026', '2026');
     UPDATE entries SET merged_into = 2 WHERE id = 4;`)
   return { db, raw }
 }
@@ -82,7 +82,7 @@ describe('favourites', () => {
   test(`holds at most ${FAVOURITES_HELD} records per person`, async () => {
     const { db, raw } = setup()
     raw.prepare(`WITH RECURSIVE seq(x) AS (VALUES(10) UNION ALL SELECT x + 1 FROM seq WHERE x < ?)
-      INSERT INTO entries(id, script, created_by, created_at, updated_at) SELECT x, 'han', 'u1', '2026', '2026' FROM seq`).run(10 + FAVOURITES_HELD)
+      INSERT INTO entries(id, created_by, created_at, updated_at) SELECT x, 'u1', '2026', '2026' FROM seq`).run(10 + FAVOURITES_HELD)
     const star = raw.prepare('INSERT INTO favourites(person, entry_id, at) VALUES (?, ?, ?)')
     for (let i = 0; i < FAVOURITES_HELD; i++) star.run('u3', 10 + i, i)
 

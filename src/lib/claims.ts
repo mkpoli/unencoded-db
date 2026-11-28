@@ -42,7 +42,7 @@ export const CLAIM_LIMITS: Record<ClaimKind, { max: number; length: number }> = 
   relation: { max: 50, length: 80 },
   ivd: { max: 1, length: 80 },
   collection: { max: 10, length: 40 },
-  tag: { max: 30, length: 40 },
+  tag: { max: 32, length: 40 },
   creator: { max: 10, length: 80 },
 }
 export const CLAIMS_MAX = 200

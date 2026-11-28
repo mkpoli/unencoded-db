@@ -1,4 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit'
+import { valuesOf } from '$lib/claims'
 import { recordCode } from '$lib/code'
 import { BATCH_ROWS_MAX } from '$lib/limits'
 import { citesEvidence, createEntry, readEntryFields, readSightingFields, validateCiteTargets } from '$lib/server/entries'
@@ -7,29 +8,40 @@ import { archiveCited } from '$lib/server/archive'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { writer } from '$lib/server/people'
+import { taxonomy } from '$lib/server/tags'
 import { readViaPictures, storeImages, uploadedImages } from '../../_submission.server'
-import type { Actions } from './$types'
+import type { Actions, PageServerLoad } from './$types'
+
+export const load: PageServerLoad = async (event) => taxonomy(env(event).DB)
 
 // Row 0 names no row.
 const reject = <Values>(status: 400 | 429, error: string, values: Values, row = 0) => fail(status, { error, row, values })
 const filled = (value: FormDataEntryValue | undefined) => value instanceof File && value.size > 0
 
 export const actions: Actions = {
-  // One source and one script, and a row for each character: `ids`, `row_note` and the picker's `image`,
+  // One source and shared tags, and a row for each character: `ids`, `row_note` and the picker's `image`,
   // `thumb` and `box` repeat once per row, so the nth of each belongs to the nth row. Each row is saved by
   // `createEntry`, as a single add is. The request has paid for one add in `guardWrite`; the other rows are
   // charged to the same allowance below, before anything is written, so a batch never gets past the rate
   // limit that the same characters added one at a time would meet.
   default: async (event) => {
     await guardWrite(event, 'ADDS')
+    const { DB, MEDIA } = env(event)
     const form = await event.request.formData()
-    // A batch names no category, so no list of them is read.
-    const { fields: base } = readEntryFields(form, []), shared = readSightingFields(form)
+    const { tags } = await taxonomy(DB)
+    const sharedFiling = new FormData()
+    for (const name of ['tags_present', 'tag', 'tags', 'genres_present', 'genre', 'collections_present', 'collection']) {
+      for (const value of form.getAll(name)) sharedFiling.append(name, value)
+    }
+    const { fields: base, error: baseError } = readEntryFields(sharedFiling, tags), shared = readSightingFields(form)
     const ids = form.getAll('ids').map(String), notes = form.getAll('row_note').map(String)
     const files = form.getAll('image'), thumbs = form.getAll('thumb'), boxes = form.getAll('box')
     const count = Math.max(ids.length, notes.length, files.length)
     const typed = Array.from({ length: Math.min(count, BATCH_ROWS_MAX) }, (_, i) => ({ ids: ids[i] ?? '', note: notes[i] ?? '' }))
-    const values = { script: base.script, script_other: base.script_other, ...shared, rows: typed }
+    const sharedTags = valuesOf(base.claims, 'tag')
+    const sharedCollections = valuesOf(base.claims, 'collection')
+    const values = { tags: sharedTags, collections: sharedCollections, ...shared, rows: typed }
+    if (baseError) return reject(400, baseError, values)
     const shots = await readViaPictures(form)
     if (shots.error) return reject(400, shots.error, values)
     const cited = readSightingFields(form, shots.all)
@@ -41,16 +53,19 @@ export const actions: Actions = {
     const rows = []
     for (const row of chosen) {
       const entry = new FormData()
-      entry.set('script', base.script_other ?? base.script)
       entry.set('ids', row.ids)
-      const { fields, error } = readEntryFields(entry, [])
+      for (const tag of sharedTags) entry.append('tag', tag)
+      if (sharedCollections.length) {
+        entry.set('collections_present', '1')
+        for (const collection of sharedCollections) entry.append('collection', collection)
+      }
+      const { fields, error } = readEntryFields(entry, tags)
       if (error) return reject(400, error, values, row.index + 1)
       if (!row.picture && !citesEvidence(cited)) return reject(400, 'evidence', values, row.index + 1)
       rows.push({ ...row, fields })
     }
     if (!(await chargeWrites(event, 'ADDS', rows.length - 1))) return reject(429, 'slow', values)
 
-    const { DB, MEDIA } = env(event)
     const badCite = await validateCiteTargets(DB, cited.cites)
     if (badCite) return reject(400, badCite, values)
     const pictures = []

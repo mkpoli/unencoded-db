@@ -29,10 +29,10 @@ test('successful routes use their registered card or a generic site preview', ()
 test('card requests reject hidden or merged records and sources without visible evidence', async () => {
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026');
-    INSERT INTO entries(id, script, created_by, created_at, updated_at, hidden_at, merged_into) VALUES
-      (1, 'han', 'p', '2026', '2026', null, null),
-      (2, 'han', 'p', '2026', '2026', 'hidden', null),
-      (3, 'han', 'p', '2026', '2026', null, 1);
+    INSERT INTO entries(id, created_by, created_at, updated_at, hidden_at, merged_into) VALUES
+      (1, 'p', '2026', '2026', null, null),
+      (2, 'p', '2026', '2026', 'hidden', null),
+      (3, 'p', '2026', '2026', null, 1);
     INSERT INTO sources(id, hash, title) VALUES (1, 'book', 'A book'), (2, 'thread', 'A thread');
     INSERT INTO sightings(id, entry_id, first_entry, source_id, place, created_by, created_at, updated_at, hidden_at) VALUES
       (1, 2, 2, 1, 'Book', 'p', '2026', '2026', null),
@@ -59,8 +59,8 @@ test('a copy preview uses public evidence from that copy and checks visibility b
   const { raw, db } = openTestDb()
   const slug = 'ntcu-848'
   raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026');
-    INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES
-      (1, 'han', NULL, 'p', '2026', '2026'), (2, 'han', '永', 'p', '2026', '2026'), (3, 'han', '木', 'p', '2026', '2026');
+    INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES
+      (1, NULL, 'p', '2026', '2026'), (2, '永', 'p', '2026', '2026'), (3, '木', 'p', '2026', '2026');
     INSERT INTO sources(id, hash, url) VALUES
       (1, 'page', 'https://ip194097.ntcu.edu.tw/memory/TGB/thak.asp?id=848&page=7');
     INSERT INTO sightings(id, entry_id, first_entry, source_id, place, created_by, created_at, updated_at) VALUES
@@ -128,9 +128,9 @@ test('titles break between words, evenly, and keep the site name whole', () => {
 test('cards are looked up in the cache only after visibility, under an address made from their content', async () => {
   const { db, raw } = openTestDb()
   raw.exec(`INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026');
-    INSERT INTO entries(id, script, ids, created_by, created_at, updated_at, hidden_at) VALUES
-      (1, 'han', '永', 'p', '2026', '2026', null),
-      (2, 'han', '永', 'p', '2026', '2026', 'hidden');`)
+    INSERT INTO entries(id, ids, created_by, created_at, updated_at, hidden_at) VALUES
+      (1, '永', 'p', '2026', '2026', null),
+      (2, '永', 'p', '2026', '2026', 'hidden');`)
   const looked: string[] = []
   const cached = new Response('png', { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' } })
   const globals = globalThis as unknown as { caches?: unknown }

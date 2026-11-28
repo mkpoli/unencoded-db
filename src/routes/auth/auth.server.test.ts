@@ -157,10 +157,10 @@ test('sign-in started from the consent page of agent sign-in returns to it', asy
 test('signing in with Glyph Atlas brings an anonymous browser’s favourites along', async () => {
   const { db, raw } = openTestDb()
   const kept = await createPerson(db, 'atlas-user', 'Kept')
-  raw.exec(`INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES
-    (1, 'han', '${kept.id}', '2026', '2026'),
-    (2, 'han', '${kept.id}', '2026', '2026'),
-    (3, 'han', '${kept.id}', '2026', '2026');
+  raw.exec(`INSERT INTO entries(id, created_by, created_at, updated_at) VALUES
+    (1, '${kept.id}', '2026', '2026'),
+    (2, '${kept.id}', '2026', '2026'),
+    (3, '${kept.id}', '2026', '2026');
     INSERT INTO favourites(person, entry_id, at) VALUES ('${kept.id}', 1, 10), ('${kept.id}', 2, 10);`)
 
   const anon = await createPerson(db, null, 'anon-123456')

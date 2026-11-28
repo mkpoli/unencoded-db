@@ -2,7 +2,7 @@
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
   import Seo from '$lib/components/Seo.svelte'
   import { recordCode } from '$lib/code'
-  import { scriptName } from '$lib/scripts'
+  import { shownLabel } from '$lib/tags'
   import { href, locale, media, t } from '$lib/t'
   let { data } = $props()
 </script>
@@ -25,7 +25,7 @@
                   <span class="plate">{#if record.ids}<IdsGlyph ids={record.ids} layout={record.layout} path={data.glyphs?.[record.id]} />{/if}</span>
                   <span class="plate">{#if record.cover_key}<img src={media(record.cover_key)} alt="" loading="lazy" decoding="async" />{:else}<span class="blank">{t('browse.noImage')}</span>{/if}</span>
                 </a>
-                <div class="about"><a class="code" href={href(`/${recordCode(record.id)}`)}>{recordCode(record.id)}</a><span class="badge">{scriptName(locale(), record.script, record.script_other)}</span><span class="count">{t(record.sightings === 1 ? 'browse.sighting' : 'browse.sightings', { n: record.sightings })}</span></div>
+                <div class="about"><a class="code" href={href(`/${recordCode(record.id)}`)}>{recordCode(record.id)}</a>{#each record.scripts as tag (tag.name)}<span class="tag-chip" data-tag-type="script">{shownLabel(tag, locale())}</span>{/each}<span class="count">{t(record.sightings === 1 ? 'browse.sighting' : 'browse.sightings', { n: record.sightings })}</span></div>
               </article>
             {/each}
           </div>

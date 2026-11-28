@@ -21,9 +21,9 @@ async function target(event: RequestEvent) {
 }
 
 export const load: PageServerLoad = async (event) => {
-  const { id, entry, sighting, only } = await target(event)
+  const { id, sighting, only } = await target(event)
   const { place, title, author, page, report_date, original_date, media, rev } = sighting
-  return { id, only, script: entry.script, script_other: entry.script_other, sighting: { id: sighting.id, place, title, author, page, report_date, original_date, rev, picture: media[0] ?? null } }
+  return { id, only, sighting: { id: sighting.id, place, title, author, page, report_date, original_date, rev, picture: media[0] ?? null } }
 }
 
 export const actions: Actions = {

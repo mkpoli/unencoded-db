@@ -51,7 +51,7 @@ test('create, browse, view, edit and add a sighting', async () => {
 
 function sightingFixture(count: number, put: (key: string, bytes: Uint8Array) => Promise<unknown>) {
   const { db, raw } = openTestDb()
-  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, script, created_by, created_at, updated_at) VALUES (1, 'han', 'p', '2026', '2026')")
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, created_by, created_at, updated_at) VALUES (1, 'p', '2026', '2026')")
   const insert = raw.prepare("INSERT INTO sightings(entry_id, first_entry, place, created_by, created_at, updated_at, hidden_at) VALUES (1, 1, 'existing', 'p', '2026', '2026', ?)")
   for (let i = 0; i < count; i++) insert.run(i === 0 ? 'hidden' : null)
   const form = new FormData()
@@ -99,8 +99,8 @@ test('browse continues an empty search window and reports the final segment', as
   const { db, raw } = openTestDb()
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
   raw.prepare(`WITH RECURSIVE seq(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM seq WHERE x < ?)
-    INSERT INTO entries(id, script, created_by, created_at, updated_at) SELECT x, 'han', 'p', '2026', '2026' FROM seq`).run(SEARCH_WINDOW + 1)
-  raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT tag, id FROM entries CROSS JOIN (SELECT 'all' AS tag UNION ALL SELECT 's:han')")
+    INSERT INTO entries(id, created_by, created_at, updated_at) SELECT x, 'p', '2026', '2026' FROM seq`).run(SEARCH_WINDOW + 1)
+  raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'all', id FROM entries")
   const event = (url: string) => ({ url: new URL(url), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
   const first = await browseLoad(event('https://example.test/en?q=missing')) as any
   expect(first).toMatchObject({ tiles: [], next: '0.2', partial: true, continued: false, total: { n: 0, floor: false } })
@@ -109,17 +109,19 @@ test('browse continues an empty search window and reports the final segment', as
   await expect(browseLoad(event('https://example.test/en?q=missing&after=0.0'))).rejects.toMatchObject({ status: 404 })
 })
 
-test('browse lists every script, and a script narrows the list to its records', async () => {
+test('browse lists script tags, narrows by them, and redirects legacy ?script= links', async () => {
   const { db, raw } = openTestDb()
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
-  raw.exec("INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES (1, 'han', '⿰木木', 'p', '2026', '2026'), (2, 'bouyei', '⿱好看', 'p', '2026', '2026')")
-  raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'all', id FROM entries UNION ALL SELECT 's:' || script, id FROM entries")
-  const event = (query: string) => ({ url: new URL(`https://example.test/en?${query}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
+  raw.exec("INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES (1, '⿰木木', 'p', '2026', '2026'), (2, '⿱好看', 'p', '2026', '2026')")
+  raw.exec("INSERT INTO entry_tags(tag, entry_id) VALUES ('all', 1), ('all', 2), ('t:han', 1), ('t:布依方塊字', 2)")
+  const event = (query: string) => ({ url: new URL(`https://example.test/en${query ? `?${query}` : ''}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
   const ids = (result: any) => result.tiles.map((tile: { id: number }) => tile.id).sort()
   expect(ids(await browseLoad(event('')))).toEqual([1, 2])
-  expect(await browseLoad(event(''))).toMatchObject({ script: null })
-  expect(ids(await browseLoad(event('script=bouyei')))).toEqual([2])
-  expect(ids(await browseLoad(event('script=han')))).toEqual([1])
+  expect(ids(await browseLoad(event('tag=bouyei')))).toEqual([2])
+  expect(ids(await browseLoad(event('tag=han')))).toEqual([1])
+  await expect(browseLoad(event('script=bouyei'))).rejects.toMatchObject({ status: 301, location: '/en?tag=%E5%B8%83%E4%BE%9D%E6%96%B9%E5%A1%8A%E5%AD%97' })
+  await expect(browseLoad(event('script=bai'))).rejects.toMatchObject({ status: 301, location: '/en?tag=baiwen' })
+  await expect(browseLoad(event('script=other&filter=variant'))).rejects.toMatchObject({ status: 301, location: '/en?filter=variant' })
   await expect(browseLoad(event('script=klingon'))).rejects.toMatchObject({ status: 404 })
 })
 
@@ -140,9 +142,9 @@ test('the source gallery answers an order or a cursor it does not know with 404'
 test('browse recognizes complete IDS without applying the component term limit', async () => {
   const { db, raw } = openTestDb()
   raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
-  raw.exec("INSERT INTO entries(id, script, ids, created_by, created_at, updated_at) VALUES (1, 'han', '⿰木木', 'p', '2026', '2026'), (2, 'han', '⿱木木', 'p', '2026', '2026'), (3, 'han', '⿰木⿰水⿰火⿰土⿰金石', 'p', '2026', '2026')")
+  raw.exec("INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES (1, '⿰木木', 'p', '2026', '2026'), (2, '⿱木木', 'p', '2026', '2026'), (3, '⿰木⿰水⿰火⿰土⿰金石', 'p', '2026', '2026')")
   raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) SELECT id, 0, printf('ids%05d', id), 'ids', ids FROM entries")
-  raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT tag, id FROM entries CROSS JOIN (SELECT 'all' AS tag UNION ALL SELECT 's:han')")
+  raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'all', id FROM entries")
   raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'p:' || ids, id FROM entries")
   const event = (q: string) => ({ url: new URL(`https://example.test/en?q=${encodeURIComponent(q)}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
   expect(await browseLoad(event('⿰木木'))).toMatchObject({ searchError: null, tiles: [{ id: 1 }] })
@@ -313,7 +315,7 @@ test('the radicals page lists the radicals in use, browse narrows by one and the
 
 test('a record code typed into search opens its record', async () => {
   const { db, raw } = openTestDb()
-  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, script, created_by, created_at, updated_at, hidden_at, merged_into) VALUES (34, 'han', 'p', '2026', '2026', NULL, NULL), (35, 'han', 'p', '2026', '2026', 'hidden', NULL), (36, 'han', 'p', '2026', '2026', NULL, 34), (37, 'han', 'p', '2026', '2026', NULL, 35)")
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026'); INSERT INTO entries(id, created_by, created_at, updated_at, hidden_at, merged_into) VALUES (34, 'p', '2026', '2026', NULL, NULL), (35, 'p', '2026', '2026', 'hidden', NULL), (36, 'p', '2026', '2026', NULL, 34), (37, 'p', '2026', '2026', NULL, 35)")
   const at = (search: string) => ({ url: new URL(`https://example.test/ja?${search}`), params: { locale: 'ja' }, locals: { person: null, glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
   const event = (q: string) => at(`q=${encodeURIComponent(q)}`)
   for (const q of ['R+0022', 'r+0022', '天天玄玄']) await expect(browseLoad(event(q))).rejects.toMatchObject({ status: 303, location: '/ja/R+0022' })

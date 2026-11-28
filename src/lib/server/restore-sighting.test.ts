@@ -4,7 +4,7 @@ import { createPerson } from './people'
 import { sightingSnapshot } from './revisions'
 import { openTestDb } from './testdb'
 
-const entry: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] }
+const entry: EntryFields = { description: null, radical: null, strokes: null, claims: [] }
 const seen = (place: string): SightingFields => ({ place, url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null })
 const image: StoredImage = { image_key: 'current.webp', image_type: 'image/webp', image_w: 100, image_h: 80, thumb_key: 'thumb.webp', box: '[[1,2,10,10]]' }
 

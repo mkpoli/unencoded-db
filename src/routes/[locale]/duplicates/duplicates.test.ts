@@ -7,7 +7,7 @@ import { createPerson } from '$lib/server/people'
 import { openTestDb } from '$lib/server/testdb'
 import { load } from './+page.server'
 
-const fields = (claims: Claim[], script = 'han'): EntryFields => ({ script, script_other: null, description: null, radical: null, strokes: null, claims })
+const fields = (claims: Claim[], script = 'han'): EntryFields => ({ description: null, radical: null, strokes: null, claims: [...claims, ...(script ? [newClaim('tag', script)] : [])] })
 const seen = { place: 'A shop', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, note: null, quotes: null } as SightingFields
 
 async function fixture() {
@@ -15,7 +15,7 @@ async function fixture() {
   const person = await createPerson(db)
   const who = { actor: person.id, ip: null }
   const add = (ids: string | string[], script?: string) => createEntry(db, fields([ids].flat().map(value => newClaim('ids', value)), script), seen, [], who)
-  const open = async (query = '') => await load({ url: new URL(`https://example.test/en/duplicates${query}`), params: { locale: 'en' }, locals: {}, platform: { env: { DB: db } } } as never) as { groups: { ids: string[]; same: boolean; records: { id: number; script: string }[]; pairs: [number, number][] }[]; next: string | null }
+  const open = async (query = '') => await load({ url: new URL(`https://example.test/en/duplicates${query}`), params: { locale: 'en' }, locals: {}, platform: { env: { DB: db } } } as never) as { groups: { ids: string[]; same: boolean; records: { id: number; scripts: { name: string }[] }[]; pairs: [number, number][] }[]; next: string | null }
   const listed = async () => (await open()).groups.map(group => [group.ids.join(' '), group.same, group.records.map(record => record.id)])
   const relate = (id: number, rev: number, ids: string, value: string) => editEntry(db, id, rev, fields([newClaim('ids', ids), { ...newClaim('relation', value), data: { relationship: 'glyph' } } as Claim]), who, null)
   return { db, raw, who, add, open, listed, relate }
@@ -26,7 +26,7 @@ test('records of one form are listed, the form with the latest record first, wha
   await add('⿱赤相'); await add('⿰王甲'); await add('⿱赤相', 'miao'); await add('⿰木木'); await add('⿰壬甲'); await add('⿱？木'); await add('⿱？木')
   expect(await listed()).toEqual([['⿰王甲 ⿰壬甲', false, [2, 5]], ['⿱赤相', true, [1, 3]]])
   const [, group] = (await open()).groups
-  expect([group.records.map(record => record.script), group.pairs]).toEqual([['han', 'miao'], [[1, 3]]])
+  expect([group.records.map(record => record.scripts.map(tag => tag.name)), group.pairs]).toEqual([[['han'], ['miao']], [[1, 3]]])
 })
 
 test('a merge takes the pair off the list and its undo brings it back', async () => {
