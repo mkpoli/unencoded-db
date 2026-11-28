@@ -71,7 +71,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   const syncApi = event.route.id === '/api/sync/atlas'
   // A request that claims a token is that token's person or no one, never its connection's.
   const claims = agent && event.request.headers.has('authorization')
-  event.locals.person = !db || pathname.startsWith('/media/') || syncApi ? null : claims ? await tokenPerson(db, bearerOf(event.request)) : await personOf(db, agent ? agentToken(event.request) : event.cookies.get(sessionName(event)))
+  event.locals.person = !db || pathname.startsWith('/media/') || pathname.startsWith('/api/composer/') || syncApi ? null : claims ? await tokenPerson(db, bearerOf(event.request)) : await personOf(db, agent ? agentToken(event.request) : event.cookies.get(sessionName(event)))
   if (!['GET', 'HEAD', 'OPTIONS'].includes(event.request.method) && !(event.route.id === '/auth/sign-out' && event.request.method === 'POST')) {
     // An agent's request says in its body whether it writes, and the sync endpoint authenticates itself.
     if (!agent && !syncApi) {

@@ -19,7 +19,7 @@
   import { recordCode } from '$lib/code'
   import { LOOSE_MIN, MADE_OF } from '$lib/similar'
   import { browser } from '$app/environment'
-  import { composerUrl, type GlyphStyle } from '$lib/composer'
+  import { composerBrowserUrl, type GlyphStyle } from '$lib/composer'
   import type { IdsAdapter, IdsEditor } from 'ids-input/svelte'
   import IdsGlyph from './IdsGlyph.svelte'
   import IdsLine from './IdsLine.svelte'
@@ -96,7 +96,7 @@
   let tools = $state.raw<{ Builder: typeof import('./IdsBuilder.svelte').default; adapter: IdsAdapter; messages: Record<string, string> | undefined } | null>(null)
   const adapter = $derived.by(() => {
     if (!tools) return undefined
-    const base = composerUrl(fontStyle)
+    const base = composerBrowserUrl(fontStyle, typeof location === 'object' ? location.origin : undefined)
     return { ...tools.adapter, fontStyle,
       variationSequences: () => import('han-compose/variants').then(engine => engine.variationSequences(base)),
     }
