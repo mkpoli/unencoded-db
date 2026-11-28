@@ -6,11 +6,30 @@ import { ENTRIES_PER_SITEMAP, pageSitemap } from '$lib/server/sitemap'
 import { media } from '$lib/media'
 import type { RequestHandler } from './$types'
 
-// `site` lists the sections, a number a block of records, and `sources-` and a number a block of the
-// sources that visible records cite.
+// `site` lists the sections, `copies` lists cited digitized copies, `parts` lists tagged component
+// pages, a number a block of records, and `sources-` and a number a block of the sources that
+// visible records cite.
 export const GET: RequestHandler = async event => {
   const { part } = event.params
   if (part === 'site') return pageSitemap(PUBLIC_SECTIONS)
+  if (part === 'copies') {
+    const { results } = await env(event).DB.prepare(`
+      SELECT DISTINCT p.copy_slug FROM digitized_copy_pages p
+      JOIN sources s ON s.id = p.source_id
+      WHERE s.records > 0
+      ORDER BY p.copy_slug
+      LIMIT ?
+    `).bind(ENTRIES_PER_SITEMAP).all<{ copy_slug: string }>()
+    if (!results.length) error(404)
+    return pageSitemap(results.map(({ copy_slug }) => `/sources/copy/${copy_slug}`))
+  }
+  if (part === 'parts') {
+    const { results } = await env(event).DB.prepare(
+      'SELECT part FROM part_counts ORDER BY n DESC, part LIMIT ?',
+    ).bind(ENTRIES_PER_SITEMAP).all<{ part: string }>()
+    if (!results.length) error(404)
+    return pageSitemap(results.map(({ part: component }) => `/part/${encodeURIComponent(component)}`))
+  }
   const match = /^(sources-)?([1-9]\d*)$/.exec(part)
   const end = Number(match?.[2]) * ENTRIES_PER_SITEMAP
   if (!match || !Number.isSafeInteger(end)) error(404)

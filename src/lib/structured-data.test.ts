@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { jsonLdScript, machineDate, recordData, RECORD_LICENSE, sourceData } from './structured-data'
+import { copyData, jsonLdScript, machineDate, partData, recordData, RECORD_LICENSE, sourceData, websiteData } from './structured-data'
 
 const source = { id: 7, title: '康熙字典', author: '張玉書', publisher: null, report_date: '1716', url: 'https://example.org/kx' }
 
@@ -81,4 +81,31 @@ test('a source names what it appeared in', () => {
 
 test('script text cannot close its element', () => {
   expect(jsonLdScript({ name: '</script><b>' })).not.toContain('</script><b>')
+})
+
+test('websiteData emits WebSite with SearchAction and publisher', () => {
+  const site = websiteData({ locale: 'ja', name: 'Rare Character Compendium', alternateName: '珍字集覽', description: 'desc' }) as any
+  expect(site['@type']).toBe('WebSite')
+  expect(site['@id']).toBe('https://rare.glyphatlas.org/')
+  expect(site.inLanguage).toBe('ja')
+  expect(site.publisher).toEqual({ '@type': 'Organization', name: 'Glyph Atlas', url: 'https://glyphatlas.org/' })
+  expect(site.potentialAction).toEqual({
+    '@type': 'SearchAction',
+    target: { '@type': 'EntryPoint', urlTemplate: 'https://rare.glyphatlas.org/ja?q={search_term_string}' },
+    'query-input': 'required name=search_term_string',
+  })
+})
+
+test('partData and copyData emit CollectionPage and breadcrumbs', () => {
+  const [partPage, partTrail] = partData({ locale: 'en', part: '木', name: 'Part 木', description: '3 records', siteName: 'Site', partsName: 'Parts' }) as any[]
+  expect(partPage).toMatchObject({ '@type': 'CollectionPage', url: 'https://rare.glyphatlas.org/en/part/%E6%9C%A8', inLanguage: 'en' })
+  expect(partTrail.itemListElement.map((item: any) => item.item)).toEqual([
+    'https://rare.glyphatlas.org/en', 'https://rare.glyphatlas.org/en/parts', 'https://rare.glyphatlas.org/en/part/%E6%9C%A8',
+  ])
+
+  const [copyPage, copyTrail] = copyData({ locale: 'en', slug: 'ntcu-848', name: '彙音字典 · NTCU', description: '2 records', siteName: 'Site', sourcesName: 'Sources' }) as any[]
+  expect(copyPage).toMatchObject({ '@type': 'CollectionPage', url: 'https://rare.glyphatlas.org/en/sources/copy/ntcu-848', inLanguage: 'en' })
+  expect(copyTrail.itemListElement.map((item: any) => item.item)).toEqual([
+    'https://rare.glyphatlas.org/en', 'https://rare.glyphatlas.org/en/sources', 'https://rare.glyphatlas.org/en/sources/copy/ntcu-848',
+  ])
 })

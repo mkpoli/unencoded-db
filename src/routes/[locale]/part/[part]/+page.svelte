@@ -4,11 +4,17 @@
   import Tile from '$lib/components/Tile.svelte'
   import { browseHref } from '$lib/browse-params'
   import { roleLabel } from '$lib/composition-labels'
+  import { partData } from '$lib/structured-data'
   import { href, locale, t } from '$lib/t'
 
   let { data } = $props()
   const at = locale()
   const basePath = $derived(href(`/part/${encodeURIComponent(data.part)}`))
+  const heading = $derived(t('part.title', { part: data.part }))
+  const summaryText = $derived(t('part.total', { n: data.total }))
+  const structured = $derived(partData({
+    locale: locale(), part: data.part, name: heading, description: summaryText, siteName: t('app.name'), partsName: t('nav.parts'),
+  }))
 
   function filterHref(func: string | null, after: string | null = null): string {
     const params = new URLSearchParams()
@@ -20,7 +26,7 @@
   }
 </script>
 
-<Seo title={t('part.title', { part: data.part })} />
+<Seo data={structured} title={heading} description={summaryText} />
 <div class="page stack">
   <div class="row nav-row">
     <a class="text-link back" href={href('/parts')}>← {t('nav.parts')}</a>

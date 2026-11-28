@@ -4,6 +4,21 @@ import { SITE_ORIGIN } from './seo'
 export const RECORD_LICENSE = 'https://creativecommons.org/licenses/by-sa/4.0/'
 const CONTEXT = 'https://schema.org'
 const SITE = { '@type': 'WebSite', '@id': `${SITE_ORIGIN}/`, url: `${SITE_ORIGIN}/` }
+const PUBLISHER = { '@type': 'Organization', name: 'Glyph Atlas', url: 'https://glyphatlas.org/' }
+
+export type WebsiteFacts = { locale: string; name: string; alternateName: string; description: string }
+
+export function websiteData({ locale, name, alternateName, description }: WebsiteFacts): Json {
+  return {
+    '@context': CONTEXT, '@type': 'WebSite', '@id': `${SITE_ORIGIN}/`, url: `${SITE_ORIGIN}/`,
+    name, alternateName, description, inLanguage: locale, publisher: PUBLISHER,
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: { '@type': 'EntryPoint', urlTemplate: `${SITE_ORIGIN}/${locale}?q={search_term_string}` },
+      'query-input': 'required name=search_term_string',
+    },
+  }
+}
 
 export type SourceFacts = { id: number; title?: string | null; author?: string | null; publisher?: string | null; report_date?: string | null; url?: string | null; container?: string | null }
 type Json = Record<string, unknown>
@@ -109,6 +124,34 @@ export function datasetData(facts: DatasetFacts): Json[] {
       contentUrl: `${SITE_ORIGIN}/api/export?format=${download.format}`,
     })),
   }]
+}
+
+export type PartPageFacts = { locale: string; part: string; name: string; description: string; siteName: string; partsName: string }
+
+export function partData({ locale, part, name, description, siteName, partsName }: PartPageFacts): Json[] {
+  const url = `${SITE_ORIGIN}/${locale}/part/${encodeURIComponent(part)}`
+  return [
+    present({ '@context': CONTEXT, '@type': 'CollectionPage', '@id': url, url, name, description, inLanguage: locale, isPartOf: SITE }),
+    breadcrumbs([
+      { name: siteName, url: `${SITE_ORIGIN}/${locale}` },
+      { name: partsName, url: `${SITE_ORIGIN}/${locale}/parts` },
+      { name, url },
+    ]),
+  ]
+}
+
+export type CopyPageFacts = { locale: string; slug: string; name: string; description: string; siteName: string; sourcesName: string }
+
+export function copyData({ locale, slug, name, description, siteName, sourcesName }: CopyPageFacts): Json[] {
+  const url = `${SITE_ORIGIN}/${locale}/sources/copy/${slug}`
+  return [
+    present({ '@context': CONTEXT, '@type': 'CollectionPage', '@id': url, url, name, description, inLanguage: locale, isPartOf: SITE }),
+    breadcrumbs([
+      { name: siteName, url: `${SITE_ORIGIN}/${locale}` },
+      { name: sourcesName, url: `${SITE_ORIGIN}/${locale}/sources` },
+      { name, url },
+    ]),
+  ]
 }
 
 // The text of one script element; `<` is escaped so a value cannot close the element.
