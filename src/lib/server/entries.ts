@@ -1569,7 +1569,8 @@ export async function mediaVisible(db: D1Database, key: string) {
 }
 
 export type Listing = { filter?: string | null; facet?: string | null; creator?: string | null; radical?: string | null; decade?: string | null; within?: readonly string[]; without?: readonly string[]; query?: string | null; also?: readonly string[]; order?: Order; seed?: number | null; after?: string | null; limit?: number }
-export const SEARCH_WINDOW = 256
+// The candidates one read of a search tests: more than the largest page, so one read can fill a page.
+export const SEARCH_WINDOW = 288
 
 // The one key a filter names, or null for a filter that is not one.
 export function listTag(filter?: string | null) {

@@ -12,6 +12,7 @@ export const load = async ({ locals, platform, url }) => {
     theme: locals.theme,
     glyphStyle: locals.glyphStyle,
     tileSize: locals.tileSize,
+    listView: locals.listView,
     signIn: Boolean(platform?.env.ATLAS_ISSUER && platform.env.ATLAS_CLIENT_ID && platform.env.ATLAS_CLIENT_SECRET),
   }
 }

@@ -21,6 +21,7 @@
   import { decadeNumber } from '$lib/dates'
   import { decadeName, href, locale, t, yearsName } from '$lib/t'
   import { TILE_SIZE_COOKIE, TILE_SIZES, pageColumns, tileSizeOf } from '$lib/tile-size'
+  import { LIST_VIEW_COOKIE, LIST_VIEWS, listViewOf, type ListView } from '$lib/list-view'
   import { browseHref, browseSearchParams, mergeFilter, toggleMark, type BrowseState } from '$lib/browse-params'
   import { consumeReturningEntry, rememberBrowse } from '$lib/browse-return.svelte'
   import { parseRecordCode } from '$lib/code'
@@ -46,12 +47,19 @@
     page: data.number,
     after: page.url.searchParams.get('after'),
   })
+  // Paged, the list holds one page and is turned by number. A search has no page count, so it loads on as it scrolls either way.
+  let listView = $state<ListView>(untrack(() => listViewOf(page.data.listView)))
+  const paging = $derived(listView === 'paged' && data.pages !== null)
+  function chooseView(view: ListView) {
+    listView = view
+    document.cookie = `${LIST_VIEW_COOKIE}=${view};path=/;max-age=31536000;samesite=lax`
+  }
   // Further pages are appended as the list nears its end. They belong to the listing they were read for,
   // and a new listing starts again from its own first page.
   type Shown = { for: typeof data; tiles: typeof data.tiles; glyphs: Record<string, string | null>; next: string | null; partial: boolean; total: typeof data.total; scanned: number }
   const fresh = (from: typeof data): Shown => ({ for: from, tiles: from.tiles, glyphs: from.glyphs ?? {}, next: from.next, partial: from.partial, total: from.total, scanned: from.read })
   let loaded = $state.raw<Shown | null>(null)
-  const shown = $derived(loaded?.for === data ? loaded : fresh(data))
+  const shown = $derived(!paging && loaded?.for === data ? loaded : fresh(data))
   const REACH = 1200
   let sentinel = $state<HTMLElement>()
   let observer: IntersectionObserver | undefined
@@ -101,7 +109,7 @@
   const left = $derived(shown.total ? shown.total.n - shown.tiles.length : null)
   const done = $derived(shown.total !== null && !shown.total.floor && left !== null && left <= 0)
   const pagesLeft = $derived(left !== null && left > 0 ? Math.ceil(left / data.per) : null)
-  $effect(() => { if (mounted && (shown.partial || near) && !busy && failedFor !== data && !done && shown.next !== null) grow() })
+  $effect(() => { if (mounted && !paging && (shown.partial || near) && !busy && failedFor !== data && !done && shown.next !== null) grow() })
   const appendOnClick = (event: MouseEvent) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     event.preventDefault()
@@ -386,6 +394,9 @@
 {#snippet sizes()}
   <nav class="sizes" aria-label={t('browse.perPage')} data-sveltekit-preload-data="tap"><span aria-hidden="true">{t('browse.perPage')}</span>{#each PAGE_SIZES as size}<a class="chip" class:on={data.per === size} aria-current={data.per === size ? 'true' : undefined} href={sized(size)}>{size}</a>{/each}</nav>
 {/snippet}
+{#snippet views()}
+  <nav class="sizes views" aria-label={t('browse.view')}>{#each LIST_VIEWS as view (view)}<button type="button" class="chip" class:on={listView === view} aria-pressed={listView === view} onclick={() => chooseView(view)}>{t(`browse.view.${view}`)}</button>{/each}</nav>
+{/snippet}
 {#snippet turner(id: string)}
   {@const last = data.pages ?? 1}
   <nav class="pages" aria-label={t('browse.page')} data-sveltekit-preload-data="tap">
@@ -506,8 +517,9 @@
     {#if data.pages && data.records && shown.tiles.length}
       <div class="pager">
         <p class="range">{t('browse.shown', { from: firstShown, to: firstShown + shown.tiles.length - 1, n: `${data.records}${data.recordsFloor ? '+' : ''}` })}</p>
+        {#if data.pages > 1}{@render views()}{/if}
         {#if data.records > PAGE_SIZES[0]}{@render sizes()}{/if}
-        {#if data.pages > 1}{@render turner('page')}{/if}
+        {#if paging && data.pages > 1}{@render turner('page')}{/if}
       </div>
     {:else if data.per !== PAGE}
       <div class="pager">{@render sizes()}</div>
@@ -526,7 +538,7 @@
     {/if}
   {/if}
   </div>
-  {#if shown.next !== null && !done}
+  {#if shown.next !== null && !done && !paging}
     <div class="ahead" bind:this={sentinel}>
       {#if shown.partial && shown.total}
         <p class="muted">{t('browse.searched', { n: Math.min(shown.scanned, shown.total.pool), of: shown.total.pool })}</p>
@@ -535,12 +547,12 @@
       {:else if pagesLeft !== null}
         <p class="muted">{t(pagesLeft === 1 && !shown.total?.floor ? 'browse.pageLeft' : 'browse.pagesLeft', { n: `${pagesLeft}${shown.total?.floor ? '+' : ''}` })}</p>
       {/if}
-      {#if !shown.partial || !mounted || failedFor === data}
+      {#if !mounted || failedFor === data}
         <a class="button" href={more} aria-busy={busy} onclick={appendOnClick}>{t(shown.partial ? 'browse.continueSearch' : 'browse.more')}</a>
       {/if}
     </div>
   {/if}
-  {#if !data.searchError && data.pages && data.pages > 1 && shown.tiles.length}<div class="pager foot">{@render turner('page-foot')}</div>{/if}
+  {#if !data.searchError && paging && data.pages && data.pages > 1 && shown.tiles.length}<div class="pager foot">{@render turner('page-foot')}</div>{/if}
 </div>
 <style>
   /* The list loads on as it scrolls, so its footer is out of reach; the chats sit under the heading. */
@@ -587,6 +599,7 @@
   .pager { display:flex; flex-wrap:wrap; align-items:center; gap:8px 20px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums }
   .foot { justify-content:flex-end }
   .sizes { display:flex; flex-wrap:wrap; align-items:center; gap:2px } .sizes span { margin-inline-end:6px } .sizes .chip { justify-content:center; min-inline-size:34px; padding-inline:8px }
+  .views button.chip { font:inherit; border:0; background:none } .views button.chip.on { background:var(--surface-selected) }
   .range { margin:0; margin-inline-end:auto }
   .pages { display:flex; flex-wrap:wrap; align-items:center; gap:2px }
   .pages .chip { justify-content:center; min-inline-size:34px; padding-inline:8px } .pages .off { opacity:.35; cursor:default } .pages .off:hover { color:var(--muted) } .gap { padding-inline:4px }
