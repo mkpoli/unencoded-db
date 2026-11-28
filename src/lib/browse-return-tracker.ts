@@ -64,13 +64,13 @@ export class BrowseReturnTracker {
     if (event.toRoute === '/[locale]') {
       const clean = this.remember(event.toSearch ?? '')
       this.directFromBrowse = false
-      if (!this.returningEntry && event.type === 'popstate' && event.fromRoute === '/[locale]/entry/[id]' && event.fromEntryId) {
+      if (!this.returningEntry && event.type === 'popstate' && event.fromRoute === '/[locale]/[code=recordCode]' && event.fromEntryId) {
         this.returningEntry = { id: event.fromEntryId, scroll: false }
       }
       return clean
     }
 
-    if (event.toRoute === '/[locale]/entry/[id]') {
+    if (event.toRoute === '/[locale]/[code=recordCode]') {
       if (event.type === 'popstate') {
         const recorded = this.entries.get(this.cursor)
         if (recorded) {

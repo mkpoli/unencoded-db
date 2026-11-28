@@ -1,3 +1,10 @@
+export const SHARE_ORIGIN = 'https://mkpo.li'
+
+/** Builds the short share link on `mkpo.li` using the record's uppercase hexadecimal code. */
+export function shortShareUrl(id: number) {
+  return `${SHARE_ORIGIN}/r/${id.toString(16).toUpperCase().padStart(4, '0')}`
+}
+
 // Existing root pages and language codes start with lowercase letters. The first digit of
 // a record code uses the complementary alphabet, with the full alphabet available afterward.
 const INITIAL = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'

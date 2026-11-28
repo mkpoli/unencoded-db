@@ -29,7 +29,7 @@
 {#snippet witnessPill(item: { id: number; entry_id: number; title: string | null; place: string; original_date: string | null; report_date: string | null; thumb_key: string | null })}
   {@const sameEntry = item.entry_id === entryId}
   {@const date = witnessDate(item)}
-  <a class="pill witness" href={sameEntry ? `#sighting-${item.id}` : href(`/entry/${item.entry_id}#sighting-${item.id}`)}>
+  <a class="pill witness" href={sameEntry ? `#sighting-${item.id}` : href(`/${recordCode(item.entry_id)}#sighting-${item.id}`)}>
     {#if item.thumb_key}<img class="thumb" src={media(item.thumb_key)} width="20" height="20" alt="" loading="lazy" decoding="async" />{/if}
     <span class="name">{item.title || item.place || `#${item.id}`}</span>
     {#if date}<span class="year"><EvidenceDate text={date} reading={dates?.get(date)} /></span>{/if}
@@ -64,9 +64,9 @@
                   <span class="tag">{t('cite.unseen')}</span>
                 </span>
               {/if}
-              <a class="text-link small add-link" href={href(`/entry/${entryId}/sighting/new`)}>{t('cite.addWitness')}</a>
+              <a class="text-link small add-link" href={href(`/${recordCode(entryId)}/sighting/new`)}>{t('cite.addWitness')}</a>
             {:else if cite.status === 'removed' && cite.target}
-              <a class="pill removed" href={href(`/entry/${cite.target.entry_id}/history`)}>
+              <a class="pill removed" href={href(`/${recordCode(cite.target.entry_id)}/history`)}>
                 <span class="name">{named || cite.target.title || cite.target.place || `#${cite.target.id}`}</span>
                 <span class="tag">{t('cite.removed')}</span>
               </a>

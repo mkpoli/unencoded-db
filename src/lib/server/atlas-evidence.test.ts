@@ -84,7 +84,7 @@ function fakeR2() {
 
 const baseSighting: SightingFields = {
   place: 'Initial source', url: 'https://example.test/initial', title: 'Initial', author: null, publisher: null,
-  report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null,
+  report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null,
   contexts: null, style: null, types: null, note: null, quotes: null,
 }
 
@@ -184,6 +184,8 @@ test('mapStyle, mapContexts, computeBox and mapCropToSighting translate Glyph At
   expect(mapped.style).toBe('regular')
   expect(mapped.contexts).toBe('["running_text"]')
   expect(mapped.types).toBe('["attestation"]')
+  // A crop can come from a compilation such as this encyclopaedia, so its closeness is left unsaid.
+  expect(mapped.closeness).toBeNull()
   expect(mapped.vias).toHaveLength(2)
   expect(mapped.vias[0]).toMatchObject({ url: 'https://honkoku.org/app/#/transcription/abc/1/42', container: 'みんなで翻刻' })
   expect(mapped.vias[1]).toMatchObject({ url: 'https://glyphatlas.org/crop/k3x9a2', container: 'Glyph Atlas', publisher: 'Glyph Atlas' })

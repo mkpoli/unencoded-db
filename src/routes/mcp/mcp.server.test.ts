@@ -112,6 +112,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
     readings: [{ text: 'tōge', doculect: 'ja', meanings: [1], evidence: [1, 2] }],
     creators: [{ name: '陸貫一', evidence: [2] }],
     encodings: [{ charset: 'unicode', code: 'U+5D20' }],
+    documents: [{ doc: 'l2/25-056', page: '12' }],
     related: [{ character: '峠', relationship: 'variant', difference: 'right side', readings: [1] }],
     categories: ['kokuji'], tags: ['han', 'signage'],
     sightings: [
@@ -119,7 +120,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
       { place: 'A dictionary', title: 'Book', author: 'Someone', report_date: '1936', page: '12', types: ['definition', 'reading'], contexts: ['running_text', 'heading'], vias: [{ url: 'https://example.test/post/1', author: '@poster', publisher: 'X', report_date: '2026-11-14', container: null, source_kind: null, quote: '書影 p. 3' }] },
     ],
   })
-  expect(added).toEqual({ failed: false, value: { id: 1, code: 'R+0001', url: `${ORIGIN}/entry/1` } })
+  expect(added).toEqual({ failed: false, value: { id: 1, code: 'R+0001', url: `${ORIGIN}/R+0001` } })
   expect(asked).toEqual(['https://img.example/sign.png'])
   // Some image hosts refuse a request without one.
   expect(agents.at(-1)).toBe(`GlyphAtlasRare/1.0 (+${ORIGIN}/mcp)`)
@@ -127,7 +128,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
   expect(raw.query('SELECT ids, status, sightings, first_year FROM entries').get()).toEqual({ ids: '⿰山東', status: 'encoded', sightings: 2, first_year: '1936' })
   expect(raw.query('SELECT box, image_w FROM sighting_media').get()).toEqual({ box: '[[1,1,6,6]]', image_w: 10 })
   const claims = raw.query('SELECT key, kind, value, sightings, under FROM claims ORDER BY position').all() as { key: string; kind: string; value: string; sightings: string; under: string }[]
-  expect(claims.map(claim => [claim.kind, claim.value])).toEqual([['ids', '⿰山東'], ['ids', '⿰山⿻日木'], ['reading', 'tōge'], ['meaning', 'mountain pass'], ['encoding', 'U+5D20'], ['relation', '峠'], ['tag', 'kokuji'], ['tag', 'han'], ['tag', 'signage'], ['creator', '陸貫一']])
+  expect(claims.map(claim => [claim.kind, claim.value])).toEqual([['ids', '⿰山東'], ['ids', '⿰山⿻日木'], ['reading', 'tōge'], ['meaning', 'mountain pass'], ['encoding', 'U+5D20'], ['document', 'L2/25-056'], ['relation', '峠'], ['tag', 'kokuji'], ['tag', 'han'], ['tag', 'signage'], ['creator', '陸貫一']])
   const of = (kind: string) => claims.find(claim => claim.kind === kind)!
   expect(JSON.parse(of('meaning').sightings)).toEqual([2])
   expect(JSON.parse(of('reading').sightings)).toEqual([1, 2])
@@ -146,6 +147,7 @@ test('a record is added with its claims, sightings and fetched pictures', async 
     ],
   })
   expect(read.value.claims.find((claim: { kind: string }) => claim.kind === 'reading')).toMatchObject({ value: 'tōge', data: { doculect: 'ja' }, evidence: [1, 2] })
+  expect(read.value.claims.find((claim: { kind: string }) => claim.kind === 'document')).toMatchObject({ value: 'L2/25-056', data: { page: '12' } })
 })
 
 test('a form that cannot be described is added without ids', async () => {
@@ -231,6 +233,7 @@ test('what cannot be saved is refused whole', async () => {
   expect(await refused({ related: [{ character: '峠', relationship: 'cousin' }] })).toContain('relationship is one of')
   expect(await refused({ categories: ['poetry'] })).toContain('categories is one of')
   expect(await refused({ encodings: [{ charset: '', code: 'U+5D20' }] })).toContain('character set')
+  expect(await refused({ documents: [{ doc: 'not-a-doc' }] })).toContain('L2')
   expect(await refused({ ivd: 'U+4E00' })).toContain('IVD')
   // A picture that fails after another was fetched leaves neither behind.
   expect(await refused({ sightings: [{ ...sighting, pictures: [{ url: 'https://img.example/a.png' }, { url: 'https://img.example/b.txt' }] }] })).toContain('b.txt')
@@ -332,7 +335,7 @@ test('a sighting is added to a record, with a picture the site already shows', a
   await call('add_record', { ids: ['⿰山西'], sightings: [sighting] })
   const shown = (await call('get_record', { record: 1 })).value.sightings[0].pictures[0].url as string
   const added = await call('add_sighting', { record: 'R+0002', place: 'The same sign', pictures: [{ url: shown }], original_date: '1920' })
-  expect(added).toEqual({ failed: false, value: { record: { id: 2, code: 'R+0002', url: `${ORIGIN}/entry/2` }, sighting: 3 } })
+  expect(added).toEqual({ failed: false, value: { record: { id: 2, code: 'R+0002', url: `${ORIGIN}/R+0002` }, sighting: 3 } })
   expect(asked).toEqual(['https://img.example/sign.png'])
   expect(raw.query('SELECT sightings, first_year, cover_key IS NOT NULL AS covered FROM entries WHERE id = 2').get()).toEqual({ sightings: 2, first_year: '1920', covered: 1 })
 
@@ -348,7 +351,7 @@ test('a sighting is added to a record, with a picture the site already shows', a
   const moderator = (raw.query('SELECT id FROM people LIMIT 1').get() as { id: string }).id
   await mergeEntry(db, 2, 1, { actor: moderator, ip: null }, null)
   expect(await call('add_sighting', { record: 2, url: 'https://example.test/x' })).toMatchObject({ failed: true, value: expect.stringContaining('R+0001') })
-  expect((await call('get_record', { record: 2 })).value).toEqual({ id: 2, code: 'R+0002', url: `${ORIGIN}/entry/2`, merged_into: { id: 1, code: 'R+0001', url: `${ORIGIN}/entry/1` } })
+  expect((await call('get_record', { record: 2 })).value).toEqual({ id: 2, code: 'R+0002', url: `${ORIGIN}/R+0002`, merged_into: { id: 1, code: 'R+0001', url: `${ORIGIN}/R+0001` } })
   expect(count('sightings')).toBe(3)
 })
 
@@ -358,8 +361,8 @@ test('records are found by description, by word and by parts', async () => {
   await call('add_record', { ids: ['⿱山東'], sightings: [{ ...sighting, title: 'Gazetteer' }] })
   await call('add_record', { ids: ['⿰氵西'], sightings: [sighting] })
   expect((await call('find_similar_records', { ids: '⿰山東' })).value).toEqual({
-    same: [{ id: 1, code: 'R+0001', url: `${ORIGIN}/entry/1`, ids: '⿰山東' }],
-    similar: [{ id: 2, code: 'R+0002', url: `${ORIGIN}/entry/2`, ids: '⿱山東' }],
+    same: [{ id: 1, code: 'R+0001', url: `${ORIGIN}/R+0001`, ids: '⿰山東' }],
+    similar: [{ id: 2, code: 'R+0002', url: `${ORIGIN}/R+0002`, ids: '⿱山東' }],
   })
   expect((await call('find_similar_records', { ids: '⿰木木' })).value).toEqual({ same: [], similar: [] })
   expect((await call('find_similar_records', {})).failed).toBe(true)
@@ -414,7 +417,7 @@ test('a record is edited field by field, against the revision read', async () =>
   expect(read.rev).toBe(1)
   const meaning = read.claims.find((claim: { kind: string }) => claim.kind === 'meaning')
   // Only the codes change; the readings, meanings and their evidence stay.
-  expect(await call('edit_record', { record: 'R+0001', rev: 1, encodings: [{ charset: 'unicode', code: 'U+2C9E7' }], summary: 'Encoded as U+2C9E7.' })).toEqual({ failed: false, value: { record: { id: 1, code: 'R+0001', url: `${ORIGIN}/entry/1` }, rev: 2 } })
+  expect(await call('edit_record', { record: 'R+0001', rev: 1, encodings: [{ charset: 'unicode', code: 'U+2C9E7' }], summary: 'Encoded as U+2C9E7.' })).toEqual({ failed: false, value: { record: { id: 1, code: 'R+0001', url: `${ORIGIN}/R+0001` }, rev: 2 } })
   const after = (await call('get_record', { record: 1 })).value
   expect(after.rev).toBe(2)
   expect(after.claims.filter((claim: { kind: string }) => claim.kind !== 'encoding')).toEqual(read.claims)
@@ -459,6 +462,21 @@ test('a sighting is edited field by field, keeping or replacing its pictures', a
   expect(await call('edit_sighting', { record: 1, sighting: read.id, rev: 4, pictures: [], vias: [], place: '' })).toMatchObject({ failed: true, value: expect.stringContaining('picture or a link') })
   expect(await call('edit_sighting', { record: 1, sighting: read.id, rev: 1, note: 'Stale.' })).toMatchObject({ failed: true, value: expect.stringContaining('rev 4') })
   expect(await call('edit_sighting', { record: 1, sighting: 999, rev: 1 })).toMatchObject({ failed: true, value: expect.stringContaining(`Its sightings: ${read.id}`) })
+})
+
+test('a sighting says how close it is to the original, and an edit keeps it until it is cleared', async () => {
+  const { call, raw } = fixture()
+  expect((await call('add_record', { ids: ['⿰舟覽'], sightings: [{ ...sighting, closeness: 'primary' }, { place: 'A dictionary', url: 'https://example.test/dict', closeness: 'secondary_uncited' }] })).failed).toBe(false)
+  expect(raw.query('SELECT closeness FROM sightings ORDER BY id').all()).toEqual([{ closeness: 'primary' }, { closeness: 'secondary_uncited' }])
+  expect((await call('add_sighting', { record: 1, url: 'https://example.test/chat', closeness: 'memory' })).failed).toBe(false)
+  const read = (await call('get_record', { record: 1 })).value.sightings
+  expect(read.map((item: { closeness: string | null }) => item.closeness)).toEqual(['primary', 'secondary_uncited', 'memory'])
+  expect((await call('edit_sighting', { record: 1, sighting: read[1].id, rev: 1, note: 'Checked.' })).failed).toBe(false)
+  expect((await call('get_record', { record: 1 })).value.sightings[1].closeness).toBe('secondary_uncited')
+  expect((await call('edit_sighting', { record: 1, sighting: read[1].id, rev: 2, closeness: 'secondary_cited' })).failed).toBe(false)
+  expect((await call('edit_sighting', { record: 1, sighting: read[0].id, rev: 1, closeness: '' })).failed).toBe(false)
+  expect(raw.query('SELECT closeness FROM sightings ORDER BY id').all()).toEqual([{ closeness: null }, { closeness: 'secondary_cited' }, { closeness: 'memory' }])
+  expect(await call('add_sighting', { record: 1, url: 'https://example.test/other', closeness: 'tertiary' })).toMatchObject({ failed: true, value: expect.stringContaining('closeness is one of: primary, secondary_cited, secondary_uncited, memory') })
 })
 
 test('an agent\'s edit keeps the pictures of the chain, which it cannot send', async () => {

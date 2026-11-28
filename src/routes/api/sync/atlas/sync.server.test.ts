@@ -7,7 +7,7 @@ import { POST } from './+server'
 
 const baseSighting: SightingFields = {
   place: 'Seed', url: 'https://example.test/seed', title: 'Seed', author: null, publisher: null,
-  report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null,
+  report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null,
   contexts: null, style: null, types: null, note: null, quotes: null,
 }
 

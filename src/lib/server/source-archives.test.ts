@@ -6,7 +6,7 @@ import { archivesOfSources, editSourceArchive, sourceArchiveChanges, sourceArchi
 import { openTestDb } from './testdb'
 
 const fields: EntryFields = { description: null, radical: null, strokes: null, claims: [] }
-const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: '甲', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
+const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: '甲', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
 const copy = 'https://web.archive.org/web/20240101000000/https://example.org/post/1'
 
 let db: D1Database, raw: ReturnType<typeof openTestDb>['raw'], who: { actor: string; ip: null }
@@ -135,7 +135,8 @@ test('a record page reads the copies of the public sources it cites, works and g
   expect(await archivesOfSources(traced, [])).toEqual(new Map())
   expect(sent).toHaveLength(1)
   // The record page passes every source its visible evidence cites.
-  const { load } = await import('../../routes/[locale]/entry/[id]/+page.server')
-  const page = await load({ params: { locale: 'en', id: String(entry) }, url: new URL(`https://example.test/en/entry/${entry}`), locals: { person: null }, platform: { env: { DB: db } } } as never) as { archives: Map<number, string[]> }
+  const { load } = await import('../../routes/[locale]/[code=recordCode]/+page.server')
+  const { recordCode } = await import('../code')
+  const page = await load({ params: { locale: 'en', code: recordCode(entry) }, url: new URL(`https://example.test/en/${recordCode(entry)}`), locals: { person: null }, platform: { env: { DB: db } } } as never) as { archives: Map<number, string[]> }
   expect([...page.archives]).toEqual([[work, ['https://archive.ph/AbCd', copy]], [second, ['https://archive.ph/Zz']]])
 })

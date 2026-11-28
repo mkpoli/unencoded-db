@@ -4,6 +4,7 @@ import { quotations } from '$lib/quotations'
 import { CLAIM_KINDS, claimsOf, primaryLayoutOf, scopesOf, type Claim } from '$lib/claims'
 import { recordCode } from '$lib/code'
 import { parseContexts, parseSightingTypes } from '$lib/scripts'
+import { formatDocument } from '$lib/unicode-docs'
 import { exportIndexPage, exportPage, parseMarks, SIGHTING_FIELDS, type ExportEntry, type Sighting } from './entries'
 
 export const DATASET_VERSION = 2
@@ -190,15 +191,19 @@ const csvCell = (value: unknown) => {
 // `東 (usage) [under: east | cmn:dōng] [evidence: #3 #7]`. The JSON form carries what else a claim holds.
 const ENTRY_COLUMNS = ['description', 'status', 'radical', 'strokes'] as const
 const BULK_ENTRY_COLUMNS = [...ENTRY_COLUMNS, 'created_by_name', 'created_by_agent', 'created_by_model'] as const
-const csvColumns = (bulk: boolean) => ['entry_id', ...(bulk ? ['record_code'] as const : []), ...(bulk ? BULK_ENTRY_COLUMNS : ENTRY_COLUMNS), ...CLAIM_KINDS, 'sighting_id', ...SIGHTING_FIELDS, 'vias', 'images', 'cites']
+// A column added later goes last, so a reader that counts columns keeps reading the ones it knew.
+export const CSV_SIGHTING_FIELDS = SIGHTING_FIELDS.filter(field => field !== 'closeness')
+const csvColumns = (bulk: boolean) => ['entry_id', ...(bulk ? ['record_code'] as const : []), ...(bulk ? BULK_ENTRY_COLUMNS : ENTRY_COLUMNS), ...CLAIM_KINDS, 'sighting_id', ...CSV_SIGHTING_FIELDS, 'vias', 'images', 'cites', 'closeness']
 
 const said = (claim: Claim) => claim.kind === 'encoding'
   ? `${claim.data?.charset}:${claim.value}`
-  : claim.kind === 'relation'
-    ? `${claim.value} (${claim.data?.relationship})`
-    : claim.kind === 'reading' && claim.data?.doculect
-      ? `${claim.data.doculect}:${claim.value}`
-      : claim.value
+  : claim.kind === 'document'
+    ? [formatDocument(claim.value, typeof claim.data?.page === 'string' ? claim.data.page : null), typeof claim.data?.url === 'string' ? claim.data.url : ''].filter(Boolean).join(' ')
+    : claim.kind === 'relation'
+      ? `${claim.value} (${claim.data?.relationship})`
+      : claim.kind === 'reading' && claim.data?.doculect
+        ? `${claim.data.doculect}:${claim.value}`
+        : claim.value
 
 export const csvHeader = (bulk = true) => csvColumns(bulk).map(csvCell).join(',') + '\r\n'
 
@@ -219,10 +224,11 @@ export function csvRows(entries: readonly ExportEntry[], bulk = true) {
       ...entryColumns.map(field => entry[field]),
       ...stated,
       sighting?.id,
-      ...SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : field === 'contexts' ? parseContexts(sighting?.contexts).join(', ') : sighting?.[field]),
+      ...CSV_SIGHTING_FIELDS.map(field => field === 'types' ? parseSightingTypes(sighting?.types).join(', ') : field === 'contexts' ? parseContexts(sighting?.contexts).join(', ') : sighting?.[field]),
       sighting ? JSON.stringify(sighting.vias) : '',
       sighting?.media.map(image => image.image_key).join('; '),
       sighting ? JSON.stringify(sighting.cites ?? []) : '',
+      sighting?.closeness,
     ]).map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n'
   }).join('')
 }

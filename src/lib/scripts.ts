@@ -24,6 +24,20 @@ export const SOURCE_KINDS = ['personal'] as const
 export type SourceKind = (typeof SOURCE_KINDS)[number]
 export const sourceKind = (raw: string | null | undefined): SourceKind | null => SOURCE_KINDS.find(kind => kind === raw) ?? null
 
+// How close a sighting stands to the original: the work itself or a direct reproduction of it (a photo, a scan, a
+// rubbing, a tracing, a line drawing); a compilation, a dictionary or a typeset transcription that names its own
+// source, or one that names none; or a form given from memory. One work can hold entries of either secondary kind.
+export const CLOSENESS = ['primary', 'secondary_cited', 'secondary_uncited', 'memory'] as const
+export type Closeness = (typeof CLOSENESS)[number]
+export const closenessOf = (raw: string | null | undefined): Closeness | null => CLOSENESS.find(kind => kind === raw) ?? null
+// Evidence is read closest first: primary, then evidence nobody has judged, then the secondary kinds and memory.
+const CLOSENESS_RANK: Record<Closeness, number> = { primary: 0, secondary_cited: 2, secondary_uncited: 3, memory: 4 }
+export const closenessRank = (raw: string | null | undefined) => { const kind = closenessOf(raw); return kind ? CLOSENESS_RANK[kind] : 1 }
+// Only a primary sighting, or one nobody has judged, dates the work it reproduces; any other is dated by its report.
+export const datesOriginal = (raw: string | null | undefined) => closenessRank(raw) <= 1
+// The same rule in SQL: a sighting's original date where it dates the sighting, else null.
+export const datingOriginal = (alias: string) => `CASE WHEN ${alias}.closeness IS NULL OR ${alias}.closeness = 'primary' THEN ${alias}.original_date END`
+
 // A sighting stores the options chosen from a list as a JSON array in the order of the list, or null for none.
 function parseChosen<T extends string>(options: readonly T[], raw: string | null | undefined): T[] {
   try {

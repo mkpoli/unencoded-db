@@ -105,7 +105,7 @@ When an agent presents a bearer token belonging to an unbanned moderator, `tools
 |---|---|
 | `entries` | One character: script, status, description, radical, strokes, and the summary a gallery tile draws |
 | `claims` | What a record states more than once: description sequences, composition, readings, meanings, codes, related characters, IVD, categories, collections, tags, creators |
-| `sightings` | One place the character was seen: where, page, date, contexts, style, source types |
+| `sightings` | One place the character was seen: where, page, date, contexts, style, source types, closeness to the original |
 | `sources` | A citation, stored once however many sightings give it. A sighting cites the work the character appears in and can name the sources it was found through |
 | `sighting_via_media` | The pictures of a go-between itself, by its place in the chain |
 | `sighting_cites` | Directed provenance links from a sighting to an older work it quotes, re-sets as a later edition, or derives from |

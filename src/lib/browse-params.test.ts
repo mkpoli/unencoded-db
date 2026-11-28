@@ -123,7 +123,7 @@ test('BrowseReturnTracker keeps older record tied to its own search across brows
     fromRoute: '/[locale]',
     fromLocale: 'zh-Hant',
     fromSearch: '?q=alpha&tag=han',
-    toRoute: '/[locale]/entry/[id]',
+    toRoute: '/[locale]/[code=recordCode]',
     toLocale: 'zh-Hant',
   })
   expect(tracker.savedSearch).toBe('?q=alpha&tag=han')
@@ -132,7 +132,7 @@ test('BrowseReturnTracker keeps older record tied to its own search across brows
   // Navigate to browse B
   tracker.track({
     type: 'link',
-    fromRoute: '/[locale]/entry/[id]',
+    fromRoute: '/[locale]/[code=recordCode]',
     fromLocale: 'zh-Hant',
     toRoute: '/[locale]',
     toLocale: 'zh-Hant',
@@ -148,7 +148,7 @@ test('BrowseReturnTracker keeps older record tied to its own search across brows
     fromRoute: '/[locale]',
     fromLocale: 'zh-Hant',
     fromSearch: '?q=beta',
-    toRoute: '/[locale]/entry/[id]',
+    toRoute: '/[locale]/[code=recordCode]',
     toLocale: 'zh-Hant',
   })
   expect(tracker.savedSearch).toBe('?q=alpha&tag=han')
@@ -163,7 +163,7 @@ test('BrowseReturnTracker handles hashchange, multi-hop history links, and reloa
     fromRoute: '/[locale]',
     fromLocale: 'en',
     fromSearch: '?q=wood',
-    toRoute: '/[locale]/entry/[id]',
+    toRoute: '/[locale]/[code=recordCode]',
     toLocale: 'en',
   })
   expect(tracker.directFromBrowse).toBe(true)
@@ -174,19 +174,19 @@ test('BrowseReturnTracker handles hashchange, multi-hop history links, and reloa
   expect(tracker.savedSearch).toBe('?q=wood')
 
   // Multi-hop link from history back to record keeps search without history.back()
-  tracker.track({ type: 'link', fromRoute: '/[locale]/entry/[id]', toRoute: '/[locale]/entry/[id]/history' })
-  tracker.track({ type: 'link', fromRoute: '/[locale]/entry/[id]/history', toRoute: '/[locale]/entry/[id]' })
+  tracker.track({ type: 'link', fromRoute: '/[locale]/[code=recordCode]', toRoute: '/[locale]/[code=recordCode]/history' })
+  tracker.track({ type: 'link', fromRoute: '/[locale]/[code=recordCode]/history', toRoute: '/[locale]/[code=recordCode]' })
   expect(tracker.directFromBrowse).toBe(false)
   expect(tracker.savedSearch).toBe('?q=wood')
 
   // Reload on record hydrates saved search and survives browse B -> Back
   const reloaded = new BrowseReturnTracker()
-  reloaded.track({ type: 'enter', fromRoute: null, toRoute: '/[locale]/entry/[id]', toLocale: 'en' })
+  reloaded.track({ type: 'enter', fromRoute: null, toRoute: '/[locale]/[code=recordCode]', toLocale: 'en' })
   reloaded.hydrate('?q=wood&tag=han', null)
   expect(reloaded.savedSearch).toBe('?q=wood&tag=han')
   expect(reloaded.directFromBrowse).toBe(false)
-  reloaded.track({ type: 'link', fromRoute: '/[locale]/entry/[id]', toRoute: '/[locale]', toLocale: 'en', toSearch: '?q=other' })
-  reloaded.track({ type: 'popstate', delta: -1, fromRoute: '/[locale]', fromLocale: 'en', fromSearch: '?q=other', toRoute: '/[locale]/entry/[id]', toLocale: 'en' })
+  reloaded.track({ type: 'link', fromRoute: '/[locale]/[code=recordCode]', toRoute: '/[locale]', toLocale: 'en', toSearch: '?q=other' })
+  reloaded.track({ type: 'popstate', delta: -1, fromRoute: '/[locale]', fromLocale: 'en', fromSearch: '?q=other', toRoute: '/[locale]/[code=recordCode]', toLocale: 'en' })
   expect(reloaded.savedSearch).toBe('?q=wood&tag=han')
   expect(reloaded.directFromBrowse).toBe(false)
 })
@@ -194,26 +194,26 @@ test('BrowseReturnTracker handles hashchange, multi-hop history links, and reloa
 test('BrowseReturnTracker records returning entry for highlight and multi-hop scroll', () => {
   const tracker = new BrowseReturnTracker()
   tracker.track({ type: 'enter', fromRoute: null, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '?q=wood' })
-  tracker.track({ type: 'link', fromRoute: '/[locale]', fromLocale: 'zh-Hant', fromSearch: '?q=wood', toRoute: '/[locale]/entry/[id]', toLocale: 'zh-Hant' })
+  tracker.track({ type: 'link', fromRoute: '/[locale]', fromLocale: 'zh-Hant', fromSearch: '?q=wood', toRoute: '/[locale]/[code=recordCode]', toLocale: 'zh-Hant' })
 
   // Direct return via ← 記錄 highlights without overriding browser/snapshot scroll
   tracker.markReturning(42, false)
-  tracker.track({ type: 'popstate', delta: -1, fromRoute: '/[locale]/entry/[id]', fromEntryId: 42, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '?q=wood' })
+  tracker.track({ type: 'popstate', delta: -1, fromRoute: '/[locale]/[code=recordCode]', fromEntryId: 42, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '?q=wood' })
   expect(tracker.consumeReturning()).toEqual({ id: 42, scroll: false })
   expect(tracker.consumeReturning()).toBeNull()
 
   // Browser Back from record without clicking ← 記錄 still highlights the tile
-  tracker.track({ type: 'link', fromRoute: '/[locale]', fromLocale: 'zh-Hant', fromSearch: '?q=wood', toRoute: '/[locale]/entry/[id]', toLocale: 'zh-Hant' })
-  tracker.track({ type: 'popstate', delta: -1, fromRoute: '/[locale]/entry/[id]', fromEntryId: 77, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '?q=wood' })
+  tracker.track({ type: 'link', fromRoute: '/[locale]', fromLocale: 'zh-Hant', fromSearch: '?q=wood', toRoute: '/[locale]/[code=recordCode]', toLocale: 'zh-Hant' })
+  tracker.track({ type: 'popstate', delta: -1, fromRoute: '/[locale]/[code=recordCode]', fromEntryId: 77, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '?q=wood' })
   expect(tracker.consumeReturning()).toEqual({ id: 77, scroll: false })
 
   // Multi-hop return via ← 記錄 marks scroll: true so the browse grid centers the tile
   tracker.markReturning(99, true)
-  tracker.track({ type: 'link', fromRoute: '/[locale]/entry/[id]', fromEntryId: 99, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '?q=wood' })
+  tracker.track({ type: 'link', fromRoute: '/[locale]/[code=recordCode]', fromEntryId: 99, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '?q=wood' })
   expect(tracker.consumeReturning()).toEqual({ id: 99, scroll: true })
 
   // Clicking top-nav Records (plain link without markReturning) does not highlight or scroll
-  tracker.track({ type: 'link', fromRoute: '/[locale]/entry/[id]', fromEntryId: 99, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '' })
+  tracker.track({ type: 'link', fromRoute: '/[locale]/[code=recordCode]', fromEntryId: 99, toRoute: '/[locale]', toLocale: 'zh-Hant', toSearch: '' })
   expect(tracker.consumeReturning()).toBeNull()
 })
 

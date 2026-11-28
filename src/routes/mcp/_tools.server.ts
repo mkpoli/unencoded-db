@@ -16,7 +16,7 @@ import { ADD_SIGHTINGS_MAX, BOXES_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib
 import { REGISTRIES } from '$lib/registries'
 import { RELATION_KINDS } from '$lib/related'
 import { dateOrderWarnings } from '$lib/cites'
-import { CITE_KINDS, CITES_MAX, CONTEXTS, parseContexts, parseSightingTypes, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX, type CiteKind } from '$lib/scripts'
+import { CITE_KINDS, CITES_MAX, CLOSENESS, CONTEXTS, datingOriginal, parseContexts, parseSightingTypes, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX, type CiteKind } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
 import { addComment, cleanComment, commentsOf, setCommentHidden } from '$lib/server/comments'
 import { tagList, taxonomy } from '$lib/server/tags'
@@ -86,7 +86,7 @@ function recordId(value: unknown) {
 }
 // A record's page without a locale opens in the reader's language.
 const shownPicture = (event: RequestEvent, picture: ViaPicture) => ({ url: `${event.url.origin}/media/v2/${picture.image_key}`, width: picture.image_w, height: picture.image_h })
-const shown = (event: RequestEvent, id: number) => ({ id, code: recordCode(id), url: `${event.url.origin}/entry/${id}` })
+const shown = (event: RequestEvent, id: number) => ({ id, code: recordCode(id), url: `${event.url.origin}/${recordCode(id)}` })
 
 // ---------- Writes ----------
 
@@ -339,6 +339,7 @@ function sightingForm(input: Json) {
   for (const name of ['place', 'title', 'author', 'publisher', 'report_date', 'container', 'original_date', 'page', 'note']) put(name, text(input[name]))
   put('source_kind', choice(input.source_kind, SOURCE_KINDS, 'source_kind'))
   put('style', choice(input.style, STYLES, 'style'))
+  put('closeness', choice(input.closeness, CLOSENESS, 'closeness'))
   for (const context of items(input.contexts)) form.append('contexts', choice(context, CONTEXTS, 'contexts'))
   for (const type of items(input.types)) form.append('types', choice(type, SIGHTING_TYPES, 'types'))
   const quotes = items(input.quotes)
@@ -373,7 +374,7 @@ async function citeDateWarnings(db: D1Database, list: readonly SightingFields[])
     const targetIds = [...new Set(list.flatMap(fields => (fields.cites ?? []).map(cite => cite.sighting)).filter((id): id is number => id !== null))]
     const targets = new Map<number, { report_date: string | null; original_date: string | null }>()
     if (targetIds.length) {
-      const { results } = await db.prepare(`SELECT s.id, s.original_date, c.report_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.id IN (${targetIds.map(() => '?').join(', ')})`).bind(...targetIds).all<{ id: number; original_date: string | null; report_date: string | null }>()
+      const { results } = await db.prepare(`SELECT s.id, ${datingOriginal('s')} AS original_date, c.report_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.id IN (${targetIds.map(() => '?').join(', ')})`).bind(...targetIds).all<{ id: number; original_date: string | null; report_date: string | null }>()
       for (const row of results) targets.set(row.id, row)
     }
     const allDates = [...sightingDates(list), ...[...targets.values()].flatMap(target => [target.report_date, target.original_date])]
@@ -464,6 +465,10 @@ function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) 
 
   if (given('encodings')) form.set('encodings_present', '1')
   for (const encoding of items(input.encodings).map(record)) { form.append('encoding_charset', text(encoding.charset)); form.append('encoding_code', text(encoding.code)) }
+  if (given('documents')) form.set('documents_present', '1')
+  for (const doc of items(input.documents).map(row => typeof row === 'string' ? { doc: row } : record(row))) {
+    form.append('document_number', text(doc.doc)); form.append('document_page', text(doc.page)); form.append('document_url', text(doc.url))
+  }
   if (given('ivd')) {
     const ivd = text(input.ivd).trim()
     form.set('ivd_status', !ivd ? '' : ivd === 'none' ? 'none' : 'registered')
@@ -616,7 +621,7 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   const rawCites = await rawCitesOfSighting(DB, sighting.id)
   const now: Json = {
     place: sighting.place, ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
-    original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, types: parseSightingTypes(sighting.types), note: sighting.note,
+    original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, types: parseSightingTypes(sighting.types), note: sighting.note, closeness: sighting.closeness,
     quotes: quotations(sighting.quotes), vias: sighting.vias.map(({ id: _, ...via }) => via),
     cites: rawCites,
   }
@@ -971,7 +976,7 @@ async function getRecord(event: RequestEvent, input: Json) {
       ...(sighting.hidden_at ? { hidden: true, removed: Boolean(sighting.removed_by) } : {}),
       place: sighting.place,
       ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
-      original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note,
+      original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note, closeness: sighting.closeness,
       vias: sighting.vias.map(({ id: source_id, pictures, ...via }) => ({ source_id, ...via, pictures: (pictures ?? []).map(picture => shownPicture(event, picture)) })),
       cites: sighting.cites.map(cite => ({
         kind: cite.kind,
@@ -1083,11 +1088,12 @@ const CITATION = {
 const SIGHTING = {
   place: { type: 'string', description: 'Where the character was found, in words that help someone find it again: a book and page, a street, a website.' },
   ...CITATION,
-  original_date: { type: 'string', description: 'The date of an older work shown in the picture, when the cited publication reproduces one. Written as report_date is.' },
+  original_date: { type: 'string', description: 'The date of an older work the picture reproduces directly: a photo, scan, facsimile, rubbing, tracing or line drawing of it in the cited publication. Leave it out for a typeset transcription (隸定) or a later dictionary citing an older text; report_date dates those. Written as report_date is.' },
   page: { type: 'string', description: 'Page, folio or volume within the work.' },
   contexts: { type: 'array', items: { type: 'string', enum: CONTEXTS }, description: 'How the character appears, in every way the source shows it.' },
   style: { type: 'string', enum: STYLES, description: 'The writing style.' },
   types: { type: 'array', items: { type: 'string', enum: SIGHTING_TYPES }, description: 'What the source provides: mention (discusses the character), attestation (uses it in a text), description (says how it is written), definition (gives a meaning), reading (gives a pronunciation), relation (names a variant or the same character).' },
+  closeness: { type: 'string', enum: [...CLOSENESS, ''], description: 'How close this sighting is to the original: primary (the work itself, or a photo, scan, rubbing, tracing or line drawing of it), secondary_cited (a compilation, dictionary or typeset transcription that names its own source for this form), secondary_uncited (one that names none), memory (given from memory, with no written witness). Leave it out when unsure. An empty string clears it.' },
   quotes: { type: 'array', maxItems: QUOTATIONS_MAX, items: { type: 'object', required: ['text'], properties: { text: { type: 'string' }, locator: { type: 'string' } } }, description: 'Quoted passages, each with an optional attribution or location in the source.' },
   note: { type: 'string', description: 'A note on this source.' },
   vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' }, pictures: { type: 'array', maxItems: MEDIA_MAX, description: `Pictures of this source, such as a screenshot of the post, from their addresses, without marks. A picture belongs to one source, the chain holds ${MEDIA_MAX} in all, and the source needs a citation.`, items: { oneOf: [{ type: 'string' }, { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string' } } }], description: 'Address of the image file itself.' } } } } },
@@ -1150,6 +1156,11 @@ function recordFields(evidence: Json, key?: Json) {
     encodings: { type: 'array', description: 'The character sets, dictionaries and glyph registries that hold the character.', items: { type: 'object', required: ['charset', 'code'], properties: {
       charset: { type: 'string', description: `One of ${REGISTRIES.map(registry => registry.id).join(', ')}, or another work's name.` },
       code: { type: 'string', description: 'The code as the work writes it, such as U+2D6DD for unicode.' },
+    } } },
+    documents: { type: 'array', description: 'Unicode (L2), IRG or WG2 documents that discuss the character.', items: { type: 'object', required: ['doc'], properties: {
+      doc: { type: 'string', description: 'Document number, such as L2/25-056, IRG N2850 or WG2 N5234.' },
+      page: { type: 'string', description: 'Page or section within the document.' },
+      url: { type: 'string', description: 'Direct http or https link to the document, when not using the default L2 link.' },
     } } },
     related: { type: 'array', items: { type: 'object', required: ['character', 'relationship'], properties: {
       ...own,

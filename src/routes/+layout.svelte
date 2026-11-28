@@ -3,6 +3,7 @@
   import { afterNavigate } from '$app/navigation'
   import { page } from '$app/state'
   import { onMount, tick } from 'svelte'
+  import { parseRecordUrlCode } from '$lib/code'
   import { LOCALES, LOCALE_NAMES, LOCALE_COOKIE } from '$lib/i18n'
   import { href, locale, t } from '$lib/t'
   import { cleanBrowseSearch } from '$lib/browse-params'
@@ -14,7 +15,8 @@
 
   const path = $derived(page.url.pathname.replace(/^\/[^/]+/, ''))
   const localeSearch = $derived(path === '' ? cleanBrowseSearch(page.url.search) : page.url.search)
-  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path === '/u' || path.startsWith('/u/') ? 'people' : path.startsWith('/duplicates') ? 'duplicates' : path.startsWith('/mcp') ? 'mcp' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || path.startsWith('/entry/') ? 'browse' : '')
+  const isRecord = $derived(parseRecordUrlCode(path.split('/')[1] ?? '') !== null)
+  const section = $derived(path.startsWith('/favourites') ? 'favourites' : path.startsWith('/data') ? 'data' : path === '/u' || path.startsWith('/u/') ? 'people' : path.startsWith('/duplicates') ? 'duplicates' : path.startsWith('/mcp') ? 'mcp' : path.startsWith('/history') ? 'history' : path.startsWith('/source') ? 'sources' : path.startsWith('/radicals') ? 'radicals' : path.startsWith('/tags') ? 'tags' : path.startsWith('/chronology') ? 'chronology' : path.startsWith('/fonts') ? 'fonts' : path.startsWith('/about') ? 'about' : path === '' || path === '/' || isRecord ? 'browse' : '')
   $effect(() => { syncFavourites(data.person?.id ?? null, data.favourites) })
   type NavMode = 'full' | 'priority' | 'compact'
   let navMode = $state<NavMode>()

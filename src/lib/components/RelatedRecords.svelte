@@ -14,7 +14,7 @@
 <ul class="related">
   {#each records as { tile, relationships, stated, pictures } (tile.id)}
     <li>
-      <a class="record" href={href(`/entry/${tile.id}`)}>
+      <a class="record" href={href(`/${recordCode(tile.id)}`)}>
         <span class="plate">
           {#if tile.ids}<IdsGlyph ids={tile.ids} layout={tile.layout} />
           {:else if tile.cover_key}<img src={media(tile.cover_key)} alt="" loading="lazy" decoding="async" />{/if}
@@ -30,7 +30,7 @@
           {#each pictures as picture (picture.sighting)}
             {@const name = picture.title || picture.place}
             <li>
-              <a href="{href(`/entry/${tile.id}`)}#sighting-{picture.sighting}" title={name}>
+              <a href="{href(`/${recordCode(tile.id)}`)}#sighting-{picture.sighting}" title={name}>
                 <img src={media(picture.thumb_key)} alt={name} loading="lazy" decoding="async" />
                 <span class="caption"><span class="name">{name}</span>{#if picture.date}<span class="date"><EvidenceDate text={picture.date} reading={westernDate(picture.date)} /></span>{/if}</span>
               </a>

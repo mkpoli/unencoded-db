@@ -3,7 +3,7 @@ import { error, redirect } from '@sveltejs/kit'
 import { alsoSearch, counts, creatorCounts, creatorTag, cursorOf, decadeTag, exactSearchIds, facetTag, list, listTag, markTags, pageCount, pageCursor, pageOf, radicalTag, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, searchTotal, terms } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
 import { tileGlyphs } from '$lib/server/glyphs'
-import { parseRecordCode } from '$lib/code'
+import { parseRecordCode, recordCode } from '$lib/code'
 import { orderOf, pageSizeOf, seedOf } from '$lib/order'
 import type { PageServerLoad } from './$types'
 
@@ -69,7 +69,7 @@ export const load: PageServerLoad = async (event) => {
   ])
   const tag = requestedTag ? (tags.find(item => item.name === requestedTag || item.label === requestedTag || item.aliases.includes(requestedTag))?.name ?? requestedTag) : null
   const facet = collection ? `c:${collection}` : tag ? `t:${tag}` : null
-  if (named) redirect(303, `/${event.params.locale}/entry/${named.id}`)
+  if (named) redirect(303, `/${event.params.locale}/${recordCode(named.id)}`)
   // A whole description, or a query of parts alone, is also searched under the other spellings the browser found for it: ?also=, at most a few.
   const also = searchError ? [] : alsoSearch(query, searchParams.getAll('also'))
   const unplaced = { filter, facet, creator, radical, decade, within, without, query, also, order, seed, limit: per }
