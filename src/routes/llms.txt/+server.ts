@@ -39,6 +39,7 @@ ${tools}
 - [Radicals](${origin}/en/radicals): Browse records by radical
 - [Tags](${origin}/en/tags): Typed tag taxonomy
 - [Sources](${origin}/en/sources): Cited works and digitized copies
+- [Source quotation graph](${origin}/en/sources/graph): Work-to-work quotation lineage across cited sources
 - [Timeline](${origin}/en/chronology): Records ordered by earliest attestation
 `
 

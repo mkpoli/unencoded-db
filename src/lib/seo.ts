@@ -1,12 +1,13 @@
 import { parseRecordCode, recordCode } from './code'
 
 export const SITE_ORIGIN = 'https://rare.glyphatlas.org'
-export const PUBLIC_SECTIONS = ['', '/about', '/data', '/mcp', '/fonts', '/radicals', '/tags', '/chronology', '/sources'] as const
+export const PUBLIC_SECTIONS = ['', '/about', '/data', '/mcp', '/fonts', '/radicals', '/tags', '/chronology', '/sources', '/sources/graph'] as const
 
 const LIST_PARAMS: Record<string, readonly string[]> = {
   '': ['q', 'also', 'script', 'filter', 'genre', 'collection', 'tag', 'creator', 'radical', 'decade', 'in', 'out', 'sort', 'seed', 'after', 'page', 'per'],
   '/chronology': ['at', 'before', 'from'],
   '/sources': ['sort', 'after'],
+  '/sources/graph': ['source', 'citing', 'cited'],
 }
 
 export function isPublicPage(path: string): boolean {

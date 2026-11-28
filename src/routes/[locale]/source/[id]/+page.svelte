@@ -1,5 +1,6 @@
 <script lang="ts">
   import SourceQuotations from '$lib/components/SourceQuotations.svelte'
+  import SourceGraph from '$lib/components/SourceGraph.svelte'
   import EvidenceDate from '$lib/components/EvidenceDate.svelte'
   import Seo from '$lib/components/Seo.svelte'
   import IdsGlyph from '$lib/components/IdsGlyph.svelte'
@@ -8,7 +9,7 @@
   import ArchiveLinks from '$lib/components/ArchiveLinks.svelte'
   import { href, locale, t, when } from '$lib/t'
   import { kindName } from '$lib/source-kind'
-  import { sourceHeading } from '$lib/source-name'
+  import { sourceHeading, sourceName } from '$lib/source-name'
   import { recordCode } from '$lib/code'
   import { pictureAlt } from '$lib/picture'
   import { sourceData } from '$lib/structured-data'
@@ -99,6 +100,45 @@
     </details>
     {/if}
   </section>
+  {#if data.lineage.graph}
+    <section class="panel stack lineage" id="lineage">
+      <div class="row lineage-head">
+        <h2>{t('sourceGraph.lineage')}</h2>
+        <a class="text-link small" href={href(`/sources/graph?source=${source.id}`)}>{t('sourceGraph.full')} →</a>
+      </div>
+      <SourceGraph graph={data.lineage.graph} mode="strip" dates={data.dates} />
+      <div class="lineage-cols">
+        {#if data.lineage.cites.length}
+          <div class="stack lineage-col">
+            <h3>{t('sourceGraph.quotesWorks')}</h3>
+            <ul class="peer-list">
+              {#each data.lineage.cites as peer (peer.id)}
+                <li class="peer-row">
+                  <a class="text-link" href={href(`/source/${peer.id}`)}>{sourceName(peer, t).text}</a>
+                  <a class="badge peer-count" href={href(`/sources/graph?citing=${source.id}&cited=${peer.id}`)}>{t(peer.shared === 1 ? 'source.record' : 'source.records', { n: peer.shared })}</a>
+                </li>
+              {/each}
+            </ul>
+            {#if data.lineage.hasMoreCites}<a class="text-link small" href={href(`/sources/graph?source=${source.id}`)}>{t('sourceGraph.more')} →</a>{/if}
+          </div>
+        {/if}
+        {#if data.lineage.citedBy.length}
+          <div class="stack lineage-col">
+            <h3>{t('sourceGraph.quotedByWorks')}</h3>
+            <ul class="peer-list">
+              {#each data.lineage.citedBy as peer (peer.id)}
+                <li class="peer-row">
+                  <a class="text-link" href={href(`/source/${peer.id}`)}>{sourceName(peer, t).text}</a>
+                  <a class="badge peer-count" href={href(`/sources/graph?citing=${peer.id}&cited=${source.id}`)}>{t(peer.shared === 1 ? 'source.record' : 'source.records', { n: peer.shared })}</a>
+                </li>
+              {/each}
+            </ul>
+            {#if data.lineage.hasMoreCitedBy}<a class="text-link small" href={href(`/sources/graph?source=${source.id}`)}>{t('sourceGraph.more')} →</a>{/if}
+          </div>
+        {/if}
+      </div>
+    </section>
+  {/if}
   {#if data.sightings.length}
   <section class="stack">
     <div class="row"><h2>{t('entry.sightings')}</h2><span class="badge">{data.sightings.length}</span><span class="badge">{t(records === 1 ? 'source.record' : 'source.records', { n: records })}</span></div>
@@ -173,6 +213,16 @@
   .body { gap:10px; min-width:0 }
   .note { margin:0; white-space:pre-wrap; overflow-wrap:anywhere }
   .named-quote { max-width:75ch; margin:0; padding:2px 0 2px 10px; border-left:2px solid var(--line-strong); white-space:pre-wrap; overflow-wrap:anywhere }
+  .lineage { gap:12px }
+  .lineage-head { justify-content:space-between; align-items:baseline }
+  .lineage-cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr)); gap:14px 20px }
+  .lineage-col { gap:6px; min-width:0 }
+  .lineage-col h3 { font-size:12.5px; color:var(--muted); font-weight:600 }
+  .peer-list { display:flex; flex-direction:column; gap:6px; margin:0; padding:0; list-style:none }
+  .peer-row { display:flex; align-items:baseline; justify-content:space-between; gap:8px; min-width:0 }
+  .peer-row .text-link { overflow-wrap:anywhere }
+  .peer-count { flex:none; text-decoration:none }
+  .peer-count:hover, .peer-count:focus-visible { border-color:var(--accent); color:var(--accent) }
   h3 { margin:0 } .badge.via { align-self:start }
   @media(max-width:600px) { .panel { padding:16px } .seen { grid-template-columns:minmax(0,1fr) } .record { flex-direction:row; justify-content:flex-start; gap:10px } .plate { width:56px; height:56px } }
 </style>

@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit'
 import { quotations, QUOTATIONS_MAX } from '../quotations'
 import { sampledSightings } from './source-sightings'
+import { sourceCitationsRefreshStatements } from './source-graph'
 import { sourceMatches, sourceMatchParams } from './source-aliases'
 import { authorKeys, nameKey, nameLabel, sourceKeys, sourceNameKey } from '../name-key'
 // The store of records: an entry is a character, a claim is one thing the record states about it, a
@@ -715,6 +716,7 @@ export async function createEntry(db: D1Database, fields: EntryFields, sighting:
       ...formRows(db, ENTRY_SEQ, formsOf(claims)),
       ...partRoleRows(db, ENTRY_SEQ, partRoleRowsOf(primaryIdsOf(claims), compositionOf(claims))),
       recount(db, ENTRY_SEQ),
+      ...(drafts.some(draft => (draft.fields.cites ?? []).length > 0) ? sourceCitationsRefreshStatements(db, ENTRY_SEQ) : []),
       ...dates.reindex,
     ])
     return results[0].results[0].id
@@ -853,6 +855,7 @@ export async function addSighting(db: D1Database, id: number, fields: SightingFi
           .bind(id, sightingSnapshot(fields, media), who.actor, at, who.ip),
         ...index,
         recount(db, id),
+        ...((fields.cites ?? []).length > 0 ? sourceCitationsRefreshStatements(db, id) : []),
         ...dates.reindex,
       ])
       return results[before.length].results[0].id
@@ -981,8 +984,9 @@ async function writeSighting(db: D1Database, id: number, baseRev: number, sent: 
         ...insertVias(db, id, source.vias),
         db.prepare('DELETE FROM sighting_cites WHERE sighting_id = ?').bind(id),
         ...insertCites(db, id, source.cites),
+        ...sourceCitationsRefreshStatements(db, current.entry_id),
         // A source no sighting cites any more, as its work, as a via, or as a named older work, is not kept.
-        ...[...new Set(oldSources)].filter(sourceId => sourceId !== null).map(sourceId => db.prepare('DELETE FROM sources WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM sightings WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM sighting_vias WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM sighting_cites WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_aliases WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_alias_changes WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_archives WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_archive_changes WHERE source_id = ?1)').bind(sourceId)),
+        ...[...new Set(oldSources)].filter(sourceId => sourceId !== null).map(sourceId => db.prepare('DELETE FROM sources WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM sightings WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM sighting_vias WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM sighting_cites WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_citation_edges WHERE citing_source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_citations WHERE citing_source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_citations WHERE cited_source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_aliases WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_alias_changes WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_archives WHERE source_id = ?1) AND NOT EXISTS (SELECT 1 FROM source_archive_changes WHERE source_id = ?1)').bind(sourceId)),
         ...(media ? [db.prepare('DELETE FROM sighting_media WHERE sighting_id = ?').bind(id), insertMedia(db, id, media)] : []),
         db.prepare('UPDATE entries SET updated_at = ? WHERE id = ?').bind(now(), current.entry_id),
         revision(db, who, { entry: current.entry_id, sighting: id, kind: 'sighting_edit', rev, snapshot: sightingSnapshot(fields, kept), summary }),
@@ -1265,6 +1269,8 @@ async function relocate(db: D1Database, from: number, id: number, baseRev: numbe
         ...indexes,
         recount(db, from, [sighting.source_id, ...sighting.vias.map(via => via.id), ...sighting.cites.map(cite => cite.source_id)]),
         recount(db, into),
+        ...sourceCitationsRefreshStatements(db, from),
+        ...sourceCitationsRefreshStatements(db, into),
       ])
       return { id: into }
     } catch (error) {
@@ -1306,6 +1312,7 @@ async function setVisible<R>(db: D1Database, target: { entry: number; sighting?:
         revision(db, who, { entry: target.entry, sighting: target.sighting, kind: hidden ? 'hide' : 'unhide', rev: 0, snapshot: removed ? '{"removed":true}' : '{}', summary }),
         ...index,
         recount(db, target.entry),
+        ...sourceCitationsRefreshStatements(db, target.entry),
       ])
       return 'done'
     } catch (error) {
@@ -1344,7 +1351,7 @@ export const putBackSighting = (db: D1Database, entryId: number, id: number, who
 export async function refresh(db: D1Database, id: number) {
   await withDateIndex(db, async guard => {
     const entry = await getEntryRow(db, id)
-    if (entry) await db.batch([guard, ...await reindex(db, id, entry, await claimRows(db, id), await sightingRows(db, id)), recount(db, id)])
+    if (entry) await db.batch([guard, ...await reindex(db, id, entry, await claimRows(db, id), await sightingRows(db, id)), recount(db, id), ...sourceCitationsRefreshStatements(db, id)])
   })
 }
 
