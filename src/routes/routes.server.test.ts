@@ -42,9 +42,10 @@ test('create, browse, view, edit and add a sighting', async () => {
   const seen = new FormData(); seen.set('url', 'https://example.test/source'); seen.set('original_date', '1935')
   await expect(addSightingActions.default(event(seen))).rejects.toMatchObject({ status: 303 })
   detail = await detailLoad(event()) as any
-  expect(detail.earliest).toEqual({ year: '1935', kind: 'original', sighting: detail.sightings[1].id })
+  expect(detail.earliest).toEqual({ year: '1935', kind: 'original', sighting: 2 })
   expect(detail.entry.description).toBe('Updated')
-  expect(detail.sightings).toHaveLength(2)
+  // The dated evidence is listed before the undated.
+  expect(detail.sightings.map((sighting: { id: number }) => sighting.id)).toEqual([2, 1])
 })
 
 function sightingFixture(count: number, put: (key: string, bytes: Uint8Array) => Promise<unknown>) {

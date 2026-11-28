@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test'
 import { createEntry, editSighting, getEntry, history, list, restoreSighting, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { createPerson } from './people'
+import { sightingSnapshot } from './revisions'
 import { openTestDb } from './testdb'
 
 const entry: EntryFields = { script: 'han', script_other: null, description: null, radical: null, strokes: null, claims: [] }
-const seen = (place: string): SightingFields => ({ place, url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null })
+const seen = (place: string): SightingFields => ({ place, url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null })
 const image: StoredImage = { image_key: 'current.webp', image_type: 'image/webp', image_w: 100, image_h: 80, thumb_key: 'thumb.webp', box: '[[1,2,10,10]]' }
 
 async function fixture() {
@@ -75,4 +76,17 @@ test('rolls back the sighting and journal if reindexing fails', async () => {
   await expect(restoreSighting(db, id, sighting, 1, seen('restored'), who, 1)).rejects.toThrow('index failure')
   expect((await getEntry(db, id))!.sightings[0]).toMatchObject({ place: 'original', rev: 1 })
   expect((await history(db, id))).toHaveLength(2)
+})
+
+test('a restore brings back the closeness a version held, and a version from before it holds none', async () => {
+  const { db, raw, who, id, sighting } = await fixture()
+  await editSighting(db, sighting, 1, { ...seen('original'), closeness: 'secondary_uncited' }, null, who, null, id)
+  await editSighting(db, sighting, 2, { ...seen('original'), closeness: 'memory' }, null, who, null, id)
+  const versions = (raw.query('SELECT snapshot FROM revisions WHERE sighting_id = ? ORDER BY id').all(sighting) as { snapshot: string }[]).map(row => sightingSnapshot(row.snapshot))
+  expect(versions.map(version => version?.closeness)).toEqual([null, 'secondary_uncited', 'memory'])
+  expect(await restoreSighting(db, id, sighting, 3, versions[1]!, who, 2)).toEqual({ ok: true, rev: 4 })
+  expect((await getEntry(db, id))!.sightings[0].closeness).toBe('secondary_uncited')
+  const before = JSON.stringify({ place: 'older', url: null, title: null, author: null, publisher: null, report_date: null, original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, vias: [], media: [] })
+  expect(sightingSnapshot(before)?.closeness).toBeNull()
+  expect(sightingSnapshot(JSON.stringify({ ...JSON.parse(before), closeness: 'tertiary' }))).toBeNull()
 })

@@ -10,13 +10,14 @@ import { isDescription, rateFormsOfPart } from 'ids-input'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { TAG_IMPLY_DEPTH_MAX, TAG_TYPES, arrangeTags, canImply, cleanTag, implicationClosure, localized, tagLabels } from '$lib/tags'
-import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement, mergeTag, aliasTag, unaliasTag, aliasesStatement, nameTier } from './tags'
+import { MOVE_RECORDS_MAX, MOVES_PER_HOUR, changesStatement, tagChanges, createTag, deleteTag, ensureTags, implicationsStatement, implyTag, latestChangeStatement, moveSizeStatement, recentMovesStatement, refileStatements, renameTag, moveTag, tagList, tagsStatement, taxonomy, undoTagChange, unimplyTag, createGroup, deleteGroup, moveGroup, renameGroup, groupsStatement, mergeTag, aliasTag, unaliasTag, aliasesStatement, nameTier } from './tags'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { ORDER, type Order } from '$lib/order'
 import { standing } from '$lib/radicals'
 import { decadeOf } from '$lib/dates'
 import { recordCode } from '$lib/code'
-import { type Via, addSighting, moveSighting, getSighting, claimedBy, counts, countsStatement, creatorCounts, creatorCountsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, searchFound, foundStatement, type EntryFields, type SightingFields, type StoredImage } from './entries'
+import { readDates, sightingDates } from './date-readings'
+import { type Via, evidenceOrder, addSighting, moveSighting, getSighting, claimedBy, counts, countsStatement, creatorCounts, creatorCountsStatement, createEntry, cursorOf, pageCount, pageCursor, pageOf, PAGES_MAX, PAGED_MAX, customScripts, customScriptsStatement, facetTag, editEntry, editSighting, entryFieldsOf, exportPage, getEntry, history, list, listStatement, mediaVisible, mergeEntry, mergedInto, readBoxes, redactRevision, readEntryFields, readSightingFields, refresh, restoreSighting, revertEntry, SEARCH_WINDOW, searchTotal, TOTAL_READ, totalStatement, wordSize, exactSize, alsoSearchIds, alsoSearchParts, PART_ALSO_MAX, searchParts, ALSO_MAX, earliestSighting, CHRONICLE_PAGE, chronicleBackStatement, chroniclePlace, chronicleStatement, chronology, decadeCountsStatement, parseSourceCursor, radicalCounts, radicalCountsStatement, shuffleRanges, sourceList, sourcePage, SOURCES_PAGE, setHidden, SightingLimitError, terms, unmergeEntry, searchFound, foundStatement, type EntryFields, type SightingFields, type StoredImage } from './entries'
 import { PAGE, PAGE_SIZES, pageSizeOf } from '$lib/order'
 import { joinAtlas, createPerson, personOf, startSession } from './people'
 import { openTestDb } from './testdb'
@@ -28,7 +29,7 @@ const relation = (character: string, relationship: string, difference = '', evid
 // A source is found among the sightings that passed through it by the index of the chain, never by a scan.
 const VIA_SEARCH = /SEARCH v USING (COVERING )?INDEX sighting_vias_by_source \(source_id=\?\)/
 const via = (over: Partial<Via>): Via => ({ url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, quote: null, ...over })
-const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
+const seen = (over: Partial<SightingFields> = {}): SightingFields => ({ place: 'A shop sign in Tainan', url: null, title: null, author: null, publisher: null, report_date: null, container: null, source_kind: null, vias: [], closeness: null, original_date: null, page: null, contexts: null, style: null, types: null, quotes: null, note: null, ...over })
 const image: StoredImage = { image_key: 'a.webp', image_type: 'image/webp', image_w: 100, image_h: 100, thumb_key: 't.webp', box: null }
 
 let db: D1Database, raw: ReturnType<typeof openTestDb>['raw'], who: { actor: string; ip: null }
@@ -797,6 +798,22 @@ test('a sighting keeps every context checked, in the order of the list', () => {
   expect(readSightingFields(new FormData()).contexts).toBeNull()
 })
 
+test('a sighting keeps one closeness of the list, and the table refuses any other', async () => {
+  const form = new FormData()
+  form.set('closeness', 'secondary_cited')
+  expect(readSightingFields(form).closeness).toBe('secondary_cited')
+  form.set('closeness', 'tertiary')
+  expect(readSightingFields(form).closeness).toBeNull()
+  expect(readSightingFields(new FormData()).closeness).toBeNull()
+  const id = await createEntry(db, fields(), seen({ closeness: 'memory' }), [], who)
+  const sighting = (await getEntry(db, id))!.sightings[0]
+  expect(sighting.closeness).toBe('memory')
+  expect(JSON.parse((await history(db, id)).find(row => row.kind === 'sighting')!.snapshot).closeness).toBe('memory')
+  expect(await editSighting(db, sighting.id, 1, seen({ closeness: 'primary' }), null, who, null, id)).toMatchObject({ ok: true })
+  expect((await getEntry(db, id))!.sightings[0].closeness).toBe('primary')
+  expect(() => raw.run("UPDATE sightings SET closeness = 'tertiary' WHERE id = ?", [sighting.id])).toThrow(/CHECK/)
+})
+
 describe('source types', () => {
   test('reads several checked types, ignores unknown values, and orders them for storage', () => {
     const form = new FormData()
@@ -1251,15 +1268,16 @@ describe('query cost', () => {
     await claimedBy(traced, 'ids', '⿰木木')
     await sourcePage(traced, 1)
     // claims, then the source itself (a lookup by key), then a direct and a via read of rows and pictures,
-    // then the chains of the listed sightings.
-    expect(plans).toHaveLength(7)
+    // unseen named cites, then the chains of the listed sightings.
+    expect(plans).toHaveLength(8)
     plans.splice(1, 1)
     expect(plans[0]).toMatch(/SEARCH k USING COVERING INDEX claims_by_value \(kind=\? AND value=\?\)/)
     expect(plans[1]).toMatch(/SEARCH s USING INDEX sightings_by_source \(source_id=\?\)/)
     expect(plans[2]).toMatch(/SEARCH s USING INDEX sightings_by_source \(source_id=\?\)/)
     expect(plans[3]).toMatch(VIA_SEARCH)
     expect(plans[4]).toMatch(VIA_SEARCH)
-    expect(plans[5]).toMatch(/SEARCH v USING PRIMARY KEY \(sighting_id=\?\)/)
+    expect(plans[5]).toMatch(/SEARCH sc USING INDEX sighting_cites_by_source \(source_id=\?\)/)
+    expect(plans[6]).toMatch(/SEARCH v USING PRIMARY KEY \(sighting_id=\?\)/)
     for (const details of plans) expect(details).not.toMatch(/TEMP B-TREE|SCAN (?!.*USING)/)
   })
 
@@ -1422,6 +1440,18 @@ describe('records a search finds', () => {
       expect(details.join('\n')).not.toMatch(/SCAN (entry_tags|claims)/)
     }
   })
+})
+
+test('a tag change by an agent shows the person it works for, with the agent and model', async () => {
+  const person = await createPerson(db)
+  const agent = await createPerson(db)
+  raw.query("UPDATE people SET name = 'Owner' WHERE id = ?").run(person.id)
+  raw.query("UPDATE people SET name = 'Claude Code', agent = 1, agent_model = 'Opus 5.5', merged_into = ? WHERE id = ?").run(person.id, agent.id)
+  expect(await createTag(db, await tagList(db), { name: '族名', type: 'domain', implies: [] }, { actor: agent.id, ip: null })).toMatchObject({ ok: true })
+  await createTag(db, await tagList(db), { name: '物理', type: 'domain', implies: [] }, who)
+  const changes = await tagChanges(db)
+  expect(changes.find(change => change.name === '族名')).toMatchObject({ by_id: person.id, by_name: 'Owner', by_agent: 'Claude Code', by_model: 'Opus 5.5' })
+  expect(changes.find(change => change.name === '物理')).toMatchObject({ by_id: who.actor, by_agent: null, by_model: null })
 })
 
 describe('typed tags and implications', () => {
@@ -1602,7 +1632,7 @@ describe('typed tags and implications', () => {
       ['move size', plan(moveSizeStatement(db, '甲')), /SEARCH tag_counts USING PRIMARY KEY \(tag=\?\)/],
       ['recent moves', plan(recentMovesStatement(db, who.actor, '2026')), /SEARCH tag_changes USING (COVERING )?INDEX tag_changes_by_actor \(actor=\?/],
       ['latest change', plan(latestChangeStatement(db, '甲')), /SEARCH tag_changes USING COVERING INDEX tag_changes_by_name \(subject=\? AND name=\?\)/],
-      ['changes', plan(changesStatement(db)), /SCAN c[\s\S]*SEARCH p USING INDEX sqlite_autoindex_people_1 \(id=\?\)/],
+      ['changes', plan(changesStatement(db)), /SCAN c[\s\S]*SEARCH p USING INDEX sqlite_autoindex_people_1 \(id=\?\)[\s\S]*SEARCH m USING INDEX sqlite_autoindex_people_1 \(id=\?\)/],
       ...refileStatements(db, '甲').map((statement, index): [string, string, RegExp] => [
         `refile ${index}`,
         plan(statement),
@@ -1615,7 +1645,7 @@ describe('typed tags and implications', () => {
     for (const [name, details, wanted] of reads) {
       expect(`${name}: ${details}`).not.toMatch(/claims_by_value \(kind=\?\)/)
       expect(`${name}: ${details}`).toMatch(wanted)
-      expect(`${name}: ${details}`).not.toMatch(/AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (tags|tag_counts|claims|entries|entry_tags|people|cl|e|t)\b/)
+      expect(`${name}: ${details}`).not.toMatch(/AUTOMATIC|TEMP B-TREE FOR (ORDER BY|DISTINCT)|SCAN (tags|tag_counts|claims|entries|entry_tags|people|cl|e|t|m)\b/)
       if (name !== 'implications') expect(`${name}: ${details}`).not.toMatch(/SCAN tag_implications\b/)
       if (name !== 'refile 3') expect(details).not.toMatch(/TEMP B-TREE/)
     }
@@ -2212,6 +2242,45 @@ test('a record names the evidence that holds its earliest year through every wri
   const undated = await createEntry(db, fields(), seen(), [], who)
   expect(first(undated)).toBeNull()
 })
+test('evidence is read closest first, and only primary or unjudged evidence is dated by the work it names', async () => {
+  const picture = (key: string): StoredImage => ({ ...image, image_key: `${key}.webp`, thumb_key: `${key}-t.webp` })
+  const reindexSql = readFileSync(new URL('../../../scripts/reindex-dates.sql', import.meta.url), 'utf8')
+  const summary = (id: number) => raw.query('SELECT first_year, first_year_kind, first_sighting, cover_key, cover_place FROM entries WHERE id = ?').get(id) as { first_year: string; first_year_kind: string; first_sighting: number; cover_key: string; cover_place: string }
+  const swept = (id: number) => { raw.exec('UPDATE entries SET first_year = NULL, first_year_kind = NULL, first_sighting = NULL'); raw.exec(reindexSql); return summary(id) }
+  // A write that repairs a date runs the file statement by statement, split at each semicolon.
+  for (const statement of reindexSql.split(';').map(sql => sql.trim()).filter(Boolean)) raw.prepare(statement)
+  const id = await createEntry(db, fields(), seen({ place: 'dictionary', closeness: 'secondary_uncited', report_date: '1994', original_date: '1606' }), [picture('dictionary')], who, [
+    { fields: seen({ place: 'stele', closeness: 'primary', report_date: '2001', original_date: '1650' }), media: [picture('stele')] },
+    { fields: seen({ place: 'chat', closeness: 'memory', report_date: '1400' }), media: [] },
+    { fields: seen({ place: 'cited', closeness: 'secondary_cited', report_date: '1890', original_date: '1500' }), media: [] },
+    { fields: seen({ place: 'sign', report_date: '2020' }), media: [picture('sign')] },
+  ])
+  await addSighting(db, id, seen({ place: 'undated' }), [], who)
+  const order = async () => {
+    const { sightings } = (await getEntry(db, id))!
+    return evidenceOrder(sightings, await readDates(db, sightingDates(sightings))).map(sighting => sighting.place)
+  }
+  expect(await order()).toEqual(['stele', 'sign', 'undated', 'cited', 'dictionary', 'chat'])
+  const place = (name: string) => (raw.query('SELECT id FROM sightings WHERE place = ?').get(name) as { id: number }).id
+  // A memory reported earliest still dates the record by its report; the dictionaries' older dates do not.
+  expect(summary(id)).toEqual({ first_year: '1400', first_year_kind: 'report', first_sighting: place('chat'), cover_key: 'stele-t.webp', cover_place: 'stele' })
+  expect(swept(id)).toMatchObject({ first_year: '1400', first_year_kind: 'report', first_sighting: place('chat') })
+  const chat = (await getEntry(db, id))!.sightings.find(sighting => sighting.place === 'chat')!
+  await setHidden(db, { entry: id, sighting: chat.id }, true, who, null)
+  expect(summary(id)).toMatchObject({ first_year: '1650', first_year_kind: 'original', first_sighting: place('stele') })
+  expect(swept(id)).toMatchObject({ first_year: '1650', first_year_kind: 'original', first_sighting: place('stele') })
+  // Unjudged again, the dictionary's own date counts.
+  const dictionary = (await getEntry(db, id))!.sightings.find(sighting => sighting.place === 'dictionary')!
+  expect(await editSighting(db, dictionary.id, dictionary.rev, seen({ place: 'dictionary', report_date: '1994', original_date: '1606' }), null, who, null, id)).toMatchObject({ ok: true })
+  expect(summary(id)).toMatchObject({ first_year: '1606', first_year_kind: 'original', first_sighting: place('dictionary'), cover_key: 'stele-t.webp' })
+  expect(swept(id)).toMatchObject({ first_year: '1606', first_sighting: place('dictionary') })
+  // Of two sightings with one date, the closer holds it, though it was added later.
+  const tie = await createEntry(db, fields(), seen({ place: 'unjudged', report_date: '1700' }), [picture('unjudged')], who)
+  const primary = await addSighting(db, tie, seen({ place: 'original', closeness: 'primary', report_date: '1700' }), [picture('original')], who)
+  expect(summary(tie)).toMatchObject({ first_year: '1700', first_sighting: primary, cover_key: 'original-t.webp', cover_place: 'original' })
+  expect(swept(tie)).toMatchObject({ first_year: '1700', first_sighting: primary })
+})
+
 test('parts typed with no structure find the records that spell them another way', async () => {
   const typed = await createEntry(db, described('⿱艹時'), seen(), [], who)
   const radical = await createEntry(db, described('⿱⺾時'), seen(), [], who)

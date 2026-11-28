@@ -56,6 +56,17 @@ test('the CSV file has a row for every piece of evidence and one for an empty re
   expect(rows[0]).toContain('"one.png; two.png"')
 })
 
+test('the CSV file puts closeness last, and the JSON file carries it with each piece of evidence', async () => {
+  const { db, raw } = fixture()
+  raw.exec("UPDATE sightings SET closeness = 'primary' WHERE place = 'source 0'")
+  const [head, first] = (await (await GET(event(db, '/api/export?format=csv'))).text()).split('\r\n')
+  expect(head.split(',').slice(-4)).toEqual(['"vias"', '"images"', '"cites"', '"closeness"'])
+  expect(first.endsWith(',"primary"')).toBe(true)
+  const body = await (await GET(event(db))).json() as any
+  expect(body.entries[0].evidence[0].closeness).toBe('primary')
+  expect(body.entries[0].evidence[1].closeness).toBeNull()
+})
+
 test('the image list gives each visible picture its record, source and absolute addresses', async () => {
   const { db } = fixture()
   const response = await GET(event(db, '/api/export?format=media'))

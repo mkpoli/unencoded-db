@@ -31,6 +31,7 @@
   import SubmitBar from '$lib/components/SubmitBar.svelte'
   import { COMMENTS_SHOWN } from '$lib/comments'
   import Discussion from '$lib/components/Discussion.svelte'
+  import CitePills from '$lib/components/CitePills.svelte'
   import ViaChain from '$lib/components/ViaChain.svelte'
   import ArchiveLinks from '$lib/components/ArchiveLinks.svelte'
   import type { Fill } from '$lib/encoded'
@@ -53,6 +54,9 @@
   let { data, form } = $props()
   const entry = $derived(data.entry)
   const claims = $derived(data.claims)
+  const derivedCount = $derived(data.sightings.filter(s => s.cites.some(c => c.status === 'witness')).length)
+  // A source cited on several sightings points at the first in page order, the closest to the original.
+  const witnessBySource = $derived(new Map(data.sightings.filter(s => s.source_id !== null).map(s => [s.source_id!, s.id] as const).reverse()))
   const editing = $derived(Boolean(form?.error && page.url.searchParams.has('/edit')))
   const commenting = $derived(Boolean(form?.error && page.url.searchParams.has('/comment')))
   const shownComments = $derived.by(() => { const shown = data.comments.filter(comment => !comment.hidden_at).length; return shown && (data.comments.length >= COMMENTS_SHOWN ? `${shown}+` : String(shown)) })
@@ -161,7 +165,8 @@
     entry.status && t(`status.${entry.status}`),
     entry.description || entry.cover_place,
   ].filter(Boolean).join(' · '))
-  const cover = $derived(data.sightings.find(sighting => sighting.media.length)?.media[0])
+  // The picture the record's cover is drawn from, which need not be the first the page shows.
+  const cover = $derived(data.sightings.flatMap(sighting => sighting.media).find(picture => picture.thumb_key === entry.cover_key) ?? data.sightings.find(sighting => sighting.media.length)?.media[0])
   const sources = $derived(data.sightings.filter(sighting => sighting.source_id !== null).map(sighting => ({ ...sighting, id: sighting.source_id! })))
   const vias = $derived(data.sightings.flatMap(sighting => sighting.vias))
   const structured = $derived(recordData({ locale: locale(), id: entry.id, name: seoTitle, description: seoDescription, siteName: t('app.name'), image: cover && media(cover.image_key), sources, vias, archives: data.archives }))
@@ -333,23 +338,26 @@
     <a class="text-link small" href="https://www.unicode.org/irg/pp/" target="_blank" rel="noopener">{t('ready.rules')} ↗</a>
   </section>
   {/if}
-  <section class="stack"><h2>{t('entry.sightings')}</h2>
+  <section class="stack">
+    <div class="row"><h2>{t('entry.sightings')}</h2>{#if derivedCount > 0}<span class="badge">{t('entry.derivedCount', { derived: derivedCount, total: data.sightings.length })}</span>{/if}</div>
     {#each data.sightings as sighting (sighting.id)}
       {@const types = parseSightingTypes(sighting.types)}
       {@const contexts = parseContexts(sighting.contexts)}
       {@const web = sighting.url && /^https?:\/\//i.test(sighting.url) ? sighting.url : null}
       {@const copies = (sighting.source_id && data.archives.get(sighting.source_id)) || []}
+      {@const otherWitnesses = new Map([...witnessBySource].filter(([, sid]) => sid !== sighting.id))}
       <article class="panel stack" id="sighting-{sighting.id}">
         <EvidencePictures pictures={sighting.media} alt={position => pictureAlt([subject, recordCode(entry.id), sighting.title, sighting.place], position, sighting.media.length)} preparing={position => Boolean(preparing[`${sighting.id}:${position}`])} ondownload={(picture, position) => download(sighting, picture, position)} />
         {#if sighting.place}<h3>{sighting.place}</h3>{/if}
-        {#if types.length || data.earliest?.sighting === sighting.id}<div class="row badges">{#if data.earliest?.sighting === sighting.id}<span class="badge earliest">{t('entry.earliest')}</span>{/if}{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
+        {#if types.length || sighting.closeness || data.earliest?.sighting === sighting.id}<div class="row badges">{#if data.earliest?.sighting === sighting.id}<span class="badge earliest">{t('entry.earliest')}</span>{/if}{#if sighting.closeness}<span class="badge closeness" title={t(`closeness.${sighting.closeness}.hint`)}>{t(`closeness.${sighting.closeness}`)}</span>{/if}{#each types as type}<span class="badge">{t(`evidence.type.${type}`)}</span>{/each}</div>{/if}
         {#if web || copies.length}
           <div class="cited">
             {#if web}<a class="text-link url" href={web} target="_blank" rel="noopener noreferrer">{web} ↗</a>{/if}
             <ArchiveLinks archives={copies} />
           </div>
         {/if}
-        {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} archives={data.archives} pictures />{/if}
+        {#if sighting.cites.length || sighting.cited_by.length}<CitePills entryId={entry.id} cites={sighting.cites} citedBy={sighting.cited_by} dates={data.dates} />{/if}
+        {#if sighting.vias.length}<ViaChain vias={sighting.vias} dates={data.dates} archives={data.archives} witnesses={otherWitnesses} pictures />{/if}
         <dl class="facts">{#each sourceFields as field}{#if sighting[field.key]}<div><dt>{t(field.label)}</dt><dd>{#if field.key === 'report_date' || field.key === 'original_date'}<EvidenceDate text={sighting[field.key]} reading={data.dates.get(sighting[field.key] ?? '')} />{:else if field.key === 'source_kind'}{kindName(sighting.source_kind)}{:else}{sighting[field.key]}{/if}</dd></div>{/if}{/each}
           {#if contexts.length}<div><dt>{t('field.context')}</dt><dd>{contexts.map(context => t(`context.${context}`)).join(' · ')}</dd></div>{/if}
           {#if sighting.style}<div><dt>{t('field.style')}</dt><dd>{t(`style.${sighting.style}`)}</dd></div>{/if}
@@ -430,5 +438,6 @@
   .first-seen { align-self:center; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; text-decoration:underline; text-decoration-color:var(--line-strong); text-underline-offset:3px }
   .first-seen:hover { color:var(--ink) }
   .badge.earliest { background:var(--accent-light); color:var(--accent) }
+  .badge.closeness { background:none; box-shadow:inset 0 0 0 1px var(--line) }
   .attribution { display:flex; flex-wrap:wrap; align-items:center; gap:6px }
 </style>

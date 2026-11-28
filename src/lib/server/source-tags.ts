@@ -1,10 +1,12 @@
 // Tags already carried by other visible records citing the same source(s).
 // Reads at most SOURCE_TAG_READ sightings per source from `sightings_by_source`, joins visible records
-// and their `tag` claims by key, and keeps tags on at least half of that source's records.
+// and their `tag` claims by key, and keeps tags on at least half of that source's records
+// and on at least SOURCE_TAG_MIN of them, so one record's tags are never echoed as the source's.
 
 export const SOURCE_TAG_READ = 128
 export const SOURCE_TAG_LIMIT = 5
 export const SOURCE_TAG_SOURCES_MAX = 5
+export const SOURCE_TAG_MIN = 3
 
 export type SourceTagRow = { entry_id: number; tag: string | null }
 
@@ -37,7 +39,7 @@ export function commonTagsOfRows(rows: readonly SourceTagRow[]) {
   if (!total) return []
   const kept: { tag: string; count: number; ratio: number }[] = []
   for (const [tag, held] of byTag) {
-    if (held.size * 2 >= total) kept.push({ tag, count: held.size, ratio: held.size / total })
+    if (held.size >= SOURCE_TAG_MIN && held.size * 2 >= total) kept.push({ tag, count: held.size, ratio: held.size / total })
   }
   return kept
 }

@@ -2,6 +2,10 @@ import type { RequestEvent } from '@sveltejs/kit'
 import { AGENT_UNKNOWN } from '$lib/agent'
 import { hashHex } from './image'
 
+// Who did something: an agent row shows as the person it is merged into, with the agent and its model beside them.
+export const WHO = (column: string) => `LEFT JOIN people p ON p.id = ${column} LEFT JOIN people m ON m.id = p.merged_into`
+export const WHO_COLUMNS = "COALESCE(m.id, p.id) AS by_id, COALESCE(m.name, p.name) AS by_name, CASE WHEN p.agent = 1 THEN p.name END AS by_agent, CASE WHEN p.agent = 1 THEN NULLIF(p.agent_model, '') END AS by_model"
+
 export type Person = { id: string; name: string; atlas: boolean; moderator: boolean; banned: boolean }
 type Row = { id: string; name: string; atlas_sub: string | null; role: string; banned_at: string | null }
 

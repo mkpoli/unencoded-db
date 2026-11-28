@@ -38,8 +38,8 @@
     "fast-png": "8.0.0",
     "fflate": "^0.8.3",
     "fonteditor-core": "^2.6.3",
-    "han-compose": "github:mkpoli/han-compose#0d6ce68944b42de0e64d1f0fbafb427d66cf355e",
-    "ids-input": "github:mkpoli/ids-input#d64e17faf3bbefcbfab5638790b5519238210e3c",
+    "han-compose": "github:mkpoli/han-compose#06b207f4aec4361c221b79d4e0c1750eba6d6fc9",
+    "ids-input": "github:mkpoli/ids-input#6e44775c2d6aa72589a901189a463129ae67a798",
     "jose": "^6.2.15",
     "opentype.js": "1.3.4",
     "svgpath": "^2.6.0"

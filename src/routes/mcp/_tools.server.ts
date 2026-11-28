@@ -15,10 +15,12 @@ import { cleanIds, IDS_LENGTH_MAX } from '$lib/ids'
 import { ADD_SIGHTINGS_MAX, BOXES_MAX, MEDIA_MAX, PICTURES_BODY_MAX } from '$lib/limits'
 import { REGISTRIES } from '$lib/registries'
 import { RELATION_KINDS } from '$lib/related'
-import { CONTEXTS, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX } from '$lib/scripts'
+import { dateOrderWarnings } from '$lib/cites'
+import { CITE_KINDS, CITES_MAX, CLOSENESS, CONTEXTS, datingOriginal, parseContexts, parseSightingTypes, SCRIPTS, SIGHTING_TYPES, SOURCE_KINDS, STYLES, VIAS_MAX, type CiteKind } from '$lib/scripts'
 import { candidates } from '$lib/server/candidates'
-import { tagList } from '$lib/server/tags'
-import { addSighting, CITATION_FIELDS, citesEvidence, createEntry, editEntry, editSighting, getEntry, heldPictures, list, mediaVisible, namedVias, readBoxes, readEntryFields, readSightingFields, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, SightingLimitError, SIGHTINGS_MAX, viaKey, viaRows, type StoredImage, type ViaPicture } from '$lib/server/entries'
+import { addComment, cleanComment, commentsOf, setCommentHidden } from '$lib/server/comments'
+import { tagList, taxonomy } from '$lib/server/tags'
+import { addSighting, CITATION_FIELDS, citesEvidence, CiteValidationError, createEntry, editEntry, editSighting, ENTRY_HISTORY_PAGE, getEntry, getEntryRow, getSighting, heldPictures, history, linkSightings, list, mediaVisible, mergeEntry, mergedInto, namedVias, openReports, preserveHiddenCites, putBackSighting, rawCitesOfSighting, readBoxes, readEntryFields, readSightingFields, redactRevision, removeSighting, resolveReport, restoreSighting, sameIds, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, setHidden, SightingLimitError, SIGHTINGS_MAX, unmergeEntry, validateCiteTargets, viaKey, viaRows, type Cite, type SightingFields, type StoredImage, type ViaPicture } from '$lib/server/entries'
 import { chargeWrites, env, guardWrite, ipHash } from '$lib/server/guard'
 import { archiveCited } from '$lib/server/archive'
 import { scheduleAtlasSync } from '$lib/server/atlas-evidence'
@@ -28,6 +30,8 @@ import { MAX_IMAGE, prepareImage, sniff } from '$lib/server/image'
 import { pagesOf } from '$lib/pdf-pages'
 import { heavyJpx, isPdf, JPX_PIXELS, PDF_SIDE, renderPdfPage } from '$lib/server/pdf'
 import { AGENT_NAME_MAX, agentWriter, cleanAgentName, type AgentSaid } from '$lib/server/people'
+import { entrySnapshot, revisionDates, revisionFields, sightingSnapshot } from '$lib/server/revisions'
+import { editSourceAlias } from '$lib/server/source-aliases'
 import { described, storeImages, type ReadImage } from '../_submission.server'
 
 type Json = Record<string, unknown>
@@ -40,6 +44,21 @@ const said = (code: string, values?: Record<string, string | number>) => transla
 const record = (value: unknown): Json => value && typeof value === 'object' && !Array.isArray(value) ? value as Json : {}
 const items = (value: unknown): unknown[] => Array.isArray(value) ? value : value == null ? [] : [value]
 const text = (value: unknown) => typeof value === 'string' ? value : typeof value === 'number' ? String(value) : ''
+
+function positiveInt(value: unknown, name: string) {
+  if (typeof value === 'number') {
+    if (Number.isSafeInteger(value) && value >= 1) return value
+    throw new Refusal(`${name} must be a positive integer.`)
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (/^[1-9]\d{0,15}$/.test(trimmed)) {
+      const parsed = Number(trimmed)
+      if (Number.isSafeInteger(parsed)) return parsed
+    }
+  }
+  throw new Refusal(`${name} must be a positive integer.`)
+}
 
 function choice(value: unknown, allowed: readonly string[], name: string) {
   const chosen = text(value).trim()
@@ -71,9 +90,17 @@ const shown = (event: RequestEvent, id: number) => ({ id, code: recordCode(id), 
 
 // ---------- Writes ----------
 
-async function guard(event: RequestEvent, limit: 'ADDS' | 'EDITS') {
-  try { await guardWrite(event, limit) } catch (cause) {
+export const isModerator = (event: RequestEvent) => Boolean(event.locals.person?.moderator && !event.locals.person.banned)
+
+async function guard(event: RequestEvent, limit: 'ADDS' | 'EDITS', moderation = false) {
+  if (moderation && !isModerator(event)) {
+    throw new Refusal(event.locals.person?.banned ? said('banned') : 'This action requires moderator permission.')
+  }
+  try { await guardWrite(event, limit, moderation) } catch (cause) {
     if (!isHttpError(cause)) throw cause
+    if (cause.status === 403 && moderation && !event.locals.person?.banned) {
+      throw new Refusal('This action requires moderator permission.')
+    }
     throw new Refusal(cause.status === 403 ? said('banned') : cause.status === 503 ? said('paused') : cause.status === 429 ? said('slow') : cause.body.message)
   }
 }
@@ -312,6 +339,7 @@ function sightingForm(input: Json) {
   for (const name of ['place', 'title', 'author', 'publisher', 'report_date', 'container', 'original_date', 'page', 'note']) put(name, text(input[name]))
   put('source_kind', choice(input.source_kind, SOURCE_KINDS, 'source_kind'))
   put('style', choice(input.style, STYLES, 'style'))
+  put('closeness', choice(input.closeness, CLOSENESS, 'closeness'))
   for (const context of items(input.contexts)) form.append('contexts', choice(context, CONTEXTS, 'contexts'))
   for (const type of items(input.types)) form.append('types', choice(type, SIGHTING_TYPES, 'types'))
   const quotes = items(input.quotes)
@@ -327,7 +355,45 @@ function sightingForm(input: Json) {
     for (const field of CITATION_FIELDS) form.append(`via_${field}`, field === 'url' ? link(via.url, 'A via url') : field === 'source_kind' ? choice(via.source_kind, SOURCE_KINDS, 'A via source_kind') : text(via[field]))
     form.append('via_quote', text(via.quote))
   }
+  const cites = items(input.cites).map(record)
+  if (cites.length > CITES_MAX) throw new Refusal(`A sighting names up to ${CITES_MAX} cited older works.`)
+  for (const cite of cites) {
+    const kind = choice(cite.kind, CITE_KINDS, 'A cite kind') || 'quotes'
+    const target = cite.sighting === undefined || cite.sighting === null || cite.sighting === '' ? '' : Number.isInteger(cite.sighting) && (cite.sighting as number) >= 1 ? String(cite.sighting) : (() => { throw new Refusal('A cite sighting is a positive integer sighting id.') })()
+    form.append('cite_kind', kind)
+    form.append('cite_sighting', target)
+    for (const field of CITATION_FIELDS) form.append(`cite_${field}`, field === 'url' ? link(cite.url, 'A cite url') : field === 'source_kind' ? choice(cite.source_kind, SOURCE_KINDS, 'A cite source_kind') : text(cite[field]))
+    form.append('cite_quote', text(cite.quote))
+    form.append('cite_note', text(cite.note))
+  }
   return form
+}
+
+async function citeDateWarnings(db: D1Database, list: readonly SightingFields[]): Promise<string[]> {
+  try {
+    const targetIds = [...new Set(list.flatMap(fields => (fields.cites ?? []).map(cite => cite.sighting)).filter((id): id is number => id !== null))]
+    const targets = new Map<number, { report_date: string | null; original_date: string | null }>()
+    if (targetIds.length) {
+      const { results } = await db.prepare(`SELECT s.id, ${datingOriginal('s')} AS original_date, c.report_date FROM sightings s LEFT JOIN sources c ON c.id = s.source_id WHERE s.id IN (${targetIds.map(() => '?').join(', ')})`).bind(...targetIds).all<{ id: number; original_date: string | null; report_date: string | null }>()
+      for (const row of results) targets.set(row.id, row)
+    }
+    const allDates = [...sightingDates(list), ...[...targets.values()].flatMap(target => [target.report_date, target.original_date])]
+    const book = await readDates(db, allDates)
+    const messages: string[] = []
+    for (const fields of list) {
+      const citesWithTargets = (fields.cites ?? []).map(cite => {
+        const target = cite.sighting ? targets.get(cite.sighting) : undefined
+        return { report_date: cite.report_date, target_report_date: target?.report_date ?? null, target_original_date: target?.original_date ?? null }
+      })
+      for (const warning of dateOrderWarnings(fields, fields.vias, citesWithTargets, book)) {
+        if (warning.side === 'via') messages.push(`Via #${warning.index + 1} (${warning.viaYear}) predates the work (${warning.workYear}); if it is an older work this source quotes, record it under cites instead.`)
+        else messages.push(`Cite #${warning.index + 1} (${warning.citeYear}) postdates the work (${warning.workYear}); if it is where you found this source, record it under vias instead.`)
+      }
+    }
+    return messages
+  } catch {
+    return []
+  }
 }
 
 // The record's own fields as its form sends them. A field the input leaves out is left out of the form, so
@@ -441,12 +507,18 @@ async function addRecord(event: RequestEvent, input: Json) {
   const tags = await tagList(env(event).DB)
   const { fields: entry, error } = readEntryFields(entryForm(input, tags.map(tag => tag.name), value => places(value, inputs.length, 'evidence')), tags)
   if (error) throw new Refusal(said(error))
+  const { DB, MEDIA } = env(event)
   const stated = inputs.map((sighting, index) => {
     const form = sightingForm(sighting)
     const vias = viaPictureItems(items(sighting.vias).map(record), form)
-    if (!items(sighting.pictures).length && !vias.some(row => row?.length) && !citesEvidence(readSightingFields(form))) throw new Refusal(`Sighting ${index + 1}: ${said('evidence')}`)
-    return { form, vias, pictures: sighting.pictures }
+    const preview = readSightingFields(form)
+    if (!items(sighting.pictures).length && !vias.some(row => row?.length) && !citesEvidence(preview)) throw new Refusal(`Sighting ${index + 1}: ${said('evidence')}`)
+    return { form, vias, pictures: sighting.pictures, cites: preview.cites }
   })
+  for (const [index, item] of stated.entries()) {
+    const badCite = await validateCiteTargets(DB, item.cites)
+    if (badCite) throw new Refusal(`Sighting ${index + 1}: ${said(badCite)}`)
+  }
   if (!(await chargeWrites(event, 'ADDS', stated.length - 1))) throw new Refusal(said('slow'))
   const budget = { bytes: PICTURES_BODY_MAX, fetches: FETCHES_MAX }
   const read = []
@@ -455,7 +527,6 @@ async function addRecord(event: RequestEvent, input: Json) {
     const via = await readViaPictures(event, planViaPictures(event, vias), budget)
     read.push({ fields: readSightingFields(form, via.pictures.map(row => row ?? [])), pictures: own, files: via.files })
   }
-  const { DB, MEDIA } = env(event)
   const drafts = []
   for (const { fields, pictures, files } of read) {
     await storeImages(MEDIA, files)
@@ -466,7 +537,8 @@ async function addRecord(event: RequestEvent, input: Json) {
   notifyIndexNow(event, { entries: [id] })
   scheduleAtlasSync(event, [id])
   archiveCited(event, drafts.map(draft => draft.fields))
-  return shown(event, id)
+  const warnings = await citeDateWarnings(DB, drafts.map(draft => draft.fields))
+  return { ...shown(event, id), ...(warnings.length ? { warnings } : {}) }
 }
 
 async function addSightingTo(event: RequestEvent, input: Json) {
@@ -476,7 +548,10 @@ async function addSightingTo(event: RequestEvent, input: Json) {
   if (found.sightings.length >= SIGHTINGS_MAX) throw new Refusal(said('sightingLimit'))
   const form = sightingForm(input)
   const vias = viaPictureItems(items(input.vias).map(record), form)
-  if (!items(input.pictures).length && !vias.some(row => row?.length) && !citesEvidence(readSightingFields(form))) throw new Refusal(said('evidence'))
+  const preview = readSightingFields(form)
+  if (!items(input.pictures).length && !vias.some(row => row?.length) && !citesEvidence(preview)) throw new Refusal(said('evidence'))
+  const badCite = await validateCiteTargets(DB, preview.cites)
+  if (badCite) throw new Refusal(said(badCite))
   // One sighting takes what its form takes in one request, its pictures and those of its vias together.
   const budget = { bytes: MAX_WRITE_BODY, fetches: FETCHES_MAX }
   const pictures = await readPictures(event, input.pictures, budget)
@@ -488,12 +563,14 @@ async function addSightingTo(event: RequestEvent, input: Json) {
   let sighting: number | null
   try { sighting = await addSighting(DB, id, fields, media, { actor: person.id, ip: await ipHash(event) }) } catch (cause) {
     if (cause instanceof SightingLimitError) throw new Refusal(said('sightingLimit'))
+    if (cause instanceof CiteValidationError) throw new Refusal(said(cause.code))
     throw cause
   }
   if (!sighting) throw new Refusal(said('missing'))
   notifyIndexNow(event, { entries: [id] })
   archiveCited(event, [fields])
-  return { record: shown(event, id), sighting }
+  const warnings = await citeDateWarnings(DB, [fields])
+  return { record: shown(event, id), sighting, ...(warnings.length ? { warnings } : {}) }
 }
 
 // Like the record's edit form: what the input leaves out stays, and the edit is made against the
@@ -529,10 +606,13 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   if (!sighting) throw new Refusal(`${recordCode(id)} has no sighting ${text(input.sighting)}. Its sightings: ${found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => sighting.id).join(', ')}.`)
   const rev = revisionOf(input.rev)
   if (rev !== sighting.rev) throw changed(sighting.rev)
+  const { DB, MEDIA } = env(event)
+  const rawCites = await rawCitesOfSighting(DB, sighting.id)
   const now: Json = {
     place: sighting.place, ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
-    original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, types: parseSightingTypes(sighting.types), note: sighting.note,
+    original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, types: parseSightingTypes(sighting.types), note: sighting.note, closeness: sighting.closeness,
     quotes: quotations(sighting.quotes), vias: sighting.vias.map(({ id: _, ...via }) => via),
+    cites: rawCites,
   }
   const stated = Object.fromEntries(Object.keys(now).filter(name => input[name] !== undefined).map(name => [name, input[name]]))
   // A via that states pictures gets those; any other keeps its own, as a restore does.
@@ -540,6 +620,10 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   const rows = viaPictureItems(stated.vias === undefined ? [] : items(stated.vias).map(record), form)
   const planned = planViaPictures(event, rows, new Map(sighting.vias.flatMap(via => via.pictures ?? []).map(picture => [picture.image_key, picture])))
   const read = readSightingFields(form)
+  const citesToSave = input.cites === undefined ? rawCites : preserveHiddenCites(read.cites ?? [], rawCites, sighting.cites)
+  const heldTargets = new Set(rawCites.map(cite => cite.sighting).filter((target): target is number => target !== null))
+  const badCite = await validateCiteTargets(DB, citesToSave, sighting.id, heldTargets)
+  if (badCite) throw new Refusal(said(badCite))
   const chain = (pictures: readonly (ViaPicture[] | undefined)[]) => {
     const stating = new Map<string, ViaPicture[]>()
     for (const [index, row] of viaRows(form).entries()) {
@@ -555,9 +639,8 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   const budget = { bytes: MAX_WRITE_BODY, fetches: FETCHES_MAX }
   const pictures = input.pictures === undefined ? null : await editedPictures(event, sighting.media, input.pictures, budget)
   const via = await readViaPictures(event, planned, budget)
-  const fields = { ...read, vias: chain(via.pictures) }
+  const fields = { ...read, cites: citesToSave, vias: chain(via.pictures) }
   if (!(pictures ?? sighting.media).length && !citesEvidence(fields) && !fields.place) throw new Refusal(said('evidence'))
-  const { DB, MEDIA } = env(event)
   await storeImages(MEDIA, via.files)
   let media: StoredImage[] | null = null
   if (pictures) {
@@ -569,7 +652,39 @@ async function editSightingOf(event: RequestEvent, input: Json) {
   if (!result.ok) throw result.code === 'conflict' ? changed((await getEntry(DB, id))?.sightings.find(row => row.id === sighting.id)?.rev ?? rev) : new Refusal(said(result.code))
   notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
   archiveCited(event, [fields])
-  return { record: shown(event, id), sighting: sighting.id, rev: result.rev }
+  const warnings = await citeDateWarnings(DB, [fields])
+  return { record: shown(event, id), sighting: sighting.id, rev: result.rev, ...(warnings.length ? { warnings } : {}) }
+}
+
+async function linkSightingsOf(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const sightingId = Number(text(input.sighting))
+  if (!Number.isInteger(sightingId) || sightingId < 1) throw new Refusal('sighting is a positive integer sighting id.')
+  const kind = (choice(input.kind, CITE_KINDS, 'kind') || 'quotes') as CiteKind
+  const citedRaw = input.cited_sighting
+  const citedId = citedRaw === undefined || citedRaw === null || citedRaw === '' ? null : Number.isInteger(citedRaw) && (citedRaw as number) >= 1 ? citedRaw as number : (() => { throw new Refusal('cited_sighting is a positive integer sighting id.') })()
+  const src = input.source ? record(input.source) : {}
+  const form = sightingForm({
+    cites: [{
+      kind,
+      sighting: citedId,
+      ...Object.fromEntries(CITATION_FIELDS.map(field => [field, src[field]])),
+      quote: input.quote,
+      note: input.note,
+    }],
+  })
+  const [cite] = readSightingFields(form).cites ?? []
+  if (!cite) throw new Refusal('Give cited_sighting or a source citation.')
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const result = await linkSightings(DB, sightingId, cite, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
+  if (!result.ok) throw new Refusal(result.code === 'full' ? `A sighting names up to ${CITES_MAX} cited older works.` : said(result.code))
+  const updatedEntries = result.cited_entry_id && result.cited_entry_id !== result.entry_id ? [result.entry_id, result.cited_entry_id] : [result.entry_id]
+  const updated = await getSighting(DB, sightingId)
+  notifyIndexNow(event, { entries: updatedEntries, sources: updated ? citedBy(updated) : [] })
+  if (updated) archiveCited(event, [updated])
+  const warnings = updated ? await citeDateWarnings(DB, [updated]) : []
+  return { record: shown(event, result.entry_id), sighting: sightingId, rev: result.rev, ...(warnings.length ? { warnings } : {}) }
 }
 
 // The pictures an edit leaves a sighting with, none stored yet.
@@ -591,6 +706,213 @@ async function editedPictures(event: RequestEvent, held: readonly StoredImage[],
     pictures.push(box === kept.box ? kept : { ...kept, box, thumb_key: kept.image_key })
   }
   return pictures
+}
+
+async function removeSightingFrom(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const { id } = await openRecord(event, input.record)
+  const sightingId = positiveInt(input.sighting, 'sighting')
+  const rev = revisionOf(input.rev)
+  const { DB } = env(event)
+  const sighting = await getSighting(DB, sightingId)
+  if (!sighting || sighting.entry_id !== id || sighting.hidden_at) throw new Refusal(`${recordCode(id)} has no sighting ${sightingId}.`)
+  if (sighting.rev !== rev) throw changed(sighting.rev)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const result = await removeSighting(DB, id, sighting.id, rev, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
+  if (result === 'only') throw new Refusal('Cannot remove the only remaining sighting of a record.')
+  if (result === 'conflict') throw changed((await getSighting(DB, sighting.id))?.rev ?? rev)
+  if (result === 'merged') throw new Refusal(said('merged'))
+  if (result !== 'done') throw new Refusal(said('missing'))
+  notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
+  return { record: shown(event, id), sighting: sighting.id, removed: true }
+}
+
+async function mergeRecords(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const first = recordId(input.record)
+  const second = recordId(input.duplicate_of)
+  if (!first || !second) throw new Refusal(said('missing'))
+  if (first === second) throw new Refusal(said('self'))
+  const from = Math.max(first, second), into = Math.min(first, second)
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const result = await mergeEntry(DB, from, into, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
+  if (!result.ok) {
+    throw new Refusal(result.code === 'self' ? said('self') : result.code === 'merged' ? said('merged') : result.code === 'full' ? said('sightingLimit') : said('missing'))
+  }
+  notifyIndexNow(event, { entries: [from, into] })
+  return { merged: shown(event, from), into: shown(event, into) }
+}
+
+async function unmergeRecord(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const id = recordId(input.record)
+  const { DB } = env(event)
+  const entry = id ? await getEntryRow(DB, id) : null
+  if (!id || !entry || entry.hidden_at) throw new Refusal(said('missing'))
+  if (!entry.merged_into) throw new Refusal('That record is not merged into another record.')
+  const into = entry.merged_into
+  const person = await agentWriter(event, DB, agentSaid(input))
+  if (!await unmergeEntry(DB, id, { actor: person.id, ip: await ipHash(event) })) {
+    throw new Refusal(said('conflict'))
+  }
+  notifyIndexNow(event, { entries: [id, into] })
+  return { record: shown(event, id), from: shown(event, into), unmerged: true }
+}
+
+async function addCommentTo(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const { id, found } = await openRecord(event, input.record)
+  let about: number | null = null
+  if (input.sighting !== undefined && input.sighting !== null) {
+    about = positiveInt(input.sighting, 'sighting')
+    if (!found.sightings.some(sighting => sighting.id === about && !sighting.hidden_at)) {
+      throw new Refusal(`${recordCode(id)} has no sighting ${about}.`)
+    }
+  }
+  const body = cleanComment(input.body)
+  if (!body) throw new Refusal(said('comment'))
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const comment = await addComment(DB, { entry: id, sighting: about }, body, { actor: person.id, ip: await ipHash(event) })
+  return { record: shown(event, id), comment }
+}
+
+async function editSourceAliasTo(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const source = positiveInt(input.source, 'source')
+  const alias = text(input.alias).trim()
+  const action = choice(input.action, ['add', 'remove'], 'action')
+  if (!action) throw new Refusal('action is one of: add, remove.')
+  if (!alias || alias.length > 300) throw new Refusal('alias must be 1 to 300 characters.')
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  if (!await editSourceAlias(DB, source, alias, action === 'remove', person.id)) {
+    throw new Refusal(translate('en', 'source.aliasError'))
+  }
+  notifyIndexNow(event, { sources: [source] })
+  return { source, alias, action }
+}
+
+async function restoreRevisionTo(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS')
+  const { id, found } = await openRecord(event, input.record)
+  const { DB } = env(event)
+
+  if (input.put_back === true) {
+    const sightingId = positiveInt(input.sighting, 'sighting')
+    const sighting = found.sightings.find(s => s.id === sightingId && s.hidden_at && s.removed_by)
+    if (!sighting) throw new Refusal('No contributor-removed sighting with that id exists on this record.')
+    const person = await agentWriter(event, DB, agentSaid(input))
+    if (await putBackSighting(DB, id, sightingId, { actor: person.id, ip: await ipHash(event) }) !== 'done') throw new Refusal(said('missing'))
+    notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
+    return { record: shown(event, id), sighting: sightingId, restored: true }
+  }
+
+  const revisionId = positiveInt(input.revision, 'revision')
+  const baseRev = revisionOf(input.rev)
+  if (input.sighting !== undefined && input.sighting !== null) {
+    const sightingId = positiveInt(input.sighting, 'sighting')
+    const sighting = found.sightings.find(s => s.id === sightingId && !s.hidden_at)
+    if (!sighting) throw new Refusal(`${recordCode(id)} has no sighting ${sightingId}.`)
+    if (baseRev !== sighting.rev) throw changed(sighting.rev)
+    const old = await DB.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id = ? AND redacted_at IS NULL AND kind IN ('sighting','sighting_edit')")
+      .bind(revisionId, id, sighting.id).first<{ snapshot: string; rev: number }>()
+    const fields = old && sightingSnapshot(old.snapshot)
+    if (!old || !fields) throw new Refusal('That sighting revision cannot be restored.')
+    if (!sighting.media.length && !sighting.vias.some(via => via.pictures?.length) && !citesEvidence(fields) && !fields.place) throw new Refusal(said('evidence'))
+    const person = await agentWriter(event, DB, agentSaid(input))
+    const result = await restoreSighting(DB, id, sighting.id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, old.rev, revisionId)
+    if (!result.ok) throw result.code === 'conflict' ? changed((await getSighting(DB, sighting.id))?.rev ?? baseRev) : new Refusal(said('missing'))
+    notifyIndexNow(event, { entries: [id], sources: citedBy(sighting) })
+    return { record: shown(event, id), sighting: sighting.id, rev: result.rev }
+  }
+
+  if (baseRev !== found.entry.rev) throw changed(found.entry.rev)
+  const old = await DB.prepare("SELECT snapshot, rev FROM revisions WHERE id = ? AND entry_id = ? AND sighting_id IS NULL AND redacted_at IS NULL AND kind IN ('create','edit','revert','merge','unmerge')")
+    .bind(revisionId, id).first<{ snapshot: string; rev: number }>()
+  const fields = old && entrySnapshot(old.snapshot)
+  if (!old || !fields) throw new Refusal('That record revision cannot be restored.')
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const result = await editEntry(DB, id, baseRev, fields, { actor: person.id, ip: await ipHash(event) }, `r${old.rev}`, 'revert', revisionId)
+  if (!result.ok) throw result.code === 'conflict' ? changed((await getEntry(DB, id))?.entry.rev ?? baseRev) : new Refusal(said('missing'))
+  notifyIndexNow(event, { entries: [id] })
+  scheduleAtlasSync(event, [id], { onlyIfChanged: true })
+  return { record: shown(event, id), rev: result.rev }
+}
+
+// ---------- Moderation ----------
+
+async function setHiddenTo(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS', true)
+  const id = recordId(input.record)
+  if (!id) throw new Refusal(said('missing'))
+  if (typeof input.hidden !== 'boolean') throw new Refusal('hidden must be true or false.')
+  const sighting = input.sighting === undefined || input.sighting === null ? null : positiveInt(input.sighting, 'sighting')
+  const { DB } = env(event)
+  const entry = await getEntryRow(DB, id)
+  if (!entry) throw new Refusal(said('missing'))
+  if (entry.merged_into) throw new Refusal(`${said('merged')} Moderate ${recordCode(entry.merged_into)} (${entry.merged_into}).`)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const ok = await setHidden(DB, { entry: id, sighting }, input.hidden, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
+  if (!ok) throw new Refusal(said('missing'))
+  notifyIndexNow(event, { entries: [id] })
+  return { record: shown(event, id), ...(sighting !== null ? { sighting } : {}), hidden: input.hidden }
+}
+
+async function listReportsMod(event: RequestEvent, input: Json) {
+  if (!isModerator(event)) {
+    throw new Refusal(event.locals.person?.banned ? said('banned') : 'This action requires moderator permission.')
+  }
+  const after = input.after === undefined || input.after === null ? 0 : positiveInt(input.after, 'after')
+  const { reports, next } = await openReports(env(event).DB, after)
+  return {
+    reports: reports.map(report => ({
+      id: report.id,
+      record: shown(event, report.entry_id),
+      sighting: report.sighting_id,
+      reason: report.reason,
+      at: report.at,
+      by: report.by_name,
+      ids: report.ids,
+      record_hidden: Boolean(report.hidden_at),
+      target_hidden: Boolean(report.target_hidden_at),
+    })),
+    next,
+  }
+}
+
+async function resolveReportMod(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS', true)
+  const report = positiveInt(input.report, 'report')
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  if (!await resolveReport(DB, report, person.id)) throw new Refusal('No open report with that id exists.')
+  return { report, resolved: true }
+}
+
+async function setCommentHiddenMod(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS', true)
+  const id = recordId(input.record)
+  if (!id) throw new Refusal(said('missing'))
+  const comment = positiveInt(input.comment, 'comment')
+  if (typeof input.hidden !== 'boolean') throw new Refusal('hidden must be true or false.')
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  if (!await setCommentHidden(DB, id, comment, input.hidden, person.id)) throw new Refusal('That comment does not exist on this record.')
+  return { record: shown(event, id), comment, hidden: input.hidden }
+}
+
+async function redactRevisionMod(event: RequestEvent, input: Json) {
+  await guard(event, 'EDITS', true)
+  const id = recordId(input.record)
+  if (!id) throw new Refusal(said('missing'))
+  const revisionId = positiveInt(input.revision, 'revision')
+  const { DB } = env(event)
+  const person = await agentWriter(event, DB, agentSaid(input))
+  const ok = await redactRevision(DB, id, revisionId, { actor: person.id, ip: await ipHash(event) }, summaryOf(input))
+  if (!ok) throw new Refusal('That revision cannot be redacted (it may be missing, already redacted, or the current revision).')
+  return { record: shown(event, id), revision: revisionId, redacted: true }
 }
 
 // ---------- Reads ----------
@@ -620,25 +942,110 @@ async function findSimilar(event: RequestEvent, input: Json) {
 
 async function getRecord(event: RequestEvent, input: Json) {
   const id = recordId(input.record)
-  const found = id ? await getEntry(env(event).DB, id) : null
-  if (!id || !found || found.entry.hidden_at) throw new Refusal(said('missing'))
+  const { DB } = env(event)
+  const showHidden = isModerator(event) && input.include_hidden === true
+  const found = id ? await getEntry(DB, id) : null
+  if (!id || !found || (found.entry.hidden_at && !showHidden)) throw new Refusal(said('missing'))
   const { entry } = found
-  if (entry.merged_into) return { ...shown(event, id), merged_into: shown(event, entry.merged_into) }
-  const sightings = found.sightings.filter(sighting => !sighting.hidden_at)
-  const visible = new Set(sightings.map(sighting => sighting.id))
+  if (entry.merged_into) return { ...shown(event, id), ...(entry.hidden_at ? { hidden: true } : {}), merged_into: shown(event, entry.merged_into) }
+  const sightings = showHidden ? found.sightings : found.sightings.filter(sighting => !sighting.hidden_at)
+  const visible = new Set(found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => sighting.id))
+  const [dates, comments] = await Promise.all([
+    readDates(DB, sightingDates(sightings)),
+    commentsOf(DB, id, showHidden),
+  ])
   return {
     ...shown(event, id), rev: entry.rev,
+    ...(entry.hidden_at ? { hidden: true } : {}),
     script: entry.script === 'other' ? entry.script_other ?? 'other' : entry.script,
     status: entry.status, description: entry.description, radical: entry.radical, strokes: entry.strokes,
-    claims: found.claims.map(claim => ({ key: claim.key, kind: claim.kind, value: claim.value, ...(claim.data ? { data: claim.data } : {}), ...(claim.under.length ? { under: claim.under } : {}), evidence: claim.sightings.filter(sighting => visible.has(sighting)) })),
-    date_readings: Object.fromEntries(await readDates(env(event).DB, sightingDates(sightings))),
+    claims: found.claims.map(claim => ({ key: claim.key, kind: claim.kind, value: claim.value, ...(claim.data ? { data: claim.data } : {}), ...(claim.under.length ? { under: claim.under } : {}), evidence: claim.sightings.filter(sighting => showHidden || visible.has(sighting)) })),
+    date_readings: Object.fromEntries(dates),
     sightings: sightings.map(sighting => ({
-      id: sighting.id, rev: sighting.rev, place: sighting.place,
+      id: sighting.id, rev: sighting.rev, source_id: sighting.source_id,
+      ...(sighting.hidden_at ? { hidden: true, removed: Boolean(sighting.removed_by) } : {}),
+      place: sighting.place,
       ...Object.fromEntries(CITATION_FIELDS.map(field => [field, sighting[field]])),
-      original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note,
-      vias: sighting.vias.map(({ id: _, pictures, ...via }) => ({ ...via, pictures: (pictures ?? []).map(picture => shownPicture(event, picture)) })),
+      original_date: sighting.original_date, page: sighting.page, contexts: parseContexts(sighting.contexts), style: sighting.style, quotes: quotations(sighting.quotes), types: parseSightingTypes(sighting.types), note: sighting.note, closeness: sighting.closeness,
+      vias: sighting.vias.map(({ id: source_id, pictures, ...via }) => ({ source_id, ...via, pictures: (pictures ?? []).map(picture => shownPicture(event, picture)) })),
+      cites: sighting.cites.map(cite => ({
+        kind: cite.kind,
+        status: cite.status,
+        sighting: cite.sighting,
+        entry_id: cite.target?.entry_id ?? null,
+        record: cite.target ? recordCode(cite.target.entry_id) : null,
+        source_id: cite.source_id,
+        ...Object.fromEntries(CITATION_FIELDS.map(field => [field, cite[field]])),
+        quote: cite.quote,
+        note: cite.note,
+      })),
+      cited_by: sighting.cited_by.map(item => ({
+        kind: item.kind,
+        sighting: item.sighting_id,
+        entry_id: item.entry_id,
+        record: recordCode(item.entry_id),
+        title: item.title,
+        place: item.place,
+        report_date: item.report_date,
+        original_date: item.original_date,
+        quote: item.quote,
+        note: item.note,
+      })),
       pictures: sighting.media.map(picture => ({ ...shownPicture(event, picture), marks: picture.box ? JSON.parse(picture.box) as number[][] : [] })),
     })),
+    comments: comments.map(comment => ({ id: comment.id, sighting: comment.sighting_id, body: comment.body, at: comment.at, by: comment.by_name, ...(comment.hidden_at ? { hidden: true } : {}) })),
+  }
+}
+
+async function listTags(event: RequestEvent) {
+  const { tags, groups } = await taxonomy(env(event).DB)
+  return {
+    groups: groups.map(group => ({ id: group.id, type: group.type, label: group.label })),
+    tags: tags.map(tag => ({ name: tag.name, label: tag.label, type: tag.type, group: tag.group, aliases: tag.aliases, implies: tag.implies })),
+  }
+}
+
+async function getHistory(event: RequestEvent, input: Json) {
+  const id = recordId(input.record)
+  const { DB } = env(event)
+  const showHidden = isModerator(event) && input.include_hidden === true
+  const found = id ? await getEntry(DB, id) : null
+  if (!id || !found || (found.entry.hidden_at && !showHidden)) throw new Refusal(said('missing'))
+  if (found.entry.merged_into) return { ...shown(event, id), ...(found.entry.hidden_at ? { hidden: true } : {}), merged_into: shown(event, found.entry.merged_into) }
+  const before = input.before === undefined || input.before === null ? null : positiveInt(input.before, 'before')
+  const visibleSightings = new Map(found.sightings.filter(sighting => !sighting.hidden_at).map(sighting => [sighting.id, sighting.rev]))
+  const removed = found.sightings.filter(sighting => sighting.hidden_at && sighting.removed_by)
+  const removedRevs = new Map(removed.map(sighting => [sighting.id, sighting.rev]))
+  const [page, duplicates] = await Promise.all([history(DB, id, before), mergedInto(DB, id)])
+  const next = page.length > ENTRY_HISTORY_PAGE ? page[ENTRY_HISTORY_PAGE - 1].id : null
+  const rows = page.slice(0, ENTRY_HISTORY_PAGE)
+    .filter(row => showHidden || !row.sighting_id || visibleSightings.has(row.sighting_id) || removedRevs.has(row.sighting_id))
+    .map(({ id: revId, sighting_id, kind, rev, summary, at, by_name, by_agent, by_model, snapshot, redacted_at }) => ({
+      id: revId,
+      sighting: sighting_id,
+      rev,
+      summary,
+      at,
+      by: by_name,
+      ...(by_agent ? { by_agent: true, ...(by_model ? { by_model } : {}) } : {}),
+      redacted: Boolean(redacted_at),
+      ...revisionFields({ sighting_id, kind, snapshot, redacted_at }),
+      removed: sighting_id !== null && removedRevs.has(sighting_id),
+      ...(sighting_id !== null && !visibleSightings.has(sighting_id) && !removedRevs.has(sighting_id) ? { hidden: true } : {}),
+    }))
+  const dates = await revisionDates(DB, rows)
+  return {
+    record: shown(event, id),
+    rev: found.entry.rev,
+    duplicates: duplicates.map(dup => shown(event, dup)),
+    removed: removed.map(sighting => ({ id: sighting.id, rev: sighting.rev, title: sighting.title, place: sighting.place })),
+    date_readings: Object.fromEntries(dates),
+    rows: rows.map(({ fields, sightingFields, ...row }) => ({
+      ...row,
+      ...(fields ? { fields } : {}),
+      ...(sightingFields ? { sighting_fields: sightingFields } : {}),
+    })),
+    next,
   }
 }
 
@@ -652,7 +1059,7 @@ To add a character:
 3. Cite the work the character appears in as the sighting's source, with author, title, publisher, date and page. Cite where you found it, such as a post or a chat message that shows the page, as a via, with its author, date, link and the words you quote, and its pictures when you have them.
 4. A chat message, a forum post or a personal communication is evidence and is cited as one: the author as they sign, the date of that message, the words quoted, the group or channel as container, the service as publisher, and no title. A private message, a letter or a conversation has no container and takes source_kind personal. Each message is its own citation; never reuse another message's author or date.
 
-To correct a record or a sighting, read it with get_record and call edit_record or edit_sighting with the rev it shows, giving only what changes. Say what changed and why in summary.
+To correct a record or a sighting, read it with get_record and call edit_record or edit_sighting with the rev it shows, giving only what changes. Say what changed and why in summary. Merge two records with merge_records only when their evidence pictures clearly show the exact same written form; when unsure, leave them separate and add a related claim with relationship "uncertain". Use get_history and restore_revision to inspect or revert earlier changes.
 
 Every change you make is shown as an agent's. Say what you are in agent on each add and edit: the harness you run in and the model you run on.
 
@@ -671,14 +1078,29 @@ const CITATION = {
 const SIGHTING = {
   place: { type: 'string', description: 'Where the character was found, in words that help someone find it again: a book and page, a street, a website.' },
   ...CITATION,
-  original_date: { type: 'string', description: 'The date of an older work shown in the picture, when the cited publication reproduces one. Written as report_date is.' },
+  original_date: { type: 'string', description: 'The date of an older work the picture reproduces directly: a photo, scan, facsimile, rubbing, tracing or line drawing of it in the cited publication. Leave it out for a typeset transcription (隸定) or a later dictionary citing an older text; report_date dates those. Written as report_date is.' },
   page: { type: 'string', description: 'Page, folio or volume within the work.' },
   contexts: { type: 'array', items: { type: 'string', enum: CONTEXTS }, description: 'How the character appears, in every way the source shows it.' },
   style: { type: 'string', enum: STYLES, description: 'The writing style.' },
   types: { type: 'array', items: { type: 'string', enum: SIGHTING_TYPES }, description: 'What the source provides: mention (discusses the character), attestation (uses it in a text), description (says how it is written), definition (gives a meaning), reading (gives a pronunciation), relation (names a variant or the same character).' },
+  closeness: { type: 'string', enum: [...CLOSENESS, ''], description: 'How close this sighting is to the original: primary (the work itself, or a photo, scan, rubbing, tracing or line drawing of it), secondary_cited (a compilation, dictionary or typeset transcription that names its own source for this form), secondary_uncited (one that names none), memory (given from memory, with no written witness). Leave it out when unsure. An empty string clears it.' },
   quotes: { type: 'array', maxItems: QUOTATIONS_MAX, items: { type: 'object', required: ['text'], properties: { text: { type: 'string' }, locator: { type: 'string' } } }, description: 'Quoted passages, each with an optional attribution or location in the source.' },
   note: { type: 'string', description: 'A note on this source.' },
   vias: { type: 'array', maxItems: VIAS_MAX, description: 'The sources the evidence passed through, from the one nearest the cited work to the one you saw it in.', items: { type: 'object', properties: { ...CITATION, quote: { type: 'string', description: 'The words this sighting quotes from the source, as written.' }, pictures: { type: 'array', maxItems: MEDIA_MAX, description: `Pictures of this source, such as a screenshot of the post, from their addresses, without marks. A picture belongs to one source, the chain holds ${MEDIA_MAX} in all, and the source needs a citation.`, items: { oneOf: [{ type: 'string' }, { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string' } } }], description: 'Address of the image file itself.' } } } } },
+  cites: {
+    type: 'array', maxItems: CITES_MAX,
+    description: 'Older works this sighting quotes, re-sets as a later edition, or derives from. Each row names a witness sighting by id, a source citation, or both.',
+    items: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: CITE_KINDS, description: 'quotes (the text names the older work), edition (re-typeset/re-keyed later edition of a base printing), or derived (dependence argued without explicit naming; requires note).' },
+        sighting: { type: 'integer', minimum: 1, description: 'The identified older witness sighting id, in this or any other record.' },
+        ...CITATION,
+        quote: { type: 'string', description: 'Short excerpt naming the older work (for quotes).' },
+        note: { type: 'string', description: 'Rationale for dependence (required for derived).' },
+      },
+    },
+  },
   pictures: {
     type: 'array', maxItems: MEDIA_MAX, description: `Evidence pictures, fetched from their addresses and kept by the site. JPEG, PNG or WebP, or pages of a PDF, up to ${FETCHES_MAX} from other sites and ${PDF_PAGES_MAX} PDF pages in one call.`,
     items: {
@@ -766,8 +1188,21 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'get_record', title: 'Read a record', annotations: READS, run: getRecord,
-    description: 'A record with its claims (descriptions, readings, meanings, creators, codes, relations) and its sightings, each with its citation and picture addresses.',
+    description: 'A record with its revision number (rev), claims (descriptions, readings, meanings, creators, codes, relations), latest comments, and sightings (each with its id, rev, source_id, citation, vias, and picture addresses).',
     inputSchema: { type: 'object', required: ['record'], properties: { record: RECORD } },
+  },
+  {
+    name: 'list_tags', title: 'List tags', annotations: READS, run: listTags,
+    description: 'List the typed tag taxonomy: groups, canonical tag names, labels, aliases, and automatic tag implications.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_history', title: 'Read record history', annotations: READS, run: getHistory,
+    description: 'Read a record\'s revision history, merged duplicates, and contributor-removed sightings.',
+    inputSchema: { type: 'object', required: ['record'], properties: {
+      record: RECORD,
+      before: { type: 'integer', minimum: 1, description: 'The `next` cursor from an earlier call, for older revisions.' },
+    } },
   },
   {
     name: 'add_record', title: 'Add a character', annotations: ADDS, run: addRecord,
@@ -796,9 +1231,133 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'edit_sighting', title: 'Edit evidence on a record', annotations: EDITS, run: editSightingOf,
-    description: `Change one sighting of a record. A field left out stays as it is; quotes, vias and pictures given replace the whole list. Keep a picture by giving its address from get_record. When a via gives pictures, the chain's pictures are those given: a via holds exactly its own list, and a via that leaves them out keeps the ones it has. When no via gives pictures, each via keeps its own, even one left out of vias. ${SIGHTING_RULE} Answers the new rev.`,
+    description: `Change one sighting of a record. A field left out stays as it is; quotes, vias, cites and pictures given replace the whole list. Keep a picture by giving its address from get_record. When a via gives pictures, the chain's pictures are those given: a via holds exactly its own list, and a via that leaves them out keeps the ones it has. When no via gives pictures, each via keeps its own, even one left out of vias. ${SIGHTING_RULE} Answers the new rev.`,
     inputSchema: { type: 'object', required: ['record', 'sighting', 'rev', 'agent'], properties: {
       agent: AGENT, record: RECORD, sighting: { type: 'integer', minimum: 1, description: 'The sighting\'s id in get_record.' }, rev: REV, summary: SUMMARY, ...SIGHTING,
+    } },
+  },
+  {
+    name: 'link_sightings', title: 'Link a sighting to an older work', annotations: EDITS, run: linkSightingsOf,
+    description: 'Add or upgrade one provenance edge on a sighting (quotes, edition, or derived) against its current state without sending the whole sighting. Matches by cited_sighting or source citation.',
+    inputSchema: { type: 'object', required: ['sighting', 'kind', 'agent'], properties: {
+      agent: AGENT,
+      sighting: { type: 'integer', minimum: 1, description: 'The later (citing) sighting id.' },
+      kind: { type: 'string', enum: CITE_KINDS, description: 'quotes, edition, or derived.' },
+      cited_sighting: { type: 'integer', minimum: 1, description: 'The older witness sighting id (in any record).' },
+      source: { type: 'object', description: 'The work as named by the text, used when no witness is linked yet or to record the attested name.', properties: CITATION },
+      quote: { type: 'string', description: 'Short excerpt naming the older work.' },
+      note: { type: 'string', description: 'Rationale (required for derived).' },
+      summary: SUMMARY,
+    } },
+  },
+  {
+    name: 'remove_sighting', title: 'Remove evidence from a record', annotations: EDITS, run: removeSightingFrom,
+    description: 'Remove an erroneous or misplaced sighting from a record (reversible via restore_revision). Cannot remove a record\'s last remaining sighting.',
+    inputSchema: { type: 'object', required: ['record', 'sighting', 'rev', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      sighting: { type: 'integer', minimum: 1, description: 'The sighting\'s id in get_record.' },
+      rev: REV,
+      summary: SUMMARY,
+    } },
+  },
+  {
+    name: 'merge_records', title: 'Merge duplicate records', annotations: EDITS, run: mergeRecords,
+    description: 'Merge two duplicate records of the exact same written form. The higher-numbered record always merges into the lower-numbered one, moving its evidence and keeping both histories.',
+    inputSchema: { type: 'object', required: ['record', 'duplicate_of', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      duplicate_of: { type: 'string', description: 'The other record id or code representing the same written form.' },
+      summary: SUMMARY,
+    } },
+  },
+  {
+    name: 'unmerge_record', title: 'Undo a record merge', annotations: EDITS, run: unmergeRecord,
+    description: 'Undo a merge, separating a merged duplicate record back out with its sightings and claims.',
+    inputSchema: { type: 'object', required: ['record', 'agent'], properties: {
+      agent: AGENT,
+      record: { type: 'string', description: 'The merged duplicate record id or code to unmerge.' },
+    } },
+  },
+  {
+    name: 'add_comment', title: 'Comment on a record', annotations: ADDS, run: addCommentTo,
+    description: 'Post a discussion comment on a record or on a specific sighting.',
+    inputSchema: { type: 'object', required: ['record', 'body', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      sighting: { type: 'integer', minimum: 1, description: 'Optional sighting id this comment discusses.' },
+      body: { type: 'string', description: 'Comment text, up to 4,000 characters.' },
+    } },
+  },
+  {
+    name: 'edit_source_alias', title: 'Edit source alternate name', annotations: EDITS, run: editSourceAliasTo,
+    description: 'Add or remove an alternate name or abbreviation on a cited source (by source_id from get_record).',
+    inputSchema: { type: 'object', required: ['source', 'alias', 'action', 'agent'], properties: {
+      agent: AGENT,
+      source: { type: 'integer', minimum: 1, description: 'Source id from get_record.' },
+      alias: { type: 'string', description: 'Alternate title or abbreviation, 1 to 300 characters.' },
+      action: { type: 'string', enum: ['add', 'remove'] },
+    } },
+  },
+  {
+    name: 'restore_revision', title: 'Restore a previous revision', annotations: EDITS, run: restoreRevisionTo,
+    description: 'Restore a previous record revision, restore a sighting\'s previous text (keeping its current pictures), or put back a contributor-removed sighting (with put_back: true).',
+    inputSchema: { type: 'object', required: ['record', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      sighting: { type: 'integer', minimum: 1, description: 'Sighting id when restoring a sighting revision or putting back removed evidence.' },
+      revision: { type: 'integer', minimum: 1, description: 'Revision id from get_history (omit when put_back is true).' },
+      rev: REV,
+      put_back: { type: 'boolean', description: 'Set true with sighting to put back contributor-removed evidence.' },
+    } },
+  },
+]
+
+const MOD_TOOLS: Tool[] = [
+  {
+    name: 'set_hidden', title: 'Hide or unhide a record or sighting', annotations: EDITS, run: setHiddenTo,
+    description: 'Moderator only. Hide or restore visibility of a record or one of its sightings.',
+    inputSchema: { type: 'object', required: ['record', 'hidden', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      sighting: { type: 'integer', minimum: 1, description: 'Optional sighting id; omit to hide or unhide the whole record.' },
+      hidden: { type: 'boolean', description: 'true to hide, false to unhide.' },
+      summary: SUMMARY,
+    } },
+  },
+  {
+    name: 'list_reports', title: 'List open moderation reports', annotations: READS, run: listReportsMod,
+    description: 'Moderator only. List unresolved moderation reports with their targets and reasons.',
+    inputSchema: { type: 'object', properties: {
+      after: { type: 'integer', minimum: 1, description: 'The `next` cursor from an earlier call, for later reports.' },
+    } },
+  },
+  {
+    name: 'resolve_report', title: 'Resolve a moderation report', annotations: EDITS, run: resolveReportMod,
+    description: 'Moderator only. Mark an open moderation report as resolved.',
+    inputSchema: { type: 'object', required: ['report', 'agent'], properties: {
+      agent: AGENT,
+      report: { type: 'integer', minimum: 1, description: 'Report id from list_reports.' },
+    } },
+  },
+  {
+    name: 'set_comment_hidden', title: 'Hide or unhide a comment', annotations: EDITS, run: setCommentHiddenMod,
+    description: 'Moderator only. Hide or restore visibility of a comment on a record.',
+    inputSchema: { type: 'object', required: ['record', 'comment', 'hidden', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      comment: { type: 'integer', minimum: 1, description: 'Comment id from get_record.' },
+      hidden: { type: 'boolean', description: 'true to hide, false to unhide.' },
+    } },
+  },
+  {
+    name: 'redact_revision', title: 'Redact a past revision', annotations: EDITS, run: redactRevisionMod,
+    description: 'Moderator only. Irreversibly clear the stored snapshot and summary of a past revision (cannot redact the current revision).',
+    inputSchema: { type: 'object', required: ['record', 'revision', 'agent'], properties: {
+      agent: AGENT,
+      record: RECORD,
+      revision: { type: 'integer', minimum: 1, description: 'Revision id from get_history.' },
+      summary: SUMMARY,
     } },
   },
 ]
@@ -807,13 +1366,18 @@ const TOOLS: Tool[] = [
 export const MCP_TOOLS = TOOLS.map(({ name, annotations }) => ({ name, write: annotations.readOnlyHint !== true }))
 
 /** The tools, known tag names listed on the `categories` schema of the tools that take one. */
-export const toolList = (tags: readonly string[]) => TOOLS.map(({ run: _, ...tool }) => !('categories' in record(tool.inputSchema.properties)) ? tool : {
-  ...tool, inputSchema: { ...tool.inputSchema, properties: { ...record(tool.inputSchema.properties), categories: { type: 'array', items: { type: 'string', enum: tags } } } },
+const INCLUDE_HIDDEN = { type: 'boolean', description: 'Moderator only. Set true to include hidden records, sightings or comments (default false).' }
+
+export const toolList = (tags: readonly string[], moderator = false) => (moderator ? [...TOOLS, ...MOD_TOOLS] : TOOLS).map(({ run: _, ...tool }) => {
+  const properties = { ...record(tool.inputSchema.properties) }
+  if ('categories' in properties) properties.categories = { type: 'array', items: { type: 'string', enum: tags } }
+  if (moderator && (tool.name === 'get_record' || tool.name === 'get_history')) properties.include_hidden = INCLUDE_HIDDEN
+  return { ...tool, inputSchema: { ...tool.inputSchema, properties } }
 })
 
 /** What a tool answers, or null for a name that is no tool. */
 export async function callTool(event: RequestEvent, name: unknown, input: unknown): Promise<ToolResult | null> {
-  const tool = TOOLS.find(tool => tool.name === name)
+  const tool = TOOLS.find(tool => tool.name === name) ?? MOD_TOOLS.find(tool => tool.name === name)
   if (!tool) return null
   try {
     return { content: [{ type: 'text', text: JSON.stringify(await tool.run(event, record(input))) }] }

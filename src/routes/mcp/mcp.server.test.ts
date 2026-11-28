@@ -1,13 +1,15 @@
+import { createHash } from 'node:crypto'
 import { afterEach, expect, test } from 'bun:test'
+import { LOCALE_COOKIE } from '$lib/i18n'
 import { handle } from '../../hooks.server'
 import { openTestDb } from '$lib/server/testdb'
-import { mergeEntry } from '$lib/server/entries'
+import { mergeEntry, report } from '$lib/server/entries'
 import { personOf } from '$lib/server/people'
 import { MEDIA_MAX } from '$lib/limits'
 import { PDF_SIDE } from '$lib/server/pdf'
 import { imageObject, pdfOf } from '$lib/server/pdf.test'
 import { FETCHES_MAX, PDF_PAGES_MAX } from './_tools.server'
-import { POST } from './+server'
+import { GET, POST } from './+server'
 
 const png = new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,10,0,0,0,10,8,6,0,0,0,0,0,0,0])
 const ORIGIN = 'https://example.test'
@@ -61,7 +63,7 @@ test('a connection is opened with the revision asked for and a token of its own'
   const { send, count } = fixture()
   const open = (protocolVersion: string) => send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion, capabilities: {}, clientInfo: { name: 'test', version: '1' } } })
   const first = await open('2025-06-18'), second = await open('2099-01-01')
-  expect((await first.json() as any).result).toMatchObject({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'rare-character-compendium' } })
+  expect((await first.json() as any).result).toMatchObject({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'org.glyphatlas/rare-character-compendium' } })
   expect((await second.json() as any).result.protocolVersion).toBe('2025-11-25')
   expect(first.headers.get('mcp-session-id')).toMatch(/^[0-9a-f]{64}$/)
   expect(second.headers.get('mcp-session-id')).not.toBe(first.headers.get('mcp-session-id'))
@@ -75,7 +77,11 @@ test('the protocol answers its own methods and refuses the rest', async () => {
   expect((await send({ jsonrpc: '2.0', method: 'notifications/initialized' })).status).toBe(202)
   expect(await (await send({ jsonrpc: '2.0', id: 'a', method: 'ping' })).json()).toEqual({ jsonrpc: '2.0', id: 'a', result: {} })
   const { result } = await (await send({ jsonrpc: '2.0', id: 2, method: 'tools/list' })).json() as any
-  expect(result.tools.map((tool: { name: string }) => tool.name)).toEqual(['find_similar_records', 'search_records', 'get_record', 'add_record', 'add_sighting', 'edit_record', 'edit_sighting'])
+  expect(result.tools.map((tool: { name: string }) => tool.name)).toEqual([
+    'find_similar_records', 'search_records', 'get_record', 'list_tags', 'get_history',
+    'add_record', 'add_sighting', 'edit_record', 'edit_sighting', 'link_sightings',
+    'remove_sighting', 'merge_records', 'unmerge_record', 'add_comment', 'edit_source_alias', 'restore_revision',
+  ])
   expect(result.tools.every((tool: Record<string, unknown>) => !('run' in tool) && (tool.inputSchema as any).type === 'object')).toBe(true)
   expect((await (await send({ jsonrpc: '2.0', id: 3, method: 'resources/list' })).json() as any).error.code).toBe(-32601)
   expect((await (await send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'drop_everything' } })).json() as any).error.code).toBe(-32602)
@@ -443,6 +449,21 @@ test('a sighting is edited field by field, keeping or replacing its pictures', a
   expect(await call('edit_sighting', { record: 1, sighting: 999, rev: 1 })).toMatchObject({ failed: true, value: expect.stringContaining(`Its sightings: ${read.id}`) })
 })
 
+test('a sighting says how close it is to the original, and an edit keeps it until it is cleared', async () => {
+  const { call, raw } = fixture()
+  expect((await call('add_record', { ids: ['⿰舟覽'], sightings: [{ ...sighting, closeness: 'primary' }, { place: 'A dictionary', url: 'https://example.test/dict', closeness: 'secondary_uncited' }] })).failed).toBe(false)
+  expect(raw.query('SELECT closeness FROM sightings ORDER BY id').all()).toEqual([{ closeness: 'primary' }, { closeness: 'secondary_uncited' }])
+  expect((await call('add_sighting', { record: 1, url: 'https://example.test/chat', closeness: 'memory' })).failed).toBe(false)
+  const read = (await call('get_record', { record: 1 })).value.sightings
+  expect(read.map((item: { closeness: string | null }) => item.closeness)).toEqual(['primary', 'secondary_uncited', 'memory'])
+  expect((await call('edit_sighting', { record: 1, sighting: read[1].id, rev: 1, note: 'Checked.' })).failed).toBe(false)
+  expect((await call('get_record', { record: 1 })).value.sightings[1].closeness).toBe('secondary_uncited')
+  expect((await call('edit_sighting', { record: 1, sighting: read[1].id, rev: 2, closeness: 'secondary_cited' })).failed).toBe(false)
+  expect((await call('edit_sighting', { record: 1, sighting: read[0].id, rev: 1, closeness: '' })).failed).toBe(false)
+  expect(raw.query('SELECT closeness FROM sightings ORDER BY id').all()).toEqual([{ closeness: null }, { closeness: 'secondary_cited' }, { closeness: 'memory' }])
+  expect(await call('add_sighting', { record: 1, url: 'https://example.test/other', closeness: 'tertiary' })).toMatchObject({ failed: true, value: expect.stringContaining('closeness is one of: primary, secondary_cited, secondary_uncited, memory') })
+})
+
 test('an agent\'s edit keeps the pictures of the chain, which it cannot send', async () => {
   const { call, raw } = fixture()
   pictures()
@@ -630,4 +651,292 @@ test('every write is an agent\'s, named by the harness and model it says', async
   expect((await call('add_record', { ids: ['⿰山南'], sightings: [sighting], agent: { harness: 'Codex' } }, other)).failed).toBe(false)
   expect(actor(3)).toMatchObject({ name: 'Codex', agent: 1, agent_model: '' })
   expect((await call('add_sighting', { record: 1, ...sighting, place: 'Elsewhere', agent: { harness: 'x'.repeat(81) } }, other)).value).toContain('agent.harness')
+})
+
+test('cites, cited_by, link_sightings, and date-order warnings work across records', async () => {
+  const { call } = fixture()
+  const r1 = await call('add_record', {
+    ids: ['⿰山東'],
+    sightings: [{ place: 'Zihui Bu p. 5', title: '字彙補', report_date: '1666', url: 'https://example.test/zihui' }],
+  })
+  expect(r1.failed).toBe(false)
+  const s1 = (await call('get_record', { record: r1.value.id })).value.sightings[0].id
+
+  const r2 = await call('add_record', {
+    ids: ['⿰山柬'],
+    sightings: [{
+      place: 'Kangxi p. 12', title: '康熙字典', report_date: '1716', url: 'https://example.test/kx',
+      cites: [
+        { kind: 'quotes', sighting: s1, title: '字彙補', quote: '《字彙補》音東' },
+        { kind: 'quotes', title: '現代論文', report_date: '2024' },
+      ],
+      vias: [{ title: '古本', report_date: '1600' }],
+    }],
+  })
+  expect(r2.failed).toBe(false)
+  expect(r2.value.warnings).toHaveLength(2)
+
+  // Cross-record cited_by appears on record 1.
+  const got1 = (await call('get_record', { record: r1.value.id })).value
+  expect(got1.sightings[0].cited_by).toHaveLength(1)
+  expect(got1.sightings[0].cited_by[0]).toMatchObject({ kind: 'quotes', entry_id: r2.value.id, title: '康熙字典' })
+
+  // link_sightings adds a derived edge (requiring note) and refuses direct 2-cycles.
+  const s2 = (await call('get_record', { record: r2.value.id })).value.sightings[0].id
+  expect((await call('link_sightings', { sighting: s2, kind: 'derived', source: { title: '龍龕手鑑' } })).failed).toBe(true)
+  const linked = await call('link_sightings', { sighting: s2, kind: 'derived', source: { title: '龍龕手鑑', report_date: '997' }, note: 'same gloss', summary: 'link older gloss' })
+  expect(linked.failed).toBe(false)
+  expect(linked.value.rev).toBe(2)
+
+  const twoCycle = await call('link_sightings', { sighting: s1, kind: 'quotes', cited_sighting: s2 })
+  expect(twoCycle.failed).toBe(true)
+})
+
+test('GET /mcp redirects browsers to the localized setup page and answers 405 to MCP clients', async () => {
+  const send = (method: 'GET' | 'HEAD', headers: Record<string, string> = {}, cookie?: string) => {
+    const request = new Request(`${ORIGIN}/mcp`, { method, headers })
+    const event = {
+      request,
+      url: new URL(request.url),
+      route: { id: '/mcp' },
+      params: {},
+      locals: {},
+      cookies: { get: (name: string) => name === LOCALE_COOKIE ? cookie : undefined },
+      platform: undefined,
+      getClientAddress: () => '127.0.0.1',
+    }
+    return handle({ event, resolve: (resolved: any) => GET(resolved) } as any)
+  }
+
+  const browser = await send('GET', { accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'accept-language': 'ja,en;q=0.8' })
+  expect(browser.status).toBe(302)
+  expect(browser.headers.get('location')).toBe('/ja/mcp')
+  expect(browser.headers.get('cache-control')).toBe('private, no-store')
+  expect(browser.headers.get('vary')).toBe('Accept, Accept-Language, Cookie')
+
+  const head = await send('HEAD', { accept: 'text/html', 'accept-language': 'ja' })
+  expect(head.status).toBe(302)
+  expect(head.headers.get('location')).toBe('/ja/mcp')
+
+  const preferred = await send('GET', { accept: 'text/html', 'accept-language': 'ja' }, 'zh-Hant')
+  expect(preferred.status).toBe(302)
+  expect(preferred.headers.get('location')).toBe('/zh-Hant/mcp')
+
+  const invalidCookie = await send('GET', { accept: 'text/html', 'accept-language': 'ko' }, 'xx-Invalid')
+  expect(invalidCookie.status).toBe(302)
+  expect(invalidCookie.headers.get('location')).toBe('/ko/mcp')
+
+  const zeroSse = await send('GET', { accept: 'text/html, text/event-stream;q=0', 'accept-language': 'en' })
+  expect(zeroSse.status).toBe(302)
+  expect(zeroSse.headers.get('location')).toBe('/en/mcp')
+
+  const nonHtml: Record<string, string>[] = [
+    {},
+    { accept: 'text/event-stream' },
+    { accept: 'text/html, text/event-stream' },
+    { accept: 'text/event-stream;q=0.5, text/html' },
+    { accept: 'text/html, text/event-stream;q=0.5' },
+    { accept: 'application/json' },
+    { accept: '*/*' },
+    { accept: 'text/html;q=0' },
+    { accept: 'text/html;q=2' },
+    { accept: 'text/html;q=0x1' },
+  ]
+  for (const headers of nonHtml) {
+    const response = await send('GET', headers)
+    expect(response.status).toBe(405)
+    expect(response.headers.get('allow')).toBe('POST')
+    expect(response.headers.get('vary')).toBe('Accept')
+  }
+})
+
+test('list_tags, add_comment, and edit_source_alias work via MCP', async () => {
+  const { call, raw } = fixture()
+  const tags = await call('list_tags', {})
+  expect(tags.failed).toBe(false)
+  expect(tags.value.tags.some((tag: { name: string }) => tag.name === 'kokuji')).toBe(true)
+
+  await call('add_record', { ids: ['⿰山東'], sightings: [{ place: 'p. 1', title: 'Kangxi Dictionary', url: 'https://example.test/1' }] })
+  const initial = (await call('get_record', { record: 1 })).value
+  expect(initial.sightings[0].source_id).toBeGreaterThan(0)
+  expect(initial.comments).toEqual([])
+
+  const commented = await call('add_comment', { record: 1, sighting: initial.sightings[0].id, body: 'Matches block print.', agent: { harness: 'Test' } })
+  expect(commented.failed).toBe(false)
+  expect(commented.value.comment).toBeGreaterThan(0)
+  expect(await call('add_comment', { record: 1, sighting: 999, body: 'bad', agent: { harness: 'Test' } })).toMatchObject({ failed: true })
+  expect(await call('add_comment', { record: 1, body: '   ', agent: { harness: 'Test' } })).toMatchObject({ failed: true })
+
+  const afterComment = (await call('get_record', { record: 1 })).value
+  expect(afterComment.comments).toHaveLength(1)
+  expect(afterComment.comments[0]).toMatchObject({ sighting: initial.sightings[0].id, body: 'Matches block print.' })
+
+  const sourceId = initial.sightings[0].source_id
+  expect(await call('edit_source_alias', { source: sourceId, alias: 'KXZD', action: 'add', agent: { harness: 'Test' } })).toEqual({
+    failed: false,
+    value: { source: sourceId, alias: 'KXZD', action: 'add' },
+  })
+  expect(raw.query('SELECT spelling FROM source_aliases WHERE source_id = ?').all(sourceId)).toEqual([{ spelling: 'KXZD' }])
+  expect((await call('edit_source_alias', { source: sourceId, alias: 'KXZD', action: 'remove', agent: { harness: 'Test' } })).failed).toBe(false)
+  expect(raw.query('SELECT spelling FROM source_aliases WHERE source_id = ?').all(sourceId)).toEqual([])
+})
+
+test('remove_sighting, merge_records, unmerge_record, get_history, and restore_revision work via MCP', async () => {
+  const { call } = fixture()
+  await call('add_record', { ids: ['⿰山東'], description: 'First', sightings: [{ place: 'p. 1', url: 'https://example.test/1' }] })
+  const added = await call('add_sighting', { record: 1, place: 'p. 2', url: 'https://example.test/2' })
+  const secondId = added.value.sighting as number
+
+  // Remove the second sighting, refuse removing the last remaining one, then put it back.
+  expect(await call('remove_sighting', { record: 1, sighting: secondId, rev: 1, summary: 'Duplicate scan', agent: { harness: 'Test' } })).toMatchObject({
+    failed: false,
+    value: { sighting: secondId, removed: true },
+  })
+  const firstId = (await call('get_record', { record: 1 })).value.sightings[0].id as number
+  expect(await call('remove_sighting', { record: 1, sighting: firstId, rev: 1, agent: { harness: 'Test' } })).toMatchObject({
+    failed: true,
+    value: expect.stringContaining('only remaining'),
+  })
+
+  const hist = (await call('get_history', { record: 1 })).value
+  expect(hist.removed).toHaveLength(1)
+  expect(hist.removed[0].id).toBe(secondId)
+  expect(await call('restore_revision', { record: 1, sighting: secondId, put_back: true, agent: { harness: 'Test' } })).toMatchObject({
+    failed: false,
+    value: { sighting: secondId, restored: true },
+  })
+  expect((await call('get_record', { record: 1 })).value.sightings).toHaveLength(2)
+
+  // Edit record + sighting, then restore both from history.
+  await call('edit_record', { record: 1, rev: 1, description: 'Second', agent: { harness: 'Test' } })
+  await call('edit_sighting', { record: 1, sighting: firstId, rev: 1, place: 'p. 1 corrected', agent: { harness: 'Test' } })
+  const histAfter = (await call('get_history', { record: 1 })).value
+  const createRow = histAfter.rows.find((row: { sighting: number | null; rev: number }) => row.sighting === null && row.rev === 1)
+  const sightingRow = histAfter.rows.find((row: { sighting: number | null; rev: number }) => row.sighting === firstId && row.rev === 1)
+  expect(createRow.fields?.description).toBe('First')
+  expect(sightingRow.sighting_fields?.place).toBe('p. 1')
+
+  expect(await call('restore_revision', { record: 1, revision: String(createRow.id), rev: 2, agent: { harness: 'Test' } })).toMatchObject({ failed: false, value: { rev: 3 } })
+  expect((await call('get_record', { record: 1 })).value.description).toBe('First')
+  expect(await call('restore_revision', { record: 1, sighting: firstId, revision: sightingRow.id, rev: 2, agent: { harness: 'Test' } })).toMatchObject({ failed: false, value: { sighting: firstId, rev: 3 } })
+  expect((await call('get_record', { record: 1 })).value.sightings.find((s: { id: number }) => s.id === firstId).place).toBe('p. 1')
+
+  // Merge two records (always higher into lower) and undo the merge.
+  await call('add_record', { ids: ['⿰山東'], sightings: [{ place: 'p. 3', url: 'https://example.test/3' }] })
+  expect(await call('merge_records', { record: 1, duplicate_of: 2, summary: 'Same glyph', agent: { harness: 'Test' } })).toMatchObject({
+    failed: false,
+    value: { merged: { id: 2 }, into: { id: 1 } },
+  })
+  expect((await call('get_record', { record: 2 })).value.merged_into.id).toBe(1)
+  expect((await call('get_history', { record: 1 })).value.duplicates).toHaveLength(1)
+  expect(await call('unmerge_record', { record: 2, agent: { harness: 'Test' } })).toMatchObject({
+    failed: false,
+    value: { record: { id: 2 }, from: { id: 1 }, unmerged: true },
+  })
+  expect((await call('get_record', { record: 2 })).value.merged_into).toBeUndefined()
+  expect(await call('unmerge_record', { record: 2, agent: { harness: 'Test' } })).toMatchObject({ failed: true })
+})
+
+test('moderator MCP tools are advertised and callable only by unbanned moderators, even when writes are paused', async () => {
+  const { db, raw, send, call } = fixture({ WRITES_PAUSED: '1' })
+  const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex')
+  const at = new Date().toISOString()
+  raw.run("INSERT INTO people(id, name, role, created_at) VALUES('mod1', 'ModBot', 'moderator', ?)", [at])
+  raw.run("INSERT INTO people(id, name, role, created_at) VALUES('mem1', 'MemberBot', 'member', ?)", [at])
+  raw.run("INSERT INTO agent_clients(id, name, redirect_uris, created_at, used_at) VALUES('c1', 'Bot', '[]', ?, ?)", [at, at])
+  const modToken = 'a'.repeat(64)
+  const memToken = 'b'.repeat(64)
+  raw.run('INSERT INTO agent_tokens(token_hash, client, person, created_at) VALUES(?, ?, ?, ?)', [tokenHash(modToken), 'c1', 'mod1', at])
+  raw.run('INSERT INTO agent_tokens(token_hash, client, person, created_at) VALUES(?, ?, ?, ?)', [tokenHash(memToken), 'c1', 'mem1', at])
+
+  const modAuth = { authorization: `Bearer ${modToken}` }
+  const memAuth = { authorization: `Bearer ${memToken}` }
+
+  // Anonymous and regular members do not see moderator tools and are refused when calling them.
+  const anonTools = (await (await send({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).json() as any).result.tools.map((t: { name: string }) => t.name)
+  const memTools = (await (await send({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, memAuth)).json() as any).result.tools.map((t: { name: string }) => t.name)
+  const modTools = (await (await send({ jsonrpc: '2.0', id: 3, method: 'tools/list' }, modAuth)).json() as any).result.tools.map((t: { name: string }) => t.name)
+  for (const name of ['set_hidden', 'list_reports', 'resolve_report', 'set_comment_hidden', 'redact_revision']) {
+    expect(anonTools).not.toContain(name)
+    expect(memTools).not.toContain(name)
+    expect(modTools).toContain(name)
+  }
+
+  const callAs = async (name: string, args: Record<string, unknown>, headers: Record<string, string>) => {
+    const body = await (await send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }, headers)).json() as any
+    const text = body.result.content[0].text
+    return { failed: Boolean(body.result.isError), value: body.result.isError ? text : JSON.parse(text) }
+  }
+
+  expect(await callAs('list_reports', {}, memAuth)).toMatchObject({ failed: true, value: expect.stringContaining('moderator') })
+  expect(await callAs('set_hidden', { record: 1, hidden: true, agent: { harness: 'Test' } }, memAuth)).toMatchObject({ failed: true, value: expect.stringContaining('moderator') })
+
+  // Full end-to-end moderation lifecycle on an unpaused database.
+  const unpaused = fixture()
+  unpaused.raw.run("INSERT INTO people(id, name, role, created_at) VALUES('mod1', 'ModBot', 'moderator', ?)", [at])
+  unpaused.raw.run("INSERT INTO agent_clients(id, name, redirect_uris, created_at, used_at) VALUES('c1', 'Bot', '[]', ?, ?)", [at, at])
+  unpaused.raw.run('INSERT INTO agent_tokens(token_hash, client, person, created_at) VALUES(?, ?, ?, ?)', [tokenHash(modToken), 'c1', 'mod1', at])
+  const callMod = async (name: string, args: Record<string, unknown>) => {
+    const body = await (await unpaused.send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }, modAuth)).json() as any
+    const text = body.result.content[0].text
+    return { failed: Boolean(body.result.isError), value: body.result.isError ? text : JSON.parse(text) }
+  }
+
+  await unpaused.call('add_record', { ids: ['⿰山東'], description: 'Secret PII', sightings: [{ place: 'p. 1', url: 'https://example.test/1' }] })
+  await unpaused.call('edit_record', { record: 1, rev: 1, description: 'Clean', agent: { harness: 'Test' } })
+  const sightingId = (await unpaused.call('get_record', { record: 1 })).value.sightings[0].id as number
+  const commentId = (await unpaused.call('add_comment', { record: 1, body: 'Spam link', agent: { harness: 'Test' } })).value.comment as number
+  await report(unpaused.db, { entry: 1, sighting: sightingId }, 'Spam sighting', 'mod1')
+
+  // List & resolve reports.
+  const listed = await callMod('list_reports', {})
+  expect(listed.failed).toBe(false)
+  expect(listed.value.reports).toHaveLength(1)
+  const reportId = listed.value.reports[0].id as number
+  expect(await callMod('resolve_report', { report: reportId, agent: { harness: 'Mod' } })).toEqual({ failed: false, value: { report: reportId, resolved: true } })
+  expect((await callMod('list_reports', {})).value.reports).toEqual([])
+
+  // Hide comment: hidden from public and default moderator get_record; visible only with include_hidden: true.
+  expect(await callMod('set_comment_hidden', { record: 1, comment: commentId, hidden: true, agent: { harness: 'Mod' } })).toMatchObject({ failed: false, value: { comment: commentId, hidden: true } })
+  expect((await unpaused.call('get_record', { record: 1, include_hidden: true })).value.comments).toEqual([])
+  expect((await callMod('get_record', { record: 1 })).value.comments).toEqual([])
+  expect((await callMod('get_record', { record: 1, include_hidden: true })).value.comments).toMatchObject([{ id: commentId, hidden: true }])
+
+  // Hide sighting & record: hidden by default even for moderators; visible when include_hidden: true.
+  expect(await callMod('set_hidden', { record: 1, sighting: sightingId, hidden: true, summary: 'Bad scan', agent: { harness: 'Mod' } })).toMatchObject({ failed: false, value: { sighting: sightingId, hidden: true } })
+  expect((await unpaused.call('get_record', { record: 1, include_hidden: true })).value.sightings).toEqual([])
+  expect((await callMod('get_record', { record: 1 })).value.sightings).toEqual([])
+  expect((await callMod('get_record', { record: 1, include_hidden: true })).value.sightings).toMatchObject([{ id: sightingId, hidden: true }])
+  const hiddenHist = (await callMod('get_history', { record: 1, include_hidden: true })).value.rows as { sighting: number | null; hidden?: boolean }[]
+  expect(hiddenHist.some(row => row.sighting === sightingId && row.hidden === true)).toBe(true)
+
+  expect(await callMod('set_hidden', { record: 1, hidden: true, summary: 'Spam', agent: { harness: 'Mod' } })).toMatchObject({ failed: false, value: { hidden: true } })
+  expect((await unpaused.call('get_record', { record: 1, include_hidden: true })).failed).toBe(true)
+  expect((await callMod('get_record', { record: 1 })).failed).toBe(true)
+  expect((await callMod('get_record', { record: 1, include_hidden: true })).value.hidden).toBe(true)
+  expect(await callMod('set_hidden', { record: 1, hidden: false, agent: { harness: 'Mod' } })).toMatchObject({ failed: false, value: { hidden: false } })
+
+  // Redact past revision (rev 1) succeeds; redacting current revision (rev 2) is refused.
+  const hist = (await callMod('get_history', { record: 1 })).value.rows as { id: number; sighting: number | null; rev: number }[]
+  const rev1 = hist.find(r => r.sighting === null && r.rev === 1)!
+  const rev2 = hist.find(r => r.sighting === null && r.rev === 2)!
+  expect(await callMod('redact_revision', { record: 1, revision: rev1.id, summary: 'Remove PII', agent: { harness: 'Mod' } })).toMatchObject({ failed: false, value: { revision: rev1.id, redacted: true } })
+  expect(await callMod('redact_revision', { record: 1, revision: rev2.id, agent: { harness: 'Mod' } })).toMatchObject({ failed: true })
+
+  // Merged records are refused by set_hidden so duplicates stay reachable for unmerge.
+  await unpaused.call('add_record', { ids: ['⿰山東'], sightings: [{ place: 'p. 2', url: 'https://example.test/2' }] })
+  await unpaused.call('merge_records', { record: 1, duplicate_of: 2, agent: { harness: 'Test' } })
+  expect(await callMod('set_hidden', { record: 2, hidden: true, agent: { harness: 'Mod' } })).toMatchObject({ failed: true, value: expect.stringContaining('merged') })
+
+  // Moderator tools still work under WRITES_PAUSED=1.
+  raw.run("INSERT INTO entries(id, script, rev, created_by, created_at, updated_at) VALUES(1, 'han', 1, 'mod1', ?, ?)", [at, at])
+  await report(db, { entry: 1, sighting: null }, 'Paused test', 'mod1')
+  expect((await callAs('resolve_report', { report: 1, agent: { harness: 'Mod' } }, modAuth)).failed).toBe(false)
+
+  // A banned moderator loses moderator tool visibility and access.
+  raw.run("UPDATE people SET banned_at = ? WHERE id = 'mod1'", [at])
+  const bannedTools = (await (await send({ jsonrpc: '2.0', id: 4, method: 'tools/list' }, modAuth)).json() as any).result.tools.map((t: { name: string }) => t.name)
+  expect(bannedTools).not.toContain('set_hidden')
+  expect(await callAs('list_reports', {}, modAuth)).toMatchObject({ failed: true })
+  expect(await callAs('set_hidden', { record: 1, hidden: true, agent: { harness: 'Mod' } }, modAuth)).toMatchObject({ failed: true })
 })
