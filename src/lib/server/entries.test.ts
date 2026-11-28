@@ -2373,6 +2373,11 @@ test('parts typed with no structure find the records that spell them another way
   expect(await found({ query: '⺾時' })).toEqual([typed, radical, mate])
   const flesh = await createEntry(db, described('⿰⺼木'), seen(), [], who)
   expect(await found({ query: '月木' })).toEqual([flesh])
+  // A character is found written out in the strokes it is drawn from, which the browser names as another spelling.
+  const strokes = await createEntry(db, described('⿲㇇丨𰛅'), seen(), [], who)
+  expect(alsoSearchParts('水', ['㇇𰛅'])).toEqual(['㇇𰛅'])
+  expect(await found({ query: '水', also: ['㇇𰛅'] })).toEqual([strokes])
+  expect(await found({ query: '㇇' })).toEqual([strokes])
   // The widest search stays under the number of values one statement may bind.
   const widest = { script: 'han', filter: 'variant', facet: 't:hakka', radical: '口', decade: '1930', within: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], without: ['unicode', 'zitools', 'yedict', 'glyphwiki', 'mj'], query: '㔾七丸儿兔', also: ['兹冃冊凷刀', '叉友另囘堇', '夂奂尒彐擧'] }
   const bound = (statement: unknown) => (statement as { values: unknown[] }).values.length

@@ -5,7 +5,8 @@
 import { groupKey, groupMates, hasOverlay, hasStroke, plain, typedTree, write, type Tree } from './similar'
 import { radicalEquivalent } from './radicals'
 
-export type Table = { encoded: ReadonlyMap<string, string>; described: ReadonlyMap<string, string> }
+/** `all`, when the table has it, holds every description of a character, the first one first. */
+export type Table = { encoded: ReadonlyMap<string, string>; described: ReadonlyMap<string, string>; all?: ReadonlyMap<string, readonly string[]> }
 /** Spellings at most, the one typed included. */
 export const SPELLINGS_MAX = 16
 
@@ -99,15 +100,33 @@ function partSteps(run: readonly string[], table: Table): string[][] {
   return found
 }
 
+// The parts a character is drawn from when its description goes down to strokes or overlays, which no
+// spelling writes out: 水 is ㇇ and 𰛅. A component the table names by number alone ({24}) is left out, and
+// a description with fewer than two parts left says nothing.
+function drawnFrom(part: string, table: Table): string[][] {
+  if (wholeOf(part, table)) return []
+  // A description that takes strokes away (㇯上一) names what the character is not made of.
+  const descriptions = (table.all?.get(part) ?? [table.described.get(part) ?? '']).filter(description => !description.includes('\u31EF'))
+  const runs = descriptions.map(description => [...new Set([...description.replace(/\{\d+\}|#\([^)]*\)|&[^;]*;/gu, '')].filter(isParts).map(radicalEquivalent))])
+  return runs.filter(run => run.length >= 2 && run.length <= PART_RUN_MAX && !run.includes(part))
+}
+
 /**
  * The runs of parts that may spell what a run of parts does, the typed one first: 艹時 is also 艹日寺 and 蒔.
  * Radical code points count as the ideographs they stand for, and a run with the same parts in another order is the same run.
  * A part typed twice is folded as two (木木 into 林) and written once, since a record is found by each part it holds.
+ * A character typed alone that is drawn from strokes is also the run of those (水 is ㇇𰛅), which finds a description that writes it out.
  */
 export function partSpellings(text: string, table: Table, limit = PART_SPELLINGS_MAX): string[] {
   const start = [...plain(text)].map(radicalEquivalent)
   const key = (run: readonly string[]) => [...new Set(run)].sort().join('')
   const found = [start], seen = new Set([key(start)])
+  // Only a character typed alone: among other parts its strokes would find every record that holds a 一 or a 丨.
+  if (start.length === 1) for (const run of drawnFrom(start[0], table)) {
+    if (found.length === limit || seen.has(key(run))) continue
+    seen.add(key(run))
+    found.push(run)
+  }
   for (let at = 0; at < found.length && found.length < limit; at++) {
     for (const stepped of partSteps(found[at], table)) {
       if (new Set(stepped).size > PART_RUN_MAX || stepped.length > PART_RUN_MAX * 2 || seen.has(key(stepped))) continue

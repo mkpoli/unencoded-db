@@ -83,6 +83,14 @@ test('parts typed with no structure are also the parts written out and the chara
   const more = { described: new Map([['林', '⿰木木'], ['产', '⿱亠⿸丷厂'], ['𠂉', '⿱丷厂']]), encoded: new Map([['⿰木木', '林'], ['⿳亠丷厂', '产']]) }
   expect(partSpellings('木木', more)).toEqual(['木', '林'])
   expect(partSpellings('厂丷亠', more)).toContain('产')
+  // A character drawn from strokes is also the run of what it is drawn from, by each description it has.
+  const strokes = new Map([['水', '⿰㇇𰛅'], ['𰛅', '⿰亅{24}'], ['手', '⿱㇒⿻二亅'], ['丄', '⿱丨一']])
+  const drawn = { described: strokes, encoded: new Map<string, string>(), all: new Map([['水', ['⿰㇇𰛅', '⿰𰛄{24}']], ['丄', ['⿱丨一', '㇯上一']]]) }
+  expect(partSpellings('水', drawn)).toEqual(['水', '㇇𰛅'])
+  expect(partSpellings('手', drawn)).toEqual(['手', '丿二亅'])
+  expect(partSpellings('舟水', drawn)).toEqual(['舟水'])
+  expect(partSpellings('丄', drawn)).toEqual(['丄', '丨一'])
+  expect(partSpellings('𰛅', drawn)).toEqual(['𰛅'])
   expect(isParts('艹時')).toBe(true)
   for (const text of ['⿱艹時', '艹 時', 'word', '']) expect(isParts(text)).toBe(false)
 })
