@@ -2,10 +2,8 @@ import { error, redirect } from '@sveltejs/kit'
 import { FUNCTION_MAX, partKey, validPartKey } from '$lib/composition'
 import { tileGlyphs } from '$lib/server/glyphs'
 import { env } from '$lib/server/guard'
-import { partEntries, partSummary } from '$lib/server/parts'
+import { parsePartCursor, partEntries, partSummary, type PartCursor } from '$lib/server/parts'
 import type { PageServerLoad } from './$types'
-
-const AFTER_RE = /^[1-9]\d{0,15}$/
 
 export const load: PageServerLoad = async (event) => {
   const raw = event.params.part
@@ -31,12 +29,10 @@ export const load: PageServerLoad = async (event) => {
   }
 
   const rawAfter = searchParams.get('after')
-  let after: number | null = null
+  let after: PartCursor | null = null
   if (rawAfter !== null) {
-    if (!AFTER_RE.test(rawAfter)) error(404)
-    const parsed = Number(rawAfter)
-    if (!Number.isSafeInteger(parsed) || parsed < 1) error(404)
-    after = parsed
+    after = parsePartCursor(rawAfter)
+    if (!after) error(404)
   }
 
   const db = env(event).DB

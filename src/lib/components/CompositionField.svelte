@@ -50,18 +50,22 @@
 
   $effect(() => {
     if (!hydrated || !open) return
-    const keys = [...new Set(rows.map(row => partKey(row.part)).filter(validPartKey))]
-    for (const key of keys) {
-      if (fetched.has(key)) continue
-      fetched.add(key)
-      fetch(`/api/parts/functions?part=${encodeURIComponent(key)}`)
-        .then(res => res.ok ? res.json() as Promise<{ functions?: { func: string }[] }> : null)
-        .then(payload => {
-          if (!payload?.functions) return
-          suggestions = { ...suggestions, [key]: payload.functions.map(item => item.func) }
-        })
-        .catch(() => { fetched.delete(key) })
-    }
+    const keys = [...new Set(rows.map(row => partKey(row.part)).filter(key => validPartKey(key) && !fetched.has(key)))]
+    if (!keys.length) return
+    const timer = setTimeout(() => {
+      for (const key of keys) {
+        if (fetched.has(key)) continue
+        fetched.add(key)
+        fetch(`/api/parts/functions?part=${encodeURIComponent(key)}`)
+          .then(res => res.ok ? res.json() as Promise<{ functions?: { func: string }[] }> : null)
+          .then(payload => {
+            if (!payload?.functions) return
+            suggestions = { ...suggestions, [key]: payload.functions.map(item => item.func) }
+          })
+          .catch(() => { fetched.delete(key) })
+      }
+    }, 200)
+    return () => clearTimeout(timer)
   })
 
   // Unsaved rows stay while the description is being typed, and start again from its parts once it

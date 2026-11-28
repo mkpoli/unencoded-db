@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { newClaim, readClaims, type Claim } from '$lib/claims'
 import { analyze, composeValue, parseComposition, partKey, partRoleRowsOf } from '$lib/composition'
 import { createEntry, editEntry, mergeEntry, setHidden, type EntryFields, type SightingFields } from './entries'
-import { listParts, partCountsStatement, partEntries, partEntriesStatement, partFunctionCountsStatement, partFunctionSuggestionsStatement, partSuggestions, partSummary } from './parts'
+import { listParts, parsePartCursor, partCountsStatement, partEntries, partEntriesStatement, partFunctionCountsStatement, partFunctionSuggestionsStatement, partSuggestions, partSummary } from './parts'
 import { openTestDb } from './testdb'
 import { load as partPageLoad } from '../../routes/[locale]/part/[part]/+page.server'
 import { load as partsIndexLoad } from '../../routes/[locale]/parts/+page.server'
@@ -117,9 +117,33 @@ describe('part functions', () => {
     // Filter by specific function and by unlabeled.
     expect((await partEntries(db, '亻', { func: '表示民族名' })).entries.map(item => item.tile.id)).toEqual([id3])
     expect((await partEntries(db, '亻', { func: '' })).entries.map(item => item.tile.id)).toEqual([id4])
-    expect((await partEntries(db, '亻', { limit: 2 })).entries.map(item => item.tile.id)).toEqual([id4, id3])
-    expect((await partEntries(db, '亻', { limit: 2 })).more).toBe(id3)
-    expect((await partEntries(db, '亻', { after: id3, limit: 2 })).entries.map(item => item.tile.id)).toEqual([id2, id1])
+    const page1 = await partEntries(db, '亻', { limit: 2 })
+    expect(page1.entries.map(item => item.tile.id)).toEqual([id4, id3])
+    expect(page1.more).toBe(String(id3))
+    const page2 = await partEntries(db, '亻', { after: parsePartCursor(page1.more!), limit: 2 })
+    expect(page2.entries.map(item => item.tile.id)).toEqual([id2, id1])
+    expect(page2.more).toBeNull()
+
+    // A single record tagging the same part twice with different roles/functions never loses rows across pages.
+    const dupId = await createEntry(db, fields([
+      newClaim('ids', '⿰木木'),
+      newClaim('composition', '⿰木木', {
+        parts: ['木', '木'],
+        roles: ['semantic', 'phonetic'],
+        functions: ['表植物', ''],
+        formation: null,
+      }),
+    ]), seen(), [], who)
+    const firstHalf = await partEntries(db, '木', { limit: 1 })
+    expect(firstHalf.entries).toHaveLength(1)
+    expect(firstHalf.more).not.toBeNull()
+    const secondHalf = await partEntries(db, '木', { after: parsePartCursor(firstHalf.more!), limit: 1 })
+    expect(secondHalf.entries).toHaveLength(1)
+    expect(secondHalf.more).toBeNull()
+    expect([...firstHalf.entries, ...secondHalf.entries].map(item => [item.tile.id, item.role, item.func])).toEqual([
+      [dupId, 'semantic', '表植物'],
+      [dupId, 'phonetic', ''],
+    ])
 
     // Editing updates counts cleanly.
     await editEntry(db, id4, 1, fields([
@@ -209,8 +233,10 @@ describe('part functions', () => {
       partFunctionCountsStatement(db, '亻'),
       partFunctionSuggestionsStatement(db, '亻'),
       partEntriesStatement(db, '亻', null, null),
-      partEntriesStatement(db, '亻', '度量衡「倍」字省略', 100),
-      partEntriesStatement(db, '亻', '', 100),
+      partEntriesStatement(db, '亻', null, { id: 100, role: 'semantic', func: '表示民族名' }),
+      partEntriesStatement(db, '亻', '度量衡「倍」字省略', null),
+      partEntriesStatement(db, '亻', '度量衡「倍」字省略', { id: 100, role: 'semantic', func: '度量衡「倍」字省略' }),
+      partEntriesStatement(db, '亻', '', { id: 100, role: '', func: '' }),
     ]
     for (const stmt of statements) {
       const plan = explain(stmt)

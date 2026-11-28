@@ -102,8 +102,8 @@
             class="slice"
             class:active={seg.active}
             class:dim={selected !== null && !seg.active}
-            aria-label={`${seg.label}: ${seg.n} (${seg.pct}%)`}
-            aria-current={seg.active ? 'page' : undefined}
+            tabindex="-1"
+            aria-hidden="true"
           >
             <path d={seg.path} fill="none" stroke={seg.color} stroke-width={seg.active ? STROKE + 5 : STROKE} />
             <title>{seg.label}: {seg.n} ({seg.pct}%)</title>
@@ -176,11 +176,10 @@
   }
   .ring { display: flex; justify-content: center }
   .ring svg { width: 176px; height: 176px; overflow: visible }
-  .slice { cursor: pointer; outline: none }
+  .slice { cursor: pointer }
   .slice path { transition: stroke-width 140ms ease, opacity 140ms ease }
   .slice:hover path { opacity: 0.88 }
   .slice.dim path { opacity: 0.42 }
-  .slice:focus-visible path { stroke-dasharray: 4 2; outline: 3px solid var(--focus-ring) }
   .center-glyph { fill: var(--ink); font-size: 28px; font-weight: 600 }
   .center-count { fill: var(--muted); font-size: 11.5px }
   .legend-wrap { min-width: 0 }

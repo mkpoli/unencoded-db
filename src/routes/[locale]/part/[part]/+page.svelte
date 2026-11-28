@@ -10,11 +10,11 @@
   const at = locale()
   const basePath = $derived(href(`/part/${encodeURIComponent(data.part)}`))
 
-  function filterHref(func: string | null, after: number | null = null): string {
+  function filterHref(func: string | null, after: string | null = null): string {
     const params = new URLSearchParams()
     if (func === '') params.set('unlabeled', '1')
     else if (func !== null) params.set('func', func)
-    if (after !== null) params.set('after', String(after))
+    if (after !== null) params.set('after', after)
     const query = params.toString()
     return query ? `${basePath}?${query}` : basePath
   }
