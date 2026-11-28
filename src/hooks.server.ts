@@ -1,5 +1,6 @@
 import { canonicalRecordSubpath } from '$lib/code'
 import { GLYPH_STYLE_COOKIE, glyphStyleOf } from '$lib/composer'
+import { LIST_VIEW_COOKIE, listViewOf } from '$lib/list-view'
 import { redirect, type Handle, type RequestEvent } from '@sveltejs/kit'
 import { isLocale, LOCALE_COOKIE, negotiate } from '$lib/i18n'
 import { agentToken, loopback, personOf, sessionName } from '$lib/server/people'
@@ -62,6 +63,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   event.locals.theme = theme === 'light' || theme === 'dark' ? theme : 'system'
   event.locals.glyphStyle = glyphStyleOf(event.cookies.get(GLYPH_STYLE_COOKIE))
   event.locals.tileSize = tileSizeOf(event.cookies.get(TILE_SIZE_COOKIE))
+  event.locals.listView = listViewOf(event.cookies.get(LIST_VIEW_COOKIE))
   const db = event.platform?.env.DB
   // A browser names itself by its cookie. An agent names itself by the token it signed in for, or else by
   // its connection's own.
