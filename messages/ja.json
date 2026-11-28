@@ -383,6 +383,8 @@
   "ready.running": "本文中の用例",
   "ready.second": "2件目の出典",
   "ready.rules": "IRGの規則",
+  "ready.fssc": "画数と第一画の基準",
+  "ready.radicals": "部首配当規則",
   "edit.title": "記録{id}を編集",
   "edit.identity": "文字",
   "duplicates.title": "重複の可能性がある記録",

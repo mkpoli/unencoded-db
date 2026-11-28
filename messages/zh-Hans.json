@@ -383,6 +383,8 @@
   "ready.running": "出现于正文",
   "ready.second": "第二个出处",
   "ready.rules": "IRG规则",
+  "ready.fssc": "笔画数与起笔指南",
+  "ready.radicals": "部首归部规则",
   "edit.title": "编辑记录{id}",
   "edit.identity": "字",
   "duplicates.title": "可能重复的记录",

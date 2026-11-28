@@ -41,7 +41,7 @@
   import { documentUrl, formatDocumentPage } from '$lib/unicode-docs'
   import { COLLECTIONS, TAG_TYPES, implicationClosure, localized, tagLabels, tagLookup } from '$lib/tags'
   import { boxesOf, evidenceFile, pictureAlt } from '$lib/picture'
-  import { CHECKS, readiness } from '$lib/readiness'
+  import { CHECKS, IRG_REFERENCES, readiness } from '$lib/readiness'
   import { parseContexts, parseSightingTypes } from '$lib/scripts'
   import { snippet } from '$lib/seo'
   import { recordData } from '$lib/structured-data'
@@ -368,7 +368,7 @@
   <section class="panel stack">
     <h2>{t('ready.title')}</h2>
     <ul class="checks">{#each CHECKS as check}<li class:done={ready[check]}><span class="tick" aria-hidden="true">{ready[check] ? '✓' : '○'}</span>{t(`ready.${check}`)}</li>{/each}</ul>
-    <a class="text-link small" href="https://www.unicode.org/irg/pp/" target="_blank" rel="noopener">{t('ready.rules')} ↗</a>
+    <p class="sites">{#each IRG_REFERENCES as ref (ref.id)}<a class="text-link small" href={ref.href} target="_blank" rel="noopener" title="{ref.doc} ({ref.date})">{t(ref.labelKey)} ↗</a>{/each}</p>
   </section>
   {/if}
   <section class="stack">
