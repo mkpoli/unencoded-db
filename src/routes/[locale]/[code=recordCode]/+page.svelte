@@ -35,10 +35,11 @@
   import ViaChain from '$lib/components/ViaChain.svelte'
   import ArchiveLinks from '$lib/components/ArchiveLinks.svelte'
   import type { Fill } from '$lib/encoded'
-  import { compositionOf, encodingsOf, idsForms, primaryLayoutOf, supportedBy, valuesOf } from '$lib/claims'
+  import { compositionOf, documentsOf, encodingsOf, idsForms, primaryLayoutOf, supportedBy, valuesOf } from '$lib/claims'
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { codePage, marksOf, registryLabel } from '$lib/registries'
+  import { documentUrl, formatDocumentPage } from '$lib/unicode-docs'
   import { COLLECTIONS, implicationClosure, localized, tagLabels, tagLookup } from '$lib/tags'
   import { boxesOf, evidenceFile, pictureAlt } from '$lib/picture'
   import { CHECKS, readiness } from '$lib/readiness'
@@ -155,6 +156,7 @@
   const analysis = $derived(sequences[0] ? analyze(sequences[0], compositionOf(claims)) : null)
   const ivd = $derived(valuesOf(claims, 'ivd')[0] ?? null)
   const encodings = $derived(encodingsOf(claims))
+  const documents = $derived(documentsOf(claims))
   const recordLabel = $derived(`${recordCode(entry.id)} ${recordName(entry.id)}`)
   const unicode = $derived(encodings.find(encoding => encoding.charset === 'unicode'))
   const subject = $derived(entry.ids || (unicode && encodedCharacter(unicode.code)))
@@ -292,6 +294,7 @@
         <div><dt>{registryLabel(encoding.charset)}</dt><dd>{#if character}<span class="character encoded">{character}</span><CopyButton text={character} />{' '}{/if}{#if page}<a class="mono text-link" href={page} target="_blank" rel="noopener">{encoding.code} ↗</a>{:else}<span class="mono">{encoding.code}</span>{/if}{#if character}<span class="sites">{#each characterLinks(character, at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</span>{/if}</dd></div>
       {/each}
       {#if ivd}<div><dt>{t('field.ivd')}</dt><dd class:mono={ivd !== 'none'}>{ivd === 'none' ? t('field.ivdNone') : ivd}</dd></div>{/if}
+      {#if documents.length}<div><dt>{t('field.documents')}<EditLink field="identity" name={t('field.documents')} /></dt><dd><ul class="docs">{#each documents as doc (`${doc.doc}|${doc.page ?? ''}|${doc.url ?? ''}`)}{@const link = documentUrl(doc.doc, doc.url)}<li>{#if link}<a class="mono text-link" href={link} target="_blank" rel="noopener noreferrer">{doc.doc} ↗</a>{:else}<span class="mono">{doc.doc}</span>{/if}{#if doc.page}{' '}<span class="muted">{formatDocumentPage(doc.page)}</span>{/if}</li>{/each}</ul></dd></div>{/if}
       {#if data.filed.length}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd class="radicals">{#each data.filed as radical, index (radical.path)}{#if index}<span class="muted" aria-hidden="true">›</span>{/if}<a class="character text-link" href={browseHref(href(), { radical: radical.path })}>{radical.radical}</a>{/each}</dd></div>{:else if entry.radical}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd>{entry.radical}</dd></div>{:else}<div><dt>{t('field.radical')}</dt><dd><EditLink field="identity" name={t('entry.addRadical')} add /></dd></div>{/if}
       {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
     </dl>
@@ -422,6 +425,8 @@
   .chips { display:flex; flex-wrap:wrap; align-items:center; gap:6px } .chip-link { padding:2px 10px; border:1px solid var(--line); border-radius:999px; font-size:13px } .chip-link:hover { border-color:var(--accent); color:var(--accent) } .chips .tag-chip:hover { filter: brightness(0.95) }
   .marks { display:flex; flex-wrap:wrap; gap:6px; margin:0; padding:0; list-style:none } .marks a:hover { text-decoration:underline }
   .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(145px,100%),1fr)); gap:12px; margin:0 } .facts:empty { display:none }
+  .docs { display:flex; flex-direction:column; gap:2px; margin:0; padding:0; list-style:none }
+  .docs li { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 6px }
   dt { color:var(--muted); font-size:12px } dd { margin:2px 0 0; overflow-wrap:anywhere }
   .radicals { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px }
   .character { font-size:20px; line-height:1.3 } .character.encoded { font-family:inherit; vertical-align:middle }

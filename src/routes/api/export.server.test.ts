@@ -100,6 +100,7 @@ test('export gives every claim kind a column and the pictures a cell', async () 
     (1, 1, 'ids00002', 'ids', '⿱亻木', NULL, '[]', '[]'), (1, 2, 'read0001', 'reading', 'tung', '{"doculect":"hak"}', '[2]', '["mean0001"]'), (1, 3, 'read0002', 'reading', 'dong', NULL, '[]', '[]'),
     (1, 4, 'mean0001', 'meaning', 'east hill', NULL, '[1,2]', '[]'), (1, 5, 'mean0002', 'meaning', 'a pile', NULL, '[]', '[]'),
     (1, 6, 'code0001', 'encoding', 'U+5D20', '{"charset":"unicode"}', '[]', '[]'),
+    (1, 12, 'doc00001', 'document', 'L2/25-056', '{"page":"12"}', '[]', '[]'),
     (1, 7, 'rela0001', 'relation', '崬', '{"relationship":"variant"}', '[1]', '["mean0001","read0001"]'), (1, 8, 'rela0002', 'relation', '堆', '{"relationship":"usage"}', '[]', '["mean0002"]'),
     (1, 9, 'rela0003', 'relation', '東', '{"relationship":"similar"}', '[]', '[]'),
     (1, 10, 'genr0001', 'tag', 'hakka', NULL, '[]', '[]'), (1, 11, 'tag00001', 'tag', 'IRG', NULL, '[]', '[]')`)
@@ -108,13 +109,14 @@ test('export gives every claim kind a column and the pictures a cell', async () 
   const [head, first] = (await response.text()).split('\r\n')
   const columns = head.split(',').map(column => column.slice(1, -1))
   const cells = first.split('","').map(cell => cell.replace(/^"|"$/g, ''))
-  for (const kind of ['ids', 'composition', 'reading', 'meaning', 'encoding', 'relation', 'ivd', 'collection', 'tag', 'images']) expect(columns).toContain(kind)
+  for (const kind of ['ids', 'composition', 'reading', 'meaning', 'encoding', 'document', 'relation', 'ivd', 'collection', 'tag', 'images']) expect(columns).toContain(kind)
   const cell = (name: string) => cells[columns.indexOf(name)]
   expect(cell('ids')).toBe('⿰亻木; ⿱亻木')
   // A claim names what it holds under after its value, and the evidence rows it rests on by their id.
   expect(cell('reading')).toBe('hak:tung [under: east hill] [evidence: #2]; dong')
   expect(cell('meaning')).toBe('east hill [evidence: #1 #2]; a pile')
   expect(cell('encoding')).toBe('unicode:U+5D20')
+  expect(cell('document')).toBe('L2/25-056 p. 12')
   expect(cell('relation')).toBe('崬 (variant) [under: east hill | hak:tung] [evidence: #1]; 堆 (usage) [under: a pile]; 東 (similar)')
   expect(cell('tag')).toBe('hakka; IRG')
   expect(cell('images')).toBe('one.png; two.png')

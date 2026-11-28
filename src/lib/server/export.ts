@@ -4,6 +4,7 @@ import { quotations } from '$lib/quotations'
 import { CLAIM_KINDS, claimsOf, primaryLayoutOf, scopesOf, type Claim } from '$lib/claims'
 import { recordCode } from '$lib/code'
 import { parseContexts, parseSightingTypes } from '$lib/scripts'
+import { formatDocument } from '$lib/unicode-docs'
 import { exportIndexPage, exportPage, parseMarks, SIGHTING_FIELDS, type ExportEntry, type Sighting } from './entries'
 
 export const DATASET_VERSION = 2
@@ -198,11 +199,13 @@ const csvColumns = (bulk: boolean) => ['entry_id', ...(bulk ? ['record_code'] as
 
 const said = (claim: Claim) => claim.kind === 'encoding'
   ? `${claim.data?.charset}:${claim.value}`
-  : claim.kind === 'relation'
-    ? `${claim.value} (${claim.data?.relationship})`
-    : claim.kind === 'reading' && claim.data?.doculect
-      ? `${claim.data.doculect}:${claim.value}`
-      : claim.value
+  : claim.kind === 'document'
+    ? [formatDocument(claim.value, typeof claim.data?.page === 'string' ? claim.data.page : null), typeof claim.data?.url === 'string' ? claim.data.url : ''].filter(Boolean).join(' ')
+    : claim.kind === 'relation'
+      ? `${claim.value} (${claim.data?.relationship})`
+      : claim.kind === 'reading' && claim.data?.doculect
+        ? `${claim.data.doculect}:${claim.value}`
+        : claim.value
 
 export const csvHeader = (bulk = true) => csvColumns(bulk).map(csvCell).join(',') + '\r\n'
 

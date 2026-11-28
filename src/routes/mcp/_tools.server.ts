@@ -466,6 +466,10 @@ function entryForm(input: Json, tags: readonly string[], cite: (value: unknown) 
 
   if (given('encodings')) form.set('encodings_present', '1')
   for (const encoding of items(input.encodings).map(record)) { form.append('encoding_charset', text(encoding.charset)); form.append('encoding_code', text(encoding.code)) }
+  if (given('documents')) form.set('documents_present', '1')
+  for (const doc of items(input.documents).map(row => typeof row === 'string' ? { doc: row } : record(row))) {
+    form.append('document_number', text(doc.doc)); form.append('document_page', text(doc.page)); form.append('document_url', text(doc.url))
+  }
   if (given('ivd')) {
     const ivd = text(input.ivd).trim()
     form.set('ivd_status', !ivd ? '' : ivd === 'none' ? 'none' : 'registered')
@@ -1147,6 +1151,11 @@ function recordFields(evidence: Json, key?: Json) {
     encodings: { type: 'array', description: 'The character sets, dictionaries and glyph registries that hold the character.', items: { type: 'object', required: ['charset', 'code'], properties: {
       charset: { type: 'string', description: `One of ${REGISTRIES.map(registry => registry.id).join(', ')}, or another work's name.` },
       code: { type: 'string', description: 'The code as the work writes it, such as U+2D6DD for unicode.' },
+    } } },
+    documents: { type: 'array', description: 'Unicode (L2), IRG or WG2 documents that discuss the character.', items: { type: 'object', required: ['doc'], properties: {
+      doc: { type: 'string', description: 'Document number, such as L2/25-056, IRG N2850 or WG2 N5234.' },
+      page: { type: 'string', description: 'Page or section within the document.' },
+      url: { type: 'string', description: 'Direct http or https link to the document, when not using the default L2 link.' },
     } } },
     related: { type: 'array', items: { type: 'object', required: ['character', 'relationship'], properties: {
       ...own,

@@ -9,6 +9,7 @@
   import { analyze } from '$lib/composition'
   import { formationLabel, roleLabel } from '$lib/composition-labels'
   import { registryLabel } from '$lib/registries'
+  import { formatDocument } from '$lib/unicode-docs'
   import { COLLECTIONS, type TagType } from '$lib/tags'
   import { parseContexts, parseSightingTypes } from '$lib/scripts'
   import { statusOf } from '$lib/status'
@@ -31,7 +32,7 @@
   ] as const
   const KIND_LABELS: Record<ClaimKind, `${string}.${string}`> = {
     ids: 'field.ids', composition: 'field.formation', reading: 'field.reading', meaning: 'field.meaning', encoding: 'field.encodings',
-    relation: 'field.relatedCharacters', ivd: 'field.ivd', collection: 'field.collection', tag: 'field.tags', creator: 'field.creator',
+    document: 'field.documents', relation: 'field.relatedCharacters', ivd: 'field.ivd', collection: 'field.collection', tag: 'field.tags', creator: 'field.creator',
   }
   const WIDE: ClaimKind[] = ['reading', 'meaning', 'relation', 'composition']
   const at = locale()
@@ -39,6 +40,11 @@
   function shown(claim: Claim, claims: Claim[]): string {
     switch (claim.kind) {
       case 'encoding': return `${registryLabel(String(claim.data?.charset ?? ''))} ${claim.value}`
+      case 'document': {
+        const label = formatDocument(claim.value, typeof claim.data?.page === 'string' ? claim.data.page : null)
+        const url = typeof claim.data?.url === 'string' ? claim.data.url : ''
+        return url ? `${label} · ${url}` : label
+      }
       case 'ivd': return claim.value === 'none' ? t('field.ivdNone') : claim.value
       case 'collection': return COLLECTIONS.find(item => item.slug === claim.value)?.label ?? claim.value
       case 'tag': return labels.get(claim.value) ?? claim.value

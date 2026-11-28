@@ -5,6 +5,7 @@ import { CLAIM_KINDS, claimsOf, primaryLayoutOf, scopesOf, type Claim } from '$l
 import { parseMarks, EXPORT_PAGE_MAX, exportPage } from '$lib/server/entries'
 import { CSV_SIGHTING_FIELDS } from '$lib/server/export'
 import { parseContexts, parseSightingTypes } from '$lib/scripts'
+import { formatDocument } from '$lib/unicode-docs'
 import { env } from '$lib/server/guard'
 import { positiveId } from '../../_submission.server'
 import type { RequestHandler } from './$types'
@@ -53,7 +54,15 @@ export const GET: RequestHandler = async (event) => {
   // `東 (usage) [under: east | cmn:dōng] [evidence: #3 #7]`. The JSON form carries what else a claim holds.
   const entryColumns = ['script', 'script_other', 'description', 'status', 'radical', 'strokes'] as const
   const columns = ['entry_id', ...entryColumns, ...CLAIM_KINDS, 'sighting_id', ...CSV_SIGHTING_FIELDS, 'vias', 'images', 'date_readings', 'cites', 'closeness'] as const
-  const said = (claim: Claim) => claim.kind === 'encoding' ? `${claim.data?.charset}:${claim.value}` : claim.kind === 'relation' ? `${claim.value} (${claim.data?.relationship})` : claim.kind === 'reading' && claim.data?.doculect ? `${claim.data.doculect}:${claim.value}` : claim.value
+  const said = (claim: Claim) => claim.kind === 'encoding'
+    ? `${claim.data?.charset}:${claim.value}`
+    : claim.kind === 'document'
+      ? [formatDocument(claim.value, typeof claim.data?.page === 'string' ? claim.data.page : null), typeof claim.data?.url === 'string' ? claim.data.url : ''].filter(Boolean).join(' ')
+      : claim.kind === 'relation'
+        ? `${claim.value} (${claim.data?.relationship})`
+        : claim.kind === 'reading' && claim.data?.doculect
+          ? `${claim.data.doculect}:${claim.value}`
+          : claim.value
   const rows = result.entries.flatMap(({ evidence, claims, ...entry }) => {
     const sightings = evidence.length ? evidence : [null]
     const stated = CLAIM_KINDS.map(kind => claimsOf(claims, kind).map(claim => [
