@@ -54,7 +54,7 @@
   "browse.search": "Tìm theo thành phần, địa điểm, sách, cách đọc…",
   "browse.searchLabel": "Tìm trong danh mục",
   "browse.tooManyTerms": "Có thể tìm tối đa năm từ hoặc thành phần khác nhau.",
-  "browse.idsHint": "IDS hoàn chỉnh được tìm theo dạng khớp chính xác.",
+  "browse.idsHint": "Nhập IDS sẽ tìm mọi mô tả có chứa cấu trúc đó: ⿰氵五, ⿰氵？ hoặc chỉ riêng ⿲.",
   "browse.noSearchTerms": "Nhập từ hoặc ký tự cần tìm.",
   "browse.queryTooLong": "Nội dung tìm kiếm không được quá 200 ký tự.",
   "browse.all": "Tất cả",
@@ -828,5 +828,7 @@
   "mcp.tool.restore_revision": "Khôi phục phiên bản trước hoặc đặt lại bằng chứng đã gỡ.",
   "mcp.authTitle": "Đăng nhập và ghi dữ liệu",
   "mcp.authBody": "Có thể dùng không cần đăng nhập; mỗi kết nối nhận một tên ẩn danh mới. Ứng dụng hỗ trợ OAuth 2.1 có thể đăng nhập qua Glyph Atlas để mọi đóng góp gắn với tài khoản của bạn.",
-  "mcp.writesBody": "Dữ liệu ghi qua MCP tuân theo cùng quy tắc kiểm tra như biểu mẫu web; ảnh bằng chứng được tải từ địa chỉ công khai."
+  "mcp.writesBody": "Dữ liệu ghi qua MCP tuân theo cùng quy tắc kiểm tra như biểu mẫu web; ảnh bằng chứng được tải từ địa chỉ công khai.",
+  "search.suggestions": "Gợi ý tìm kiếm",
+  "search.written": "Cách viết"
 }

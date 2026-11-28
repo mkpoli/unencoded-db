@@ -934,7 +934,7 @@ const SEARCH_PAGE_MAX = 50
 async function searchRecords(event: RequestEvent, input: Json) {
   const limit = Number.isInteger(input.limit) ? Math.min(Math.max(input.limit as number, 1), SEARCH_PAGE_MAX) : SEARCH_PAGE
   const page = await list(env(event).DB, { query: text(input.query).trim(), after: text(input.after) || null, limit })
-  if (!page) throw new Refusal(`Search for one description sequence, or up to ${SEARCH_TERMS_MAX} words or characters, in at most ${SEARCH_LENGTH_MAX} characters.`)
+  if (!page) throw new Refusal(`Search for up to ${SEARCH_TERMS_MAX} words, characters or structures such as ⿰氵？, in at most ${SEARCH_LENGTH_MAX} characters.`)
   return {
     records: page.tiles.map(tile => ({ ...shown(event, tile.id), ids: tile.ids, status: tile.status, sightings: tile.sightings, first_year: tile.firstYear, registered_in: tile.marks })),
     next: page.next,
@@ -1193,7 +1193,7 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'search_records', title: 'Search records', annotations: READS, run: searchRecords,
-    description: 'Records found by a description sequence, an encoded character, or words from their readings, meanings, tags and sources. Without a query, every record, those with the most evidence first. first_year numbers years as ISO 8601 does: 168 BCE is -167.',
+    description: 'Records found by a description sequence or a structure they hold (⿰氵？, or ⿲ alone), an encoded character, or words from their readings, meanings, tags and sources. Without a query, every record, those with the most evidence first. first_year numbers years as ISO 8601 does: 168 BCE is -167.',
     inputSchema: { type: 'object', properties: {
       query: { type: 'string' },
       limit: { type: 'integer', minimum: 1, maximum: SEARCH_PAGE_MAX, default: SEARCH_PAGE },

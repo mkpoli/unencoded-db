@@ -1,6 +1,6 @@
 import { taxonomy } from '$lib/server/tags'
 import { error, redirect } from '@sveltejs/kit'
-import { alsoSearch, counts, creatorCounts, creatorTag, cursorOf, decadeTag, exactSearchIds, facetTag, list, listTag, markTags, pageCount, pageCursor, pageOf, radicalTag, SEARCH_LENGTH_MAX, SEARCH_TERMS_MAX, searchTotal, terms } from '$lib/server/entries'
+import { alsoSearch, counts, creatorCounts, creatorTag, cursorOf, decadeTag, facetTag, list, listTag, markTags, pageCount, pageCursor, pageOf, radicalTag, searchProblem, searchTotal } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
 import { tileGlyphs } from '$lib/server/glyphs'
 import { parseRecordCode, recordCode } from '$lib/code'
@@ -55,9 +55,7 @@ export const load: PageServerLoad = async (event) => {
     redirect(302, `${dealt.pathname}${dealt.search}`)
   }
   if (!listTag(filter) || facetTag(rawFacet) === undefined || creatorTag(requestedCreator) === undefined || radicalTag(radical) === undefined || decadeTag(decade) === undefined || !markTags(within, without)) error(404)
-  const exact = query.length <= SEARCH_LENGTH_MAX && exactSearchIds(query)
-  const words = query.length <= SEARCH_LENGTH_MAX && !exact ? new Set(terms(query)) : new Set<string>()
-  const searchError = query.length > SEARCH_LENGTH_MAX ? 'queryTooLong' : !exact && query && words.size === 0 ? 'noSearchTerms' : words.size > SEARCH_TERMS_MAX ? 'tooManyTerms' : null
+  const searchError = searchProblem(query)
   // A record's code typed whole, R+0022 or 天天玄玄, opens the record it names.
   const coded = placed === null && number === 1 ? parseRecordCode(query) : null
   // A merged record opens the one it was merged into, and neither may be hidden.

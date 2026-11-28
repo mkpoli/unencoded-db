@@ -145,6 +145,7 @@ test('browse recognizes complete IDS without applying the component term limit',
   raw.exec("INSERT INTO entries(id, ids, created_by, created_at, updated_at) VALUES (1, '⿰木木', 'p', '2026', '2026'), (2, '⿱木木', 'p', '2026', '2026'), (3, '⿰木⿰水⿰火⿰土⿰金石', 'p', '2026', '2026')")
   raw.exec("INSERT INTO claims(entry_id, position, key, kind, value) SELECT id, 0, printf('ids%05d', id), 'ids', ids FROM entries")
   raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'all', id FROM entries")
+  raw.exec("INSERT INTO entry_tags(tag, entry_id) SELECT 'p:' || ids, id FROM entries")
   const event = (q: string) => ({ url: new URL(`https://example.test/en?q=${encodeURIComponent(q)}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
   expect(await browseLoad(event('⿰木木'))).toMatchObject({ searchError: null, tiles: [{ id: 1 }] })
   expect(await browseLoad(event('⿰木⿰水⿰火⿰土⿰金石'))).toMatchObject({ searchError: null, tiles: [{ id: 3 }] })
@@ -154,7 +155,8 @@ test('browse explains invalid search terms without showing unfiltered entries', 
   const { db } = openTestDb()
   const event = (q: string) => ({ url: new URL(`https://example.test/en?q=${encodeURIComponent(q)}`), locals: { glyphStyle: 'sans' }, platform: { env: { DB: db } } }) as any
   expect(await browseLoad(event('one two three four five six'))).toMatchObject({ searchError: 'tooManyTerms', tiles: [], next: null })
-  expect(await browseLoad(event('... ⿰'))).toMatchObject({ searchError: 'noSearchTerms', tiles: [], next: null })
+  expect(await browseLoad(event('... 、'))).toMatchObject({ searchError: 'noSearchTerms', tiles: [], next: null })
+  expect(await browseLoad(event('⿲'))).toMatchObject({ searchError: null, tiles: [] })
   const longQuery = 'a'.repeat(201)
   expect(await browseLoad(event(longQuery))).toMatchObject({ searchError: 'queryTooLong', query: longQuery, tiles: [], next: null })
   expect(await browseLoad(event('a'.repeat(200)))).toMatchObject({ searchError: null })

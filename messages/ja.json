@@ -54,7 +54,7 @@
   "browse.search": "部品、場所、書名、読みなどで検索…",
   "browse.searchLabel": "記録を検索",
   "browse.tooManyTerms": "語や部品は5種類まで検索できます。",
-  "browse.idsHint": "完成したIDSは完全一致で検索します。",
+  "browse.idsHint": "IDSで検索すると、それを含む構成記述がすべて見つかります（例：⿰氵五、⿰氵？、⿲単体）。",
   "browse.noSearchTerms": "検索する語または文字を入力してください。",
   "browse.queryTooLong": "検索語は200文字以内で入力してください。",
   "browse.all": "すべて",
@@ -828,5 +828,7 @@
   "mcp.tool.restore_revision": "過去の版を復元するか、外された証拠を戻します。",
   "mcp.authTitle": "ログインと書き込み",
   "mcp.authBody": "ログインしなくても利用でき、接続ごとに新しい匿名の名前が付きます。OAuth 2.1対応のクライアントからGlyph Atlasで認証すると、ご自身のアカウント名義で記録されます。",
-  "mcp.writesBody": "書き込みにはWebフォームと同じ検証が適用されます。証拠画像は公開URLから取得されます。"
+  "mcp.writesBody": "書き込みにはWebフォームと同じ検証が適用されます。証拠画像は公開URLから取得されます。",
+  "search.suggestions": "検索候補",
+  "search.written": "表記"
 }
