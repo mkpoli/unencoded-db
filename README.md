@@ -44,6 +44,17 @@ ATLAS_SYNC_TOKEN=<secret> bun scripts/sync-atlas-evidence.ts --remote https://ra
 
 Production reads Glyph Atlas over the `ATLAS` Worker service binding (`glyph-atlas`), with `ATLAS_ORIGIN` as fallback. Optional secrets: `ATLAS_RATE_LIMIT_PASS` (sent as `x-rate-limit-pass` to Glyph Atlas) and `ATLAS_SYNC_TOKEN` (authorizes `POST /api/sync/atlas` for remote backfills).
 
+## IRG Working Set citation sync
+
+Bibliographic citations and IRG discussion records from [hc.jsecs.org](https://hc.jsecs.org/irg/ws2024/app/) (WS2015–WS2024) can be imported onto records carrying an `irg-ws` serial or an encoded Extension G/H/J Unicode claim:
+
+```sh
+bun scripts/sync-irg-evidence.ts --local --dry-run
+bun scripts/sync-irg-evidence.ts --local --entry 1
+```
+
+Each imported sighting cites the original work, places the ORT entry in `via`, links the ORT evidence scans in `note` without mirroring copyrighted scans into `MEDIA`, and stays omitted if a contributor later removes it.
+
 ## Evidence dates
 
 Report dates, original dates and dates in a citation chain keep the contributor's transcription. Chinese and Japanese era dates use the [HuTime Calendar Conversion API](https://ap.hutime.org/cal/). Each HuTime conversion records its query, precision and inclusive Western-calendar bounds. For example, 明萬曆34年 runs from 1606-02-07 through 1607-01-27. The chronology files it under 1606. Dates already in the Western calendar use the same 1582 Julian/Gregorian cutover. A year before the common era is read from 前168年, 西元前168年, 168 BCE, BC 168, 168 TCN, 기원전 168년 or -168, all the same year; a minus sign counts years as BCE does, with no year 0, and the record and source pages show the year beside it. A zero-padded signed year (-0168) stays unread, since it is how ISO 8601 writes one, and ISO 8601 counts it one year apart. The bounds and `first_year` in the exports and the API follow ISO 8601: 168 BCE is -0167 and -167. An ambiguous or unreadable expression stays available as entered. A dynasty name or the prefix 日本 can identify the intended calendar.
