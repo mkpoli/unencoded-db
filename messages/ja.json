@@ -835,6 +835,7 @@
   "stemma.nodes": "証拠{count}件",
   "stemma.edges": "関係{count}件",
   "stemma.unlinked": "未接続{count}件",
-  "stemma.truncated": "最大4段階（証拠60件）まで表示しています。別の記録の証拠を開くと、さらに先をたどれます。",
-  "stemma.empty": "この文字の出典関係はまだ記録されていません。"
+  "stemma.truncated": "最大{hops}段階（{nodes}件）まで表示しています。別の記録の証拠を開くと、さらに先をたどれます。",
+  "stemma.empty": "この文字の出典関係はまだ記録されていません。",
+  "stemma.limit": "最大{hops}段階・{nodes}件"
 }

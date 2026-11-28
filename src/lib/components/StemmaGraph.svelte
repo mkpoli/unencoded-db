@@ -24,11 +24,22 @@
   const layout = $derived(layoutStemma(graph, mode))
   let hoveredUnit = $state<string | null>(null)
 
-  const highlightedUnits = $derived.by(() => {
+  const lineageSets = $derived.by(() => {
     if (!hoveredUnit) return null
-    return new Set([hoveredUnit, ...(layout.ancestors[hoveredUnit] ?? []), ...(layout.descendants[hoveredUnit] ?? [])])
+    const anc = new Set(layout.ancestors[hoveredUnit] ?? [])
+    const desc = new Set(layout.descendants[hoveredUnit] ?? [])
+    const all = new Set([hoveredUnit, ...anc, ...desc])
+    return { anc, desc, all }
   })
 
+  function edgeInLineage(fromUnit: string, toUnit: string): boolean {
+    if (!lineageSets || !hoveredUnit) return false
+    if (fromUnit === hoveredUnit || toUnit === hoveredUnit) return true
+    return (lineageSets.anc.has(fromUnit) && lineageSets.anc.has(toUnit))
+      || (lineageSets.desc.has(fromUnit) && lineageSets.desc.has(toUnit))
+  }
+
+  const nodeById = $derived(new Map(graph.nodes.map(node => [node.id, node])))
   const uid = $props.id()
 
   function nodeHref(node: StemmaNode): string | null {
@@ -48,6 +59,7 @@
 </script>
 
 {#snippet tileInner(node: StemmaNode)}
+  {@const label = nodeLabel(node)}
   <span class="glyph" class:empty={!node.thumbKey}>
     {#if node.kind === 'unseen'}
       <span class="plus" aria-hidden="true">＋</span>
@@ -57,9 +69,9 @@
       <span class="mark" aria-hidden="true">{node.kind === 'removed' ? '×' : '#'}</span>
     {/if}
   </span>
-  <span class="title">{nodeLabel(node)}</span>
+  <span class="title" title={label}>{label}</span>
   <span class="sub">
-    {#if node.date}<span class="year"><EvidenceDate text={node.date} reading={dates?.get(node.date)} /></span>{/if}
+    {#if node.date}<span class="year"><EvidenceDate text={node.date} reading={dates?.get(node.date)} linked={false} /></span>{/if}
     {#if node.kind === 'unseen'}
       <span class="tag">{t('cite.unseen')}</span>
     {:else if node.kind === 'removed'}
@@ -70,7 +82,7 @@
   </span>
 {/snippet}
 
-<div class="stemma" class:full={mode === 'full'} role="region" aria-label={t('stemma.region')}>
+<div class="stemma" class:full={mode === 'full'} class:strip={mode === 'strip'} role="region" aria-label={t('stemma.region')}>
   <div class="scroller">
     <div class="canvas" style:width="{layout.width}px" style:height="{layout.height}px">
       <svg class="edges" viewBox="0 0 {layout.width} {layout.height}" width={layout.width} height={layout.height} aria-hidden="true">
@@ -86,8 +98,8 @@
           </marker>
         </defs>
         {#each layout.edges as edge (edge.key)}
-          {@const inLineage = highlightedUnits ? (highlightedUnits.has(edge.fromUnit) && highlightedUnits.has(edge.toUnit)) : false}
-          {@const dimmed = highlightedUnits !== null && !inLineage}
+          {@const inLineage = edgeInLineage(edge.fromUnit, edge.toUnit)}
+          {@const dimmed = lineageSets !== null && !inLineage}
           {@const marker = inLineage ? `${uid}-arrow-active` : edge.kind === 'derived' ? `${uid}-arrow-derived` : `${uid}-arrow`}
           <path
             d={edge.path}
@@ -103,8 +115,8 @@
       </svg>
 
       {#each layout.units as unit (unit.id)}
-        {@const dimmed = highlightedUnits !== null && !highlightedUnits.has(unit.id)}
-        {@const related = highlightedUnits !== null && highlightedUnits.has(unit.id)}
+        {@const dimmed = lineageSets !== null && !lineageSets.all.has(unit.id)}
+        {@const related = lineageSets !== null && lineageSets.all.has(unit.id)}
         {#if unit.kind === 'edition'}
           <div
             class="cluster"
@@ -128,7 +140,7 @@
                 {@const link = nodeHref(member)}
                 {@const current = activeSightingId !== null && member.sightingId === activeSightingId}
                 {#if link}
-                  <a class="tile member witness" class:current class:cross={member.entryId !== graph.entryId} href={link}>
+                  <a class="tile member witness" class:current class:cross={member.entryId !== graph.entryId} aria-current={current ? 'location' : undefined} href={link}>
                     {@render tileInner(member)}
                   </a>
                 {:else}
@@ -155,6 +167,7 @@
               style:top="{unit.y}px"
               style:width="{unit.width}px"
               style:height="{unit.height}px"
+              aria-current={current ? 'location' : undefined}
               href={link}
               onmouseenter={() => hoveredUnit = unit.id}
               onmouseleave={() => { if (hoveredUnit === unit.id) hoveredUnit = null }}
@@ -186,8 +199,18 @@
     </div>
   </div>
 
+  <ul class="sr-only">
+    {#each graph.edges as edge, index (index)}
+      {@const older = nodeById.get(edge.from)}
+      {@const newer = nodeById.get(edge.to)}
+      {#if older && newer}
+        <li>{nodeLabel(newer)} — {t(`cite.kind.${edge.kind}`)} — {nodeLabel(older)}</li>
+      {/if}
+    {/each}
+  </ul>
+
   {#if legend}
-    <div class="legend" aria-label={t('stemma.legend')}>
+    <div class="legend" role="group" aria-label={t('stemma.legend')}>
       <span class="leg"><span class="swatch solid" aria-hidden="true"></span>{t('cite.kind.quotes')}</span>
       <span class="leg"><span class="swatch derived" aria-hidden="true"></span>{t('cite.kind.derived')}</span>
       <span class="leg"><span class="swatch frame" aria-hidden="true"></span>{t('cite.kind.edition')}</span>
@@ -209,21 +232,22 @@
     scroll-padding-inline: var(--fade-size);
     mask:
       linear-gradient(black, black) no-clip subtract,
-      linear-gradient(to var(--fade-dir), black, transparent) var(--fade-start-pos) 0 / var(--fade-start) 100% no-repeat no-clip,
-      linear-gradient(to var(--fade-dir), transparent, black) var(--fade-end-pos) 0 / var(--fade-end) 100% no-repeat no-clip;
+      linear-gradient(to var(--fade-dir), black, transparent) var(--fade-start-pos) 0 / var(--stemma-fade-start) 100% no-repeat no-clip,
+      linear-gradient(to var(--fade-dir), transparent, black) var(--fade-end-pos) 0 / var(--stemma-fade-end) 100% no-repeat no-clip;
     animation: stemma-fade-start auto linear both, stemma-fade-end auto linear both;
     animation-duration: auto;
     animation-timeline: scroll(self inline);
     animation-range: 0px var(--fade-size), calc(100% - var(--fade-size)) 100%;
   }
+  .strip .scroller { max-block-size: 420px; overflow: auto }
   .scroller:dir(rtl) { --fade-dir: left; --fade-start-pos: 100%; --fade-end-pos: 0 }
   @keyframes stemma-fade-start {
-    from { --fade-start: 0px }
-    to { --fade-start: var(--fade-size) }
+    from { --stemma-fade-start: 0px }
+    to { --stemma-fade-start: var(--fade-size) }
   }
   @keyframes stemma-fade-end {
-    from { --fade-end: var(--fade-size) }
-    to { --fade-end: 0px }
+    from { --stemma-fade-end: var(--fade-size) }
+    to { --stemma-fade-end: 0px }
   }
 
   .canvas { position: relative; flex: none }
@@ -296,8 +320,9 @@
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
-  .year, .tag { white-space: nowrap }
+  .year, .tag { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
   .code {
+    flex: none;
     padding: 0 4px;
     border-radius: 4px;
     background: var(--accent-light);
@@ -344,7 +369,7 @@
   .swatch.unseen { width: 16px; height: 12px; border: 1.5px dashed var(--line-strong); border-radius: 3px }
 
   @media print {
-    .scroller { overflow: visible; mask: none; animation: none }
+    .scroller, .strip .scroller { max-block-size: none; overflow: visible; mask: none; animation: none }
     .tile.dim, .cluster.dim, .edge.dim { opacity: 1 }
   }
 </style>

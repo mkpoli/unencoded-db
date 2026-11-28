@@ -835,6 +835,7 @@
   "stemma.nodes": "용례 {count}건",
   "stemma.edges": "연결 {count}건",
   "stemma.unlinked": "미연결 {count}건",
-  "stemma.truncated": "최대 4단계(용례 60건)까지 표시합니다. 다른 항목의 용례를 열면 더 살펴볼 수 있습니다.",
-  "stemma.empty": "이 글자에는 아직 기록된 출처 연결이 없습니다."
+  "stemma.truncated": "최대 {hops}단계({nodes}건)까지 표시합니다. 다른 항목의 용례를 열면 더 살펴볼 수 있습니다.",
+  "stemma.empty": "이 글자에는 아직 기록된 출처 연결이 없습니다.",
+  "stemma.limit": "최대 {hops}단계 · {nodes}건"
 }

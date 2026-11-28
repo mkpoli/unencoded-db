@@ -7,6 +7,8 @@ import { parseYear } from './cites'
 import type { CiteKind } from './scripts'
 import type { Sighting } from './server/entries'
 
+export const STEMMA_NODES_LIMIT = 60
+
 export type StemmaNodeKind = 'witness' | 'unseen' | 'removed'
 
 export type StemmaNode = {
@@ -18,6 +20,8 @@ export type StemmaNode = {
   title: string | null
   place: string
   date: string | null
+  originalDate?: string | null
+  reportDate?: string | null
   year: number | null
   thumbKey: string | null
 }
@@ -26,8 +30,6 @@ export type StemmaEdge = {
   from: string
   to: string
   kind: CiteKind
-  quote?: string | null
-  note?: string | null
 }
 
 export type StemmaGraph = {
@@ -63,7 +65,6 @@ export type StemmaRoute = {
 }
 
 export type StemmaLayout = {
-  mode: 'strip' | 'full'
   width: number
   height: number
   cols: number
@@ -73,7 +74,6 @@ export type StemmaLayout = {
   ancestors: Record<string, string[]>
   descendants: Record<string, string[]>
   nodeToUnit: Record<string, string>
-  overflowsStrip: boolean
 }
 
 type Metrics = {
@@ -95,40 +95,52 @@ const METRICS: Record<'strip' | 'full', Metrics> = {
 }
 
 export const witnessNodeId = (sightingId: number) => `s:${sightingId}`
-export const unseenNodeId = (sourceId: number | null, fallbackKey: string) => sourceId !== null ? `u:${sourceId}` : `u:name:${fallbackKey}`
+export const unseenNodeId = (sourceId: number) => `u:${sourceId}`
 export const removedNodeId = (sightingId: number) => `r:${sightingId}`
 
-function yearFor(originalDate: string | null, reportDate: string | null, dates?: ReadonlyMap<string, DateReading | null>): number | null {
+/** Earliest parsed calendar year across a witness's original and report dates (shared by strip and full stemma). */
+export function yearFor(originalDate: string | null | undefined, reportDate: string | null | undefined, dates?: ReadonlyMap<string, DateReading | null>): number | null {
   const years = [originalDate, reportDate].map(text => parseYear(text, dates)).filter((value): value is number => value !== null)
   return years.length ? Math.min(...years) : null
 }
 
 /**
- * Builds the 1-hop provenance graph around a single entry's already-loaded sightings.
+ * Builds the 1-hop provenance graph around a single entry's already-loaded sightings (capped at STEMMA_NODES_LIMIT).
  * Returns null when the record has zero cite edges (keeping plain entries unchanged).
  */
 export function buildEntryStemma(
   entryId: number,
   sightings: readonly Sighting[],
   dates?: ReadonlyMap<string, DateReading | null>,
+  nodeLimit = STEMMA_NODES_LIMIT,
 ): StemmaGraph | null {
   const nodes = new Map<string, StemmaNode>()
   const edges: StemmaEdge[] = []
   const edgeKeys = new Set<string>()
   const linkedSightings = new Set<number>()
+  let truncated = false
 
-  const putNode = (node: StemmaNode) => {
+  const putNode = (node: StemmaNode): boolean => {
     const existing = nodes.get(node.id)
-    if (!existing) { nodes.set(node.id, node); return }
-    // Prefer richer witness metadata if the same node is encountered twice.
-    if (!existing.thumbKey && node.thumbKey) existing.thumbKey = node.thumbKey
-    if (!existing.title && node.title) existing.title = node.title
-    if (!existing.date && node.date) existing.date = node.date
-    if (existing.year === null && node.year !== null) existing.year = node.year
+    if (existing) {
+      if (!existing.thumbKey && node.thumbKey) existing.thumbKey = node.thumbKey
+      if (!existing.title && node.title) existing.title = node.title
+      if (!existing.date && node.date) existing.date = node.date
+      if (!existing.originalDate && node.originalDate) existing.originalDate = node.originalDate
+      if (!existing.reportDate && node.reportDate) existing.reportDate = node.reportDate
+      if (existing.year === null && node.year !== null) existing.year = node.year
+      return true
+    }
+    if (nodes.size >= nodeLimit) {
+      truncated = true
+      return false
+    }
+    nodes.set(node.id, node)
+    return true
   }
 
   const addEdge = (edge: StemmaEdge) => {
-    if (edge.from === edge.to) return
+    if (edge.from === edge.to || !nodes.has(edge.from) || !nodes.has(edge.to)) return
     const key = `${edge.from}\u0000${edge.to}\u0000${edge.kind}`
     if (edgeKeys.has(key)) return
     edgeKeys.add(key)
@@ -139,8 +151,7 @@ export function buildEntryStemma(
     if (sighting.hidden_at) continue
     if (!sighting.cites.length && !sighting.cited_by.length) continue
     const selfId = witnessNodeId(sighting.id)
-    linkedSightings.add(sighting.id)
-    putNode({
+    const selfAdded = putNode({
       id: selfId,
       kind: 'witness',
       sightingId: sighting.id,
@@ -149,15 +160,18 @@ export function buildEntryStemma(
       title: sighting.title,
       place: sighting.place,
       date: sighting.original_date ?? sighting.report_date,
+      originalDate: sighting.original_date,
+      reportDate: sighting.report_date,
       year: yearFor(sighting.original_date, sighting.report_date, dates),
       thumbKey: sighting.media[0]?.thumb_key ?? null,
     })
+    if (!selfAdded) continue
+    linkedSightings.add(sighting.id)
 
     for (const cite of sighting.cites) {
       if (cite.status === 'witness' && cite.target) {
         const targetId = witnessNodeId(cite.target.id)
-        if (cite.target.entry_id === entryId) linkedSightings.add(cite.target.id)
-        putNode({
+        if (putNode({
           id: targetId,
           kind: 'witness',
           sightingId: cite.target.id,
@@ -166,14 +180,17 @@ export function buildEntryStemma(
           title: cite.target.title || cite.title,
           place: cite.target.place,
           date: cite.target.original_date ?? cite.target.report_date,
+          originalDate: cite.target.original_date,
+          reportDate: cite.target.report_date,
           year: yearFor(cite.target.original_date, cite.target.report_date, dates),
           thumbKey: cite.target.thumb_key,
-        })
-        addEdge({ from: targetId, to: selfId, kind: cite.kind, quote: cite.quote, note: cite.note })
-      } else if (cite.status === 'unseen') {
-        const fallback = `${cite.title ?? ''}|${cite.author ?? ''}|${cite.report_date ?? ''}|${cite.url ?? ''}`
-        const targetId = unseenNodeId(cite.source_id, fallback)
-        putNode({
+        })) {
+          if (cite.target.entry_id === entryId) linkedSightings.add(cite.target.id)
+          addEdge({ from: targetId, to: selfId, kind: cite.kind })
+        }
+      } else if (cite.status === 'unseen' && cite.source_id !== null) {
+        const targetId = unseenNodeId(cite.source_id)
+        if (putNode({
           id: targetId,
           kind: 'unseen',
           sightingId: null,
@@ -182,13 +199,16 @@ export function buildEntryStemma(
           title: cite.title || cite.author || cite.url,
           place: '',
           date: cite.report_date,
+          originalDate: null,
+          reportDate: cite.report_date,
           year: yearFor(null, cite.report_date, dates),
           thumbKey: null,
-        })
-        addEdge({ from: targetId, to: selfId, kind: cite.kind, quote: cite.quote, note: cite.note })
+        })) {
+          addEdge({ from: targetId, to: selfId, kind: cite.kind })
+        }
       } else if (cite.status === 'removed' && cite.target) {
         const targetId = removedNodeId(cite.target.id)
-        putNode({
+        if (putNode({
           id: targetId,
           kind: 'removed',
           sightingId: cite.target.id,
@@ -197,18 +217,19 @@ export function buildEntryStemma(
           title: cite.title || cite.target.title,
           place: cite.target.place,
           date: cite.target.original_date ?? cite.target.report_date,
+          originalDate: cite.target.original_date,
+          reportDate: cite.target.report_date,
           year: yearFor(cite.target.original_date, cite.target.report_date, dates),
           thumbKey: null,
-        })
-        addEdge({ from: targetId, to: selfId, kind: cite.kind, quote: cite.quote, note: cite.note })
+        })) {
+          addEdge({ from: targetId, to: selfId, kind: cite.kind })
+        }
       }
     }
 
     for (const inbound of sighting.cited_by) {
-      const fromId = selfId
       const toId = witnessNodeId(inbound.sighting_id)
-      if (inbound.entry_id === entryId) linkedSightings.add(inbound.sighting_id)
-      putNode({
+      if (putNode({
         id: toId,
         kind: 'witness',
         sightingId: inbound.sighting_id,
@@ -217,18 +238,24 @@ export function buildEntryStemma(
         title: inbound.title,
         place: inbound.place,
         date: inbound.original_date ?? inbound.report_date,
+        originalDate: inbound.original_date,
+        reportDate: inbound.report_date,
         year: yearFor(inbound.original_date, inbound.report_date, dates),
         thumbKey: inbound.thumb_key,
-      })
-      addEdge({ from: fromId, to: toId, kind: inbound.kind, quote: inbound.quote, note: inbound.note })
+      })) {
+        if (inbound.entry_id === entryId) linkedSightings.add(inbound.sighting_id)
+        addEdge({ from: selfId, to: toId, kind: inbound.kind })
+      }
     }
   }
 
   if (!edges.length) return null
   const visibleCount = sightings.filter(s => !s.hidden_at).length
   const unlinkedCount = Math.max(0, visibleCount - linkedSightings.size)
-  return { entryId, nodes: [...nodes.values()], edges, unlinkedCount }
+  return { entryId, nodes: [...nodes.values()], edges, unlinkedCount, truncated }
 }
+
+const KIND_ORDER: Record<StemmaNodeKind, number> = { unseen: 0, witness: 1, removed: 2 }
 
 function compareNodes(a: StemmaNode, b: StemmaNode, focalEntryId: number): number {
   const ya = a.year ?? Number.POSITIVE_INFINITY
@@ -237,7 +264,11 @@ function compareNodes(a: StemmaNode, b: StemmaNode, focalEntryId: number): numbe
   const fa = a.entryId === focalEntryId ? 0 : a.kind === 'unseen' ? -1 : 1
   const fb = b.entryId === focalEntryId ? 0 : b.kind === 'unseen' ? -1 : 1
   if (fa !== fb) return fa - fb
-  return a.id.localeCompare(b.id)
+  if (a.kind !== b.kind) return KIND_ORDER[a.kind] - KIND_ORDER[b.kind]
+  const na = a.sightingId ?? a.sourceId ?? 0
+  const nb = b.sightingId ?? b.sourceId ?? 0
+  if (na !== nb) return na - nb
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
 /**
@@ -246,7 +277,7 @@ function compareNodes(a: StemmaNode, b: StemmaNode, focalEntryId: number): numbe
  * 2. Breaks any residual cycles by earliest year/id so longest-path ranking terminates.
  * 3. Assigns longest-path column rank (oldest -> newest, left -> right).
  * 4. Runs two barycentre crossing-reduction sweeps across columns.
- * 5. Computes exact pixel rectangles and smooth cubic Bezier SVG paths (bowing skip-column arcs).
+ * 5. Computes exact pixel rectangles and smooth cubic Bezier SVG paths (offsetting parallel edges and bowing skip edges).
  */
 export function layoutStemma(graph: StemmaGraph, mode: 'strip' | 'full' = 'strip'): StemmaLayout {
   const m = METRICS[mode]
@@ -418,13 +449,13 @@ export function layoutStemma(graph: StemmaGraph, mode: 'strip' | 'full' = 'strip
     cursorY += rowHeights[r] + m.rowGap
   }
 
-  // Reserve a small bottom arc lane if any skip-column or back-edge exists so curves stay inside viewBox.
+  // Reserve a bottom arc lane if any skip-column or back-edge exists so curves stay inside viewBox.
   const hasArc = unitEdges.some(edge => {
     const c1 = rank.get(edge.fromUnit) ?? 0
     const c2 = rank.get(edge.toUnit) ?? 0
     return backEdgeKeys.has(edge.key) || c2 - c1 > 1
   })
-  const extraArcPad = hasArc ? 26 : 0
+  const extraArcPad = hasArc ? 32 : 0
 
   const placed: StemmaUnit[] = []
   const placedById = new Map<string, StemmaUnit>()
@@ -446,33 +477,42 @@ export function layoutStemma(graph: StemmaGraph, mode: 'strip' | 'full' = 'strip
   const width = Math.max(cursorX - m.colGap + m.padX, m.tileW + m.padX * 2)
   const height = Math.max(cursorY - m.rowGap + m.padY + extraArcPad, m.tileH + m.padY * 2)
 
+  // Group parallel edges between the same (fromUnit, toUnit) pair so they offset cleanly instead of overlapping.
+  const pairGroups = new Map<string, RawUnitEdge[]>()
+  for (const edge of unitEdges) {
+    const pairKey = `${edge.fromUnit}->${edge.toUnit}`
+    pairGroups.set(pairKey, [...(pairGroups.get(pairKey) ?? []), edge])
+  }
+
   // 6. Compute smooth SVG cubic Bezier edge routes.
   const routes: StemmaRoute[] = unitEdges.map((edge, idx) => {
     const from = placedById.get(edge.fromUnit)!
     const to = placedById.get(edge.toUnit)!
+    const siblings = pairGroups.get(`${edge.fromUnit}->${edge.toUnit}`) ?? [edge]
+    const siblingOffset = (siblings.indexOf(edge) - (siblings.length - 1) / 2) * 10
     const isBack = backEdgeKeys.has(edge.key)
     if (isBack) {
       const x1 = from.x + from.width / 2
       const y1 = from.y + from.height
       const x2 = to.x + to.width / 2
       const y2 = to.y + to.height
-      const dip = Math.max(y1, y2) + 22 + (idx % 3) * 8
+      const dip = height - m.padY + 4 - (idx % 2) * 8
       return { ...edge, backEdge: true, path: `M ${x1} ${y1} C ${x1} ${dip}, ${x2} ${dip}, ${x2} ${y2}` }
     }
-    const x1 = from.x + from.width
-    const y1 = from.y + from.height / 2
-    const x2 = to.x
-    const y2 = to.y + to.height / 2
     const span = to.col - from.col
-    if (span > 1 && from.row === to.row) {
-      // Bow below the shared row so skip-column edges never cut straight behind intermediate cards.
-      const bottom = Math.max(from.y + from.height, to.y + to.height) + 18 + (idx % 2) * 8
+    if (span > 1) {
+      // Bow skip-column edges along the open lane below the higher of the two rows so they clear intermediate tiles.
+      const laneY = Math.max(from.y + from.height, to.y + to.height) + 20 + (idx % 2) * 8 + siblingOffset
       const sx1 = from.x + from.width * 0.72
       const sy1 = from.y + from.height
       const sx2 = to.x + to.width * 0.28
       const sy2 = to.y + to.height
-      return { ...edge, backEdge: false, path: `M ${sx1} ${sy1} C ${sx1} ${bottom}, ${sx2} ${bottom}, ${sx2} ${sy2}` }
+      return { ...edge, backEdge: false, path: `M ${sx1} ${sy1} C ${sx1} ${laneY}, ${sx2} ${laneY}, ${sx2} ${sy2}` }
     }
+    const x1 = from.x + from.width
+    const y1 = from.y + from.height / 2 + siblingOffset
+    const x2 = to.x
+    const y2 = to.y + to.height / 2 + siblingOffset
     const dx = Math.max(24, (x2 - x1) * 0.45)
     return { ...edge, backEdge: false, path: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}` }
   })
@@ -502,11 +542,7 @@ export function layoutStemma(graph: StemmaGraph, mode: 'strip' | 'full' = 'strip
     descendants[unit.id] = reach(unit.id, unitSuccs)
   }
 
-  const hasCrossRecord = graph.nodes.some(node => node.kind === 'witness' && node.entryId !== null && node.entryId !== graph.entryId)
-  const overflowsStrip = maxRows > 3 || hasCrossRecord || graph.nodes.length > 12
-
   return {
-    mode,
     width,
     height,
     cols: maxCol + 1,
@@ -516,6 +552,5 @@ export function layoutStemma(graph: StemmaGraph, mode: 'strip' | 'full' = 'strip
     ancestors,
     descendants,
     nodeToUnit,
-    overflowsStrip,
   }
 }

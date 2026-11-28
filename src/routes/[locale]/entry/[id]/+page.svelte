@@ -52,13 +52,12 @@
   import { kindName } from '$lib/source-kind'
   import { recordCode, recordName } from '$lib/code'
   import StemmaGraph from '$lib/components/StemmaGraph.svelte'
-  import { buildEntryStemma, layoutStemma } from '$lib/stemma'
+  import { buildEntryStemma } from '$lib/stemma'
   let { data, form } = $props()
   const entry = $derived(data.entry)
   const claims = $derived(data.claims)
   const derivedCount = $derived(data.sightings.filter(s => s.cites.some(c => c.status === 'witness')).length)
   const stemma = $derived(buildEntryStemma(entry.id, data.sightings, data.dates))
-  const stemmaClipped = $derived(stemma ? layoutStemma(stemma, 'strip').rows > 3 : false)
   let activeSighting = $state<number | null>(null)
   $effect(() => {
     if (!stemma || typeof IntersectionObserver === 'undefined') { activeSighting = null; return }
@@ -369,11 +368,9 @@
             <h3>{t('stemma.title')}</h3>
             {#if stemma.unlinkedCount > 0}<span class="badge">{t('stemma.unlinked', { count: stemma.unlinkedCount })}</span>{/if}
           </div>
-          <a class="text-link small" href={href(`/entry/${entry.id}/stemma`)}>{t('stemma.full')} ↗</a>
+          <a class="text-link small" href={href(`/entry/${entry.id}/stemma`)}>{t('stemma.full')} →</a>
         </div>
-        <div class:stemma-clipped={stemmaClipped}>
-          <StemmaGraph graph={stemma} mode="strip" dates={data.dates} activeSightingId={activeSighting} />
-        </div>
+        <StemmaGraph graph={stemma} mode="strip" dates={data.dates} activeSightingId={activeSighting} />
       </div>
     {/if}
     {#each data.sightings as sighting (sighting.id)}
@@ -478,5 +475,4 @@
   .stemma-strip { display:flex; flex-direction:column; gap:10px; padding:14px 16px }
   .stemma-head { justify-content:space-between; align-items:baseline }
   .stemma-meta { gap:8px }
-  .stemma-clipped { max-block-size:380px; overflow-y:auto }
 </style>

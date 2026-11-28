@@ -835,6 +835,7 @@
   "stemma.nodes": "{count}條證據",
   "stemma.edges": "{count}條關聯",
   "stemma.unlinked": "{count}條未關聯",
-  "stemma.truncated": "最多顯示4層關聯（60條證據）。開啟其他條目的證據可繼續查看。",
-  "stemma.empty": "此字尚無來源關聯記錄。"
+  "stemma.truncated": "最多顯示{hops}層關聯（{nodes}項）。開啟其他條目的證據可繼續查看。",
+  "stemma.empty": "此字尚無來源關聯記錄。",
+  "stemma.limit": "最多{hops}層·{nodes}項"
 }

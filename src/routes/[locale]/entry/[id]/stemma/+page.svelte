@@ -6,6 +6,7 @@
   let { data } = $props()
   const code = $derived(recordCode(data.id))
   const title = $derived(t('stemma.pageTitle', { id: code }))
+  const witnessCount = $derived(data.graph.nodes.filter(node => node.kind === 'witness').length)
 </script>
 
 <Seo {title} description={data.entry.description ?? undefined} />
@@ -16,10 +17,13 @@
     <div class="row head">
       <h1>{title}{#if data.entry.ids}<span class="ids muted">{data.entry.ids}</span>{/if}</h1>
       <div class="row badges">
-        <span class="badge">{t('stemma.nodes', { count: data.graph.nodes.length })}</span>
+        <span class="badge">{t('stemma.nodes', { count: witnessCount })}</span>
         <span class="badge">{t('stemma.edges', { count: data.graph.edges.length })}</span>
         {#if data.graph.unlinkedCount > 0}
           <span class="badge">{t('stemma.unlinked', { count: data.graph.unlinkedCount })}</span>
+        {/if}
+        {#if data.graph.truncated}
+          <span class="badge" title={t('stemma.truncated', data.limits)}>{t('stemma.limit', data.limits)}</span>
         {/if}
       </div>
     </div>
@@ -28,9 +32,6 @@
   {#if data.graph.edges.length}
     <section class="panel stack">
       <StemmaGraph graph={data.graph} mode="full" dates={data.dates} legend />
-      {#if data.graph.truncated}
-        <p class="hint">{t('stemma.truncated')}</p>
-      {/if}
     </section>
   {:else}
     <section class="panel">

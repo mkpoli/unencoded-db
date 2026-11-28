@@ -835,6 +835,7 @@
   "stemma.nodes": "{count}条证据",
   "stemma.edges": "{count}条关联",
   "stemma.unlinked": "{count}条未关联",
-  "stemma.truncated": "最多显示4层关联（60条证据）。打开其他条目的证据可继续查看。",
-  "stemma.empty": "此字尚无来源关联记录。"
+  "stemma.truncated": "最多显示{hops}层关联（{nodes}项）。打开其他条目的证据可继续查看。",
+  "stemma.empty": "此字尚无来源关联记录。",
+  "stemma.limit": "最多{hops}层·{nodes}项"
 }

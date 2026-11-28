@@ -835,6 +835,7 @@
   "stemma.nodes": "{count} ghi nhận",
   "stemma.edges": "{count} liên kết",
   "stemma.unlinked": "{count} chưa liên kết",
-  "stemma.truncated": "Hiển thị tối đa 4 bước (60 ghi nhận). Mở một ghi nhận thuộc mục khác để xem tiếp.",
-  "stemma.empty": "Chữ này chưa có liên kết nguồn gốc nào được ghi lại."
+  "stemma.truncated": "Hiển thị tối đa {hops} bước ({nodes} mục). Mở một ghi nhận thuộc mục khác để xem tiếp.",
+  "stemma.empty": "Chữ này chưa có liên kết nguồn gốc nào được ghi lại.",
+  "stemma.limit": "Tối đa {hops} bước · {nodes} mục"
 }

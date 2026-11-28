@@ -5,13 +5,13 @@
 @font-face { font-family: "Kureedo Specimen"; src: url("/fonts/specimen-kureedo.woff2") format("woff2"); font-display: swap; unicode-range: U+6C38 }
 @font-face { font-family: "TW-Kai Specimen"; src: url("/fonts/specimen-tw-kai.woff2") format("woff2"); font-display: swap; unicode-range: U+6C38 }
 
-@property --fade-start {
+@property --stemma-fade-start {
   syntax: "<length>";
   inherits: false;
   initial-value: 0px;
 }
 
-@property --fade-end {
+@property --stemma-fade-end {
   syntax: "<length>";
   inherits: false;
   initial-value: 0px;

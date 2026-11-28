@@ -835,6 +835,7 @@
   "stemma.nodes": "{count} witnesses",
   "stemma.edges": "{count} links",
   "stemma.unlinked": "{count} unlinked",
-  "stemma.truncated": "Showing up to 4 hops (60 witnesses). Open a cross-record witness to explore further.",
-  "stemma.empty": "No provenance links recorded for this character yet."
+  "stemma.truncated": "Showing up to {hops} hops ({nodes} nodes). Open a cross-record witness to explore further.",
+  "stemma.empty": "No provenance links recorded for this character yet.",
+  "stemma.limit": "Up to {hops} hops · {nodes} max"
 }

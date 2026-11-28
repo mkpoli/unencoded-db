@@ -1,5 +1,5 @@
 import { error, redirect } from '@sveltejs/kit'
-import { entryStemma } from '$lib/server/entries'
+import { entryStemma, STEMMA_HOPS_MAX, STEMMA_NODES_MAX } from '$lib/server/entries'
 import { env } from '$lib/server/guard'
 import { positiveId } from '../../../../_submission.server'
 import type { PageServerLoad } from './$types'
@@ -15,5 +15,6 @@ export const load: PageServerLoad = async (event) => {
     entry: found.entry,
     graph: found.graph,
     dates: found.dates,
+    limits: { hops: STEMMA_HOPS_MAX, nodes: STEMMA_NODES_MAX },
   }
 }
