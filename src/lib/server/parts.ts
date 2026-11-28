@@ -1,4 +1,4 @@
-// Indexed reads for component function analysis (`/parts`, `/part/<part>`, and `/api/parts/functions`).
+// Indexed reads for component function analysis (`/radicals`, `/part/<part>`, and `/api/parts/functions`).
 // Every read uses a dedicated index on `entry_part_roles`, `part_function_counts`, or `part_counts`
 // with bounded limits and tuple keyset pagination (`?after=`), avoiding table scans and temp B-trees.
 import { FUNCTION_MAX, partKey, ROLE_MAX, ROLES, validPartKey } from '$lib/composition'
@@ -67,6 +67,20 @@ export const partFunctionSuggestionsStatement = (db: D1Database, part: string, l
 export const partTotalStatement = (db: D1Database, part: string) =>
   db.prepare('SELECT n FROM part_counts WHERE part = ?').bind(part)
 
+/** Record count filed under one radical path via primary-key lookup on `tag_counts`. */
+export const radicalRecordCountStatement = (db: D1Database, path: string) =>
+  db.prepare('SELECT n FROM tag_counts WHERE tag = ? AND n > 0').bind(`b:${path}`)
+
+/** Counts for an arbitrary set of canonical components via a single `json_each` primary-key lookup on `part_counts`. */
+export const partCountsByKeysStatement = (db: D1Database, keys: readonly string[]) =>
+  db.prepare('SELECT part, n FROM part_counts WHERE part IN (SELECT value FROM json_each(?))').bind(JSON.stringify(keys))
+
+/** Counts for a small fixed set of related component forms via primary-key lookup on `part_counts`. */
+export const relatedPartsStatement = (db: D1Database, parts: readonly string[]) => {
+  const marks = parts.map(() => '?').join(', ')
+  return db.prepare(`SELECT part, n FROM part_counts WHERE part IN (${marks})`).bind(...parts)
+}
+
 /**
  * One keyset-paginated page of live records for a component, optionally filtered by effective
  * function bucket (`func || role`, or `''` for unlabeled, or `null` for all).
@@ -111,6 +125,23 @@ export function partEntriesStatement(
 export async function listParts(db: D1Database, limit = PARTS_LIST_LIMIT): Promise<PartCount[]> {
   const { results } = await partCountsStatement(db, limit).all<PartCount>()
   return results
+}
+
+export async function partCountsByKeys(db: D1Database, keys: readonly string[]): Promise<Map<string, number>> {
+  if (!keys.length) return new Map()
+  const { results } = await partCountsByKeysStatement(db, keys).all<PartCount>()
+  return new Map(results.map(row => [row.part, row.n]))
+}
+
+export async function radicalRecordCount(db: D1Database, path: string): Promise<number> {
+  const row = await radicalRecordCountStatement(db, path).first<{ n: number }>()
+  return row?.n ?? 0
+}
+
+export async function relatedPartCounts(db: D1Database, parts: readonly string[]): Promise<PartCount[]> {
+  if (!parts.length) return []
+  const { results } = await relatedPartsStatement(db, parts).all<PartCount>()
+  return results.sort((a, b) => b.n - a.n || a.part.localeCompare(b.part))
 }
 
 export async function partSuggestions(db: D1Database, rawPart: string, limit = PART_SUGGESTIONS_LIMIT): Promise<{ part: string; functions: FunctionSlice[] }> {

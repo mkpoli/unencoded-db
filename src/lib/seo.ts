@@ -1,7 +1,7 @@
 import { parseRecordCode, recordCode } from './code'
 
 export const SITE_ORIGIN = 'https://rare.glyphatlas.org'
-export const PUBLIC_SECTIONS = ['', '/about', '/data', '/mcp', '/fonts', '/radicals', '/parts', '/tags', '/chronology', '/sources'] as const
+export const PUBLIC_SECTIONS = ['', '/about', '/data', '/mcp', '/fonts', '/radicals', '/tags', '/chronology', '/sources'] as const
 
 const LIST_PARAMS: Record<string, readonly string[]> = {
   '': ['q', 'also', 'script', 'filter', 'genre', 'collection', 'tag', 'creator', 'radical', 'decade', 'in', 'out', 'sort', 'seed', 'after', 'page', 'per'],

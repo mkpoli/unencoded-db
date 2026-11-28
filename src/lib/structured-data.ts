@@ -134,7 +134,7 @@ export function partData({ locale, part, name, description, siteName, partsName 
     present({ '@context': CONTEXT, '@type': 'CollectionPage', '@id': url, url, name, description, inLanguage: locale, isPartOf: SITE }),
     breadcrumbs([
       { name: siteName, url: `${SITE_ORIGIN}/${locale}` },
-      { name: partsName, url: `${SITE_ORIGIN}/${locale}/parts` },
+      { name: partsName, url: `${SITE_ORIGIN}/${locale}/radicals` },
       { name, url },
     ]),
   ]
