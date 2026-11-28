@@ -5,6 +5,9 @@
 //   - Extension G (U+30000..U+3134F) -> WS2015 (https://hc.jsecs.org/irg/ws2015/app/)
 //   - Extension H (U+31350..U+323AF) -> WS2017 (https://hc.jsecs.org/irg/ws2017/app/)
 //   - Extension J (U+323B0..U+3347F) -> WS2021 (https://hc.jsecs.org/irg/ws2021/app/)
+// Active candidate submissions live in WS2024 (https://hc.jsecs.org/irg/ws2024/app/). All four ORT
+// apps accept 5-digit zero-padded serial lookups (`?id=00001`), and ws2017/ws2021/ws2024 accept
+// IDS-substring lookups (`?ids=...`).
 //
 // Prefix allowlists and `?find=` punctuation rewrites (GHZR, G_Z, G_PGLG, USAT, V-, and WS2017's
 // GDM-00001..00220 cap) are derived from Unihan 18.0.0 Unihan_IRGSources.txt and verified against
@@ -12,9 +15,17 @@
 // excluded; when a character carries both a G-source and another working-set source, the non-G
 // source is preferred because later horizontal extensions (e.g. GZ-, GDM-) share prefixes with
 // original working-set submissions.
+import { cleanIds } from './ids'
 
 export type WorkingSetId = 'ws2015' | 'ws2017' | 'ws2021'
+export type ReviewWorkingSetId = WorkingSetId | 'ws2024'
 export type IrgLink = { name: string; href: string; title: string }
+
+export const ACTIVE_WORKING_SET = 'ws2024' as const
+export const ACTIVE_WORKING_SET_LABEL = 'IRG WS2024'
+
+const WS_CODE = /^WS(2015|2017|2021|2024)-(\d{5})$/
+const SERIAL_DIGITS = /^\d{1,5}$/
 
 type WorkingSetSpec = {
   id: WorkingSetId
@@ -83,6 +94,34 @@ export function ortFindRef(ws: WorkingSetId, source: string): string | null {
 /** Direct URL to a character's IRG Working Set ORT review page by its ORT lookup reference. */
 export function ortUrl(ws: WorkingSetId, findRef: string): string {
   return `https://hc.jsecs.org/irg/${ws}/app/index.php?find=${encodeURIComponent(findRef)}`
+}
+
+/** Direct URL to an IRG Working Set ORT entry by its serial number (1..99999, zero-padded to 5 digits), or null if invalid. */
+export function ortSerialUrl(ws: ReviewWorkingSetId, serial: string): string | null {
+  if (!SERIAL_DIGITS.test(serial) || Number(serial) < 1) return null
+  return `https://hc.jsecs.org/irg/${ws}/app/index.php?id=${serial.padStart(5, '0')}`
+}
+
+/**
+ * Parses a canonical working-set serial code (`WS2015-00001`, `WS2017-00001`, `WS2021-00001`, or
+ * `WS2024-00001`, serial `00001`..`99999`) into its working-set slug and 5-digit serial, or null.
+ */
+export function parseWorkingSetCode(code: string): { ws: ReviewWorkingSetId; serial: string } | null {
+  const match = WS_CODE.exec(code.trim())
+  if (!match || Number(match[2]) < 1) return null
+  return { ws: `ws${match[1]}` as ReviewWorkingSetId, serial: match[2] }
+}
+
+/** Direct ORT URL for a canonical working-set serial code (e.g. `WS2024-00001`), or null if invalid. */
+export function workingSetPage(code: string): string | null {
+  const parsed = parseWorkingSetCode(code)
+  return parsed ? ortSerialUrl(parsed.ws, parsed.serial) : null
+}
+
+/** Direct ORT IDS-substring lookup URL for an active working set (`ws2017`, `ws2021`, or `ws2024`). */
+export function ortIdsUrl(ids: string, ws: Exclude<ReviewWorkingSetId, 'ws2015'> = ACTIVE_WORKING_SET): string | null {
+  const sequence = cleanIds(ids)
+  return sequence ? `https://hc.jsecs.org/irg/${ws}/app/index.php?ids=${encodeURIComponent(sequence)}` : null
 }
 
 /**

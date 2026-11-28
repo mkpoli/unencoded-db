@@ -20,10 +20,11 @@ test('an encoded character appends IRG Working Set and UAX #45 links from Unihan
   ])
 })
 
-test('a description links to its described card and to the editor', () => {
+test('a description links to its described card, the editor, zi.tools and IRG WS2024', () => {
   expect(descriptionLinks('⿰山東', 'en').map(link => link.href)).toEqual([
     'https://glyphatlas.org/en/character/U+2FF0-U+5C71-U+6771', 'https://ids.mkpo.li/%E2%BF%B0%E5%B1%B1%E6%9D%B1',
     'https://zi.tools/?secondary=ids&seq=%E2%BF%B0%E5%B1%B1%E6%9D%B1',
+    'https://hc.jsecs.org/irg/ws2024/app/index.php?ids=%E2%BF%B0%E5%B1%B1%E6%9D%B1',
   ])
   expect(descriptionLinks('', 'en')).toEqual([])
 })
