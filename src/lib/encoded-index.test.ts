@@ -74,3 +74,9 @@ test('a guessed structure finds the character made of its parts first, and chara
   expect(hits[0]).toMatchObject({ char: '蒔', tier: 'similar' })
   expect(lookup(index, '⿱日寺').find(hit => hit.char === '時')).toMatchObject({ tier: 'similar', score: 0.95 })
 })
+
+test('stroke-level remainder splits and differing rarest parts still find the target character', () => {
+  expect(lookup(index, '⿱亠⿰丿小')[0]).toMatchObject({ char: '亦', tier: 'similar' })
+  // Query whose rarest part differs from the target (𠂢 is rarer than 亻 and 木) still finds a one-off match.
+  expect(lookup(index, '⿰亻⿱木𠂢').some(hit => hit.tier === 'similar')).toBe(true)
+})

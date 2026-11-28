@@ -87,14 +87,21 @@ export function lookup(index: Index, ids: string): EncodedHit[] {
     if (!held || nearer(hit, held) !== held) found.set(point, { ...hit, char: String.fromCodePoint(point), ids: texts[number] })
   }
   if (query) for (let number = exact.get(plain(ids)) ?? -1; number >= 0; number = next[number]) consider(number)
-  const keys = [...read.counts.keys()]
-  const rarest = keys.reduce((best, key) => (byKey.get(key)?.length ?? 0) < (byKey.get(best)?.length ?? 0) ? key : best)
-  let scored = 0
-  for (const number of byKey.get(rarest) ?? []) {
-    if (scored++ >= SCORED_MAX) break
-    const own = prepare(texts[number], data)
-    if (!own || (keys.length >= 2 && keys.filter(key => own.counts.has(key)).length < 2)) continue
-    consider(number, own)
+  const keys = [...read.counts.keys()].sort((a, b) => (byKey.get(a)?.length ?? 0) - (byKey.get(b)?.length ?? 0))
+  // A structured query with three or more parts may differ from a candidate in its rarest part alone,
+  // so scan the two rarest posting lists. A loose query must hold every part, so the rarest suffices.
+  const scanKeys = query && keys.length >= 3 ? keys.slice(0, 2) : keys.slice(0, 1)
+  const seen = new Set<number>()
+  for (const scanKey of scanKeys) {
+    let scored = 0
+    for (const number of byKey.get(scanKey) ?? []) {
+      if (seen.has(number)) continue
+      seen.add(number)
+      if (scored++ >= SCORED_MAX) break
+      const own = prepare(texts[number], data)
+      if (!own || (keys.length >= 2 && keys.filter(key => own.counts.has(key)).length < 2)) continue
+      consider(number, own)
+    }
   }
   forgetExpansions()
   return keepBest([...found.values()])
