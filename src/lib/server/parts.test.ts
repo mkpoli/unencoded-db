@@ -97,14 +97,14 @@ describe('part functions', () => {
     expect(await partSummary(db, '亻')).toEqual({
       total: 4,
       slices: [
-        { func: '', n: 1 },
+        { func: 'semantic', n: 1 },
         { func: '度量衡「倍」字省略', n: 1 },
         { func: '提示白讀或訓讀（福州方言字）', n: 1 },
         { func: '表示民族名', n: 1 },
       ],
     })
 
-    // Suggestions exclude unlabeled rows and normalize radical code points.
+    // Suggestions exclude standard roles and unlabeled rows, returning reusable custom function labels.
     expect(await partSuggestions(db, '⺅')).toEqual({
       part: '亻',
       functions: [
@@ -114,9 +114,9 @@ describe('part functions', () => {
       ],
     })
 
-    // Filter by specific function and by unlabeled.
+    // Filter by specific function and by role bucket (`semantic`).
     expect((await partEntries(db, '亻', { func: '表示民族名' })).entries.map(item => item.tile.id)).toEqual([id3])
-    expect((await partEntries(db, '亻', { func: '' })).entries.map(item => item.tile.id)).toEqual([id4])
+    expect((await partEntries(db, '亻', { func: 'semantic' })).entries.map(item => item.tile.id)).toEqual([id4])
     const page1 = await partEntries(db, '亻', { limit: 2 })
     expect(page1.entries.map(item => item.tile.id)).toEqual([id4, id3])
     expect(page1.more).toBe(String(id3))

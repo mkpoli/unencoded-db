@@ -1,7 +1,7 @@
 // Indexed reads for component function analysis (`/parts`, `/part/<part>`, and `/api/parts/functions`).
 // Every read uses a dedicated index on `entry_part_roles`, `part_function_counts`, or `part_counts`
 // with bounded limits and tuple keyset pagination (`?after=`), avoiding table scans and temp B-trees.
-import { FUNCTION_MAX, partKey, ROLE_MAX, validPartKey } from '$lib/composition'
+import { FUNCTION_MAX, partKey, ROLE_MAX, ROLES, validPartKey } from '$lib/composition'
 import { TILE_COLUMNS, toTile, type Tile, type TileRow } from './entries'
 
 export const PARTS_LIST_LIMIT = 200
@@ -56,17 +56,20 @@ export const partCountsStatement = (db: D1Database, limit = PARTS_LIST_LIMIT) =>
 export const partFunctionCountsStatement = (db: D1Database, part: string, limit = PART_SLICES_LIMIT) =>
   db.prepare('SELECT func, n FROM part_function_counts WHERE part = ? ORDER BY n DESC, func LIMIT ?').bind(part, limit)
 
-/** Shared function-tag autocomplete suggestions for one canonical component (non-empty labels only). */
+const SUGGESTION_EXCLUDED = ['', ...ROLES]
+const SUGGESTION_MARKS = SUGGESTION_EXCLUDED.map(() => '?').join(', ')
+
+/** Shared function-tag autocomplete suggestions for one canonical component (specific custom labels only). */
 export const partFunctionSuggestionsStatement = (db: D1Database, part: string, limit = PART_SUGGESTIONS_LIMIT) =>
-  db.prepare("SELECT func, n FROM part_function_counts WHERE part = ? AND func != '' ORDER BY n DESC, func LIMIT ?").bind(part, limit)
+  db.prepare(`SELECT func, n FROM part_function_counts WHERE part = ? AND func NOT IN (${SUGGESTION_MARKS}) ORDER BY n DESC, func LIMIT ?`).bind(part, ...SUGGESTION_EXCLUDED, limit)
 
 /** Total tagged-role count for one canonical component. */
 export const partTotalStatement = (db: D1Database, part: string) =>
   db.prepare('SELECT n FROM part_counts WHERE part = ?').bind(part)
 
 /**
- * One keyset-paginated page of live records for a component, optionally filtered by `func`
- * (pass `''` for unlabeled rows, a non-empty string for a specific function, or `null` for all).
+ * One keyset-paginated page of live records for a component, optionally filtered by effective
+ * function bucket (`func || role`, or `''` for unlabeled, or `null` for all).
  * Uses tuple keyset comparisons so a record tagging the same part with multiple `(role, func)`
  * pairs never loses rows across a page boundary.
  */
@@ -80,16 +83,16 @@ export function partEntriesStatement(
   if (func !== null) {
     if (after) {
       return db.prepare(`SELECT ${TILE_COLUMNS}, p.role AS part_role, p.func AS part_func
-        FROM entry_part_roles p INDEXED BY entry_part_roles_by_func
+        FROM entry_part_roles p INDEXED BY entry_part_roles_by_bucket
         CROSS JOIN entries e ON e.id = p.entry_id
-        WHERE p.part = ? AND p.func = ? AND (p.entry_id, p.role) < (?, ?)
-        ORDER BY p.entry_id DESC, p.role DESC LIMIT ?`).bind(part, func, after.id, after.role, limit)
+        WHERE p.part = ? AND p.bucket = ? AND (p.entry_id, p.role, p.func) < (?, ?, ?)
+        ORDER BY p.entry_id DESC, p.role DESC, p.func DESC LIMIT ?`).bind(part, func, after.id, after.role, after.func, limit)
     }
     return db.prepare(`SELECT ${TILE_COLUMNS}, p.role AS part_role, p.func AS part_func
-      FROM entry_part_roles p INDEXED BY entry_part_roles_by_func
+      FROM entry_part_roles p INDEXED BY entry_part_roles_by_bucket
       CROSS JOIN entries e ON e.id = p.entry_id
-      WHERE p.part = ? AND p.func = ?
-      ORDER BY p.entry_id DESC, p.role DESC LIMIT ?`).bind(part, func, limit)
+      WHERE p.part = ? AND p.bucket = ?
+      ORDER BY p.entry_id DESC, p.role DESC, p.func DESC LIMIT ?`).bind(part, func, limit)
   }
   if (after) {
     return db.prepare(`SELECT ${TILE_COLUMNS}, p.role AS part_role, p.func AS part_func

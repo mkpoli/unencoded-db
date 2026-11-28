@@ -3,7 +3,8 @@
   // Clicking any slice or legend row filters `/part/<part>` to that function; clicking the active
   // one clears the filter. Both the SVG and the legend carry full accessible labels and contrast.
   import type { FunctionSlice } from '$lib/server/parts'
-  import { t } from '$lib/t'
+  import { roleLabel } from '$lib/composition-labels'
+  import { locale, t } from '$lib/t'
 
   let {
     part,
@@ -15,10 +16,12 @@
     part: string
     slices: readonly FunctionSlice[]
     total: number
-    /** `null` = all, `''` = unlabeled, non-empty string = that function label. */
+    /** `null` = all, `''` = unlabeled, non-empty string = that function or role bucket. */
     selected?: string | null
     hrefFor: (func: string | null) => string
   } = $props()
+
+  const at = locale()
 
   // High-contrast light/dark adaptive slice palette matching the site's semantic color families.
   const PALETTE = [
@@ -76,7 +79,7 @@
       cursor = end
       const unlabeled = item.func === ''
       const color = unlabeled ? UNLABELED_COLOR : PALETTE[colorIndex++ % PALETTE.length]
-      const label = unlabeled ? t('part.unlabeled') : item.func
+      const label = unlabeled ? t('part.unlabeled') : roleLabel(at, item.func)
       const active = selected === item.func
       return {
         func: item.func,
