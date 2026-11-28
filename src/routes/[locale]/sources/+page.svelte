@@ -22,7 +22,10 @@
 
 <Seo title={t('nav.sources')} />
 <div class="page stack">
-  <h1>{t('nav.sources')}</h1>
+  <div class="row sources-head">
+    <h1>{t('nav.sources')}</h1>
+    <a class="text-link" href={href('/sources/graph')}>{t('sourceGraph.link')} →</a>
+  </div>
   <search>
     <form class="publisher-filter" action={href('/sources')} method="GET">
       {#if data.sort !== 'new'}<input type="hidden" name="sort" value={data.sort} />{/if}
@@ -79,6 +82,7 @@
 </div>
 
 <style>
+  .sources-head { justify-content:space-between; align-items:baseline }
   .publisher-filter { display:flex; flex-wrap:wrap; gap:8px; align-items:end }
   .publisher-filter :global(.field) { width:min(100%, 22rem) }
   .publisher-filter .text-link { align-self:end; padding:8px }

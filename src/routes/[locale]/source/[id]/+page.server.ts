@@ -2,6 +2,7 @@ import { copyOfSource } from '$lib/server/digitized-copies'
 import { readDates } from '$lib/server/date-readings'
 import { error, fail, type RequestEvent } from '@sveltejs/kit'
 import { sourcePage } from '$lib/server/entries'
+import { sourceLineage } from '$lib/server/source-graph'
 import { env, guardWrite } from '$lib/server/guard'
 import { notifyIndexNow } from '$lib/server/indexnow'
 import { tileGlyphs } from '$lib/server/glyphs'
@@ -19,7 +20,6 @@ export const load: PageServerLoad = async (event) => {
   const found = await sourcePage(env(event).DB, id)
   if (!found) error(404)
   const glyphs = await tileGlyphs(event.platform, event.url.origin, [...found.sightings.map(sighting => sighting.tile), ...found.namedIn.map(item => item.tile)], event.locals.glyphStyle)
-  const dates = await readDates(env(event).DB, [found.source.report_date, ...found.sightings.flatMap(s => [s.original_date, ...s.vias.map(via => via.report_date)]), ...found.namedIn.flatMap(item => [item.original_date, item.report_date])])
   const cursor = (name: string) => {
     const param = event.url.searchParams.get(name)
     const value = param === null ? null : positiveId(param)
@@ -28,9 +28,16 @@ export const load: PageServerLoad = async (event) => {
   }
   const before = cursor('before'), archivesBefore = cursor('archivesBefore')
   const db = env(event).DB
-  const [aliases, history, archives, archiveHistory, copy] = await Promise.all([sourceAliases(db, id), sourceAliasChanges(db, id, before),
-    sourceArchives(db, id), sourceArchiveChanges(db, id, archivesBefore), copyOfSource(db, id)])
-  return { ...found, glyphs, dates, aliases, copy, ...history, before, archives, archiveChanges: archiveHistory.changes, olderArchives: archiveHistory.older, archivesBefore,
+  const [aliases, history, archives, archiveHistory, copy, lineage] = await Promise.all([sourceAliases(db, id), sourceAliasChanges(db, id, before),
+    sourceArchives(db, id), sourceArchiveChanges(db, id, archivesBefore), copyOfSource(db, id), sourceLineage(db, id)])
+  const dates = await readDates(db, [
+    found.source.report_date,
+    ...found.sightings.flatMap(s => [s.original_date, ...s.vias.map(via => via.report_date)]),
+    ...found.namedIn.flatMap(item => [item.original_date, item.report_date]),
+    ...lineage.cites.map(peer => peer.report_date),
+    ...lineage.citedBy.map(peer => peer.report_date),
+  ])
+  return { ...found, glyphs, dates, aliases, copy, lineage, ...history, before, archives, archiveChanges: archiveHistory.changes, olderArchives: archiveHistory.older, archivesBefore,
     archiveNow: offersArchiveNow(found.source.url, archives) }
 }
 

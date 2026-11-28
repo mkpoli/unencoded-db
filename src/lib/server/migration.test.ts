@@ -735,3 +735,42 @@ test('0068 migrates record scripts, custom scripts and revision snapshots into s
   expect(entrySnapshot(snaps[4].snapshot)!.claims.map(c => c.value)).toContain('han')
   raw.close()
 })
+
+test('0070 backfills source_citations from visible sightings and ignores hidden or merged entries', () => {
+  const all = readdirSync(join(import.meta.dir, '../../../migrations')).filter(name => name.endsWith('.sql')).sort()
+  const raw = new Database(':memory:')
+  raw.exec('PRAGMA foreign_keys = ON')
+  for (const name of all.filter(name => name < '0070')) raw.exec(migration(name))
+  raw.exec("INSERT INTO people(id, name, created_at) VALUES ('p', 'Person', '2026')")
+  raw.exec(`INSERT INTO sources(id, hash, title, records) VALUES
+    (1, 'h1', '字彙補', 2),
+    (2, 'h2', '康熙字典', 2),
+    (3, 'h3', '龍龕手鑑', 0)`)
+  raw.exec(`INSERT INTO entries(id, hidden_at, merged_into, created_by, created_at, updated_at) VALUES
+    (1, NULL, NULL, 'p', '2026', '2026'),
+    (2, NULL, NULL, 'p', '2026', '2026'),
+    (3, '2026', NULL, 'p', '2026', '2026'),
+    (4, NULL, 1, 'p', '2026', '2026')`)
+  raw.exec(`INSERT INTO sightings(id, entry_id, first_entry, source_id, place, hidden_at, created_by, created_at, updated_at) VALUES
+    (1, 1, 1, 1, 'p1', NULL, 'p', '2026', '2026'),
+    (2, 1, 1, 2, 'p2', NULL, 'p', '2026', '2026'),
+    (3, 2, 2, 1, 'p3', NULL, 'p', '2026', '2026'),
+    (4, 2, 2, 2, 'p4', NULL, 'p', '2026', '2026'),
+    (5, 3, 3, 2, 'p5', NULL, 'p', '2026', '2026'),
+    (6, 4, 4, 2, 'p6', NULL, 'p', '2026', '2026')`)
+  raw.exec(`INSERT INTO sighting_cites(sighting_id, position, kind, source_id, cited_id) VALUES
+    (2, 0, 'quotes', NULL, 1),
+    (2, 1, 'quotes', 3, NULL),
+    (4, 0, 'derived', NULL, 3),
+    (5, 0, 'quotes', 3, NULL),
+    (6, 0, 'quotes', 3, NULL)`)
+
+  for (const name of all.filter(name => name >= '0070')) raw.exec(migration(name))
+
+  expect(raw.query('PRAGMA foreign_key_check').all()).toEqual([])
+  expect(raw.query('SELECT citing_source_id, cited_source_id, records, quotes_count, edition_count, derived_count FROM source_citations ORDER BY citing_source_id, cited_source_id').all()).toEqual([
+    { citing_source_id: 2, cited_source_id: 1, records: 2, quotes_count: 1, edition_count: 0, derived_count: 1 },
+    { citing_source_id: 2, cited_source_id: 3, records: 1, quotes_count: 1, edition_count: 0, derived_count: 0 },
+  ])
+  raw.close()
+})
