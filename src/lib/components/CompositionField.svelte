@@ -11,7 +11,7 @@
 
   type Row = { part: string; roleText: string }
 
-  let { ids = '', value = '' }: { ids?: string; value?: string } = $props()
+  let { ids = '', value = '', anchor }: { ids?: string; value?: string; anchor?: string } = $props()
 
   const uid = $props.id()
   const at = locale()
@@ -67,7 +67,7 @@
 </script>
 
 {#if parsed}
-  <FactLine label={t('field.formation')} stated={set}>
+  <FactLine id={anchor} label={t('field.formation')} stated={set}>
     {#snippet value()}
       <span class="formation">{formationLabel(at, resolved)}</span>
       {#each tags as tag, index (index)}<span class="tag">{tag.part} · {roleLabel(at, tag.role)}</span>{/each}

@@ -97,9 +97,11 @@
     const target = document.getElementById(`edit-${field}`)
     if (!target) return
     if (target instanceof HTMLDetailsElement) {
-      // The radical line and the line of encodings after it share `edit-identity`.
       target.open = true
-      for (let line = target.nextElementSibling; line instanceof HTMLDetailsElement && line.classList.contains('fact'); line = line.nextElementSibling) line.open = true
+      // The radical line and the line of encodings after it share `edit-identity`.
+      if (field === 'identity') {
+        for (let line = target.nextElementSibling; line instanceof HTMLDetailsElement && line.classList.contains('fact'); line = line.nextElementSibling) line.open = true
+      }
     }
     history.replaceState(history.state, '', `#edit-${field}`)
     target.scrollIntoView({ block: 'center' })
@@ -229,7 +231,7 @@
   {#if entry.hidden_at}<p class="notice bad">{t('entry.hidden')}</p>{/if}
   {#if entry.merged_into}<p class="notice quiet"><a class="text-link" href={href(`/${recordCode(entry.merged_into)}`)}>{t('entry.mergedInto', { id: recordCode(entry.merged_into) })}</a></p>{/if}
   <section class="panel stack">
-    <div class="head"><h2>{t('entry.about')}</h2><a class="button small" href="#edit-ids" data-edit="ids">{t('entry.edit')}</a></div>
+    <div class="head"><h2>{t('entry.structure')}</h2><a class="button small" href="#edit-ids" data-edit="ids" aria-label={t('entry.editField', { field: t('entry.structure') })}>{t('entry.edit')}</a></div>
     {#if sequences.length}
       <div class="identity">
         <ul class="forms">{#each groups as group, position (group.ids)}<li class="form" bind:this={formsShown[position]}><ul class="styles">{#each GLYPH_STYLES as style (style)}<li><GlyphFace {style}><IdsGlyph ids={group.ids} layout={group.layout} {style} /></GlyphFace></li>{/each}</ul><p class="sequence">{#each group.spellings as spelling, index (spelling)}<span class="ids" class:secondary={index > 0}>{spelling}</span><CopyButton text={spelling} />{/each}</p><SpellingReport record={entry.id} sequence={group.ids} layout={group.layout} drawing={style => formsShown[position]?.querySelector(`.styles > li:nth-child(${GLYPH_STYLES.indexOf(style) + 1}) svg`) ?? null} /></li>{/each}</ul>
@@ -247,8 +249,37 @@
       </div>
     {/if}
     {#if analysis?.tagged}
-      <p class="formation"><span class="label">{t('field.formation')}</span><span class="method">{formationLabel(at, analysis.formation)}</span>{#each analysis.parts.filter(part => part.role) as part, index (index)}<span class="part">{part.part} · {roleLabel(at, part.role)}</span>{/each}</p>
+      <p class="formation"><span class="label">{t('field.formation')}</span><span class="method">{formationLabel(at, analysis.formation)}</span>{#each analysis.parts.filter(part => part.role) as part, index (index)}<span class="part">{part.part} · {roleLabel(at, part.role)}</span>{/each}<EditLink field="composition" name={t('field.formation')} /></p>
+    {:else if analysis}
+      <p class="formation"><span class="label">{t('field.formation')}</span><EditLink field="composition" name={t('entry.addFormation')} add /></p>
     {/if}
+    <ul class="marks" aria-label={t('field.encodings')}>
+      {#each marks as mark (mark.registry.id)}
+        {@const name = t(`registry.${mark.registry.id}`)}
+        {@const text = mark.code === null ? t('registry.out', { name }) : mark.since ? t('registry.since', { version: mark.since }) : t('registry.in', { name })}
+        <li>{#if mark.href}<a class="badge encoded" href={mark.href} target="_blank" rel="noopener" title={mark.registry.label}>{text}</a>{:else}<span class="badge" class:encoded={mark.code !== null} title={mark.registry.label}>{text}</span>{/if}</li>
+      {/each}
+      <li><EditLink field="identity" name={t('field.encodings')} /></li>
+    </ul>
+    <dl class="facts">
+      {#each encodings as encoding (encoding.charset + '|' + encoding.code)}
+        {@const character = encoding.charset === 'unicode' ? encodedCharacter(encoding.code) : ''}
+        {@const page = character ? null : codePage(encoding)}
+        <div><dt>{registryLabel(encoding.charset)}</dt><dd>{#if character}<span class="character encoded">{character}</span><CopyButton text={character} />{' '}{/if}{#if page}<a class="mono text-link" href={page} target="_blank" rel="noopener">{encoding.code} ↗</a>{:else}<span class="mono">{encoding.code}</span>{/if}{#if character}<span class="sites">{#each characterLinks(character, at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</span>{/if}</dd></div>
+      {/each}
+      {#if ivd}<div><dt>{t('field.ivd')}</dt><dd class:mono={ivd !== 'none'}>{ivd === 'none' ? t('field.ivdNone') : ivd}</dd></div>{/if}
+      {#if documents.length}<div><dt>{t('field.documents')}<EditLink field="identity" name={t('field.documents')} /></dt><dd><ul class="docs">{#each documents as doc (`${doc.doc}|${doc.page ?? ''}|${doc.url ?? ''}`)}{@const link = documentUrl(doc.doc, doc.url)}<li>{#if link}<a class="mono text-link" href={link} target="_blank" rel="noopener noreferrer">{doc.doc} ↗</a>{:else}<span class="mono">{doc.doc}</span>{/if}{#if doc.page}{' '}<span class="muted">{formatDocumentPage(doc.page)}</span>{/if}</li>{/each}</ul></dd></div>{/if}
+      {#if data.filed.length}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd class="radicals">{#each data.filed as radical, index (radical.path)}{#if index}<span class="muted" aria-hidden="true">›</span>{/if}<a class="character text-link" href={browseHref(href(), { radical: radical.path })}>{radical.radical}</a>{/each}</dd></div>{:else if entry.radical}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd>{entry.radical}</dd></div>{:else}<div><dt>{t('field.radical')}</dt><dd><EditLink field="identity" name={t('entry.addRadical')} add /></dd></div>{/if}
+      {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
+    </dl>
+  </section>
+  <section class="panel stack">
+    <div class="head"><h2>{t('entry.explanation')}</h2><a class="button small" href="#edit-senses" data-edit="senses" aria-label={t('entry.editField', { field: t('entry.explanation') })}>{t('entry.edit')}</a></div>
+    <div class="senses">
+      <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} records={data.related} />
+      {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation' || claim.kind === 'creator')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
+      {:else}<EditLink field="senses" name={t('entry.addSenses')} add />{/if}
+    </div>
     <div class="line">
       {#if entry.description}<p class="description">{entry.description}</p><EditLink field="description" name={t('field.description')} />
       {:else}<EditLink field="description" name={t('entry.addDescription')} add />{/if}
@@ -279,37 +310,13 @@
     {:else}
       <p><EditLink field="filing" name={t('entry.addCategory')} add /></p>
     {/if}
-    <ul class="marks" aria-label={t('field.encodings')}>
-      {#each marks as mark (mark.registry.id)}
-        {@const name = t(`registry.${mark.registry.id}`)}
-        {@const text = mark.code === null ? t('registry.out', { name }) : mark.since ? t('registry.since', { version: mark.since }) : t('registry.in', { name })}
-        <li>{#if mark.href}<a class="badge encoded" href={mark.href} target="_blank" rel="noopener" title={mark.registry.label}>{text}</a>{:else}<span class="badge" class:encoded={mark.code !== null} title={mark.registry.label}>{text}</span>{/if}</li>
-      {/each}
-      <li><EditLink field="identity" name={t('field.encodings')} /></li>
-    </ul>
-    <dl class="facts">
-      {#each encodings as encoding (encoding.charset + '|' + encoding.code)}
-        {@const character = encoding.charset === 'unicode' ? encodedCharacter(encoding.code) : ''}
-        {@const page = character ? null : codePage(encoding)}
-        <div><dt>{registryLabel(encoding.charset)}</dt><dd>{#if character}<span class="character encoded">{character}</span><CopyButton text={character} />{' '}{/if}{#if page}<a class="mono text-link" href={page} target="_blank" rel="noopener">{encoding.code} ↗</a>{:else}<span class="mono">{encoding.code}</span>{/if}{#if character}<span class="sites">{#each characterLinks(character, at) as link}<a class="text-link small" href={link.href} target="_blank" rel="noopener">{link.name} ↗</a>{/each}</span>{/if}</dd></div>
-      {/each}
-      {#if ivd}<div><dt>{t('field.ivd')}</dt><dd class:mono={ivd !== 'none'}>{ivd === 'none' ? t('field.ivdNone') : ivd}</dd></div>{/if}
-      {#if documents.length}<div><dt>{t('field.documents')}<EditLink field="identity" name={t('field.documents')} /></dt><dd><ul class="docs">{#each documents as doc (`${doc.doc}|${doc.page ?? ''}|${doc.url ?? ''}`)}{@const link = documentUrl(doc.doc, doc.url)}<li>{#if link}<a class="mono text-link" href={link} target="_blank" rel="noopener noreferrer">{doc.doc} ↗</a>{:else}<span class="mono">{doc.doc}</span>{/if}{#if doc.page}{' '}<span class="muted">{formatDocumentPage(doc.page)}</span>{/if}</li>{/each}</ul></dd></div>{/if}
-      {#if data.filed.length}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd class="radicals">{#each data.filed as radical, index (radical.path)}{#if index}<span class="muted" aria-hidden="true">›</span>{/if}<a class="character text-link" href={browseHref(href(), { radical: radical.path })}>{radical.radical}</a>{/each}</dd></div>{:else if entry.radical}<div><dt>{t('field.radical')}<EditLink field="identity" name={t('field.radicalStrokes')} /></dt><dd>{entry.radical}</dd></div>{:else}<div><dt>{t('field.radical')}</dt><dd><EditLink field="identity" name={t('entry.addRadical')} add /></dd></div>{/if}
-      {#if entry.strokes != null}<div><dt>{t('field.strokes')}</dt><dd>{entry.strokes}</dd></div>{/if}
-    </dl>
-    <div class="senses">
-      <SenseList {claims} sightings={data.sightings.map(sighting => sighting.id)} records={data.related} />
-      {#if claims.some(claim => claim.kind === 'meaning' || claim.kind === 'reading' || claim.kind === 'relation' || claim.kind === 'creator')}<span class="pen"><EditLink field="senses" name={t('field.senses')} /></span>
-      {:else}<EditLink field="senses" name={t('entry.addSenses')} add />{/if}
-    </div>
-    {#if entry.by_name && entry.created_at}
-      <p class="hint attribution">
-        <span>{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</span>
-        {#if entry.by_agent}<AgentBadge name={entry.by_agent} model={entry.by_model ?? null} standalone={entry.by_agent === entry.by_name} />{/if}
-      </p>
-    {/if}
   </section>
+  {#if entry.by_name && entry.created_at}
+    <p class="hint attribution">
+      <span>{t('entry.firstAdded', { name: entry.by_name, date: day(entry.created_at) })}</span>
+      {#if entry.by_agent}<AgentBadge name={entry.by_agent} model={entry.by_model ?? null} standalone={entry.by_agent === entry.by_name} />{/if}
+    </p>
+  {/if}
   <details class="panel" id="edit" bind:open={editOpen}>
     <summary>{t('entry.edit')}</summary>
     <form class="stack form" method="POST" action="?/edit">
@@ -318,7 +325,7 @@
       {#key `${entry.id}:${entry.rev}:${editing}`}
         <CharacterFields bind:this={fields} anchor="edit-ids" exclude={entry.id} values={editIds} layout={primaryLayoutOf(editValues.claims)} bind:primary onfill={facts => filled = facts}>
           <div class="sheet">
-            <CompositionField ids={primary} value={editComposition} />
+            <CompositionField anchor="edit-composition" ids={primary} value={editComposition} />
             <ScriptPicker value={editValues.script} other={editValues.script_other} />
             <IdentityFields anchor="edit-identity" claims={editValues.claims} radical={editValues.radical} strokes={editValues.strokes} fill={filled} ids={primary} />
           </div>
