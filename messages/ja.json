@@ -845,5 +845,7 @@
   "mcp.tool.restore_revision": "過去の版を復元するか、外された証拠を戻します。",
   "mcp.authTitle": "ログインと書き込み",
   "mcp.authBody": "ログインしなくても利用でき、接続ごとに新しい匿名の名前が付きます。OAuth 2.1対応のクライアントからGlyph Atlasで認証すると、ご自身のアカウント名義で記録されます。",
-  "mcp.writesBody": "書き込みにはWebフォームと同じ検証が適用されます。証拠画像は公開URLから取得されます。"
+  "mcp.writesBody": "書き込みにはWebフォームと同じ検証が適用されます。証拠画像は公開URLから取得されます。",
+  "search.suggestions": "検索候補",
+  "search.written": "表記"
 }

@@ -10,6 +10,10 @@ declare module 'ids-input' {
   export type VariationFamily = { id: string; subjects: readonly string[]; evidenceOnly?: boolean; forms: readonly { id: string; text: string; outline?: { d: string; viewBox?: string } }[] }
   export function variationFamiliesOfPart(part: IdsPart | undefined, lookup?: (text: string) => readonly VariationFamily[]): readonly VariationFamily[]
   export function write(tree: IdsPart): string
+  /** The structures one part away from a description: ⿱木口 gives ⿱？口 and ⿱木？. */
+  export function similarStructures(text: string): string[]
+  /** The operators, each with how many parts it joins, in keyboard order. */
+  export const OPERATORS: readonly (readonly [string, number])[]
   /** `text` with the ASCII names of the operators (LR, UD) written as operators. */
   export function unalias(text: string | null | undefined): string
   /** A part of a structure searched for; null stands for any part. */
@@ -52,8 +56,15 @@ declare module 'ids-input/svelte' {
     fontStyle?: import('$lib/composer').GlyphStyle
     variationSequences?(): Promise<Map<string, string[]>>
     structure(char: string): Promise<unknown[]>
+    /** Components and characters found by a character, a code point, a name, a reading or a meaning. */
+    search?(query: string, options?: { limit?: number; signal?: AbortSignal }): Promise<{ char: string; label?: string }[]>
     variationFamilies?(text: string): readonly import('ids-input').VariationFamily[]
   }
+  export const OperatorIcon: Component<{ op: string; size?: number }>
+  /** The palette of parts that are hard to type, by strokes, script and recent use. */
+  export const IdsParts: Component<{ adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; recentKey?: string | null; onpick?: (part: string) => void }>
+  /** Characters or a description typed, opened level by level into the parts they are made of. */
+  export const IdsFrom: Component<{ adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; ontake?: (part: string) => void; text?: string }, {}, 'text'>
   export function createEditor(options: () => { adapter: IdsAdapter; messages?: Record<string, string>; locale?: string; disabled?: boolean; tintMode?: 'hover' | 'on' | 'off' }): IdsEditor
   export const IdsOperators: Component<{ editor: IdsEditor; keyHints?: boolean }>
   export const IdsTree: Component<{ editor: IdsEditor; variations?: boolean; keyHints?: boolean }>

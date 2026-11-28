@@ -845,5 +845,7 @@
   "mcp.tool.restore_revision": "復原先前版本，或放回已移除的證據。",
   "mcp.authTitle": "登入與寫入",
   "mcp.authBody": "無需登入即可使用，每次連線會取得一個新的匿名名稱。支援OAuth 2.1的用戶端可透過Glyph Atlas驗證，將寫入歸屬到你的帳號。",
-  "mcp.writesBody": "寫入遵循與網頁表單相同的檢查規則；證據圖片會從公開網址抓取。"
+  "mcp.writesBody": "寫入遵循與網頁表單相同的檢查規則；證據圖片會從公開網址抓取。",
+  "search.suggestions": "搜尋建議",
+  "search.written": "寫法"
 }

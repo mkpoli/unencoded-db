@@ -5,6 +5,7 @@
   import { page } from '$app/state'
   import Seo from '$lib/components/Seo.svelte'
   import Tile from '$lib/components/Tile.svelte'
+  import SearchSuggestions from '$lib/components/SearchSuggestions.svelte'
   import { COLLECTIONS, arrangeTags, localized } from '$lib/tags'
   import { MARKED } from '$lib/registries'
   import { ORDER, PAGE, PAGE_SIZES, SORTS, pageSteps } from '$lib/order'
@@ -299,6 +300,11 @@
     event.preventDefault()
     void applyFilters({ noScroll: true, keepFocus: true })
   }
+  // A way of writing or a character taken from the suggestions is searched for at once.
+  function searchFor(text: string) {
+    query = text
+    void applyFilters({ noScroll: true, keepFocus: true })
+  }
   function clearQuery() {
     filterTicket++
     resolvingIds = false
@@ -443,6 +449,7 @@
       {#if hasFilters}<a class="text-link clear-filters" href={clearedFilters}>{t('sources.clear')}</a>{/if}
     </div>
   </form>
+  {#if mounted && query.trim() !== data.query && !filtering}<SearchSuggestions {query} onsearch={searchFor} />{/if}
   </search>
   <div class="filter-foot">
     <p class="hint" id="search-hint">{t('browse.idsHint')}</p>
@@ -524,6 +531,7 @@
   .glyph-setting { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; min-inline-size:0 }
   .glyph-setting-label { font-size:11px; font-weight:500; color:var(--muted) }
   .intro { gap:8px; max-width:720px }
+  search { display:flex; flex-direction:column; gap:8px }
   .filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:16px; border:1px solid var(--line); border-radius:9px; background:var(--surface) }
   .filters .field { flex:1 1 140px } .filters .search { flex:2 1 220px } .filters .radical { flex:0 1 120px } .filters .decade { flex:1 1 140px }
   .search:has([aria-invalid="true"]) > label { color:var(--wrong) }
