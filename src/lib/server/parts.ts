@@ -1,7 +1,7 @@
 // Indexed reads for component function analysis (`/parts`, `/part/<part>`, and `/api/parts/functions`).
 // Every read uses a dedicated index on `entry_part_roles`, `part_function_counts`, or `part_counts`
 // with bounded limits and tuple keyset pagination (`?after=`), avoiding table scans and temp B-trees.
-import { FUNCTION_MAX, partKey, ROLE_MAX, validPartKey } from '$lib/composition'
+import { FUNCTION_MAX, partKey, ROLE_MAX, ROLES, validPartKey } from '$lib/composition'
 import { TILE_COLUMNS, toTile, type Tile, type TileRow } from './entries'
 
 export const PARTS_LIST_LIMIT = 200
@@ -56,9 +56,12 @@ export const partCountsStatement = (db: D1Database, limit = PARTS_LIST_LIMIT) =>
 export const partFunctionCountsStatement = (db: D1Database, part: string, limit = PART_SLICES_LIMIT) =>
   db.prepare('SELECT func, n FROM part_function_counts WHERE part = ? ORDER BY n DESC, func LIMIT ?').bind(part, limit)
 
+const SUGGESTION_EXCLUDED = ['', ...ROLES]
+const SUGGESTION_MARKS = SUGGESTION_EXCLUDED.map(() => '?').join(', ')
+
 /** Shared function-tag autocomplete suggestions for one canonical component (specific custom labels only). */
 export const partFunctionSuggestionsStatement = (db: D1Database, part: string, limit = PART_SUGGESTIONS_LIMIT) =>
-  db.prepare("SELECT func, n FROM part_function_counts WHERE part = ? AND func NOT IN ('', 'semantic', 'phonetic', 'symbol', 'initial', 'final') ORDER BY n DESC, func LIMIT ?").bind(part, limit)
+  db.prepare(`SELECT func, n FROM part_function_counts WHERE part = ? AND func NOT IN (${SUGGESTION_MARKS}) ORDER BY n DESC, func LIMIT ?`).bind(part, ...SUGGESTION_EXCLUDED, limit)
 
 /** Total tagged-role count for one canonical component. */
 export const partTotalStatement = (db: D1Database, part: string) =>

@@ -491,9 +491,8 @@ function partRoleRows(db: D1Database, owner: number | string, rows: readonly Par
         AND json_extract(j.value, '$.role') = entry_part_roles.role
         AND json_extract(j.value, '$.func') = entry_part_roles.func
     )`).bind(...values, payload),
-    db.prepare(`INSERT OR IGNORE INTO entry_part_roles(part, entry_id, role, func, bucket)
-      SELECT json_extract(j.value, '$.part'), ${sql}, json_extract(j.value, '$.role'), json_extract(j.value, '$.func'),
-        CASE WHEN json_extract(j.value, '$.func') != '' THEN json_extract(j.value, '$.func') ELSE json_extract(j.value, '$.role') END
+    db.prepare(`INSERT OR IGNORE INTO entry_part_roles(part, entry_id, role, func)
+      SELECT json_extract(j.value, '$.part'), ${sql}, json_extract(j.value, '$.role'), json_extract(j.value, '$.func')
       FROM json_each(?) j`).bind(...values, payload),
   ]
 }
