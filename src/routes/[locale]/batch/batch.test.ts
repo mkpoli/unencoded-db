@@ -34,7 +34,7 @@ function form(rows: { ids?: string; note?: string; picture?: boolean }[], shared
 
 test('saves each row as its own record under one source', async () => {
   const { event, count, raw } = fixture()
-  await expect(actions.default(event(form([{ ids: '⿰山東', picture: true }, { ids: '⿱木木', note: 'second', picture: true }, {}], { place: 'A book', title: 'Zidian' })))).rejects.toMatchObject({ status: 303, location: '/en/entry/1' })
+  await expect(actions.default(event(form([{ ids: '⿰山東', picture: true }, { ids: '⿱木木', note: 'second', picture: true }, {}], { place: 'A book', title: 'Zidian' })))).rejects.toMatchObject({ status: 303, location: '/en/R+0001' })
   expect(count('entries')).toBe(2)
   expect(count('sightings')).toBe(2)
   expect(count('sources')).toBe(1)

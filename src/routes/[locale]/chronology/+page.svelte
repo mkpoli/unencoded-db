@@ -64,7 +64,7 @@
             <tr class="entry" class:first={row.showYear}>
               <td class="year">{#if row.showYear}{yearName(entry.year)}{/if}</td>
               <td class="what">
-                <a class="record" href={href(`/entry/${entry.tile.id}`)}>
+                <a class="record" href={href(`/${recordCode(entry.tile.id)}`)}>
                   <span class="glyph">{#if entry.tile.ids}<IdsGlyph ids={entry.tile.ids} layout={entry.tile.layout} path={data.glyphs[entry.tile.id]} />{:else if entry.tile.cover_key}<img src={media(entry.tile.cover_key)} alt="" loading="lazy" decoding="async" />{/if}</span>
                   <span class="text">
                     <span class="name">{#if entry.tile.ids}<span class="ids">{entry.tile.ids}</span>{/if}<span class="code">{recordCode(entry.tile.id)}</span></span>

@@ -11,7 +11,7 @@ afterEach(() => { globalThis.fetch = realFetch })
 test('URLs cover every locale of each record and source, without duplicates', () => {
   const urls = indexNowUrls({ entries: [7, 7], sources: [3] })
   expect(urls).toHaveLength(LOCALES.length * 2)
-  expect(urls).toContain('https://rare.glyphatlas.org/ja/entry/7')
+  expect(urls).toContain('https://rare.glyphatlas.org/ja/R+0007')
   expect(urls).toContain('https://rare.glyphatlas.org/zh-Hant/source/3')
 })
 
@@ -46,7 +46,7 @@ test('a change posts the record, its cited sources and the key location after th
   await Promise.all(pending)
   expect(body.host).toBe('rare.glyphatlas.org')
   expect(body.keyLocation).toBe('https://rare.glyphatlas.org/abcdef123456.txt')
-  expect(body.urlList).toContain('https://rare.glyphatlas.org/en/entry/5')
+  expect(body.urlList).toContain('https://rare.glyphatlas.org/en/R+0005')
   expect(body.urlList).toContain('https://rare.glyphatlas.org/en/source/1')
 })
 

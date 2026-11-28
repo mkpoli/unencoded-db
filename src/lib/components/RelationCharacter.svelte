@@ -15,7 +15,7 @@
 {#if record && compact}
   <span class="record-code">{recordCode(record)}</span>
 {:else if record}
-  <a class="value record" href={href(`/entry/${record}`)}>
+  <a class="value record" href={href(`/${recordCode(record)}`)}>
     {#if tile?.ids}<span class="plate"><IdsGlyph ids={tile.ids} layout={tile.layout} /></span>
     {:else if tile?.cover_key}<span class="plate"><img src={media(tile.cover_key)} alt="" loading="lazy" decoding="async" /></span>{/if}
     <span class="code">{recordCode(record)}</span>

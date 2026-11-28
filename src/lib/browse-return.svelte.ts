@@ -1,6 +1,7 @@
 import type { AfterNavigate } from '@sveltejs/kit'
 import { browser } from '$app/environment'
 import { browseSearchFromReferrer } from './browse-params'
+import { parseRecordUrlCode } from './code'
 import { BrowseReturnTracker } from './browse-return-tracker'
 
 const STORAGE_KEY = 'ug.browse'
@@ -46,14 +47,15 @@ export function hydrateBrowseReturn() {
 
 /** Updates remembered browse query and whether history.back() returns directly to it. */
 export function trackBrowseNavigation(navigation: AfterNavigate) {
-  const fromId = Number(navigation.from?.params?.id)
+  const fromCode = navigation.from?.params?.code
+  const fromEntryId = fromCode ? parseRecordUrlCode(fromCode) : null
   const toPersist = tracker.track({
     type: navigation.type,
     delta: navigation.delta,
     fromRoute: navigation.from?.route.id ?? null,
     fromLocale: navigation.from?.params?.locale ?? null,
     fromSearch: navigation.from?.url.search ?? '',
-    fromEntryId: Number.isInteger(fromId) && fromId > 0 ? fromId : null,
+    fromEntryId,
     toRoute: navigation.to?.route.id ?? null,
     toLocale: navigation.to?.params?.locale ?? null,
     toSearch: navigation.to?.url.search ?? '',

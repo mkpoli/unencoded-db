@@ -1,6 +1,7 @@
 <script lang="ts">
   // The discussion of a record: its comments, oldest first, and the form that adds one.
   import type { Comment } from '$lib/server/comments'
+  import { recordCode } from '$lib/code'
   import { COMMENT_MAX } from '$lib/comments'
   import { href, t, when } from '$lib/t'
 
@@ -35,7 +36,7 @@
   <form class="stack write" method="POST" action="?/comment#discussion">
     {#if error}<p class="notice bad" role="alert">{t(`error.${error}`)}</p>{/if}
     {#if about}
-      <p class="row about"><span class="badge">{t('discussion.about', { id: about })}</span><a class="text-link small" href="{href(`/entry/${entry}`)}#discussion">{t('discussion.wholeRecord')}</a><input type="hidden" name="about" value={about} /></p>
+      <p class="row about"><span class="badge">{t('discussion.about', { id: about })}</span><a class="text-link small" href="{href(`/${recordCode(entry)}`)}#discussion">{t('discussion.wholeRecord')}</a><input type="hidden" name="about" value={about} /></p>
     {/if}
     <div class="field">
       <label for="comment-body">{t('discussion.comment')}</label>

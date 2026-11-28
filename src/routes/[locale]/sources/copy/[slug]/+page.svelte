@@ -20,7 +20,7 @@
   <ul class="evidence">
     {#each data.sightings as row (row.sighting)}
       <li>
-        <a class="record" href={href(`/entry/${row.entry_id}#sighting-${row.sighting}`)}>
+        <a class="record" href={href(`/${recordCode(row.entry_id)}#sighting-${row.sighting}`)}>
           {#if row.ids}
             <span class="plate"><IdsGlyph ids={row.ids} layout={row.layout} path={data.glyphs[row.entry_id]} /></span>
           {/if}

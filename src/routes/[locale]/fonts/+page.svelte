@@ -115,7 +115,7 @@
         {#each visible as row (row.id)}
           <li>
             <button class="specimen" aria-label={t('fonts.insert', { code: recordCode(row.id) })} title={t('fonts.insert', { code: recordCode(row.id) })} onclick={() => insert(glyph(row.id))}>{previewState === 'ready' || previewState === 'retrying' ? glyph(row.id) : '·'}</button>
-            <a href={href('/entry/' + row.id)}>{recordCode(row.id)}</a>
+            <a href={href(`/${recordCode(row.id)}`)}>{recordCode(row.id)}</a>
             <small>U+{privateCode(row.id).toString(16).toUpperCase()}</small>
           </li>
         {/each}

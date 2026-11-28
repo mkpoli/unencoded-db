@@ -105,7 +105,7 @@
     {#each data.sightings as sighting (sighting.id)}
       {@const tile = sighting.tile}
       <article class="panel seen" id="sighting-{sighting.id}">
-        <a class="record" href={href(`/entry/${tile.id}#sighting-${sighting.id}`)}>
+        <a class="record" href={href(`/${recordCode(tile.id)}#sighting-${sighting.id}`)}>
           <span class="plate">{#if tile.ids}<IdsGlyph ids={tile.ids} layout={tile.layout} path={data.glyphs?.[tile.id]} />{:else}<span class="small muted">{t('browse.noImage')}</span>{/if}</span>
           <span class="ids">{tile.ids ?? ''}</span>
           <span class="small muted">{recordCode(tile.id)}</span>
@@ -135,7 +135,7 @@
       {@const tile = item.tile}
       {@const citedDate = item.original_date ?? item.report_date}
       <article class="panel seen">
-        <a class="record" href={href(`/entry/${tile.id}#sighting-${item.sighting_id}`)}>
+        <a class="record" href={href(`/${recordCode(tile.id)}#sighting-${item.sighting_id}`)}>
           <span class="plate">{#if tile.ids}<IdsGlyph ids={tile.ids} layout={tile.layout} path={data.glyphs?.[tile.id]} />{:else}<span class="small muted">{t('browse.noImage')}</span>{/if}</span>
           <span class="ids">{tile.ids ?? ''}</span>
           <span class="small muted">{recordCode(tile.id)}</span>
@@ -143,12 +143,12 @@
         <div class="stack body">
           <div class="row badges">
             <span class="badge">{t(`cite.kind.${item.kind}`)}</span>
-            <a class="text-link small" href={href(`/entry/${tile.id}#sighting-${item.sighting_id}`)}>{item.title || item.place || `#${item.sighting_id}`}</a>
+            <a class="text-link small" href={href(`/${recordCode(tile.id)}#sighting-${item.sighting_id}`)}>{item.title || item.place || `#${item.sighting_id}`}</a>
             {#if citedDate}<span class="small muted"><EvidenceDate text={citedDate} reading={data.dates.get(citedDate)} /></span>{/if}
           </div>
           {#if item.quote}<blockquote class="named-quote">{item.quote}</blockquote>{/if}
           {#if item.note}<p class="note">{item.note}</p>{/if}
-          <div class="row"><a class="button small" href={href(`/entry/${item.entry_id}/sighting/new`)}>{t('entry.addSighting')}</a></div>
+          <div class="row"><a class="button small" href={href(`/${recordCode(item.entry_id)}/sighting/new`)}>{t('entry.addSighting')}</a></div>
         </div>
       </article>
     {/each}
