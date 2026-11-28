@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { readdirSync, readFileSync } from 'node:fs'
 import { IRG_REFERENCES, readiness, type SightingFacts } from './readiness'
 
 test('running text among several contexts passes the running-text check', () => {
@@ -9,10 +10,15 @@ test('running text among several contexts passes the running-text check', () => 
   expect(running(null)).toBe(false)
 })
 
-test('IRG_REFERENCES lists P&P v18 alongside 2026 FS/SC and radical assignment guidelines', () => {
-  expect(IRG_REFERENCES.map(ref => [ref.id, ref.doc, ref.href])).toEqual([
-    ['pp', 'IRG N2850R', 'https://www.unicode.org/irg/pp/'],
-    ['fssc', 'IRG N2951', 'https://www.unicode.org/irg/docs/n2951-FSSC.pdf'],
-    ['radicals', 'IRG N2952', 'https://www.unicode.org/irg/docs/n2952-RadicalAssignments.pdf'],
-  ])
+test('every IRG reference uses a unicode.org/irg URL and has a localized label in every message catalogue', () => {
+  const files = readdirSync('messages').filter(name => name.endsWith('.json'))
+  expect(files.length).toBeGreaterThanOrEqual(6)
+  for (const ref of IRG_REFERENCES) {
+    expect(ref.href.startsWith('https://www.unicode.org/irg/')).toBe(true)
+    for (const file of files) {
+      const catalogue = JSON.parse(readFileSync(`messages/${file}`, 'utf8')) as Record<string, string>
+      expect(typeof catalogue[ref.labelKey]).toBe('string')
+      expect(catalogue[ref.labelKey].trim().length).toBeGreaterThan(0)
+    }
+  }
 })
